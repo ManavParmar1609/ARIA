@@ -304,6 +304,23 @@ def save_feedback(
             row.value, row.comment = value, comment
 
 
+def review_feedback(engine: Engine) -> list[tuple[int, dict[str, Any], bool]]:
+    """Every recorded review, oldest first: (id, value, already used for recalibration)."""
+    with session_scope(engine) as session:
+        rows = session.scalars(
+            select(FeedbackRow).where(FeedbackRow.field == "review").order_by(FeedbackRow.id)
+        )
+        return [(row.id, dict(row.value), row.used_for_training) for row in rows]
+
+
+def mark_feedback_used(engine: Engine, ids: Sequence[int]) -> None:
+    if not ids:
+        return
+    with session_scope(engine) as session:
+        for row in session.scalars(select(FeedbackRow).where(FeedbackRow.id.in_(list(ids)))):
+            row.used_for_training = True
+
+
 # --- the external worker's queue -----------------------------------------------------------------
 
 

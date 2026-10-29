@@ -29,3 +29,12 @@ def test_worker_health_needs_a_recent_heartbeat(
     old = time.time() - 600
     os.utime(beat, (old, old))
     assert runner.invoke(app, ["worker-health", "--max-age", "60"]).exit_code == 1
+
+
+def test_recalibrate_says_when_there_is_nothing_to_do() -> None:
+    from aria.db.engine import get_engine, init_db
+
+    init_db(get_engine())
+    result = CliRunner().invoke(app, ["train", "recalibrate", "--dry-run"])
+    assert result.exit_code == 0, result.output
+    assert "not enough new reviews" in result.output

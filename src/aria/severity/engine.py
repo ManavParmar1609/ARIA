@@ -35,25 +35,61 @@ class SeverityResult:
 
 
 class SeverityEngine:
-    def __init__(self, rules: RuleSet, model: LinearModel | None, *, alpha: float) -> None:
+    def __init__(
+        self,
+        rules: RuleSet,
+        model: LinearModel | None,
+        *,
+        alpha: float,
+        model_path: Path | None = None,
+    ) -> None:
         self.rules = rules
-        self.model = model
-        self.alpha = model.alpha if model is not None and model.conformal_q is not None else alpha
+        self.default_alpha = alpha
+        self.model_path = model_path
+        self._model_mtime = _mtime(model_path)
+        self._set_model(model)
+
+    def _set_model(self, model: LinearModel | None) -> None:
         if model is not None and model.classes != [str(s) for s in SEVERITY_ORDER]:
             msg = f"severity model classes {model.classes} do not match {SEVERITY_ORDER}"
             raise ValueError(msg)
+        self.model = model
+        self.alpha = (
+            model.alpha
+            if model is not None and model.conformal_q is not None
+            else self.default_alpha
+        )
 
     @classmethod
     def load(cls, config: SeverityConfig) -> SeverityEngine:
         rules = load_rules(config.rules_file)
-        model = (
-            LinearModel.load(config.log_model_file)
-            if Path(config.log_model_file).exists()
-            else None
-        )
+        path = Path(config.log_model_file)
+        model = LinearModel.load(path) if path.exists() else None
         if model is None:
-            log.warning("severity.model_missing", path=str(config.log_model_file))
-        return cls(rules, model, alpha=config.alpha)
+            log.warning("severity.model_missing", path=str(path))
+        return cls(rules, model, alpha=config.alpha, model_path=path)
+
+    def refresh(self) -> bool:
+        """Reload the model when its file changed (a recalibration in this or another process)."""
+        mtime = _mtime(self.model_path)
+        if self.model_path is None or mtime is None or mtime == self._model_mtime:
+            return False
+        try:
+            model = LinearModel.load(self.model_path)
+        except (OSError, ValueError):  # caught mid-write; the next call retries
+            log.warning("severity.model_reload_failed", path=str(self.model_path))
+            return False
+        self._set_model(model)
+        self._model_mtime = mtime
+        log.info("severity.model_reloaded", version=model.version)
+        return True
+
+    def model_row(
+        self, features: WindowFeatures, alerts: Sequence[AlertSignal] = ()
+    ) -> dict[str, float]:
+        """The calibrated model's input for a window: what a review hands to recalibration."""
+        values = feature_space(features, alerts)
+        return log_feature_row(values, self.rules.evaluate(values))
 
     @property
     def gate(self) -> float:
@@ -67,6 +103,7 @@ class SeverityEngine:
         evidence: EvidenceStore,
         related: Sequence[str] = (),
     ) -> Preliminary:
+        self.refresh()
         values = feature_space(features, alerts)
         evaluation = self.rules.evaluate(values)
         hits: list[RuleHit] = []
@@ -194,6 +231,13 @@ class SeverityEngine:
             llm_unavailable_reason=result.reason,
         )
         return SeverityResult(assessment, pre, result)
+
+
+def _mtime(path: Path | None) -> int | None:
+    try:
+        return path.stat().st_mtime_ns if path is not None else None
+    except FileNotFoundError:
+        return None
 
 
 def rules_only_probabilities(values: dict[str, float], rules: RuleSet) -> np.ndarray:

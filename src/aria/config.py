@@ -162,6 +162,10 @@ class SeverityConfig(_Strict):
     service_catalog_file: Path = Path("config/service_catalog.yaml")
     log_model_file: Path = Path("models/severity_log.json")
     ticket_model_file: Path = Path("models/severity_ticket.json")
+    # Active learning: recalibrate the conformal threshold on reviewed incidents once this many
+    # new human reviews have gathered, checking every recalibrate_check_s seconds (0: never).
+    recalibrate_after: int = Field(default=30, ge=10, le=100_000)
+    recalibrate_check_s: int = Field(default=600, ge=0)
 
 
 class RetrievalConfig(_Strict):

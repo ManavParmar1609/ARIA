@@ -185,11 +185,12 @@ async def test_the_scan_loop_triages_a_burst_end_to_end(
     assert run["severity"] in {"SEV1", "SEV2"}  # fatal kernel errors on a compute node
 
 
-async def test_jobs_start_only_when_the_scan_is_configured(
+async def test_the_scan_job_starts_only_when_configured(
     runner: TriageRunner, tmp_path: Path
 ) -> None:
     stop = asyncio.Event()
-    assert start_background_jobs(runner.services, runner, stop) == []
+    by_default = start_background_jobs(runner.services, runner, stop)
+    assert [t.get_name() for t in by_default] == ["aria-recalibrate"]
 
     triggers = runner.services.config.triggers
     configured = triggers.model_copy(
@@ -199,7 +200,7 @@ async def test_jobs_start_only_when_the_scan_is_configured(
         }
     )
     runner.services.config = runner.services.config.model_copy(update={"triggers": configured})
-    [task] = start_background_jobs(runner.services, runner, stop)
-    assert task.get_name() == "aria-scan"
+    tasks = start_background_jobs(runner.services, runner, stop)
+    assert [t.get_name() for t in tasks] == ["aria-scan", "aria-recalibrate"]
     stop.set()
-    await asyncio.wait_for(task, timeout=5)
+    await asyncio.wait_for(asyncio.gather(*by_default, *tasks), timeout=5)

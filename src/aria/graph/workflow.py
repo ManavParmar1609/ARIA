@@ -836,12 +836,15 @@ async def _record_feedback(
         "reviewer": decision.reviewer,
         "comment": decision.comment,
     }
+    # The database copy also keeps the run's model input, so reviews can recalibrate the model.
+    batch = ParsedBatch.model_validate(state["batch"])
+    model_row = services.severity.model_row(batch.features, request.alerts)
     await _db(
         repo.save_feedback,
         services.engine,
         state["run_id"],
         "review",
-        value,
+        {**value, "model_row": model_row, "model_version": original.model_version},
         author=decision.reviewer,
         comment=decision.comment,
     )

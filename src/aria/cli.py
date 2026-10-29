@@ -148,6 +148,39 @@ def train_severity(
     console.print_json(json.dumps(report["conformal_split"]))
 
 
+@train_app.command("recalibrate")
+def train_recalibrate(
+    min_new_reviews: Annotated[
+        int | None,
+        typer.Option(help="Reviews needed since the last calibration (default: config)."),
+    ] = None,
+    dry_run: Annotated[bool, typer.Option(help="Report the effect without saving.")] = False,
+) -> None:
+    """Recalibrate the severity model's prediction sets on reviewed incidents."""
+    from aria.config import get_app_config
+    from aria.db.engine import get_engine
+    from aria.severity.recalibration import recalibrate_from_feedback
+
+    config = get_app_config().severity
+    result = recalibrate_from_feedback(
+        get_engine(),
+        config.log_model_file,
+        alpha=config.alpha,
+        min_new_reviews=config.recalibrate_after if min_new_reviews is None else min_new_reviews,
+        dry_run=dry_run,
+    )
+    if result is None:
+        console.print("not enough new reviews to recalibrate yet")
+        return
+    verb = "would save" if dry_run else "saved"
+    console.print(
+        f"{verb} {result.model.version}: {result.reviewed} reviewed incidents "
+        f"({result.new_reviews} new); coverage {result.coverage_before:.1%} -> "
+        f"{result.coverage_after:.1%}; mean set size {result.mean_set_before:.2f} -> "
+        f"{result.mean_set_after:.2f}"
+    )
+
+
 @train_app.command("tickets")
 def train_tickets() -> None:
     """Fit the UCI ticket priority and SLA models (needs `aria data ingest` with UCI data)."""
