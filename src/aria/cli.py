@@ -169,6 +169,68 @@ def train_tickets() -> None:
     console.print_json(json.dumps(report, default=str))
 
 
+# --- knowledge ---------------------------------------------------------------------------------
+
+
+@app.command()
+def seed(
+    workers: Annotated[int, typer.Option(help="Parser processes.")] = min(4, os.cpu_count() or 1),
+    per_mode: int = 3,
+) -> None:
+    """Load runbooks, seed incident memory (synthetic, labelled) and fit offline embeddings."""
+    from aria.config import get_settings
+    from aria.data.scenarios import LinePools, ScenarioBuilder
+    from aria.db.engine import get_engine
+    from aria.llm.local_embed import LsaEmbedder
+    from aria.retrieval.memory import IncidentMemory
+    from aria.retrieval.runbooks import load_runbooks, sync_runbooks
+    from aria.retrieval.seed import seed_incidents
+
+    settings = get_settings()
+    engine = get_engine()
+    runbooks = load_runbooks(settings.runbooks_dir)
+    console.print(f"runbooks: {sync_runbooks(engine, runbooks)}")
+    builder = ScenarioBuilder(LinePools.from_loghub(_loghub_dir()))
+    incidents = seed_incidents(builder, settings.runbooks_dir, per_mode=per_mode, workers=workers)
+    corpus = [i.document().text for i in incidents] + [rb.search_text() for rb in runbooks.values()]
+    model_path = settings.models_dir / "embed_local.npz"
+    LsaEmbedder.fit(corpus, dims=128).save(model_path)
+    from aria.llm.router import get_router
+
+    memory = IncidentMemory(engine, get_router().embedding_provider())
+
+    async def store() -> int:
+        return await memory.bulk_insert(incidents)
+
+    count = asyncio.run(store())
+    console.print(
+        f"incident memory: {count} synthetic incidents (embeddings: {memory.embedding_model}); "
+        f"offline embedder: {model_path}"
+    )
+
+
+@app.command()
+def mcp(
+    transport: Annotated[str, typer.Option(help="stdio or streamable-http")] = "stdio",
+    host: str = "127.0.0.1",
+    port: int = 8001,
+) -> None:
+    """Run ARIA's read-only MCP server."""
+    from aria.config import get_settings
+    from aria.mcp.server import build_server
+    from aria.observability.logging import configure_logging
+
+    if transport not in ("stdio", "streamable-http"):
+        raise typer.BadParameter("transport must be stdio or streamable-http")
+    settings = get_settings()
+    configure_logging(settings.log_level, "json" if transport == "stdio" else settings.log_format)
+    server = build_server()
+    if transport == "stdio":
+        server.run("stdio")
+    else:
+        server.run("streamable-http", host=host, port=port)
+
+
 # --- providers ---------------------------------------------------------------------------------
 
 

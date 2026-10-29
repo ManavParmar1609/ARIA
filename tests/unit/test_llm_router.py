@@ -260,11 +260,22 @@ async def test_complete_can_target_the_safety_model() -> None:
 
 async def test_embeddings_default_to_local_and_rerank_needs_a_provider() -> None:
     router = get_router()
-    provider = router.embedding_provider()
-    assert isinstance(provider, LocalEmbeddingProvider)
-    vectors = await provider.embed(["disk failure on node", "disk failure"])
+    embedder = router.embedding_provider()
+    assert embedder is not None
+    assert isinstance(embedder.provider, LocalEmbeddingProvider)
+    assert embedder.model.startswith(("hashing-", "lsa-"))
+    vectors = await embedder.embed(["disk failure on node", "disk failure"])
     assert len(vectors) == 2
     assert await router.rerank("q", ["a"]) is None
+
+
+def test_embedding_identity_is_the_embedding_model_not_the_chat_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-x")
+    embedder = LLMRouter(get_app_config().llm).embedding_provider()
+    assert embedder is not None
+    assert embedder.model == "nim/nvidia/nemotron-3.5-embed-1b"
 
 
 def test_status_lists_every_provider_with_its_roles() -> None:

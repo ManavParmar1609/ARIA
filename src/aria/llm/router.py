@@ -83,6 +83,25 @@ class CircuitBreaker:
 
 
 @dataclass
+class Embedder:
+    """An embedding provider plus the identity of its vector space.
+
+    ``model`` names the embedding model (not the provider's chat model), so stored vectors are
+    reused only when they came from the same space.
+    """
+
+    name: str
+    model: str
+    provider: Any
+
+    async def embed(
+        self, texts: Sequence[str], *, input_type: Literal["query", "passage"] = "passage"
+    ) -> list[list[float]]:
+        vectors: list[list[float]] = await self.provider.embed(texts, input_type=input_type)
+        return vectors
+
+
+@dataclass
 class ProviderStatus:
     name: str
     kind: str
@@ -340,20 +359,24 @@ class LLMRouter:
 
     # --- embeddings and reranking --------------------------------------------------------------
 
-    def embedding_provider(self, name: str | None = None) -> Any:
+    def embedding_provider(self, name: str | None = None) -> Embedder | None:
         """The named embedding provider, or the first available one in the embeddings chain.
 
-        An index must be queried with the provider that built it, so callers pin ``name`` and
-        never mix vectors from different providers.
+        Stored vectors carry the embedder's ``model`` id, so an index is never queried with
+        vectors from a different model.
         """
         names = [name] if name else self.config.embeddings
         for candidate in names:
             cfg = self.config.providers.get(candidate)
             if cfg is None or not cfg.is_enabled() or not self.breaker(candidate).allow():
                 continue
-            if cfg.kind is not ProviderKind.LOCAL and not cfg.embedding_model:
-                continue
-            return self.provider(candidate)
+            if cfg.kind is ProviderKind.LOCAL:
+                provider = self.provider(candidate)
+                return Embedder(candidate, str(provider.model), provider)
+            if cfg.embedding_model:
+                return Embedder(
+                    candidate, f"{candidate}/{cfg.embedding_model}", self.provider(candidate)
+                )
         return None
 
     async def rerank(self, query: str, passages: Sequence[str]) -> tuple[str, list[float]] | None:
