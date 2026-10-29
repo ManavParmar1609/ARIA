@@ -1,0 +1,200 @@
+LineId,Date,Time,Level,Node,Component,Id,Content,EventId,EventTemplate
+1,2015-07-29,"17:41:44,747",INFO,QuorumPeer[myid=1]/0,0:0:0:0:0:0:0:2181:FastLeaderElection,774,Notification time out: 3200,E31,Notification time out: <*>
+2,2015-07-29,"19:04:12,394",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:45307,E40,Received connection request /<*>:<*>
+3,2015-07-29,"19:04:29,071",WARN,SendWorker,188978561024:QuorumCnxManager$SendWorker,688,Send worker leaving thread,E42,Send worker leaving thread
+4,2015-07-29,"19:04:29,079",WARN,SendWorker,188978561024:QuorumCnxManager$SendWorker,679,Interrupted while waiting for message on queue,E24,Interrupted while waiting for message on queue
+5,2015-07-29,"19:13:17,524",WARN,SendWorker,188978561024:QuorumCnxManager$SendWorker,688,Send worker leaving thread,E42,Send worker leaving thread
+6,2015-07-29,"19:13:24,282",WARN,RecvWorker,188978561024:QuorumCnxManager$RecvWorker,762,"Connection broken for id 188978561024, my id = 1, error =",E11,"Connection broken for id <*>, my id = <*>, error ="
+7,2015-07-29,"19:13:24,370",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:57707,E40,Received connection request /<*>:<*>
+8,2015-07-29,"19:13:27,721",WARN,RecvWorker,188978561024:QuorumCnxManager$RecvWorker,762,"Connection broken for id 188978561024, my id = 1, error =",E11,"Connection broken for id <*>, my id = <*>, error ="
+9,2015-07-29,"19:13:34,382",WARN,SendWorker,188978561024:QuorumCnxManager$SendWorker,679,Interrupted while waiting for message on queue,E24,Interrupted while waiting for message on queue
+10,2015-07-29,"19:13:37,626",WARN,SendWorker,188978561024:QuorumCnxManager$SendWorker,688,Send worker leaving thread,E42,Send worker leaving thread
+11,2015-07-29,"19:13:44,301",WARN,SendWorker,188978561024:QuorumCnxManager$SendWorker,688,Send worker leaving thread,E42,Send worker leaving thread
+12,2015-07-29,"19:13:47,731",WARN,RecvWorker,188978561024:QuorumCnxManager$RecvWorker,762,"Connection broken for id 188978561024, my id = 1, error =",E11,"Connection broken for id <*>, my id = <*>, error ="
+13,2015-07-29,"19:13:54,220",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:45382,E40,Received connection request /<*>:<*>
+14,2015-07-29,"19:13:54,399",WARN,RecvWorker,188978561024:QuorumCnxManager$RecvWorker,762,"Connection broken for id 188978561024, my id = 1, error =",E11,"Connection broken for id <*>, my id = <*>, error ="
+15,2015-07-29,"19:14:04,406",WARN,SendWorker,188978561024:QuorumCnxManager$SendWorker,679,Interrupted while waiting for message on queue,E24,Interrupted while waiting for message on queue
+16,2015-07-29,"19:14:07,559",WARN,RecvWorker,188978561024:QuorumCnxManager$RecvWorker,765,Interrupting SendWorker,E25,Interrupting SendWorker
+17,2015-07-29,"19:14:07,653",WARN,SendWorker,188978561024:QuorumCnxManager$SendWorker,688,Send worker leaving thread,E42,Send worker leaving thread
+18,2015-07-29,"19:14:24,329",WARN,RecvWorker,188978561024:QuorumCnxManager$RecvWorker,765,Interrupting SendWorker,E25,Interrupting SendWorker
+19,2015-07-29,"19:14:37,585",WARN,SendWorker,188978561024:QuorumCnxManager$SendWorker,679,Interrupted while waiting for message on queue,E24,Interrupted while waiting for message on queue
+20,2015-07-29,"19:14:44,256",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:45440,E40,Received connection request /<*>:<*>
+21,2015-07-29,"19:14:47,593",WARN,RecvWorker,188978561024:QuorumCnxManager$RecvWorker,765,Interrupting SendWorker,E25,Interrupting SendWorker
+22,2015-07-29,"19:14:54,354",WARN,SendWorker,188978561024:QuorumCnxManager$SendWorker,688,Send worker leaving thread,E42,Send worker leaving thread
+23,2015-07-29,"19:15:24,476",WARN,SendWorker,188978561024:QuorumCnxManager$SendWorker,679,Interrupted while waiting for message on queue,E24,Interrupted while waiting for message on queue
+24,2015-07-29,"19:15:37,647",WARN,RecvWorker,188978561024:QuorumCnxManager$RecvWorker,765,Interrupting SendWorker,E25,Interrupting SendWorker
+25,2015-07-29,"19:15:37,648",WARN,SendWorker,188978561024:QuorumCnxManager$SendWorker,688,Send worker leaving thread,E42,Send worker leaving thread
+26,2015-07-29,"19:15:54,407",WARN,SendWorker,188978561024:QuorumCnxManager$SendWorker,679,Interrupted while waiting for message on queue,E24,Interrupted while waiting for message on queue
+27,2015-07-29,"19:15:57,854",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:57895,E40,Received connection request /<*>:<*>
+28,2015-07-29,"19:16:04,412",WARN,SendWorker,188978561024:QuorumCnxManager$SendWorker,679,Interrupted while waiting for message on queue,E24,Interrupted while waiting for message on queue
+29,2015-07-29,"19:16:04,414",WARN,SendWorker,188978561024:QuorumCnxManager$SendWorker,679,Interrupted while waiting for message on queue,E24,Interrupted while waiting for message on queue
+30,2015-07-29,"19:16:07,659",WARN,RecvWorker,188978561024:QuorumCnxManager$RecvWorker,765,Interrupting SendWorker,E25,Interrupting SendWorker
+31,2015-07-29,"19:16:14,520",WARN,SendWorker,188978561024:QuorumCnxManager$SendWorker,679,Interrupted while waiting for message on queue,E24,Interrupted while waiting for message on queue
+32,2015-07-29,"19:16:24,348",WARN,RecvWorker,188978561024:QuorumCnxManager$RecvWorker,762,"Connection broken for id 188978561024, my id = 1, error =",E11,"Connection broken for id <*>, my id = <*>, error ="
+33,2015-07-29,"19:16:27,865",WARN,SendWorker,188978561024:QuorumCnxManager$SendWorker,679,Interrupted while waiting for message on queue,E24,Interrupted while waiting for message on queue
+34,2015-07-29,"19:16:27,865",WARN,SendWorker,188978561024:QuorumCnxManager$SendWorker,688,Send worker leaving thread,E42,Send worker leaving thread
+35,2015-07-29,"19:16:34,433",WARN,RecvWorker,188978561024:QuorumCnxManager$RecvWorker,762,"Connection broken for id 188978561024, my id = 1, error =",E11,"Connection broken for id <*>, my id = <*>, error ="
+36,2015-07-29,"19:16:44,440",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:47727,E40,Received connection request /<*>:<*>
+37,2015-07-29,"19:16:57,707",WARN,SendWorker,188978561024:QuorumCnxManager$SendWorker,679,Interrupted while waiting for message on queue,E24,Interrupted while waiting for message on queue
+38,2015-07-29,"19:17:17,721",WARN,SendWorker,188978561024:QuorumCnxManager$SendWorker,679,Interrupted while waiting for message on queue,E24,Interrupted while waiting for message on queue
+39,2015-07-29,"19:17:17,921",WARN,SendWorker,188978561024:QuorumCnxManager$SendWorker,679,Interrupted while waiting for message on queue,E24,Interrupted while waiting for message on queue
+40,2015-07-29,"19:17:24,471",WARN,RecvWorker,188978561024:QuorumCnxManager$RecvWorker,762,"Connection broken for id 188978561024, my id = 1, error =",E11,"Connection broken for id <*>, my id = <*>, error ="
+41,2015-07-29,"19:17:24,477",WARN,SendWorker,188978561024:QuorumCnxManager$SendWorker,679,Interrupted while waiting for message on queue,E24,Interrupted while waiting for message on queue
+42,2015-07-29,"19:17:57,741",WARN,SendWorker,188978561024:QuorumCnxManager$SendWorker,679,Interrupted while waiting for message on queue,E24,Interrupted while waiting for message on queue
+43,2015-07-29,"19:17:57,939",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:58035,E40,Received connection request /<*>:<*>
+44,2015-07-29,"19:17:57,955",WARN,RecvWorker,188978561024:QuorumCnxManager$RecvWorker,765,Interrupting SendWorker,E25,Interrupting SendWorker
+45,2015-07-29,"19:18:04,430",WARN,SendWorker,188978561024:QuorumCnxManager$SendWorker,679,Interrupted while waiting for message on queue,E24,Interrupted while waiting for message on queue
+46,2015-07-29,"19:18:07,748",WARN,RecvWorker,188978561024:QuorumCnxManager$RecvWorker,765,Interrupting SendWorker,E25,Interrupting SendWorker
+47,2015-07-29,"19:18:07,756",WARN,RecvWorker,188978561024:QuorumCnxManager$RecvWorker,765,Interrupting SendWorker,E25,Interrupting SendWorker
+48,2015-07-29,"19:18:14,511",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:47838,E40,Received connection request /<*>:<*>
+49,2015-07-29,"19:18:14,839",WARN,SendWorker,188978561024:QuorumCnxManager$SendWorker,679,Interrupted while waiting for message on queue,E24,Interrupted while waiting for message on queue
+56,2015-07-29,"19:19:04,661",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:58116,E40,Received connection request /<*>:<*>
+57,2015-07-29,"19:21:36,502",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:45957,E40,Received connection request /<*>:<*>
+64,2015-07-29,"19:21:46,728",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:58303,E40,Received connection request /<*>:<*>
+65,2015-07-29,"19:21:49,960",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:48096,E40,Received connection request /<*>:<*>
+74,2015-07-29,"19:22:03,324",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:48141,E40,Received connection request /<*>:<*>
+81,2015-07-29,"19:22:20,143",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:58421,E40,Received connection request /<*>:<*>
+85,2015-07-29,"19:22:26,617",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:46128,E40,Received connection request /<*>:<*>
+90,2015-07-29,"19:22:26,830",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:58452,E40,Received connection request /<*>:<*>
+95,2015-07-29,"19:22:36,659",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:46173,E40,Received connection request /<*>:<*>
+97,2015-07-29,"19:22:40,083",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:48280,E40,Received connection request /<*>:<*>
+108,2015-07-29,"19:23:00,237",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:58565,E40,Received connection request /<*>:<*>
+116,2015-07-29,"19:23:16,848",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:48413,E40,Received connection request /<*>:<*>
+118,2015-07-29,"19:23:20,094",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:46329,E40,Received connection request /<*>:<*>
+125,2015-07-29,"19:23:30,110",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:46360,E40,Received connection request /<*>:<*>
+132,2015-07-29,"19:23:46,827",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:46424,E40,Received connection request /<*>:<*>
+136,2015-07-29,"19:23:53,488",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:46440,E40,Received connection request /<*>:<*>
+144,2015-07-29,"19:24:10,286",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:48600,E40,Received connection request /<*>:<*>
+146,2015-07-29,"19:24:13,553",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:46519,E40,Received connection request /<*>:<*>
+152,2015-07-29,"19:24:23,563",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:46552,E40,Received connection request /<*>:<*>
+166,2015-07-29,"19:25:03,857",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:59016,E40,Received connection request /<*>:<*>
+170,2015-07-29,"19:25:07,107",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:48811,E40,Received connection request /<*>:<*>
+171,2015-07-29,"19:25:10,536",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:59037,E40,Received connection request /<*>:<*>
+179,2015-07-29,"19:25:23,889",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:59078,E40,Received connection request /<*>:<*>
+182,2015-07-29,"19:25:30,398",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:46798,E40,Received connection request /<*>:<*>
+186,2015-07-29,"19:25:37,062",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:46812,E40,Received connection request /<*>:<*>
+188,2015-07-29,"19:25:37,257",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:59130,E40,Received connection request /<*>:<*>
+190,2015-07-29,"19:25:40,484",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:48922,E40,Received connection request /<*>:<*>
+198,2015-07-29,"19:27:55,066",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:47327,E40,Received connection request /<*>:<*>
+200,2015-07-29,"19:27:58,827",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:47351,E40,Received connection request /<*>:<*>
+201,2015-07-29,"19:28:02,167",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:47366,E40,Received connection request /<*>:<*>
+203,2015-07-29,"19:28:08,431",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:47390,E40,Received connection request /<*>:<*>
+204,2015-07-29,"19:28:08,636",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:59614,E40,Received connection request /<*>:<*>
+213,2015-07-29,"19:28:28,473",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:47472,E40,Received connection request /<*>:<*>
+215,2015-07-29,"19:28:32,018",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:59689,E40,Received connection request /<*>:<*>
+217,2015-07-29,"19:28:35,361",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:59706,E40,Received connection request /<*>:<*>
+218,2015-07-29,"19:28:38,703",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:59722,E40,Received connection request /<*>:<*>
+221,2015-07-29,"19:28:41,844",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:47540,E40,Received connection request /<*>:<*>
+223,2015-07-29,"19:28:48,527",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:47571,E40,Received connection request /<*>:<*>
+225,2015-07-29,"19:28:58,547",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:47615,E40,Received connection request /<*>:<*>
+226,2015-07-29,"19:29:01,988",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:49588,E40,Received connection request /<*>:<*>
+228,2015-07-29,"19:29:08,668",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:49610,E40,Received connection request /<*>:<*>
+249,2015-07-29,"19:29:35,500",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:59925,E40,Received connection request /<*>:<*>
+264,2015-07-29,"19:30:02,019",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:47885,E40,Received connection request /<*>:<*>
+265,2015-07-29,"19:30:02,117",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:49806,E40,Received connection request /<*>:<*>
+270,2015-07-29,"19:30:15,586",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:60070,E40,Received connection request /<*>:<*>
+279,2015-07-29,"19:30:38,863",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:49940,E40,Received connection request /<*>:<*>
+295,2015-07-29,"19:31:08,922",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:50043,E40,Received connection request /<*>:<*>
+303,2015-07-29,"19:31:39,095",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:60366,E40,Received connection request /<*>:<*>
+312,2015-07-29,"19:31:55,590",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:48289,E40,Received connection request /<*>:<*>
+314,2015-07-29,"19:31:55,793",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:60423,E40,Received connection request /<*>:<*>
+325,2015-07-29,"19:32:12,503",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:60489,E40,Received connection request /<*>:<*>
+332,2015-07-29,"19:32:29,085",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:50332,E40,Received connection request /<*>:<*>
+337,2015-07-29,"19:32:35,764",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:50354,E40,Received connection request /<*>:<*>
+344,2015-07-29,"19:32:49,042",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:48503,E40,Received connection request /<*>:<*>
+347,2015-07-29,"19:32:59,143",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:50434,E40,Received connection request /<*>:<*>
+349,2015-07-29,"19:33:02,398",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:48563,E40,Received connection request /<*>:<*>
+354,2015-07-29,"19:33:12,423",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:48609,E40,Received connection request /<*>:<*>
+357,2015-07-29,"19:33:13,727",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:48612,E40,Received connection request /<*>:<*>
+362,2015-07-29,"19:33:15,965",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:60717,E40,Received connection request /<*>:<*>
+365,2015-07-29,"19:33:19,303",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:60726,E40,Received connection request /<*>:<*>
+367,2015-07-29,"19:33:22,532",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:50526,E40,Received connection request /<*>:<*>
+371,2015-07-29,"19:33:25,983",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:60750,E40,Received connection request /<*>:<*>
+374,2015-07-29,"19:33:29,212",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:50546,E40,Received connection request /<*>:<*>
+383,2015-07-29,"19:33:42,575",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:50597,E40,Received connection request /<*>:<*>
+390,2015-07-29,"19:33:49,364",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:60834,E40,Received connection request /<*>:<*>
+392,2015-07-29,"19:33:52,595",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:50633,E40,Received connection request /<*>:<*>
+399,2015-07-29,"19:34:05,862",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:48814,E40,Received connection request /<*>:<*>
+401,2015-07-29,"19:34:05,863",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:48817,E40,Received connection request /<*>:<*>
+409,2015-07-29,"19:34:12,745",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:60918,E40,Received connection request /<*>:<*>
+417,2015-07-29,"19:34:29,448",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:60984,E40,Received connection request /<*>:<*>
+419,2015-07-29,"19:34:32,788",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:60996,E40,Received connection request /<*>:<*>
+425,2015-07-29,"19:34:52,717",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:50849,E40,Received connection request /<*>:<*>
+426,2015-07-29,"19:34:55,969",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:49023,E40,Received connection request /<*>:<*>
+432,2015-07-29,"19:35:09,526",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:32891,E40,Received connection request /<*>:<*>
+436,2015-07-29,"19:35:19,544",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:32924,E40,Received connection request /<*>:<*>
+442,2015-07-29,"19:35:42,928",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:33010,E40,Received connection request /<*>:<*>
+443,2015-07-29,"19:35:46,073",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:49204,E40,Received connection request /<*>:<*>
+446,2015-07-29,"19:35:49,498",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:51050,E40,Received connection request /<*>:<*>
+451,2015-07-29,"19:36:02,861",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:51104,E40,Received connection request /<*>:<*>
+466,2015-07-29,"19:36:26,349",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:33165,E40,Received connection request /<*>:<*>
+470,2015-07-29,"19:36:36,365",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:33198,E40,Received connection request /<*>:<*>
+476,2015-07-29,"19:36:43,049",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:33225,E40,Received connection request /<*>:<*>
+480,2015-07-29,"19:36:49,730",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:33250,E40,Received connection request /<*>:<*>
+481,2015-07-29,"19:36:49,735",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:33255,E40,Received connection request /<*>:<*>
+483,2015-07-29,"19:36:53,074",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:33266,E40,Received connection request /<*>:<*>
+485,2015-07-29,"19:36:56,302",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:51296,E40,Received connection request /<*>:<*>
+487,2015-07-29,"19:36:59,746",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.13:33282,E40,Received connection request /<*>:<*>
+491,2015-07-29,"19:37:12,920",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.11:49518,E40,Received connection request /<*>:<*>
+494,2015-07-29,"19:37:19,683",INFO,/10.10.34.11,3888:QuorumCnxManager$Listener,493,Received connection request /10.10.34.12:51380,E40,Received connection request /<*>:<*>
+495,2015-07-29,"19:52:04,792",INFO,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:NIOServerCnxn,1001,Closed socket connection for client /10.10.34.18:42772 which had sessionid 0x14ed93111f20005,E10,Closed socket connection for client /<*>:<*> which had sessionid <*>
+496,2015-07-29,"19:52:05,118",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:NIOServerCnxn,349,caught end of stream exception,E6,caught end of stream exception
+497,2015-07-29,"19:52:09,519",INFO,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:NIOServerCnxn,1001,Closed socket connection for client /10.10.34.12:45542 which had sessionid 0x14ed93111f20002,E10,Closed socket connection for client /<*>:<*> which had sessionid <*>
+498,2015-07-29,"19:54:13,615",INFO,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,832,Client attempting to renew session 0x24ed93119420016 at /10.10.34.13:37115,E8,Client attempting to renew session <*> at /<*>:<*>
+499,2015-07-29,"19:54:45,337",INFO,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:NIOServerCnxn,1001,Closed socket connection for client /10.10.34.13:37106 which had sessionid 0x14ed93111f20010,E10,Closed socket connection for client /<*>:<*> which had sessionid <*>
+500,2015-07-29,"21:01:41,504",INFO,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,839,Client attempting to establish new session at /10.10.34.19:33425,E7,Client attempting to establish new session at /<*>:<*>
+501,2015-07-29,"21:34:45,452",INFO,CommitProcessor,1:ZooKeeperServer,595,Established session 0x14ed93111f20027 with negotiated timeout 10000 for client /10.10.34.13:37177,E13,Established session <*> with negotiated timeout <*> for client /<*>:<*>
+502,2015-07-29,"21:34:48,285",INFO,CommitProcessor,1:ZooKeeperServer,595,Established session 0x14ed93111f2002b with negotiated timeout 10000 for client /10.10.34.22:47073,E13,Established session <*> with negotiated timeout <*> for client /<*>:<*>
+503,2015-07-29,"21:39:24,986",INFO,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:NIOServerCnxnFactory,197,Accepted socket connection from /10.10.34.13:37196,E2,Accepted socket connection from /<*>:<*>
+504,2015-07-29,"21:39:28,234",INFO,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:NIOServerCnxnFactory,197,Accepted socket connection from /10.10.34.26:56952,E2,Accepted socket connection from /<*>:<*>
+505,2015-07-29,"23:44:21,576",INFO,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:NIOServerCnxn,1001,Closed socket connection for client /10.10.34.11:49557 which had sessionid 0x14ed93111f20048,E10,Closed socket connection for client /<*>:<*> which had sessionid <*>
+506,2015-07-29,"23:44:28,903",ERROR,CommitProcessor,1:NIOServerCnxn,180,Unexpected Exception:,E50,Unexpected Exception:
+507,2015-07-29,"23:52:08,962",INFO,CommitProcessor,1:ZooKeeperServer,595,Established session 0x14ed93111f2005b with negotiated timeout 10000 for client /10.10.34.28:52117,E13,Established session <*> with negotiated timeout <*> for client /<*>:<*>
+508,2015-07-29,"23:52:09,163",INFO,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:NIOServerCnxnFactory,197,Accepted socket connection from /10.10.34.30:38562,E2,Accepted socket connection from /<*>:<*>
+509,2015-07-29,"23:52:09,783",INFO,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:NIOServerCnxnFactory,197,Accepted socket connection from /10.10.34.36:32876,E2,Accepted socket connection from /<*>:<*>
+510,2015-07-29,"23:52:09,785",INFO,CommitProcessor,1:ZooKeeperServer,595,Established session 0x14ed93111f2005f with negotiated timeout 10000 for client /10.10.34.36:32876,E13,Established session <*> with negotiated timeout <*> for client /<*>:<*>
+511,2015-07-30,"13:47:25,927",INFO,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:NIOServerCnxnFactory,197,Accepted socket connection from /10.10.34.11:45997,E2,Accepted socket connection from /<*>:<*>
+512,2015-07-30,"14:42:40,474",INFO,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:NIOServerCnxnFactory,197,Accepted socket connection from /10.10.34.11:49346,E2,Accepted socket connection from /<*>:<*>
+513,2015-07-30,"14:47:15,835",INFO,CommitProcessor,1:ZooKeeperServer,595,Established session 0x14ed93111f20079 with negotiated timeout 20000 for client /10.10.34.11:49800,E13,Established session <*> with negotiated timeout <*> for client /<*>:<*>
+514,2015-07-30,"14:52:21,906",INFO,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:NIOServerCnxn,1001,Closed socket connection for client /10.10.34.29:39382 which had sessionid 0x14ed93111f2005d,E10,Closed socket connection for client /<*>:<*> which had sessionid <*>
+515,2015-07-30,"14:52:36,477",INFO,CommitProcessor,1:ZooKeeperServer,595,Established session 0x14ed93111f2007c with negotiated timeout 10000 for client /10.10.34.11:50276,E13,Established session <*> with negotiated timeout <*> for client /<*>:<*>
+516,2015-07-30,"14:53:21,340",INFO,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,839,Client attempting to establish new session at /10.10.34.11:50286,E7,Client attempting to establish new session at /<*>:<*>
+523,2015-07-30,"16:12:01,554",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.19:33442; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+527,2015-07-30,"16:18:36,818",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.20:56418; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+528,2015-07-30,"16:18:38,680",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.42:34164; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+530,2015-07-30,"16:34:50,091",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.11:54411; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+532,2015-07-30,"16:44:36,930",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.13:37454; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+541,2015-07-30,"17:49:05,943",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.12:45728; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+548,2015-07-30,"19:59:02,538",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.13:38053; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+556,2015-07-30,"20:35:02,324",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.13:38079; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+559,2015-07-30,"21:03:44,632",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.11:40489; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+572,2015-07-31,"00:02:57,202",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.40:40996; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+576,2015-07-31,"00:19:37,018",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.16:39498; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+579,2015-07-31,"11:01:57,854",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.25:58975; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+580,2015-07-31,"11:09:01,762",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.33:39730; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+592,2015-07-31,"21:23:10,926",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.13:39525; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+593,2015-07-31,"21:23:12,897",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.35:48971; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+603,2015-08-10,"17:53:22,870",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.16:40418; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+635,2015-08-21,"15:55:04,347",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.13:50545; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+1266,2015-07-29,"19:54:05,544",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.13:37229; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+1273,2015-07-29,"21:01:50,768",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.25:53326; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+1291,2015-07-29,"23:52:07,913",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.12:54643; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+1328,2015-07-30,"16:18:40,188",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.30:60436; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+1334,2015-07-30,"17:33:11,443",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.11:58424; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+1355,2015-07-31,"00:17:49,993",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.12:54126; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+1372,2015-07-31,"11:09:02,382",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.30:55417; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+1399,2015-08-10,"17:52:46,935",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.20:44648; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+1400,2015-08-10,"17:53:26,762",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.18:49139; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+1404,2015-08-10,"18:12:50,548",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.25:44819; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+1405,2015-08-10,"18:23:56,257",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.15:49471; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+1411,2015-08-10,"18:25:27,950",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.11:51259; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+1452,2015-08-21,"15:55:10,840",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.35:47894; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+1927,2015-07-29,"21:34:44,640",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.12:59230; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+1943,2015-07-30,"15:14:15,378",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.11:37116; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+1949,2015-07-30,"16:34:25,605",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.13:54616; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+1950,2015-07-30,"16:34:35,580",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.14:49822; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+1961,2015-07-30,"19:19:12,507",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.11:50716; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+1965,2015-07-30,"19:57:45,045",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.11:51043; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+1971,2015-07-30,"20:36:32,026",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.12:56424; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+1986,2015-07-31,"11:09:02,264",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.34:55584; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode
+1987,2015-07-31,"11:09:02,548",WARN,NIOServerCxn.Factory,0.0.0.0/0.0.0.0:2181:ZooKeeperServer,793,Connection request from old client /10.10.34.37:34701; will be dropped if server is in r-o mode,E12,Connection request from old client /<*>:<*>; will be dropped if server is in r-o mode

@@ -1,0 +1,79 @@
+# Ground-truth labelling rubric for BlueGene/L (BGL) log windows.
+#
+# BGL lines carry alert tags assigned by system administrators (Oliner & Stearley, "What
+# Supercomputers Say", DSN 2007). ARIA's severity rules never read these tags: they see only the
+# log text, levels and rates. This file maps each tag to an impact class, and `window_rules`
+# turns the tags present in a window, plus how widespread they are, into SEV1-SEV4.
+#
+# Impact classes follow the tag's meaning: kernel panics, machine checks and power faults stop
+# nodes outright (critical); kernel terminations, memory/storage interrupts, file-system mount
+# failures and network/link faults kill jobs or partitions (major); control-daemon read/timeout
+# errors are usually recoverable (minor). Tags not listed default to `default_class`.
+
+default_class: major
+
+classes:
+  critical:
+    KERNRTSP: "rts panic - stopping execution (kernel panic on a compute node)"
+    KERNPAN: "kernel panic"
+    KERNMC: "machine check interrupt (hardware fault)"
+    KERNPOW: "power-supply fault"
+    MONPOW: "monitor-detected power fault"
+    KERNFSHUT: "file-system shutdown"
+    MASABNORM: "BGLMaster exited abnormally (control system down)"
+  major:
+    KERNTERM: "rts: kernel terminated (job killed)"
+    KERNDTLB: "data TLB error interrupt"
+    KERNSTOR: "data storage interrupt"
+    KERNMNTF: "Lustre mount FAILED on an I/O node"
+    KERNMNT: "file-system mount problem"
+    KERNSOCK: "kernel socket failure"
+    KERNREC: "error receiving packet on the tree network"
+    KERNNOETH: "no Ethernet link on an I/O node"
+    KERNSERV: "kernel service failure"
+    KERNEXT: "external interrupt fault"
+    KERNBIT: "bit-sparing / memory bit error"
+    KERNCON: "kernel console failure"
+    KERNPROG: "program interrupt"
+    KERNRTSA: "rts assertion failure"
+    KERNMICE: "microloader/MICE error"
+    APPSEV: "ciod: CioStream link severed"
+    APPALLOC: "ciod: allocation failure"
+    APPTORUS: "torus network error seen by the application"
+    LINKDISC: "link disconnected"
+    LINKIAP: "link card IAP fault"
+    LINKBLL: "link card BLL fault"
+    LINKPAP: "link card PAP fault"
+    MMCS: "MMCS control-system error"
+    MONILL: "monitor detected an illegal state"
+    BGLMASTER: "BGLMaster failure"
+  minor:
+    APPREAD: "ciod: failed to read message prefix"
+    APPRES: "ciod: connection reset by peer"
+    APPTO: "ciod: connection timed out"
+    APPCHILD: "ciod: error creating node map (no child processes)"
+    APPOUT: "ciod: LOGIN chdir failed (I/O error)"
+    APPBUSY: "ciod: resource busy"
+    APPUNAV: "ciod: resource unavailable"
+    MONNULL: "monitor reported a null reading"
+    MASNORM: "BGLMaster exited normally"
+
+# Evaluated top to bottom; the first rule whose conditions all hold sets the window's severity.
+window_rules:
+  - severity: SEV1
+    any_of:
+      - {critical_nodes_at_least: 4}
+      - {critical_alerts_at_least: 50}
+      - {major_nodes_at_least: 64}
+  - severity: SEV2
+    any_of:
+      - {critical_alerts_at_least: 1}
+      - {major_nodes_at_least: 8}
+      - {major_alerts_at_least: 100}
+  - severity: SEV3
+    any_of:
+      - {major_alerts_at_least: 1}
+      - {minor_alerts_at_least: 5}
+  - severity: SEV4
+    any_of:
+      - {always: true}

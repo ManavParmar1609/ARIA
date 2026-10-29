@@ -185,6 +185,7 @@ class Settings(BaseSettings):
 
     env: Environment = Environment.DEV
     database_url: str = "sqlite:///data/aria.db"
+    database_auth: Literal["default", "entra"] = "default"
     config_file: Path = Path("config/aria.yaml")
     data_dir: Path = Path("data")
     models_dir: Path = Path("models")

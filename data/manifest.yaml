@@ -1,0 +1,66 @@
+# Datasets ARIA trains and evaluates on. Raw data is never committed; `aria data download`
+# fetches each source into data/raw/<name>/ and verifies it:
+#   git     - content-addressed: the pinned commit is the checksum
+#   zenodo  - md5 checksums published in the Zenodo record API
+#   http    - sha256 pinned below, or recorded on first download in data/checksums.lock
+
+sources:
+  loghub-2k:
+    kind: git
+    url: https://github.com/logpai/loghub
+    commit: dd61d0952749ee7963bde24220d1be5ede023033
+    paths:
+      - "*/*_2k.log_structured.csv"
+      - "*/*_2k.log_templates.csv"
+      - LICENSE
+      - CITATION
+    license: Loghub license (free for research and academic work; cite Zhu et al., ISSRE 2023)
+    citation: "J. Zhu, S. He, P. He, J. Liu, M. R. Lyu. Loghub: A Large Collection of System Log Datasets for AI-driven Log Analytics. ISSRE 2023."
+    description: 2,000-line samples from 16 systems with ground-truth templates; BGL and Thunderbird carry sysadmin alert tags.
+
+  loghub2-corrected:
+    kind: git
+    url: https://github.com/logpai/Loghub-2.0
+    commit: ac4aad2ea86f561e5a0acbc6587fa28b487259f9
+    paths:
+      - "2k_dataset/*/*_2k.log_structured_corrected.csv"
+      - "2k_dataset/*/*_2k.log_templates_corrected.csv"
+    license: Loghub license
+    citation: "Z. Jiang et al. A Large-scale Evaluation for Log Parsing Techniques: How Far are We? ISSTA 2024."
+    description: Corrected ground-truth templates for the 2k samples, used to score the log parser.
+
+  hdfs-100k:
+    kind: git
+    url: https://github.com/logpai/loglizer
+    commit: ac67f9727acb660687a77b9c8042553aaa185cd3
+    paths:
+      - data/HDFS/HDFS_100k.log_structured.csv
+      - data/HDFS/anomaly_label.csv
+    license: Loghub license (loglizer code is MIT)
+    citation: "W. Xu, L. Huang, A. Fox, D. Patterson, M. I. Jordan. Detecting Large-Scale System Problems by Mining Console Logs. SOSP 2009."
+    description: The first ~105k contiguous HDFS_v1 lines with expert block-level anomaly labels.
+
+  loghub-bgl:
+    kind: zenodo
+    record: "8196385"
+    files: [BGL.zip]
+    license: Loghub license
+    citation: "A. J. Oliner, J. Stearley. What Supercomputers Say: A Study of Five System Logs. DSN 2007."
+    description: Full BlueGene/L log (~4.75M lines) with sysadmin alert tags; the primary severity benchmark.
+
+  loghub-hadoop:
+    kind: zenodo
+    record: "8196385"
+    files: [Hadoop.zip]
+    license: Loghub license
+    citation: "Q. Lin et al. Log Clustering based Problem Identification for Online Service Systems. ICSE 2016."
+    description: Hadoop application logs with injected failure types (machine down, network disconnection, disk full).
+
+  uci-incidents:
+    kind: uci
+    dataset_id: 498
+    fallback_url: https://archive.ics.uci.edu/static/public/498/incident+management+process+enriched+event+log.zip
+    sha256: null
+    license: CC BY 4.0 (DOI 10.24432/C57S4H)
+    citation: "C. Amaral, M. Fantinato, H. Reijers, S. Peres. Enhancing Completion Time Prediction Through Attribute Selection. 2018. UCI ML Repository."
+    description: ServiceNow incident event log from an IT company (141,712 events, 24,918 incidents, anonymized categorical codes).
