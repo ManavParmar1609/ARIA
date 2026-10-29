@@ -33,7 +33,10 @@ export function SeverityPanel({ assessment }: { assessment: SeverityAssessment }
       : (HOW[assessment.decided_by] ?? assessment.decided_by);
   const maxScore = Math.max(1, ...SEVERITIES.map((s) => assessment.rule_scores[s] ?? 0));
   return (
-    <section aria-labelledby="severity-title" className="grid min-w-0 gap-4 rounded-lg bg-raised p-4 sm:p-5">
+    <section
+      aria-labelledby="severity-title"
+      className="grid min-w-0 gap-4 rounded-lg bg-raised p-4 sm:p-5"
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="grid gap-1">
           <h2 id="severity-title" className="eyebrow text-muted-foreground">
