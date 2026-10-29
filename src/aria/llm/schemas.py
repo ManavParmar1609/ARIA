@@ -52,14 +52,19 @@ class NewHypothesis(Contract):
     component: str | None = None
 
 
+class ToolRequest(Contract):
+    tool: str  # narrowed at call time to the allowlisted tool names
+    arguments: ToolArguments = Field(default_factory=ToolArguments)
+
+
 class InvestigatorStep(Contract):
-    """One ReAct step: update beliefs, then call one read-only tool or finish."""
+    """One round: update beliefs, then run read-only tool calls in parallel, or finish."""
 
     rationale: Annotated[str, StringConstraints(min_length=1, max_length=400)]
     new_hypotheses: list[NewHypothesis] = Field(default_factory=list, max_length=3)
     updates: list[HypothesisUpdate] = Field(default_factory=list, max_length=6)
-    action: str  # narrowed at call time to the allowlisted tool names plus "finish"
-    arguments: ToolArguments = Field(default_factory=ToolArguments)
+    calls: list[ToolRequest] = Field(default_factory=list, max_length=5)
+    finish: bool = False
 
 
 class ActionOut(Contract):

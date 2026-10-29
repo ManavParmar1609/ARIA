@@ -46,11 +46,13 @@ SYSTEM_PROMPTS: dict[str, str] = {
     ),
     "investigator_step": (
         "You are ARIA's investigator. You test hypotheses about the cause of an incident by "
-        "calling read-only tools. On each turn: add up to three new hypotheses if useful, "
-        "update existing hypotheses using evidence IDs from the observations, then choose one "
-        "tool from the allowlist with its arguments, or 'finish' when the leading hypothesis is "
-        "supported or the step budget is nearly spent. Prefer the tool most likely to refute "
-        "the leading hypothesis. suggested_plan is a sensible default, not an obligation."
+        "calling read-only tools. On each round: add up to three new hypotheses if useful, "
+        "update existing hypotheses using evidence IDs from the observations, then list the "
+        "tool calls to run next (they run in parallel, at most max_parallel_calls and never "
+        "more than tool_calls_left), or set finish to true with no calls when the leading "
+        "hypothesis is supported or nothing useful is left to check. Prefer calls that could "
+        "refute the leading hypothesis. suggested_plan is a sensible default, not an "
+        "obligation; do not repeat a call that already has an observation."
     ),
     "narrative": (
         "You are ARIA's incident report writer. Improve the draft report in aria_context into a "
@@ -93,7 +95,7 @@ SYSTEM_PROMPTS: dict[str, str] = {
 
 TASK_LINES: dict[str, str] = {
     "adjudication": "Choose the incident severity from the prediction set.",
-    "investigator_step": "Take the next investigation step.",
+    "investigator_step": "Take the next investigation round.",
     "narrative": "Write the incident report.",
     "critic": "Check every claim against its cited evidence.",
     "comms": "Draft the three incident communications.",
@@ -151,7 +153,10 @@ def build_messages(
     evidence: Sequence[Evidence] = (),
     *,
     untrusted: Mapping[str, str] | None = None,
+    detail_chars: int = 700,
+    data_chars: int = 400,
 ) -> list[Message]:
+    """System and user messages for ``task``. Smaller ``*_chars`` keep long loops cheap."""
     if task not in SYSTEM_PROMPTS:
         msg = f"unknown prompt task: {task}"
         raise KeyError(msg)
@@ -164,7 +169,7 @@ def build_messages(
     parts = [
         f"<task>{TASK_LINES[task]}</task>",
         f"{CONTEXT_OPEN}\n{_dump_facts(facts)}\n{CONTEXT_CLOSE}",
-        render_evidence(evidence),
+        render_evidence(evidence, max_detail=detail_chars, max_data=data_chars),
     ]
     for label, text in (untrusted or {}).items():
         parts.append(fence_untrusted(_neutralize(text), label))

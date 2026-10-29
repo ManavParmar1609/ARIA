@@ -1,0 +1,244 @@
+"""Triage runs: create, inspect, stream, review, time-travel, fork and delete."""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import datetime
+from typing import Annotated, Any, Literal
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi.responses import PlainTextResponse
+from sse_starlette.sse import EventSourceResponse
+
+from aria.api.schemas import (
+    Checkpoint,
+    ForkRequest,
+    ReportOut,
+    ReviewRequest,
+    RunAccepted,
+    RunDetail,
+    RunId,
+    RunPage,
+    RunSummary,
+    links_for,
+)
+from aria.api.security import Principal
+from aria.api.sse import run_events
+from aria.api.state import AppState, app_state, current_principal
+from aria.contracts.inputs import TriageRequest
+from aria.contracts.report import ReviewDecision
+from aria.contracts.run import RunEvent, RunStatus
+from aria.db import repository as repo
+from aria.graph.runner import RunBusyError, RunNotFoundError, RunStateError
+from aria.reporting.markdown import render_postmortem
+
+router = APIRouter(prefix="/api/v1/runs", tags=["runs"])
+State = Annotated[AppState, Depends(app_state)]
+Caller = Annotated[Principal, Depends(current_principal)]
+
+
+async def _run_or_404(state: AppState, run_id: str) -> dict[str, Any]:
+    run = await asyncio.to_thread(repo.get_run, state.services.engine, run_id)
+    if run is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"run {run_id} not found")
+    return run
+
+
+def _public_state(values: dict[str, Any]) -> dict[str, Any]:
+    """Graph state without the raw input lines (the parsed, redacted batch is kept)."""
+    out = dict(values)
+    request = dict(out.get("request") or {})
+    if "logs" in request:
+        request["logs"] = {"lines": len(request["logs"]), "omitted": True}
+    out["request"] = request
+    return out
+
+
+@router.post("", status_code=status.HTTP_202_ACCEPTED, response_model=RunAccepted)
+async def create_run(request: TriageRequest, state: State, caller: Caller) -> RunAccepted:
+    """Start triage. The run continues in the background; follow it on ``links.stream``."""
+    trigger = "api" if caller.authenticated else "manual"
+    run_id = await asyncio.to_thread(state.runner.submit, request, trigger=trigger)
+    if state.inprocess:
+        state.worker.execute(run_id)
+    return RunAccepted(run_id=run_id, status=str(RunStatus.QUEUED), links=links_for(run_id))
+
+
+@router.get("", response_model=RunPage)
+async def list_runs(
+    state: State,
+    run_status: Annotated[RunStatus | None, Query(alias="status")] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    before: datetime | None = None,
+) -> RunPage:
+    rows = await asyncio.to_thread(
+        repo.list_runs,
+        state.services.engine,
+        limit=limit,
+        status=str(run_status) if run_status else None,
+        before=before,
+    )
+    runs = [RunSummary.model_validate(row) for row in rows]
+    return RunPage(runs=runs, next_before=runs[-1].created_at if len(runs) == limit else None)
+
+
+@router.get("/{run_id}", response_model=RunDetail)
+async def get_run(run_id: RunId, state: State) -> RunDetail:
+    run = await _run_or_404(state, run_id)
+    detail: dict[str, Any] = {**run, "links": links_for(run_id)}
+    try:
+        snapshot = await state.runner.snapshot(run_id)
+    except RunNotFoundError:
+        return RunDetail.model_validate(detail)
+    values = snapshot.values
+    interrupts = [i.value for task in snapshot.tasks for i in task.interrupts]
+    detail.update(
+        review=interrupts[0] if interrupts else None,
+        plan=values.get("plan"),
+        budget=values.get("budget"),
+        notes=values.get("notes", []),
+        replan_reasons=values.get("replan_reasons", []),
+        errors=values.get("errors", []),
+    )
+    return RunDetail.model_validate(detail)
+
+
+@router.get("/{run_id}/state")
+async def get_state(
+    run_id: RunId, state: State, checkpoint_id: str | None = None
+) -> dict[str, Any]:
+    """The run's graph state (at a checkpoint, if given), without the raw input lines."""
+    await _run_or_404(state, run_id)
+    try:
+        snapshot = await state.runner.snapshot(run_id, checkpoint_id)
+    except RunNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no state for this run yet") from exc
+    return {
+        "values": _public_state(snapshot.values),
+        "next": list(snapshot.next),
+        "checkpoint_id": snapshot.config["configurable"].get("checkpoint_id"),
+    }
+
+
+@router.get("/{run_id}/events", response_model=list[RunEvent])
+async def list_events(
+    run_id: RunId,
+    state: State,
+    after: Annotated[int, Query(ge=-1)] = -1,
+    limit: Annotated[int, Query(ge=1, le=5_000)] = 1_000,
+) -> list[RunEvent]:
+    await _run_or_404(state, run_id)
+    return await asyncio.to_thread(
+        repo.list_events, state.services.engine, run_id, after=after, limit=limit
+    )
+
+
+@router.get("/{run_id}/stream")
+async def stream(
+    run_id: RunId,
+    state: State,
+    after: Annotated[int, Query(ge=-1)] = -1,
+    until: Annotated[Literal["finished", "review"], Query()] = "finished",
+    last_event_id: Annotated[str | None, Header()] = None,
+) -> EventSourceResponse:
+    """Server-sent events: stored events after ``Last-Event-ID`` (or ``after``), then live.
+
+    The stream ends when the run finishes, or with ``until=review`` when it pauses for review.
+    """
+    await _run_or_404(state, run_id)
+    start = int(last_event_id) if last_event_id and last_event_id.isdigit() else after
+    events = run_events(state.runner, run_id, after=start, until_review=until == "review")
+    return EventSourceResponse(events, ping=15)
+
+
+async def _report(state: AppState, run_id: str) -> tuple[Any, str]:
+    run = await _run_or_404(state, run_id)
+    stored = await asyncio.to_thread(
+        repo.get_report, state.services.engine, run.get("report_id") or f"rpt-{run_id}"
+    )
+    if stored is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "this run has no report yet")
+    return stored
+
+
+@router.get("/{run_id}/report", response_model=ReportOut)
+async def get_report(run_id: RunId, state: State) -> ReportOut:
+    report, markdown = await _report(state, run_id)
+    return ReportOut(report=report, markdown=markdown)
+
+
+@router.get("/{run_id}/report.md", response_class=PlainTextResponse)
+async def get_report_markdown(run_id: RunId, state: State) -> PlainTextResponse:
+    _, markdown = await _report(state, run_id)
+    return PlainTextResponse(markdown, media_type="text/markdown; charset=utf-8")
+
+
+@router.get("/{run_id}/postmortem.md", response_class=PlainTextResponse)
+async def get_postmortem(run_id: RunId, state: State) -> PlainTextResponse:
+    report, _ = await _report(state, run_id)
+    return PlainTextResponse(render_postmortem(report), media_type="text/markdown; charset=utf-8")
+
+
+@router.post("/{run_id}/review", response_model=RunDetail)
+async def review(run_id: RunId, body: ReviewRequest, state: State, caller: Caller) -> RunDetail:
+    """Approve, edit or reject the report. Approved actions are sent before this returns."""
+    await _run_or_404(state, run_id)
+    reviewer = caller.name if caller.authenticated else (body.reviewer or caller.name)
+    decision = ReviewDecision(
+        decision=body.decision,
+        reviewer=reviewer,
+        comment=body.comment,
+        edits=body.edits,
+        approve_actions=body.approve_actions,
+    )
+    try:
+        outcome = await state.runner.resume(run_id, decision)
+    except RunNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except (RunStateError, RunBusyError) as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    if outcome.interrupt and outcome.interrupt.get("error"):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, outcome.interrupt["error"])
+    return await get_run(run_id, state)
+
+
+@router.get("/{run_id}/history", response_model=list[Checkpoint])
+async def history(
+    run_id: RunId, state: State, limit: Annotated[int, Query(ge=1, le=500)] = 100
+) -> list[Checkpoint]:
+    """Checkpoints, newest first: fork from any of them."""
+    await _run_or_404(state, run_id)
+    items = await state.runner.history(run_id, limit=limit)
+    return [Checkpoint.model_validate(item) for item in items]
+
+
+@router.post("/{run_id}/fork", status_code=status.HTTP_202_ACCEPTED, response_model=RunAccepted)
+async def fork(run_id: RunId, body: ForkRequest, state: State) -> RunAccepted:
+    """Branch a new run from a checkpoint, optionally with different run options."""
+    await _run_or_404(state, run_id)
+    try:
+        outcome = await state.runner.fork(
+            run_id,
+            body.checkpoint_id,
+            options=body.run_options(),
+            title=body.title,
+            execute=False,
+        )
+    except RunNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no such checkpoint") from exc
+    except RunStateError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    if state.inprocess:
+        state.worker.execute(outcome.run_id)
+    return RunAccepted(
+        run_id=outcome.run_id, status=str(outcome.status), links=links_for(outcome.run_id)
+    )
+
+
+@router.delete("/{run_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_run(run_id: RunId, state: State) -> None:
+    """Delete the run and everything derived from it (report, events, memory, checkpoints)."""
+    run = await _run_or_404(state, run_id)
+    if run["status"] in (RunStatus.RUNNING, RunStatus.QUEUED):
+        raise HTTPException(status.HTTP_409_CONFLICT, "the run is still in progress")
+    await state.runner.delete(run_id)

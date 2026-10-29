@@ -189,7 +189,9 @@ class CommsConfig(_Strict):
 
 
 class InvestigationConfig(_Strict):
-    max_steps: int = Field(default=6, ge=0, le=20)
+    max_steps: int = Field(default=6, ge=0, le=20)  # tool calls per investigation
+    max_rounds: int = Field(default=2, ge=1, le=10)  # decision rounds (one LLM call each)
+    max_parallel: int = Field(default=5, ge=1, le=10)  # tool calls one round may run at once
     max_hypotheses: int = Field(default=4, ge=1, le=10)
 
 
@@ -225,6 +227,7 @@ class Settings(BaseSettings):
     otel_exporter: Literal["none", "console", "otlp", "azure"] = "none"
     otlp_endpoint: str | None = None
     worker_mode: Literal["inprocess", "external"] = "inprocess"
+    worker_concurrency: int = Field(default=4, ge=1, le=64)
     require_approval: bool = True
     rate_limit_per_minute: int = Field(default=120, ge=1)
     public_base_url: str = "http://localhost:8000"

@@ -12,7 +12,7 @@ import asyncio
 import json
 import uuid
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -172,6 +172,7 @@ class TriageRunner:
         self.graph = build_graph(checkpointer=self.checkpointer, store=self.store)
         self.context = TriageContext(services=services, tools=tools)
         self._locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+        self.observers: list[Callable[[RunEvent], None]] = []  # e.g. metrics
         self._subscribers: defaultdict[str, set[asyncio.Queue[RunEvent]]] = defaultdict(set)
         self._last_seq: dict[str, int] = {}
 
@@ -218,6 +219,8 @@ class TriageRunner:
             )
             self._last_seq[run_id] = event.seq
         self._broadcast(event)
+        for observe in self.observers:
+            observe(event)
         return event
 
     async def _handle(self, run_id: str, part: Mapping[str, Any]) -> None:
@@ -366,6 +369,21 @@ class TriageRunner:
             elapsed = datetime.now(UTC) - datetime.fromisoformat(started)
             fields["latency_ms"] = round(elapsed.total_seconds() * 1_000, 1)
         await asyncio.to_thread(repo.update_run, self.engine, run_id, status=status, **fields)
+        if "latency_ms" in fields:  # first time the run reached review (or the end)
+            budget = values.get("budget") or {}
+            await self._event(
+                run_id,
+                "budget",
+                payload={
+                    "latency_ms": fields["latency_ms"],
+                    "tokens_in": budget.get("tokens_in", 0),
+                    "tokens_out": budget.get("tokens_out", 0),
+                    "cost_usd": budget.get("cost_usd", 0.0),
+                    "llm_calls": budget.get("llm_calls", 0),
+                    "tool_calls": budget.get("tool_calls", 0),
+                    "exhausted": budget.get("exhausted", []),
+                },
+            )
         interrupt = _jsonable(interrupts[0]) if interrupts else None
         if status.terminal:
             await self._event(run_id, "run_finished", payload={"status": str(status)})
@@ -406,11 +424,13 @@ class TriageRunner:
         *,
         options: Json | None = None,
         title: str | None = None,
+        execute: bool = True,
     ) -> RunOutcome:
         """Branch a new run from a checkpoint of ``run_id``, optionally with new run options.
 
         The new run gets its own run, report and action ids, its own copy of the run's log lines
-        and a fresh budget clock; the original run is not touched.
+        and a fresh budget clock; the original run is not touched. With ``execute=False`` the
+        fork is only prepared (queued); ``execute(new_run_id)`` continues it.
         """
         snapshot = await self.snapshot(run_id, checkpoint_id)
         if not snapshot.next:
@@ -423,7 +443,10 @@ class TriageRunner:
         if title:
             request = request.model_copy(update={"title": title})
         if not snapshot.values.get("plan"):  # nothing has run yet: a fork is simply a new run
-            return await self.start(request, trigger="fork", parent_run_id=run_id)
+            new_id = await asyncio.to_thread(
+                self.submit, request, trigger="fork", parent_run_id=run_id
+            )
+            return await self.execute(new_id) if execute else RunOutcome(new_id, RunStatus.QUEUED)
 
         new_id = new_run_id()
         await self.checkpointer.acopy_thread(run_id, new_id)
@@ -458,6 +481,8 @@ class TriageRunner:
         await self._event(
             new_id, "run_started", payload={"forked_from": run_id, "checkpoint_id": checkpoint_id}
         )
+        if not execute:
+            return RunOutcome(new_id, RunStatus.QUEUED)
         return await self._drive(new_id, None, config=forked)
 
     async def delete(self, run_id: str) -> None:

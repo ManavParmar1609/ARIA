@@ -145,14 +145,19 @@ def build_server(
     services: Services | None = None,
     *,
     factory: Callable[[], Any] | None = None,
+    provider: Callable[[], Services] | None = None,
 ) -> MCPServer:
-    """Build the server around ``services``, or create them at startup with ``factory``."""
+    """Build the server around ``services``, or create them at startup with ``factory``.
+
+    ``provider`` hands the server services owned by someone else (the API mounts the server
+    and shares its own services); the server then neither creates nor closes them.
+    """
     state: dict[str, Any] = {"services": services}
 
     @asynccontextmanager
     async def lifespan(_: MCPServer) -> AsyncIterator[dict[str, Any]]:
         created = False
-        if state["services"] is None:
+        if state["services"] is None and provider is None:
             state["services"] = await (factory or Services.create)()
             created = True
         try:
@@ -170,6 +175,8 @@ def build_server(
     )
 
     def svc() -> Services:
+        if provider is not None:
+            return provider()
         current = state["services"]
         if current is None:
             msg = "ARIA services are not initialised"

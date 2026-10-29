@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 
@@ -290,3 +290,74 @@ def save_feedback(
             )
         else:
             row.value, row.comment = value, comment
+
+
+# --- the external worker's queue -----------------------------------------------------------------
+
+
+def claim_runs(
+    engine: Engine,
+    worker: str,
+    *,
+    limit: int = 1,
+    stale_after_s: float = 600.0,
+) -> list[str]:
+    """Claim queued runs (and runs whose worker went quiet) for ``worker``, oldest first.
+
+    A claim is a conditional update, so two workers never take the same run.
+    """
+    now = utcnow()
+    stale = now.timestamp() - stale_after_s
+    claimed: list[str] = []
+    with session_scope(engine) as session:
+        candidates = session.scalars(
+            select(RunRow)
+            .where(RunRow.status.in_([str(RunStatus.QUEUED), str(RunStatus.RUNNING)]))
+            .order_by(RunRow.created_at)
+            .limit(limit * 5)
+        )
+        for row in candidates:
+            if len(claimed) >= limit:
+                break
+            free = row.claimed_by is None and row.status == RunStatus.QUEUED
+            abandoned = row.claimed_at is not None and row.claimed_at.timestamp() < stale
+            if not (free or abandoned):
+                continue
+            unchanged = (
+                RunRow.claimed_at.is_(None)
+                if row.claimed_at is None
+                else RunRow.claimed_at == row.claimed_at
+            )
+            result = session.execute(
+                update(RunRow)
+                .where(RunRow.id == row.id, unchanged)
+                .values(claimed_by=worker, claimed_at=now)
+            )
+            if result.rowcount == 1:  # type: ignore[attr-defined]
+                claimed.append(row.id)
+    return claimed
+
+
+def heartbeat(engine: Engine, run_id: str, worker: str) -> None:
+    with session_scope(engine) as session:
+        session.execute(
+            update(RunRow)
+            .where(RunRow.id == run_id, RunRow.claimed_by == worker)
+            .values(claimed_at=utcnow())
+        )
+
+
+def unfinished_runs(engine: Engine, *, limit: int = 50) -> list[str]:
+    """Runs left queued or running by a stopped in-process worker (never claimed)."""
+    with session_scope(engine) as session:
+        return list(
+            session.scalars(
+                select(RunRow.id)
+                .where(
+                    RunRow.status.in_([str(RunStatus.QUEUED), str(RunStatus.RUNNING)]),
+                    RunRow.claimed_by.is_(None),
+                )
+                .order_by(RunRow.created_at)
+                .limit(limit)
+            )
+        )

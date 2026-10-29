@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 from aria.config import BudgetConfig
 from aria.contracts.run import BudgetUsage
@@ -19,6 +20,7 @@ class BudgetGuard:
     def __init__(self, limits: BudgetConfig, usage: BudgetUsage | None = None) -> None:
         self.limits = limits
         self.usage = usage.model_copy(deep=True) if usage else BudgetUsage()
+        self.calls: list[dict[str, Any]] = []  # one entry per LLM call made through this guard
 
     def _exhaust(self, reason: str) -> BudgetExceededError:
         if reason not in self.usage.exhausted:
@@ -46,7 +48,20 @@ class BudgetGuard:
         if self.usage.steps >= self.limits.max_steps:
             raise self._exhaust("steps")
 
-    def record_llm(self, usage: Usage) -> None:
+    def record_llm(
+        self, usage: Usage, *, task: str = "", provider: str = "", model: str = ""
+    ) -> None:
+        self.calls.append(
+            {
+                "task": task,
+                "provider": provider,
+                "model": model,
+                "input_tokens": usage.input_tokens,
+                "output_tokens": usage.output_tokens,
+                "latency_ms": usage.latency_ms,
+                "estimated": usage.estimated,
+            }
+        )
         self.usage.llm_calls += 1
         self.usage.tokens_in += usage.input_tokens
         self.usage.tokens_out += usage.output_tokens
@@ -54,6 +69,23 @@ class BudgetGuard:
             self.usage.cost_known = False
         else:
             self.usage.cost_usd = round(self.usage.cost_usd + usage.cost_usd, 6)
+
+    def record_failure(
+        self, *, task: str, provider: str, model: str, latency_ms: float, error: str
+    ) -> None:
+        """A call that failed (timeout, provider error): it cost time but no tokens."""
+        self.calls.append(
+            {
+                "task": task,
+                "provider": provider,
+                "model": model,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "latency_ms": latency_ms,
+                "estimated": False,
+                "error": error[:300],
+            }
+        )
 
     def record_tool(self) -> None:
         self.usage.tool_calls += 1

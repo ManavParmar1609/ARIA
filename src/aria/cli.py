@@ -231,6 +231,100 @@ def mcp(
         server.run("streamable-http", host=host, port=port)
 
 
+@app.command()
+def serve(
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    reload: Annotated[bool, typer.Option(help="Restart on code changes (development).")] = False,
+) -> None:
+    """Run the API: REST and SSE, MCP at /mcp, A2A at /a2a and AG-UI at /agui."""
+    import uvicorn
+
+    uvicorn.run(
+        "aria.api.app:create_app",
+        factory=True,
+        host=host,
+        port=port,
+        reload=reload,
+        proxy_headers=True,
+        log_level="info",
+    )
+
+
+@app.command()
+def worker(
+    concurrency: Annotated[int, typer.Option(min=1, max=64)] = 4,
+    interval: Annotated[float, typer.Option(help="Seconds between queue polls.")] = 2.0,
+) -> None:
+    """Run queued triage runs from the database (for ARIA_WORKER_MODE=external)."""
+    from aria.api.worker import poll_forever
+    from aria.config import get_settings
+    from aria.graph.runner import TriageRunner
+    from aria.observability.logging import configure_logging
+    from aria.services import Services
+
+    settings = get_settings()
+    configure_logging(settings.log_level, settings.log_format)
+
+    async def main() -> None:
+        services = await Services.create()
+        try:
+            await poll_forever(TriageRunner(services), concurrency=concurrency, interval_s=interval)
+        finally:
+            await services.aclose()
+
+    asyncio.run(main())
+
+
+@app.command()
+def triage(
+    logs: Annotated[Path | None, typer.Argument(help="A log file (one line per event).")] = None,
+    system: Annotated[str, typer.Option(help="Log format, e.g. bgl, hdfs, openssh.")] = "generic",
+    scenario: Annotated[
+        str | None, typer.Option(help="Use a semi-synthetic scenario, e.g. bgl.kernel_panic.")
+    ] = None,
+    approve: Annotated[bool, typer.Option(help="Approve and publish after the run.")] = False,
+    use_llm: Annotated[bool, typer.Option(help="Allow LLM steps.")] = True,
+) -> None:
+    """Triage a log file (or a scenario) end to end and print the report."""
+    from aria.contracts.inputs import RunOptions, TriageRequest
+    from aria.data.scenarios import LinePools, ScenarioBuilder
+    from aria.db import repository as repo
+    from aria.graph.runner import TriageRunner
+    from aria.services import Services
+
+    synthetic = False
+    if scenario:
+        built = ScenarioBuilder(LinePools.from_loghub(_loghub_dir())).build(scenario, seed=1)
+        lines, system, synthetic = built.lines, built.system, True
+    elif logs is not None:
+        lines = [line for line in logs.read_text(encoding="utf-8").splitlines() if line.strip()]
+    else:
+        raise typer.BadParameter("give a log file or --scenario")
+    request = TriageRequest(
+        system=system, logs=lines, synthetic=synthetic, options=RunOptions(use_llm=use_llm)
+    )
+
+    async def main() -> None:
+        services = await Services.create()
+        try:
+            runner = TriageRunner(services)
+            outcome = await runner.start(request, trigger="cli")
+            console.print(f"run {outcome.run_id}: {outcome.status}")
+            if outcome.interrupt and approve:
+                outcome = await runner.resume(
+                    outcome.run_id, {"decision": "approve", "reviewer": "cli"}
+                )
+                console.print(f"after review: {outcome.status}")
+            stored = repo.get_report(services.engine, f"rpt-{outcome.run_id}")
+            if stored is not None:
+                console.print(stored[1], markup=False, highlight=False)
+        finally:
+            await services.aclose()
+
+    asyncio.run(main())
+
+
 # --- providers ---------------------------------------------------------------------------------
 
 

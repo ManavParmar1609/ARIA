@@ -94,29 +94,36 @@ def _investigator_step(ctx: dict[str, Any]) -> dict[str, Any]:
                     "refuting": [],
                 }
             )
-    action = "finish"
-    planned_args: dict[str, Any] = {}
-    remaining = int(ctx.get("max_steps", 0)) - int(ctx.get("step", 0))
-    if remaining > 0:
-        for planned in ctx.get("suggested_plan", []):
-            if planned.get("tool") in allowed and planned.get("tool") not in done:
-                action, planned_args = planned["tool"], planned.get("arguments") or {}
-                break
-    arguments = {
-        key: planned_args.get(key)
-        for key in ("query", "template_id", "component", "node", "failure_mode", "slug", "limit")
-    }
+    room = min(int(ctx.get("max_parallel_calls", 1)), int(ctx.get("tool_calls_left", 0)))
+    calls: list[dict[str, Any]] = []
+    for planned in ctx.get("suggested_plan", []):
+        if len(calls) >= room:
+            break
+        if planned.get("tool") in allowed and planned.get("tool") not in done:
+            planned_args = planned.get("arguments") or {}
+            calls.append(
+                {
+                    "tool": planned["tool"],
+                    "arguments": {
+                        key: planned_args.get(key)
+                        for key in (
+                            "query", "template_id", "component", "node", "failure_mode", "slug",
+                            "limit",
+                        )
+                    },
+                }
+            )  # fmt: skip
     rationale = (
-        "Enough evidence gathered; finishing."
-        if action == "finish"
-        else f"Next, check {action} to test the leading hypothesis."
+        f"Check {', '.join(c['tool'] for c in calls)} to test the hypotheses."
+        if calls
+        else "Enough evidence gathered; finishing."
     )
     return {
         "rationale": rationale,
         "new_hypotheses": new,
         "updates": updates,
-        "action": action,
-        "arguments": arguments,
+        "calls": calls,
+        "finish": not calls,
     }
 
 

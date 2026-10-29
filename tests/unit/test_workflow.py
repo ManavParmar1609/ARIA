@@ -6,6 +6,7 @@ a fresh SQLite file, and the investigator's MCP tools run in-process.
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import timedelta
@@ -415,11 +416,15 @@ async def test_injected_lines_change_neither_severity_nor_tool_use(env: Env) -> 
     keys = ("severity", "decided_by", "rule_scores", "probabilities", "prediction_set", "floor")
     assert {k: a["severity"][k] for k in keys} == {k: b["severity"][k] for k in keys}
 
-    def calls(state: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
-        return [
-            (t["tool"], {k: v for k, v in t["arguments"].items() if k != "run_id"})
+    def calls(state: dict[str, Any]) -> list[str]:
+        # Calls within a round run in parallel, so compare them as a sorted multiset.
+        return sorted(
+            json.dumps(
+                [t["tool"], {k: v for k, v in t["arguments"].items() if k != "run_id"}],
+                sort_keys=True,
+            )
             for t in state["tool_calls"]
-        ]
+        )
 
     assert calls(a) == calls(b)
     assert all(t["tool"] in INVESTIGATOR_TOOLS for t in b["tool_calls"])

@@ -177,7 +177,7 @@ async def test_schema_violations_are_reported_by_field() -> None:
 
 async def test_empty_chain_raises_no_provider() -> None:
     router = LLMRouter(_config(default=["nim"]), providers={"nim": FailingProvider()})
-    router.breaker("nim").opened_at = router.breaker("nim").clock()
+    router.breaker("nim").failure("down", trip=True)
     with pytest.raises(NoProviderAvailableError):
         await router.structured("default", "pick", MESSAGES, Pick)
 
@@ -297,3 +297,17 @@ async def test_fake_provider_errors_on_unknown_tasks_and_raises_queued_errors() 
     text, _ = await fake.chat(MESSAGES)
     assert "offline" in text
     assert json.loads(json.dumps(fake.calls[0]["task"])) == "unknown"
+
+
+def test_a_timeout_trips_the_breaker_at_once_and_for_longer() -> None:
+    now = [0.0]
+    breaker = CircuitBreaker(threshold=3, cooldown_s=30, trip_cooldown_s=300, clock=lambda: now[0])
+    breaker.failure("nim: ReadTimeout", trip=True)
+    states = [breaker.state]
+    now[0] = 61
+    states.append(breaker.state)
+    now[0] = 301
+    states.append(breaker.state)
+    breaker.success()
+    states.append(breaker.state)
+    assert states == ["open", "open", "half_open", "closed"]

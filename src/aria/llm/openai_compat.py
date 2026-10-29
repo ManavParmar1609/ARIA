@@ -108,7 +108,13 @@ class OpenAICompatibleProvider:
         )
         try:
             response = await self._client.send(request, stream=stream)
-        except (httpx.TimeoutException, httpx.TransportError) as exc:
+        except httpx.TimeoutException as exc:
+            # A provider that is too slow now will likely stay slow for the next attempt too,
+            # so the router fails over at once instead of retrying here.
+            raise ProviderError(
+                f"{self.name}: {type(exc).__name__}: {exc}", timed_out=True
+            ) from exc
+        except httpx.TransportError as exc:
             raise ProviderError(
                 f"{self.name}: {type(exc).__name__}: {exc}", retryable=True
             ) from exc
@@ -266,9 +272,13 @@ class OpenAICompatibleProvider:
                         # Overall deadline, so a model that trickles tokens cannot run forever.
                         async with asyncio.timeout(self.config.timeout_s):
                             return await self._read_stream(response, on_token)
-                    except (TimeoutError, httpx.TimeoutException, httpx.TransportError) as exc:
+                    except (TimeoutError, httpx.TimeoutException) as exc:
                         raise ProviderError(
-                            f"{self.name}: stream stalled: {type(exc).__name__}", retryable=True
+                            f"{self.name}: stream stalled: {type(exc).__name__}", timed_out=True
+                        ) from exc
+                    except httpx.TransportError as exc:
+                        raise ProviderError(
+                            f"{self.name}: stream broke: {type(exc).__name__}", retryable=True
                         ) from exc
                 body = response.json()
                 choices = body.get("choices") or []

@@ -53,20 +53,26 @@ log = get_logger(__name__)
 
 @dataclass
 class CircuitBreaker:
-    """Opens after ``threshold`` consecutive failures and lets one trial through after ``cooldown_s``."""
+    """Opens after ``threshold`` consecutive failures and lets one trial through after ``cooldown_s``.
+
+    A timeout trips it at once and for longer (``trip_cooldown_s``): a provider that is slow now
+    tends to stay slow, and every retry costs the run a full stall timeout.
+    """
 
     threshold: int = 3
     cooldown_s: float = 30.0
+    trip_cooldown_s: float = 300.0
     clock: Callable[[], float] = time.monotonic
     failures: int = 0
     opened_at: float | None = None
+    open_for: float = 0.0
     last_error: str | None = None
 
     @property
     def state(self) -> Literal["closed", "open", "half_open"]:
         if self.opened_at is None:
             return "closed"
-        return "half_open" if self.clock() - self.opened_at >= self.cooldown_s else "open"
+        return "half_open" if self.clock() - self.opened_at >= self.open_for else "open"
 
     def allow(self) -> bool:
         return self.state != "open"
@@ -76,11 +82,14 @@ class CircuitBreaker:
         self.opened_at = None
         self.last_error = None
 
-    def failure(self, error: str) -> None:
+    def failure(self, error: str, *, trip: bool = False) -> None:
+        """Count a failure; ``trip`` opens the circuit at once (a timeout: the provider is slow)."""
         self.failures += 1
         self.last_error = error[:300]
-        if self.failures >= self.threshold or self.state == "half_open":
-            self.opened_at = self.clock()
+        if trip:
+            self.opened_at, self.open_for = self.clock(), self.trip_cooldown_s
+        elif self.failures >= self.threshold or self.state == "half_open":
+            self.opened_at, self.open_for = self.clock(), self.cooldown_s
 
 
 @dataclass
@@ -149,7 +158,9 @@ class LLMRouter:
     def breaker(self, name: str) -> CircuitBreaker:
         if name not in self._breakers:
             threshold, cooldown = self._breaker_args
-            self._breakers[name] = CircuitBreaker(threshold, cooldown, self._clock)
+            self._breakers[name] = CircuitBreaker(
+                threshold=threshold, cooldown_s=cooldown, clock=self._clock
+            )
         return self._breakers[name]
 
     def is_available(self, name: str) -> bool:
@@ -247,10 +258,20 @@ class LLMRouter:
                     attempts=attempts,
                 )
                 if usage is None:  # provider error: next provider
+                    if budget is not None and attempts:
+                        budget.record_failure(
+                            task=task,
+                            provider=name,
+                            model=getattr(provider, "model", ""),
+                            latency_ms=float(attempts[-1].get("latency_ms", 0.0)),
+                            error=str(attempts[-1].get("error", "")),
+                        )
                     break
                 total = _add(total, usage)
                 if budget is not None:
-                    budget.record_llm(usage)
+                    budget.record_llm(
+                        usage, task=task, provider=name, model=getattr(provider, "model", "")
+                    )
                 try:
                     value = schema.model_validate(extract_json(text))
                     errors = validator(value) if validator else []
@@ -314,10 +335,10 @@ class LLMRouter:
             )
             if usage is None:
                 continue
-            if budget is not None:
-                budget.record_llm(usage)
-            attempts.append({"provider": name, "ok": True})
             model_name = str(model or getattr(provider, "model", ""))
+            if budget is not None:
+                budget.record_llm(usage, task=role, provider=name, model=model_name)
+            attempts.append({"provider": name, "ok": True})
             return LLMResult(text, text, name, model_name, usage, attempts)
         msg = f"no provider is available for role {role!r}"
         raise NoProviderAvailableError(msg, attempts=attempts)
@@ -360,10 +381,16 @@ class LLMRouter:
                     kwargs["model"] = model
                 text, usage = await provider.chat(conversation, **kwargs)
             except ProviderError as exc:
-                breaker.failure(str(exc))
+                breaker.failure(str(exc), trip=exc.timed_out)
                 mark_error(span, exc)
                 attempts.append(
-                    {"provider": name, "ok": False, "error": str(exc)[:300], "status": exc.status}
+                    {
+                        "provider": name,
+                        "ok": False,
+                        "error": str(exc)[:300],
+                        "status": exc.status,
+                        "latency_ms": round((time.perf_counter() - started) * 1000, 1),
+                    }
                 )
                 log.warning("llm.provider_error", provider=name, task=task, status=exc.status)
                 return "", None

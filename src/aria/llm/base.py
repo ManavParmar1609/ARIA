@@ -49,10 +49,18 @@ class LLMError(RuntimeError):
 
 
 class ProviderError(LLMError):
-    def __init__(self, message: str, *, status: int | None = None, retryable: bool = False) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        status: int | None = None,
+        retryable: bool = False,
+        timed_out: bool = False,
+    ) -> None:
         super().__init__(message)
         self.status = status
         self.retryable = retryable
+        self.timed_out = timed_out  # slow, not broken: fail over now and avoid it for a while
 
 
 class StructuredOutputError(LLMError):

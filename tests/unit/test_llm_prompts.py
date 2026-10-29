@@ -175,15 +175,38 @@ def test_fake_investigator_follows_the_plan_then_finishes() -> None:
         ],
     )
     first = InvestigatorStep.model_validate(
-        RESPONDERS["investigator_step"]({**base, "step": 0, "hypotheses": [], "observations": []})
+        RESPONDERS["investigator_step"](
+            {
+                **base,
+                "round": 0,
+                "max_parallel_calls": 5,
+                "tool_calls_left": 5,
+                "hypotheses": [],
+                "observations": [],
+            }
+        )
     )
-    assert first.action == "get_template_examples"
-    assert first.arguments.template_id == "T1"
+    assert [c.tool for c in first.calls] == ["get_template_examples", "component_timeline"]
+    assert first.calls[0].arguments.template_id == "T1"
     assert first.new_hypotheses[0].failure_mode == "kernel_panic"
+    narrow = InvestigatorStep.model_validate(
+        RESPONDERS["investigator_step"](
+            {
+                **base,
+                "max_parallel_calls": 5,
+                "tool_calls_left": 1,
+                "hypotheses": [],
+                "observations": [],
+            }
+        )
+    )
+    assert len(narrow.calls) == 1
     later = RESPONDERS["investigator_step"](
         {
             **base,
-            "step": 2,
+            "round": 1,
+            "max_parallel_calls": 5,
+            "tool_calls_left": 3,
             "hypotheses": [{"id": "H1"}],
             "observations": [
                 {"tool": "get_template_examples", "evidence_ids": ["E1"]},
@@ -192,7 +215,8 @@ def test_fake_investigator_follows_the_plan_then_finishes() -> None:
         }
     )
     step = InvestigatorStep.model_validate(later)
-    assert step.action == "finish"
+    assert step.finish
+    assert step.calls == []
     assert step.updates[0].status == "supported"
 
 

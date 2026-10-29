@@ -81,11 +81,14 @@ async def test_deterministic_loop_follows_the_plan_and_cites_its_hypotheses(
         result = await Investigator(None).run(
             inputs, belt, evidence, emit=lambda k, p: events.append((k, p))
         )
-    assert [c.tool for c in result.tool_calls] == [p["tool"] for p in plan]
+    assert sorted(c.tool for c in result.tool_calls) == sorted(p["tool"] for p in plan)
     assert all(c.arguments.get("run_id", RUN) == RUN for c in result.tool_calls)
     assert result.stopped_reason == "finished"
     assert result.leading_hypothesis is not None
-    assert len(events) == len(plan)
+    starts = [p for kind, p in events if kind == "tool_call" and p["phase"] == "start"]
+    results = [p for kind, p in events if kind == "tool_call" and p["phase"] == "result"]
+    assert sorted(p["tool"] for p in starts) == sorted(p["tool"] for p in plan)
+    assert {p["ref"] for p in starts} == {p["ref"] for p in results}
     hypotheses = [e for e in evidence.all() if e.kind is EvidenceKind.HYPOTHESIS]
     assert {e.data["id"] for e in hypotheses} == {h.id for h in result.hypotheses}
     assert all("confidence" in e.data for e in hypotheses)
@@ -129,20 +132,24 @@ async def test_off_list_actions_and_unknown_evidence_fall_back_to_the_plan(
 ) -> None:
     services, inputs, evidence = setup
     bad = [
-        {"rationale": "wipe it", "action": "delete_run"},
+        {"rationale": "wipe it", "calls": [{"tool": "delete_run"}]},
         {
             "rationale": "cite junk",
-            "action": "node_breakdown",
+            "calls": [{"tool": "node_breakdown"}],
             "updates": [
                 {"id": "H9", "status": "supported", "confidence": 0.9, "supporting": ["E999"]}
             ],
         },
     ]
     async with _belt(services, evidence) as belt:
-        result = await Investigator(_Scripted(bad), mode="llm").run(inputs, belt, evidence)  # type: ignore[arg-type]
+        investigator = Investigator(_Scripted(bad), mode="llm")  # type: ignore[arg-type]
+        result = await investigator.run(inputs, belt, evidence)
     assert "delete_run" not in {c.tool for c in result.tool_calls}
     assert all(h.id != "H9" for h in result.hypotheses)
-    assert result.tool_calls[0].tool == suggested_plan(inputs)[0]["tool"]
+    assert sorted(c.tool for c in result.tool_calls) == sorted(
+        p["tool"] for p in suggested_plan(inputs)
+    )
+    assert result.stopped_reason == "finished"
 
 
 async def test_belt_refusals_are_recorded_and_the_tool_budget_stops_the_loop(
@@ -152,17 +159,22 @@ async def test_belt_refusals_are_recorded_and_the_tool_budget_stops_the_loop(
     steps = [
         {
             "rationale": "timeline",
-            "action": "component_timeline",
-            "arguments": {"component": "KERNEL"},
+            "calls": [{"tool": "component_timeline", "arguments": {"component": "KERNEL"}}],
         },
-        {"rationale": "runbook", "action": "get_runbook", "arguments": {"slug": "generic-triage"}},
-        {"rationale": "again", "action": "get_runbook", "arguments": {"slug": "generic-triage"}},
+        {
+            "rationale": "runbook",
+            "calls": [{"tool": "get_runbook", "arguments": {"slug": "generic-triage"}}],
+        },
+        {
+            "rationale": "another",
+            "calls": [{"tool": "get_runbook", "arguments": {"slug": "zookeeper-quorum-loss"}}],
+        },
     ]
     budget = BudgetGuard(BudgetConfig(max_tool_calls=1))
     allowed = {"component_timeline", "get_runbook"}
     async with _belt(services, evidence, allowed=allowed, budget=budget) as belt:
         belt.allowed = frozenset({"get_runbook"})  # the allowlist shrinks after tools were listed
-        investigator = Investigator(_Scripted(steps), mode="llm")  # type: ignore[arg-type]
+        investigator = Investigator(_Scripted(steps), mode="llm", max_rounds=3)  # type: ignore[arg-type]
         result = await investigator.run(inputs, belt, evidence, budget=budget)
     first = result.tool_calls[0]
     assert (first.tool, first.ok) == ("component_timeline", False)
@@ -170,6 +182,18 @@ async def test_belt_refusals_are_recorded_and_the_tool_budget_stops_the_loop(
     assert [c.tool for c in result.tool_calls[1:]] == ["get_runbook"]
     assert result.stopped_reason == "budget"
     assert budget.usage.tool_calls == 1
+
+
+async def test_parallel_rounds_need_few_decisions(
+    setup: tuple[Services, InvestigationInputs, EvidenceStore],
+) -> None:
+    services, inputs, evidence = setup
+    async with _belt(services, evidence) as belt:
+        result = await Investigator(services.router, mode="llm").run(inputs, belt, evidence)
+    plan = suggested_plan(inputs)
+    assert sorted(c.tool for c in result.tool_calls) == sorted(p["tool"] for p in plan)
+    assert result.steps == len(plan)
+    assert result.stopped_reason == "finished"
 
 
 def test_quarantined_lines_never_choose_the_component(

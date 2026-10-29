@@ -14,12 +14,15 @@ evidence for the report.
 
 from __future__ import annotations
 
+import asyncio
+import json
 import re
+import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from aria.contracts.base import Claim, EvidenceKind
+from aria.contracts.base import Claim, Evidence, EvidenceKind
 from aria.contracts.parsing import ParsedBatch
 from aria.contracts.retrieval import Hypothesis, Investigation, SimilarIncident
 from aria.contracts.severity import SeverityAssessment
@@ -29,7 +32,13 @@ from aria.llm.budget import BudgetGuard
 from aria.llm.jsonschema import restrict_enum, strict_schema
 from aria.llm.prompts import build_messages
 from aria.llm.router import LLMRouter
-from aria.llm.schemas import HypothesisUpdate, InvestigatorStep, NewHypothesis, ToolArguments
+from aria.llm.schemas import (
+    HypothesisUpdate,
+    InvestigatorStep,
+    NewHypothesis,
+    ToolArguments,
+    ToolRequest,
+)
 from aria.mcp.client import ToolBelt, ToolNotAllowedError
 from aria.parsing.parser import QUARANTINE_FLAG
 
@@ -199,17 +208,27 @@ def refutes(hypothesis: Hypothesis, observation: Observation) -> bool:
 
 
 class Investigator:
+    """Rounds of plan-then-act: each round updates beliefs and runs tool calls in parallel.
+
+    ``max_steps`` caps tool calls, ``max_rounds`` caps decision rounds (LLM calls), and
+    ``max_parallel`` caps the calls one round may run at once.
+    """
+
     def __init__(
         self,
         router: LLMRouter | None,
         *,
         max_steps: int = 6,
         max_hypotheses: int = 4,
+        max_rounds: int = 2,
+        max_parallel: int = 5,
         mode: Mode = "auto",
     ) -> None:
         self.router = router
         self.max_steps = max_steps
         self.max_hypotheses = max_hypotheses
+        self.max_rounds = max_rounds
+        self.max_parallel = max_parallel
         self.mode = mode
 
     def uses_llm(self) -> bool:
@@ -219,35 +238,38 @@ class Investigator:
 
     # --- decisions -----------------------------------------------------------------------------
 
-    def _deterministic(self, loop: _Loop, step: int) -> InvestigatorStep:
+    def _deterministic(self, loop: _Loop, room: int) -> InvestigatorStep:
         done = {o.tool for o in loop.observations}
         new = [] if loop.hypotheses else candidate_hypotheses(loop.inputs)
-        upcoming = None
-        if step < self.max_steps:
-            upcoming = next((p for p in loop.plan if p["tool"] not in done), None)
-        if upcoming is None:
+        upcoming = [p for p in loop.plan if p["tool"] not in done][:room]
+        if not upcoming:
             return InvestigatorStep(
-                rationale="Planned checks complete.", new_hypotheses=new, action="finish"
+                rationale="Planned checks complete.", new_hypotheses=new, finish=True
             )
         return InvestigatorStep(
-            rationale=f"Run {upcoming['tool']} to test the hypotheses.",
+            rationale=f"Run {', '.join(p['tool'] for p in upcoming)} to test the hypotheses.",
             new_hypotheses=new,
-            action=upcoming["tool"],
-            arguments=ToolArguments(**upcoming["arguments"]),
+            calls=[
+                ToolRequest(tool=p["tool"], arguments=ToolArguments(**p["arguments"]))
+                for p in upcoming
+            ],
         )
 
-    async def _llm(self, loop: _Loop, step: int) -> InvestigatorStep | None:
+    async def _llm(self, loop: _Loop, round_no: int, room: int) -> InvestigatorStep | None:
         if self.router is None:
             return None
         allowed = [spec.name for spec in loop.belt.specs()]
-        actions = [*allowed, "finish"]
-        known = {e.id for e in loop.evidence.all()}
+        cited = self._context_evidence(loop)
+        known = {e.id for e in cited}  # the model may cite only what it was shown
         ids = {h.id for h in loop.hypotheses}
 
         def check(output: InvestigatorStep) -> list[str]:
             errors = []
-            if output.action not in actions:
-                errors.append(f"action must be one of {', '.join(actions)}")
+            bad = [c.tool for c in output.calls if c.tool not in allowed]
+            if bad:
+                errors.append(f"tools must be among {', '.join(allowed)}; got {', '.join(bad)}")
+            if len(output.calls) > room:
+                errors.append(f"at most {room} calls this round")
             for update in output.updates:
                 if update.id not in ids:
                     errors.append(f"update for unknown hypothesis {update.id}")
@@ -263,10 +285,12 @@ class Investigator:
         ]
         facts = {
             "system": loop.inputs.system,
-            "step": step,
-            "max_steps": self.max_steps,
+            "round": round_no,
+            "max_rounds": self.max_rounds,
+            "max_parallel_calls": room,
+            "tool_calls_left": room,
             "severity": str(loop.inputs.severity.severity),
-            "allowed_actions": actions,
+            "allowed_actions": allowed,
             "tools": [spec.brief() for spec in loop.belt.specs()],
             "hypotheses": hypotheses,
             "observations": [o.brief() for o in loop.observations[-6:]],
@@ -275,24 +299,43 @@ class Investigator:
             else [c.model_dump() for c in candidate_hypotheses(loop.inputs)],
             "suggested_plan": loop.plan,
         }
-        kinds = {EvidenceKind.TEMPLATE, EvidenceKind.FEATURE, EvidenceKind.TOOL}
-        cited = [e for e in loop.evidence.all() if e.kind in kinds]
-        schema = restrict_enum(strict_schema(InvestigatorStep), ["action"], actions)
+        schema = restrict_enum(strict_schema(InvestigatorStep), ["calls", "items", "tool"], allowed)
         try:
             result = await self.router.structured(
                 "investigator",
                 "investigator_step",
-                build_messages("investigator_step", facts, cited[-25:]),
+                build_messages("investigator_step", facts, cited, detail_chars=260, data_chars=180),
                 InvestigatorStep,
                 json_schema=schema,
                 validator=check,
                 budget=loop.budget,
                 temperature=0.0,
-                max_tokens=900,
+                max_tokens=1_600,  # reasoning models spend part of this before the JSON
             )
         except (BudgetExceededError, LLMError):
             return None
         return result.value
+
+    @staticmethod
+    def _context_evidence(loop: _Loop) -> list[Evidence]:
+        """A compact evidence window: the window's key signals plus this loop's observations.
+
+        Each step is one LLM call, so the context stays small: a few features, the top
+        templates, similar incidents, and the latest tool results.
+        """
+        everything = loop.evidence.all()
+        observed = {eid for o in loop.observations for eid in o.evidence_ids}
+
+        def first(kind: EvidenceKind, n: int) -> list[Evidence]:
+            return [e for e in everything if e.kind is kind][:n]
+
+        tools = [e for e in everything if e.id in observed][-6:]
+        return [
+            *first(EvidenceKind.FEATURE, 3),
+            *first(EvidenceKind.TEMPLATE, 5),
+            *first(EvidenceKind.INCIDENT, 3),
+            *tools,
+        ]
 
     # --- belief updates ------------------------------------------------------------------------
 
@@ -334,16 +377,22 @@ class Investigator:
 
     @staticmethod
     def _score(loop: _Loop) -> None:
-        """Offline scoring for hypotheses the LLM did not judge: support adds confidence."""
+        """Final beliefs from the evidence, so "supported" never rests on a model's say-so.
+
+        Each supporting observation adds confidence and a clean timeline refutes. When the LLM
+        also judged a hypothesis, its confidence is averaged in and its refutation stands.
+        """
         for i, hyp in enumerate(loop.hypotheses):
-            if hyp.id in loop.touched:
-                continue
             support = [o for o in loop.observations if supports(hyp, o)]
             refute = [o for o in loop.observations if refutes(hyp, o)]
             confidence = 0.1 if refute else min(0.95, 0.4 + 0.15 * len(support))
-            if refute:
+            judged = hyp.id in loop.touched
+            if judged:
+                confidence = (confidence + hyp.confidence) / 2
+            if refute or (judged and hyp.status == "refuted" and hyp.refuting):
                 status = "refuted"
-            elif confidence >= 0.6:
+                confidence = min(confidence, 0.2)
+            elif confidence >= 0.6:  # two independent supporting checks, or model + evidence
                 status = "supported"
             else:
                 status = "inconclusive" if loop.observations else "open"
@@ -357,6 +406,70 @@ class Investigator:
                     "refuting": list(dict.fromkeys([*hyp.refuting, *refuting]))[:8],
                 }
             )
+
+    def _room(self, calls: int, budget: BudgetGuard | None) -> int:
+        """How many calls the next round may run: by parallelism, steps and the tool budget."""
+        room = min(self.max_parallel, self.max_steps - calls)
+        if budget is not None:
+            room = min(room, budget.limits.max_tool_calls - budget.usage.tool_calls)
+        return max(0, room)
+
+    def _limit(self, calls: int, budget: BudgetGuard | None) -> str:
+        """Why no more calls fit: the run's tool budget, or this investigation's step cap."""
+        if budget is not None and budget.usage.tool_calls >= budget.limits.max_tool_calls:
+            return "budget"
+        return "max_steps" if calls >= self.max_steps else "finished"
+
+    @staticmethod
+    def _dedupe(loop: _Loop, requests: Sequence[ToolRequest]) -> list[ToolRequest]:
+        seen = {(o.tool, json.dumps(o.arguments, sort_keys=True)) for o in loop.observations}
+        out = []
+        for request in requests:
+            args = {k: v for k, v in request.arguments.model_dump().items() if v is not None}
+            key = (request.tool, json.dumps(args, sort_keys=True))
+            if key not in seen:
+                seen.add(key)
+                out.append(request)
+        return out
+
+    async def _call(
+        self, loop: _Loop, request: ToolRequest, rationale: str, emit: Emit | None
+    ) -> str:
+        """Run one tool call and record its observation: "called", "refused" or "budget"."""
+        args = {k: v for k, v in request.arguments.model_dump().items() if v is not None}
+        ref = uuid.uuid4().hex[:12]  # links this call's start and result events
+        if emit is not None:
+            emit(
+                "tool_call",
+                {
+                    "phase": "start",
+                    "ref": ref,
+                    "tool": request.tool,
+                    "arguments": args,
+                    "rationale": rationale,
+                },
+            )
+        try:
+            outcome = await loop.belt.call(request.tool, args)
+        except ToolNotAllowedError as exc:
+            observation = Observation(request.tool, args, False, str(exc), [])
+            result = "refused"
+        except BudgetExceededError:
+            return "budget"
+        else:
+            observation = Observation(
+                request.tool,
+                dict(outcome.record.arguments),
+                outcome.ok,
+                outcome.record.summary,
+                [outcome.evidence_id] if outcome.evidence_id else [],
+                outcome.data,
+            )
+            result = "called"
+        loop.observations.append(observation)
+        if emit is not None:
+            emit("tool_call", {"phase": "result", "ref": ref, **observation.brief()})
+        return result
 
     # --- loop ----------------------------------------------------------------------------------
 
@@ -377,51 +490,39 @@ class Investigator:
             budget,
             plan=[p for p in suggested_plan(inputs) if p["tool"] in tools],
         )
+        # Start from the hypotheses the evidence suggests; the LLM may add its own.
+        self._add(loop, candidate_hypotheses(inputs))
         llm = self.uses_llm()
-        stopped = "max_steps"
+        stopped = "max_rounds"
         calls = 0
-        for step in range(self.max_steps + 1):
+        for round_no in range(self.max_rounds + 1):
             try:
                 if budget is not None:
                     budget.check_step()
             except BudgetExceededError:
                 stopped = "budget"
                 break
-            decision = await self._llm(loop, step) if llm else None
+            room = self._room(calls, budget)
+            if round_no == self.max_rounds:
+                break  # the last round's results are in; scoring decides from here
+            decision = await self._llm(loop, round_no, room) if llm and room else None
             if decision is None:
-                decision = self._deterministic(loop, step)
+                decision = self._deterministic(loop, room)
             self._add(loop, decision.new_hypotheses)
             self._apply(loop, decision.updates)
             if budget is not None:
                 budget.record_step()
-            if decision.action == "finish" or step >= self.max_steps:
-                stopped = "finished" if decision.action == "finish" else "max_steps"
+            requests = self._dedupe(loop, decision.calls)[:room]
+            if decision.finish or not requests:
+                stopped = "finished" if room else self._limit(calls, budget)
                 break
-            args = {k: v for k, v in decision.arguments.model_dump().items() if v is not None}
-            if emit is not None:
-                emit(
-                    "tool_call",
-                    {"tool": decision.action, "arguments": args, "rationale": decision.rationale},
-                )
-            try:
-                outcome = await belt.call(decision.action, args)
-            except ToolNotAllowedError as exc:
-                loop.observations.append(Observation(decision.action, args, False, str(exc), []))
-                continue
-            except BudgetExceededError:
+            outcomes = await asyncio.gather(
+                *(self._call(loop, request, decision.rationale, emit) for request in requests)
+            )
+            calls += sum(1 for outcome in outcomes if outcome == "called")
+            if "budget" in outcomes:
                 stopped = "budget"
                 break
-            calls += 1
-            loop.observations.append(
-                Observation(
-                    decision.action,
-                    dict(outcome.record.arguments),
-                    outcome.ok,
-                    outcome.record.summary,
-                    [outcome.evidence_id] if outcome.evidence_id else [],
-                    outcome.data,
-                )
-            )
         self._score(loop)
         return self._conclude(loop, steps=calls, stopped=stopped)
 

@@ -212,7 +212,12 @@ def _emit(runtime: Runtime[TriageContext], kind: str, node: str, **payload: Any)
     runtime.stream_writer({"kind": kind, "node": node, "payload": payload})
 
 
-def _spent(guard: BudgetGuard, before: BudgetUsage) -> Json:
+def _spent(
+    runtime: Runtime[TriageContext], node: str, guard: BudgetGuard, before: BudgetUsage
+) -> Json:
+    """Emit one ``llm_call`` event per call the node made, and return its budget delta."""
+    for call in guard.calls:
+        _emit(runtime, "llm_call", node, **call)
     return usage_delta(before, guard.usage)
 
 
@@ -452,12 +457,14 @@ async def severity(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
         "severity": assessment.model_dump(mode="json"),
         "ticket": ticket.model_dump(mode="json") if ticket else None,
         "evidence": dump_evidence(evidence.new_items()),
-        "budget": _spent(guard, before),
+        "budget": _spent(runtime, "severity", guard, before),
         "notes": notes,
     }
 
 
-async def _retrieve(state: TriageState, runtime: Runtime[TriageContext], *, parallel: bool) -> Json:
+async def _retrieve(
+    state: TriageState, runtime: Runtime[TriageContext], *, node: str, parallel: bool
+) -> Json:
     services = runtime.context.services
     request, run_plan = _request(state), _plan(state)
     batch = ParsedBatch.model_validate(state["batch"])
@@ -482,16 +489,16 @@ async def _retrieve(state: TriageState, runtime: Runtime[TriageContext], *, para
     return {
         "retrieval": result.model_dump(mode="json"),
         "evidence": dump_evidence(evidence.new_items()),
-        "budget": _spent(guard, before),
+        "budget": _spent(runtime, node, guard, before),
     }
 
 
 async def recall(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
-    return await _retrieve(state, runtime, parallel=True)
+    return await _retrieve(state, runtime, node="recall", parallel=True)
 
 
 async def widen(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
-    return await _retrieve(state, runtime, parallel=False)
+    return await _retrieve(state, runtime, node="widen", parallel=False)
 
 
 # --- investigation and replanning ----------------------------------------------------------------
@@ -510,10 +517,15 @@ async def investigate(state: TriageState, runtime: Runtime[TriageContext]) -> Js
     guard = _guard(state, services)
     before = guard.snapshot()
     config = services.config.investigation
+    # The LLM chooses the tools on the first pass; replans add steps but run the
+    # deterministic policy, so a hard incident cannot spend the whole budget investigating.
+    router = _router(services, request, run_plan) if run_plan.replans == 0 else None
     investigator = Investigator(
-        _router(services, request, run_plan),
+        router,
         max_steps=config.max_steps + 2 * run_plan.replans,  # a replan buys more steps
         max_hypotheses=config.max_hypotheses,
+        max_rounds=config.max_rounds,
+        max_parallel=config.max_parallel,
     )
     belt = ToolBelt(
         runtime.context.tools_target(),
@@ -543,7 +555,7 @@ async def investigate(state: TriageState, runtime: Runtime[TriageContext]) -> Js
         "investigation": result.model_dump(mode="json"),
         "evidence": dump_evidence(evidence.new_items()),
         "tool_calls": [record.model_dump(mode="json") for record in belt.records],
-        "budget": _spent(guard, before),
+        "budget": _spent(runtime, "investigate", guard, before),
     }
 
 
@@ -643,7 +655,7 @@ async def report(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
     return {
         "report": incident.model_dump(mode="json"),
         "report_meta": meta,
-        "budget": _spent(guard, before),
+        "budget": _spent(runtime, "report", guard, before),
         "notes": outcome.notes,
     }
 
@@ -668,7 +680,7 @@ async def comms(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
     ]
     return {
         "actions": [action.model_dump(mode="json") for action in outcome.actions],
-        "budget": _spent(guard, before),
+        "budget": _spent(runtime, "comms", guard, before),
         "notes": notes,
     }
 

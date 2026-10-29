@@ -56,11 +56,14 @@ def strict_schema(model: type[BaseModel]) -> dict[str, Any]:
 
 
 def restrict_enum(schema: dict[str, Any], path: list[str], allowed: list[str]) -> dict[str, Any]:
-    """Narrow an enum field (for example the adjudicator's severity to the prediction set)."""
+    """Narrow an enum field (for example the adjudicator's severity to the prediction set).
+
+    ``path`` names properties; ``"items"`` steps into an array's item schema.
+    """
     out = copy.deepcopy(schema)
     node = out
     for key in path:
-        node = node["properties"][key]
+        node = node["items"] if key == "items" else node["properties"][key]
     node.pop("anyOf", None)
     node["type"] = "string"
     node["enum"] = list(allowed)

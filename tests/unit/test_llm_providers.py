@@ -328,12 +328,25 @@ async def test_reasoning_effort_and_stream_always_are_sent(monkeypatch: pytest.M
 
 
 @respx.mock
-async def test_a_stalled_stream_fails_over_as_retryable(nim: OpenAICompatibleProvider) -> None:
-    nim.config = nim.config.model_copy(update={"stream_always": True, "max_retries": 0})
-    respx.post(f"{NIM}/chat/completions").mock(side_effect=httpx.ReadTimeout("no bytes"))
+async def test_a_stalled_stream_fails_over_without_retrying(nim: OpenAICompatibleProvider) -> None:
+    nim.config = nim.config.model_copy(update={"stream_always": True, "max_retries": 2})
+    route = respx.post(f"{NIM}/chat/completions").mock(side_effect=httpx.ReadTimeout("no bytes"))
     with pytest.raises(ProviderError) as info:
         await nim.chat(MESSAGES)
-    assert info.value.retryable
+    assert info.value.timed_out
+    assert not info.value.retryable
+    assert route.call_count == 1  # a slow provider is not asked again; the router moves on
+
+
+@respx.mock
+async def test_a_broken_connection_is_retried(nim: OpenAICompatibleProvider) -> None:
+    nim.config = nim.config.model_copy(update={"max_retries": 1})
+    route = respx.post(f"{NIM}/chat/completions").mock(
+        side_effect=[httpx.ConnectError("reset"), httpx.Response(200, json=_completion("{}"))]
+    )
+    text, _ = await nim.chat(MESSAGES)
+    assert text == "{}"
+    assert route.call_count == 2
 
 
 def test_blank_env_values_mean_not_configured() -> None:
