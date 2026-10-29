@@ -1,7 +1,7 @@
 import { useCurrentFrame } from "remotion";
 
 import { Heading, Stage } from "../components";
-import { measured } from "../data";
+import { measured, realLogs } from "../data";
 import { enter } from "../motion";
 import { color, size } from "../theme";
 
@@ -21,7 +21,7 @@ const Row = ({
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "380px 1fr",
+        gridTemplateColumns: "360px 1fr",
         gap: 40,
         alignItems: "baseline",
         ...enter(frame, start),
@@ -29,7 +29,7 @@ const Row = ({
     >
       <span
         style={{
-          fontSize: 104,
+          fontSize: 88,
           fontWeight: 500,
           letterSpacing: "-0.046em",
           lineHeight: 1,
@@ -40,20 +40,20 @@ const Row = ({
         {figure}
       </span>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <span style={{ fontSize: 44, color: color.heading }}>{label}</span>
-        <span style={{ fontSize: 32, color: color.muted }}>{note}</span>
+        <span style={{ fontSize: 40, color: color.heading }}>{label}</span>
+        <span style={{ fontSize: 30, color: color.muted }}>{note}</span>
       </div>
     </div>
   );
 };
 
-/** Three results from `make eval`, with their caveat on screen the whole time. */
+/** Four results from `make eval`, with their caveat on screen the whole time. */
 export const Measured = () => {
   const frame = useCurrentFrame();
   return (
     <Stage>
       <Heading>Measured, caveats included.</Heading>
-      <div style={{ display: "flex", flexDirection: "column", gap: 30 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
         <Row
           start={20}
           figure={measured.accuracy}
@@ -72,6 +72,12 @@ export const Measured = () => {
           label={`of ${measured.attacks} prompt-injection attempts quarantined`}
           note={`${measured.falsePositives} of ${measured.benign} benign look-alikes. An upper bound: the detector was tuned on this corpus.`}
         />
+        <Row
+          start={200}
+          figure={realLogs.precision}
+          label="of its flags on real HDFS logs were real failures"
+          note={`By the experts' labels. It caught ${realLogs.recall} of the failures it could judge, ${realLogs.recallAll} of all.`}
+        />
       </div>
       <p
         style={{
@@ -82,8 +88,9 @@ export const Measured = () => {
           ...enter(frame, 10),
         }}
       >
-        Semi-synthetic data: real Loghub lines composed into incidents, so not accuracy on
-        production incidents. Method and every number: docs/evaluation.md ({measured.commit}).
+        The first three use semi-synthetic incidents built from real Loghub lines, so they are not
+        accuracy on production incidents; the last is one real log from one system. Method and every
+        number: docs/evaluation.md ({measured.commit}).
       </p>
     </Stage>
   );

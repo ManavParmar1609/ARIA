@@ -158,7 +158,7 @@ function Nav({ onNavigate }: { onNavigate?: () => void }) {
   }, [pathname]);
 
   return (
-    <nav ref={nav} aria-label="Console" className="group/nav relative grid gap-6">
+    <nav ref={nav} aria-label="Console" className="group/nav relative grid gap-4">
       <span
         ref={pill}
         aria-hidden
@@ -180,7 +180,7 @@ function Nav({ onNavigate }: { onNavigate?: () => void }) {
                   onClick={onNavigate}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "relative flex h-10 items-center gap-3 rounded-md px-3 text-[0.9375rem] transition-colors duration-(--duration-quick)",
+                    "relative flex h-9 items-center gap-3 rounded-md px-3 text-[0.9375rem] transition-colors duration-(--duration-quick)",
                     active
                       ? "bg-grass font-medium text-pop-ink group-data-[pill=on]/nav:bg-transparent"
                       : "text-foreground hover:bg-foreground/6",
@@ -205,10 +205,18 @@ function Nav({ onNavigate }: { onNavigate?: () => void }) {
 
 function ApiStatus() {
   const { data, isError } = useHealth();
-  const state = isError ? "down" : !data ? "unknown" : data.status === "ok" ? "ok" : "degraded";
+  // "degraded" with the database up means no LLM is configured: offline mode, which works.
+  const offline = data?.status === "degraded" && data.llm === false && data.database;
+  const state = isError
+    ? "down"
+    : !data
+      ? "unknown"
+      : data.status === "ok" || offline
+        ? "ok"
+        : "degraded";
   const label = {
-    ok: "API ready",
-    degraded: data?.llm === false ? "API ready, no LLM (deterministic mode)" : "API degraded",
+    ok: offline ? "API ready, offline mode" : "API ready",
+    degraded: "API degraded",
     down: "API not reachable",
     unknown: "Checking the API",
   }[state];
@@ -308,12 +316,13 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
         <div className="min-h-dvh lg:grid lg:grid-cols-[17.5rem_minmax(0,1fr)]">
           {/* A floating white panel on the cream page, like the site's navigation bars. */}
           <aside className="hidden p-3 lg:block">
-            <div className="sticky top-3 flex h-[calc(100dvh-1.5rem)] flex-col gap-7 rounded-lg bg-raised px-3 py-5">
+            <div className="sticky top-3 flex h-[calc(100dvh-1.5rem)] flex-col gap-4 rounded-lg bg-raised px-3 py-4">
               <Link href="/" className="rounded-sm px-3" aria-label="ARIA home">
                 <Wordmark />
               </Link>
               <PaletteButton />
-              <div className="-mt-2 flex-1 overflow-y-auto">
+              {/* the padding keeps the links' focus rings inside the scrolling box */}
+              <div className="-mx-1 flex-1 overflow-y-auto px-1 py-1">
                 <Nav />
               </div>
               <SessionFooter />

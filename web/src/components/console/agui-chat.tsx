@@ -401,7 +401,7 @@ export function AguiChat() {
                   setText(s.lines.join("\n"));
                 }}
               >
-                Use the {s.label.toLowerCase()} sample
+                Sample: {s.label}
               </Button>
             ))}
           </div>

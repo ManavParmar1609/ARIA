@@ -2,12 +2,8 @@ import type { Metadata } from "next";
 
 import { RunbookDetail } from "@/components/console/runbooks";
 
-export async function generateMetadata(
-  props: PageProps<"/console/runbooks/[slug]">,
-): Promise<Metadata> {
-  const { slug } = await props.params;
-  return { title: `Runbook ${decodeURIComponent(slug)}` };
-}
+// The page names the tab after the runbook once it loads (useDocumentTitle).
+export const metadata: Metadata = { title: "Runbook" };
 
 export default async function RunbookPage(props: PageProps<"/console/runbooks/[slug]">) {
   const { slug } = await props.params;

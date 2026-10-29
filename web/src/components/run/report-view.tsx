@@ -57,11 +57,9 @@ export function ReportView({ report }: { report: IncidentReport }) {
           </span>
           <span>
             written by{" "}
-            {report.generated_by !== "llm"
-              ? "the grounded template"
-              : /fake/.test(report.model ?? "")
-                ? "the offline stand-in model (no real LLM is configured)"
-                : `the LLM (${report.model ?? "model"})`}
+            {report.generated_by !== "llm" || /fake/.test(report.model ?? "")
+              ? "ARIA's evidence template (offline mode)"
+              : `the LLM (${report.model ?? "model"})`}
           </span>
           <span
             className={cn(

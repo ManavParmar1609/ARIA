@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import { useIncidents } from "@/lib/api/hooks";
 import { isSeverity } from "@/lib/api/types";
-import { relativeTime } from "@/lib/format";
+import { relativeTime, stripSeverity } from "@/lib/format";
 import { systemName } from "@/lib/systems";
 
 /** What ARIA remembers: past incidents it searches when a new one comes in. */
@@ -120,7 +120,9 @@ export function Memory() {
                         severity={isSeverity(incident.severity) ? incident.severity : null}
                         size="sm"
                       />
-                      <span className="min-w-0 flex-1 font-medium">{incident.title}</span>
+                      <span className="min-w-0 flex-1 font-medium">
+                        {stripSeverity(incident.title)}
+                      </span>
                       <span className="text-xs text-muted-foreground">
                         {systemName(incident.system)}, seen {incident.occurrences}{" "}
                         {incident.occurrences === 1 ? "time" : "times"}

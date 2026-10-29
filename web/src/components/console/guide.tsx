@@ -285,7 +285,7 @@ export function Guide() {
               >
                 {i + 1}
               </span>
-              <div className="grid gap-1">
+              <div className="grid content-start gap-1">
                 <h3 className="text-base font-medium">{part.title}</h3>
                 <p className="text-sm text-muted-foreground">{part.body}</p>
               </div>
@@ -307,7 +307,7 @@ export function Guide() {
           {Object.values(GLOSSARY).map((entry) => (
             <div
               key={entry.term}
-              className="grid gap-1 border-b border-rule py-5 last:border-b-0 md:[&:nth-last-child(-n+2)]:border-b-0"
+              className="grid content-start gap-1 border-b border-rule py-5 last:border-b-0 md:[&:nth-last-child(-n+2)]:border-b-0"
             >
               <dt className="font-medium text-heading">{entry.term}</dt>
               <dd className="text-sm text-muted-foreground">{entry.definition}</dd>

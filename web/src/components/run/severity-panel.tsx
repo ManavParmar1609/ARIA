@@ -78,7 +78,9 @@ export function SeverityPanel({ assessment }: { assessment: SeverityAssessment }
             ? `On its own, the model put ${percent(assessment.probabilities[modelTop] ?? 0)} on ${modelTop}; the floor is there for cases the model has not learned.`
             : assessment.set_empty
               ? `No severity is likely enough for the ${coverage}% prediction set on its own; ${assessment.severity} is the most likely, at ${percent(assessment.confidence)}.`
-              : `Confidence ${percent(assessment.confidence)}; the ${coverage}% set is {${assessment.prediction_set.join(", ")}}.`}
+              : assessment.prediction_set.length === 1
+                ? `Confidence ${percent(assessment.confidence)}; only ${assessment.prediction_set[0]} is plausible at ${coverage}% confidence.`
+                : `Confidence ${percent(assessment.confidence)}; at ${coverage}% confidence it is one of ${assessment.prediction_set.join(", ")}.`}
           {assessment.auditable
             ? " No LLM was involved, so the decision can be audited from rules and model alone."
             : ""}
@@ -97,9 +99,8 @@ export function SeverityPanel({ assessment }: { assessment: SeverityAssessment }
             onClick={() => setTraceOpen(!traceOpen)}
           >
             <span>
-              Rule trace: {assessment.rule_hits.length}{" "}
-              {assessment.rule_hits.length === 1 ? "rule" : "rules"}, pointing to{" "}
-              {assessment.rule_severity}
+              {assessment.rule_hits.length} {assessment.rule_hits.length === 1 ? "rule" : "rules"}{" "}
+              fired; on their own they suggest {assessment.rule_severity}
             </span>
             <ChevronDownIcon
               aria-hidden

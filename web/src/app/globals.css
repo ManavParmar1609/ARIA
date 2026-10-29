@@ -148,11 +148,13 @@
   --color-ring: var(--ring);
 
   /* Inter only. "Mono" is Inter too, with its disambiguation set (slashed zero, serifed I, l with
-     a tail) and tabular figures, so log lines and IDs stay unambiguous without a second face. */
+     a tail), so log lines and IDs stay unambiguous without a second face. Tabular figures are
+     left to .tabular on columns of numbers: in Inter they also widen the hyphen, which spaced
+     out "--system" and run IDs. */
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-mono--font-feature-settings: "ss02", "tnum";
-  --default-mono-font-feature-settings: "ss02", "tnum";
+  --font-mono--font-feature-settings: "ss02";
+  --default-mono-font-feature-settings: "ss02";
 
   /* The reference's sizes: 13, 15, 16, 18, 20, 30, 36, 53, 64, 81 px, and a display that runs
      from 53 px on a phone to 144 px on a wide screen (.text-display). */

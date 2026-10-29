@@ -35,7 +35,11 @@ export function BaselineChart({
             {[0, 25, 50, 75, 100].map((tick) => (
               <span
                 key={tick}
-                className="tabular absolute -translate-x-1/2"
+                // the end ticks sit inside the track, so "100%" never runs into "Accuracy"
+                className={cn(
+                  "tabular absolute",
+                  tick === 0 ? "" : tick === 100 ? "-translate-x-full" : "-translate-x-1/2",
+                )}
                 style={{ left: `${tick}%` }}
               >
                 {tick}%

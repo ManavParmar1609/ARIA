@@ -90,7 +90,7 @@ test.describe("console", () => {
   test("triages in chat over AG-UI and answers the review interrupt", async ({ page }) => {
     await page.goto("/console/ask");
     await page.getByRole("tab", { name: /Triage in chat/ }).click();
-    await page.getByRole("button", { name: /Use the ssh brute-force attempts sample/i }).click();
+    await page.getByRole("button", { name: /Sample: ssh brute-force attempts/i }).click();
     await page.getByRole("button", { name: "Triage in chat" }).click();
     await expect(page.getByText(/Review the incident report/)).toBeVisible();
     await expect(page.locator("li:has(svg.lucide-wrench)").first()).toBeVisible();

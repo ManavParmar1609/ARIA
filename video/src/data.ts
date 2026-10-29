@@ -123,4 +123,12 @@ export const measured = {
   falsePositives: pct(evals.edge.benign_false_positive_rate),
 };
 
+// Real HDFS logs with the experts' labels (docs/evaluation.md, "Real logs").
+const hdfs = evals.real.hdfs;
+export const realLogs = {
+  precision: pct(hdfs.lifecycle.precision),
+  recall: pct(hdfs.lifecycle.recall),
+  recallAll: pct(hdfs.recall_all),
+};
+
 export const REPO = "github.com/ManavParmar1609/ARIA";

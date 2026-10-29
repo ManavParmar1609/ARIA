@@ -38,6 +38,7 @@ import {
 import { toast } from "sonner";
 
 import { SeverityBadge } from "@/components/aria/severity";
+import { runTitle } from "@/components/console/run-row";
 import { STATUS_LABEL } from "@/components/console/status";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
@@ -205,7 +206,7 @@ function Palette({ onClose, onHelp }: { onClose: () => void; onHelp: () => void 
       all.push({
         id: `run:${run.id}`,
         group: "Incidents",
-        label: run.title ?? run.id,
+        label: runTitle(run),
         hint: `${systemName(run.system)}, ${STATUS_LABEL[run.status] ?? run.status}`,
         keywords: `${run.id} ${run.system} ${run.severity ?? ""} ${run.status}`,
         icon: InboxIcon,

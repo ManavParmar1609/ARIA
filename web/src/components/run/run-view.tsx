@@ -8,6 +8,7 @@ import { toast } from "sonner";
 
 import { TagStrip } from "@/components/aria/severity";
 import { runTitle } from "@/components/console/run-row";
+import { useDocumentTitle } from "@/lib/document-title";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/console/states";
 import { LostSpot } from "@/components/illustrations/spots";
 import { RunStatus } from "@/components/console/status";
@@ -81,7 +82,7 @@ function Header({ run, severity }: { run: RunDetail; severity: string | null | u
           <span>
             {llmCalls
               ? `${llmCalls} model calls, ${((run.tokens_in ?? 0) + (run.tokens_out ?? 0)).toLocaleString("en")} tokens`
-              : "no LLM used"}
+              : "offline mode: no LLM"}
           </span>
           {budget.tool_calls ? <span>{String(budget.tool_calls)} tool calls</span> : null}
         </p>
@@ -163,6 +164,7 @@ function RunSkeleton() {
 
 export function RunView({ runId }: { runId: string }) {
   const run = useRun(runId);
+  useDocumentTitle(run.data ? runTitle(run.data) : null);
   const [checkpoint, setCheckpoint] = useState<string | null>(null);
   const [tab, setTab] = useState("team");
   const status = run.data?.status;

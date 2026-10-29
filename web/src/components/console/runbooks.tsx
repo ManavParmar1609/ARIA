@@ -9,6 +9,7 @@ import { ApiError } from "@/lib/api/client";
 import type { RunbookStep } from "@/lib/api/types";
 import { systemName } from "@/lib/systems";
 import { cn } from "@/lib/utils";
+import { useDocumentTitle } from "@/lib/document-title";
 
 const RISK: Record<string, string> = {
   low: "border-rule text-muted-foreground",
@@ -122,6 +123,7 @@ function Steps({ title, steps }: { title: string; steps: RunbookStep[] }) {
 
 export function RunbookDetail({ slug }: { slug: string }) {
   const runbook = useRunbook(slug);
+  useDocumentTitle(runbook.data?.title);
   if (runbook.isPending) return <LoadingRows rows={6} label="Loading the runbook" />;
   if (runbook.isError) {
     if (runbook.error instanceof ApiError && runbook.error.status === 404) {

@@ -73,7 +73,7 @@ function Bars({
       {rows.map(([name, value]) => (
         <li
           key={name}
-          className="grid grid-cols-[minmax(7rem,11rem)_1fr_4rem] items-center gap-3 text-sm"
+          className="grid grid-cols-[minmax(0,7rem)_1fr_3.5rem] items-center gap-3 text-sm sm:grid-cols-[minmax(7rem,11rem)_1fr_4rem]"
         >
           <span className="truncate text-muted-foreground">{name}</span>
           <span className="h-2.5 rounded-xs bg-sunken" aria-hidden>

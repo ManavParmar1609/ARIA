@@ -14,7 +14,8 @@ const STATUS: Record<string, { label: string; className: string; icon: typeof Ci
   running: { label: "Running", className: "text-foreground", icon: LoaderCircleIcon },
   awaiting_review: {
     label: "Needs review",
-    className: "bg-highlight text-highlight-foreground border-primary/60",
+    // ink, like the sidebar's count: the state that needs a person must not read as done (green)
+    className: "bg-foreground text-background border-foreground",
     icon: UserRoundCheckIcon,
   },
   published: { label: "Published", className: "text-ok", icon: CircleCheckIcon },
@@ -53,7 +54,7 @@ const DECIDED: Record<string, string> = {
   rules: "Rules",
   model: "Model",
   llm: "LLM, within the model's set",
-  fallback: "Most severe in the set",
+  fallback: "Unsure, so took the more severe",
   human: "Reviewer",
 };
 

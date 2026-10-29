@@ -129,6 +129,8 @@ export function Overview() {
   const waiting = [...stats.waiting].sort(
     (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
   );
+  // Runs waiting for review are listed above; this list is the rest, newest first.
+  const finished = (runs.data?.runs ?? []).filter((r) => r.status !== "awaiting_review");
   const live =
     providers.data?.filter((p) => p.enabled && p.kind !== "fake" && p.kind !== "local") ?? [];
 
@@ -213,15 +215,19 @@ export function Overview() {
                 note="from logs in to report ready"
               />
               <Fact
-                label="Severity decided without doubt"
+                label="Decided without a person"
                 value={percent(stats.automaticShare) || "None yet"}
                 note="rules or the calibrated model alone"
               />
               <Fact
-                label="LLM use"
-                value={stats.tokens ? `${stats.tokens.toLocaleString("en")} tokens` : "None"}
+                label="LLM tokens used"
+                value={stats.tokens ? stats.tokens.toLocaleString("en") : "None"}
                 note={
-                  stats.tokens ? `${money(stats.cost)} where priced` : "deterministic runs only"
+                  stats.tokens
+                    ? stats.cost
+                      ? `${money(stats.cost)} spent`
+                      : "no spend recorded"
+                    : "offline mode: no LLM"
                 }
               />
             </dl>
@@ -234,7 +240,7 @@ export function Overview() {
           <section aria-labelledby="recent-title" className="grid gap-4">
             <div className="flex items-baseline justify-between gap-4">
               <h2 id="recent-title" className="text-xl tracking-heading">
-                Latest runs
+                Recently finished
               </h2>
               <Link
                 href="/console/runs"
@@ -243,11 +249,13 @@ export function Overview() {
                 All incidents
               </Link>
             </div>
-            {stats.total === 0 ? (
-              <p className="text-sm text-muted-foreground">No runs yet.</p>
+            {finished.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {stats.total === 0 ? "No runs yet." : "No run has finished yet."}
+              </p>
             ) : (
               <ul className="grid gap-2">
-                {(runs.data?.runs ?? []).slice(0, 6).map((run) => (
+                {finished.slice(0, 6).map((run) => (
                   <RunRow key={run.id} run={run} />
                 ))}
               </ul>
