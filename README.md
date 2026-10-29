@@ -300,9 +300,10 @@ Every section, with its method: [docs/evaluation.md](docs/evaluation.md).
     duplicate runs.
 - **The graph is flat.** It is one LangGraph graph of specialist nodes, not nested subgraphs
   (see [ADR 0001](docs/adr/0001-one-langgraph-graph-of-specialist-nodes.md)).
-- **Mobile Lighthouse is just under the brief's bar.** On mobile, the landing page's performance
-  score sits just below the brief's target of 95; `make web-lighthouse` prints it, and CI gates
-  at 90. Desktop and the other categories meet their bars.
+- **Mobile Lighthouse is at or just under the brief's bar.** On mobile, the landing page's
+  performance score sits at or a few points below the brief's target of 95, varying from run to
+  run; `make web-lighthouse` prints it, and CI gates at 90. Desktop and the other categories meet
+  their bars.
 - **The UI components are written in this repo.** The shadcn, 21st.dev and React Bits registries
   were unreachable from the build environment.
 
