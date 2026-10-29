@@ -394,3 +394,29 @@ class CheckpointWriteRow(Base):
     type: Mapped[str | None] = mapped_column(String(32))
     value: Mapped[bytes] = mapped_column(LargeBinary)
     task_path: Mapped[str] = mapped_column(String(255), default="")
+
+
+class CheckpointBlobRow(Base):
+    """One channel value at one version. Checkpoints reference these, so unchanged state is
+    stored once instead of in every checkpoint."""
+
+    __tablename__ = "lg_blobs"
+
+    thread_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    checkpoint_ns: Mapped[str] = mapped_column(String(255), primary_key=True, default="")
+    channel: Mapped[str] = mapped_column(String(255), primary_key=True)
+    version: Mapped[str] = mapped_column(String(64), primary_key=True)
+    type: Mapped[str] = mapped_column(String(32))
+    blob: Mapped[bytes | None] = mapped_column(LargeBinary)
+
+
+class StoreItemRow(Base):
+    """LangGraph Store items: long-term memory shared across runs (reviewer feedback, preferences)."""
+
+    __tablename__ = "lg_store"
+
+    namespace: Mapped[str] = mapped_column(String(255), primary_key=True)
+    key: Mapped[str] = mapped_column(String(255), primary_key=True)
+    value: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)

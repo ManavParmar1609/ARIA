@@ -16,13 +16,20 @@ class EvidenceStore:
     items; ids continue from the highest one already used, so they stay unique across nodes.
     """
 
-    def __init__(self, existing: Iterable[Evidence] = ()) -> None:
+    def __init__(self, existing: Iterable[Evidence] = (), *, start: int | None = None) -> None:
+        """``start`` reserves an id block, so graph branches running in parallel never collide."""
         self._items: dict[str, Evidence] = {}
         self._next = 1
         for item in existing:
             self._items[item.id] = item
             self._next = max(self._next, int(item.id[1:]) + 1)
+        if start is not None:
+            self._next = max(self._next, start)
         self._new: list[Evidence] = []
+
+    @property
+    def next_id(self) -> int:
+        return self._next
 
     def add(
         self,
