@@ -220,7 +220,7 @@ export function StampScene({ className }: { className?: string }) {
           fontSize="23"
           fontWeight="500"
           fill="#b35d09"
-          fontFamily="var(--font-inter), sans-serif"
+          fontFamily="Inter, ui-sans-serif, system-ui, sans-serif"
         >
           SEV2
         </text>

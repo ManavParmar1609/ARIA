@@ -1,12 +1,6 @@
+import Image from "next/image";
 import Link from "next/link";
-import type { ComponentType } from "react";
 
-import {
-  ApproveScene,
-  EvidenceScene,
-  NoiseScene,
-  StampScene,
-} from "@/components/illustrations/scenes";
 import { ArrowCircle, Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -17,7 +11,8 @@ interface Chapter {
   body: string;
   cta: { label: string; href: string };
   tone: Tone;
-  Scene: ComponentType<{ className?: string }>;
+  /** The scene's static file under /art (src/app/art), drawn from the illustration kit. */
+  art: string;
 }
 
 // What ARIA does, in the order a run does it. Each card's button leads to where the page shows it.
@@ -27,28 +22,28 @@ const CHAPTERS: Chapter[] = [
     body: "Thousands of log lines become a handful of templates. E-mail and IP addresses are pseudonymised, and any line that reads like an instruction to a model is quarantined before anything else reads it.",
     cta: { label: "See the logs it read", href: "#run" },
     tone: "coral",
-    Scene: NoiseScene,
+    art: "noise",
   },
   {
     title: "A severity you can check.",
     body: "Rules and a calibrated model rate the incident, and conformal prediction says which severities are still plausible. When ARIA is unsure it takes the more severe one and asks a person to look.",
     cta: { label: "How severity is decided", href: "#how" },
     tone: "sunshine",
-    Scene: StampScene,
+    art: "stamp",
   },
   {
     title: "Every claim shows its evidence.",
     body: "An investigator tests hypotheses with read-only tools, and the report may only say what that evidence supports. A validator rejects any claim whose citation is missing.",
     cta: { label: "Try a citation", href: "#run" },
     tone: "sky",
-    Scene: EvidenceScene,
+    art: "evidence",
   },
   {
     title: "Nothing goes out without you.",
     body: "The run pauses for review. Approve, edit or reject: only the messages you tick are sent, and the approved incident joins memory, so the next similar alert finds it.",
     cta: { label: "Open the console", href: "/console" },
     tone: "lilac",
-    Scene: ApproveScene,
+    art: "approve",
   },
 ];
 
@@ -83,7 +78,13 @@ export function Story() {
               key={chapter.title}
               className="grid items-center gap-6 md:min-h-[34rem] md:grid-cols-2 md:gap-10"
             >
-              <chapter.Scene
+              {/* Decorative: the card beside it says the same thing. */}
+              <Image
+                src={`/art/${chapter.art}.svg`}
+                alt=""
+                width={520}
+                height={440}
+                unoptimized
                 className={cn("mx-auto h-auto w-full max-w-md md:max-w-none", flip && "md:order-2")}
               />
               <article className="grid min-w-0 content-start gap-5 rounded-lg bg-raised p-7 sm:p-10 lg:p-12">

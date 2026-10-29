@@ -1,9 +1,10 @@
 import { ArrowDownIcon } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
 
 import { Term } from "@/components/aria/term";
-import { HeroScene, HillsBand } from "@/components/illustrations/scenes";
+import { HeroScene } from "@/components/illustrations/scenes";
 import { Results } from "@/components/site/results";
 import { RunGraph, type GraphStep } from "@/components/site/run-graph";
 import { SiteFooter } from "@/components/site/site-footer";
@@ -228,7 +229,11 @@ function Hero() {
           </Button>
         </div>
       </div>
-      <HeroScene className="mx-auto mt-6 block h-[19rem] w-full max-w-[72rem] sm:h-auto sm:px-2" />
+      {/* Each illustration is its own Suspense boundary, so React hydrates it as a separate short
+          task instead of one long one (they hold most of the page's elements). */}
+      <Suspense>
+        <HeroScene className="mx-auto mt-6 block h-[19rem] w-full max-w-[72rem] sm:h-auto sm:px-2" />
+      </Suspense>
     </section>
   );
 }
@@ -272,7 +277,15 @@ const PROMISES = [
 function TryIt() {
   return (
     <section aria-labelledby="try-title" className="relative z-10">
-      <HillsBand className="block h-32 w-full sm:h-44 lg:h-52" />
+      {/* Cropped from the sides on narrow screens, as the drawing's own "slice" would be. */}
+      <Image
+        src="/art/hills.svg"
+        alt=""
+        width={1440}
+        height={220}
+        unoptimized
+        className="block h-32 w-full object-cover object-bottom sm:h-44 lg:h-52"
+      />
       <div className="-mt-px rounded-b-sheet bg-grass text-pop-ink">
         <div className="mx-auto grid max-w-[75rem] justify-items-center gap-8 px-4 pt-6 pb-24 text-center sm:px-6 lg:pb-28">
           <h2 id="try-title" className="text-display max-w-[11ch] text-pop-ink">
