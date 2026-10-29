@@ -303,7 +303,8 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
   }, [values]);
 
   return (
-    <ol aria-label="How the agents worked" className="grid">
+    // Lines quote names from the logs (Java classes, block IDs) that can be wider than a phone.
+    <ol aria-label="How the agents worked" className="grid wrap-anywhere">
       {turns.map((turn, i) => {
         const p = progress(events, turn.nodes);
         const state: TurnState =
