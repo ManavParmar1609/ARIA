@@ -1,0 +1,319 @@
+import "server-only";
+
+import demo from "@/data/demo-run.json";
+import evals from "@/data/eval-results.json";
+import live from "@/data/eval-live.json";
+
+import type { Severity } from "./api/types";
+
+// Everything the landing page quotes comes from three committed files: the offline evaluation
+// (docs/eval-results.json), the live-provider run (docs/eval-live.json) and one recorded run
+// (scripts/record_demo_run.py). Nothing here is typed in by hand.
+
+export const REPO_URL = "https://github.com/ManavParmar1609/ARIA";
+export const EVAL_DOC_URL = `${REPO_URL}/blob/main/docs/evaluation.md`;
+
+export interface ReplayLine {
+  lineNo: number;
+  text: string;
+  level: string | null;
+  templateId: string | null;
+  quarantined: boolean;
+}
+
+export interface ReplayEvidence {
+  id: string;
+  kind: string;
+  title: string;
+  detail: string;
+  lines: number[];
+}
+
+export interface ReplayClaim {
+  text: string;
+  evidence: string[];
+}
+
+export interface Replay {
+  title: string;
+  system: string;
+  severity: Severity;
+  probabilities: Record<Severity, number>;
+  predictionSet: Severity[];
+  decidedBy: string;
+  needsReview: boolean;
+  confidence: number;
+  windowMinutes: number;
+  lines: ReplayLine[];
+  hiddenBefore: number;
+  claims: ReplayClaim[];
+  evidence: Record<string, ReplayEvidence>;
+  nLines: number;
+  timeToReviewMs: number;
+  recordedAt: string;
+  gitSha: string;
+}
+
+const stripSeverity = (title: string) => title.replace(/^SEV[1-4]\s*·\s*/, "");
+
+/** The hero's replay: a slice of the real log, the tag's fields and the evidence behind them. */
+export function replay(): Replay {
+  const events = demo.batch.events;
+  const report = demo.report;
+  const evidence = Object.fromEntries(report.evidence.map((e) => [e.id, e]));
+  const plantedLineNo = demo.input.planted_index + 1;
+
+  // Template id -> the line numbers that carry it, so a template citation lights up its lines.
+  const byTemplate = new Map<string, number[]>();
+  for (const e of events) {
+    if (e.line_no == null) continue;
+    byTemplate.set(e.template_id, [...(byTemplate.get(e.template_id) ?? []), e.line_no]);
+  }
+  const linesFor = (id: string): number[] => {
+    const e = evidence[id];
+    if (!e) return [];
+    const data = e.data as Record<string, unknown>;
+    if (typeof data.line === "number") return [data.line];
+    if (typeof data.template_id === "string") return byTemplate.get(data.template_id) ?? [];
+    return [];
+  };
+
+  // Show the first incident line with a little context before it, then the planted line.
+  const firstWarn = events.find((e) => e.level === "WARN")?.line_no ?? 1;
+  const start = Math.max(1, firstWarn - 4);
+  const shown: ReplayLine[] = events
+    .filter((e) => e.line_no != null && e.line_no >= start && e.line_no < start + 9)
+    .map((e) => ({
+      lineNo: e.line_no ?? 0,
+      text: e.message,
+      level: e.level,
+      templateId: e.template_id,
+      quarantined: false,
+    }));
+  shown.push({
+    lineNo: plantedLineNo,
+    text: demo.input.planted_line.replace(/^.*?(INFO\s)/, "$1"),
+    level: "INFO",
+    templateId: null,
+    quarantined: true,
+  });
+
+  const pick = (claim: { text: string; evidence_ids: string[] }): ReplayClaim => ({
+    text: claim.text,
+    evidence: claim.evidence_ids,
+  });
+  const newWarning = report.summary.find((c) => c.text.startsWith("Most frequent"));
+  const scale = report.summary.find((c) => /error events/.test(c.text));
+  const cause = report.suspected_cause[0];
+  const quarantine = report.actions.find((a) => a.text.includes("quarantined"));
+  const claims = [newWarning, scale, cause]
+    .filter((c): c is NonNullable<typeof c> => c != null)
+    .map(pick);
+  if (quarantine) {
+    claims.push({ text: quarantine.text, evidence: quarantine.evidence_ids });
+  }
+
+  const cited = new Set(claims.flatMap((c) => c.evidence));
+  const replayEvidence: Record<string, ReplayEvidence> = {};
+  for (const id of cited) {
+    const e = evidence[id];
+    if (!e) continue;
+    replayEvidence[id] = {
+      id,
+      kind: e.kind,
+      title: e.title,
+      detail: e.detail.length > 280 ? `${e.detail.slice(0, 277)}...` : e.detail,
+      lines: linesFor(id),
+    };
+  }
+
+  const sev = demo.severity;
+  return {
+    title: stripSeverity(report.title),
+    system: "HDFS",
+    severity: sev.severity as Severity,
+    probabilities: sev.probabilities as Record<Severity, number>,
+    predictionSet: sev.prediction_set as Severity[],
+    decidedBy: sev.decided_by,
+    needsReview: sev.needs_review,
+    confidence: sev.confidence,
+    windowMinutes: Math.round((demo.batch.features.duration_s / 60) * 10) / 10,
+    lines: shown,
+    hiddenBefore: start - 1,
+    claims,
+    evidence: replayEvidence,
+    nLines: demo.input.n_lines,
+    timeToReviewMs: demo.timings.time_to_review_ms,
+    recordedAt: demo.recorded_at,
+    gitSha: demo.git_sha,
+  };
+}
+
+/** Facts about each graph step of the recorded run, for the "how a run works" section. */
+export function runFacts() {
+  const batch = demo.batch;
+  const guard = batch.guard;
+  const inv = demo.investigation;
+  const leading = inv?.hypotheses.find((h) => h.id === inv.leading_hypothesis);
+  const tools = inv?.tool_calls ?? [];
+  const report = demo.report;
+  const ms = demo.timings.stage_ms as Record<string, number>;
+  return {
+    lines: demo.input.n_lines,
+    shards: batch.shards,
+    templates: batch.templates.length,
+    pseudonyms: guard.redactions.pseudonyms,
+    redactions: Object.values(guard.redactions.counts).reduce((a, b) => a + b, 0),
+    quarantined: guard.injections.length,
+    severity: demo.severity.severity,
+    probability: demo.severity.probabilities[demo.severity.severity as Severity] ?? 0,
+    similar: demo.retrieval?.incidents.length ?? 0,
+    toolCalls: tools.length,
+    toolNames: [...new Set(tools.map((t) => t.tool))],
+    leadingConfidence: leading?.confidence ?? null,
+    replans: demo.plan?.replans ?? 0,
+    claims: report.validation.checked_claims,
+    citationCoverage: report.validation.citation_coverage,
+    actions: demo.actions.length,
+    timeToReviewMs: demo.timings.time_to_review_ms,
+    stageMs: ms,
+  };
+}
+
+export type RunFacts = ReturnType<typeof runFacts>;
+
+// --- evaluation --------------------------------------------------------------------------------
+
+const METHOD_LABELS: Record<string, string> = {
+  aria_policy: "ARIA (rules, model, floors, review)",
+  model_only: "Calibrated model alone",
+  model_with_floors: "Model with safety floors",
+  tfidf_logreg: "TF-IDF + logistic regression",
+  rules_only: "Rules alone",
+  keyword: "Keyword matching",
+  majority_class: "Always the most common class",
+};
+
+export interface MethodScore {
+  key: string;
+  label: string;
+  accuracy: number;
+  low: number;
+  high: number;
+  macroF1: number;
+  severeUnderTriage: number;
+}
+
+export function evaluation() {
+  const sev = evals.severity;
+  const methods: MethodScore[] = Object.entries(sev.methods)
+    .map(([key, m]) => ({
+      key,
+      label: METHOD_LABELS[key] ?? key,
+      accuracy: m.accuracy,
+      low: m.accuracy_ci95[0] ?? m.accuracy,
+      high: m.accuracy_ci95[1] ?? m.accuracy,
+      macroF1: m.macro_f1,
+      severeUnderTriage: m.severe_under_triage,
+    }))
+    .sort((a, b) => b.accuracy - a.accuracy);
+  const aria = sev.methods.aria_policy;
+  const pipe = evals.pipeline;
+  const livePipe = live.pipeline;
+  const liveProviders = Object.entries(livePipe.providers).map(([name, p]) => ({
+    name,
+    models: p.models,
+    calls: p.calls,
+    failures: p.failures,
+    p50s: p.latency_p50_ms / 1000,
+    p95s: p.latency_p95_ms / 1000,
+  }));
+  return {
+    createdAt: evals.created_at,
+    gitSha: evals.git_sha,
+    dataDescription: evals.data.description,
+    severity: {
+      n: sev.n,
+      labels: sev.label_distribution,
+      accuracy: aria.accuracy,
+      ci: aria.accuracy_ci95,
+      macroF1: aria.macro_f1,
+      kappa: aria.quadratic_kappa,
+      severeUnderTriage: aria.severe_under_triage,
+      underTriage: aria.under_triage,
+      overTriage: aria.over_triage,
+      ece: sev.calibration.ece,
+      brier: sev.calibration.brier,
+      coverage: sev.conformal.coverage_raw,
+      coverageWithFloors: sev.conformal.coverage_with_floors,
+      targetCoverage: sev.conformal.target_coverage,
+      setSize: sev.conformal.mean_set_size,
+      autoDecided: sev.automation.auto_decided,
+      decidedBy: sev.automation.decided_by as Record<string, number>,
+      accuracyWhenAuto: sev.automation.accuracy_when_auto,
+      accuracyWhenFlagged: sev.automation.accuracy_when_flagged,
+      riskCoverage: sev.risk_coverage.points,
+      aurc: sev.risk_coverage.aurc,
+      methods,
+      bySystem: sev.by_system,
+      perClass: aria.per_class,
+      confusion: aria.confusion,
+    },
+    pipeline: {
+      n: pipe.n,
+      valid: pipe.groundedness.valid_reports,
+      cited: pipe.groundedness.every_claim_cited,
+      recallAt3: pipe.retrieval.recall_at_3,
+      mrr: pipe.retrieval.mrr,
+      leadingCorrect: pipe.investigation.leading_hypothesis_correct,
+      quietRuns: pipe.investigation.quiet_runs,
+      falseAlarms: pipe.investigation.false_alarms,
+      p50s: pipe.latency.time_to_review_p50_s,
+      p95s: pipe.latency.time_to_review_p95_s,
+      stageP50: pipe.latency.stage_p50_ms as Record<string, number>,
+      stageP95: pipe.latency.stage_p95_ms as Record<string, number>,
+      severityAccuracy: pipe.severity.accuracy,
+      ndcg: pipe.retrieval.ndcg_at_3,
+      recallAt1: pipe.retrieval.recall_at_1,
+      incidentRuns: pipe.retrieval.n,
+      meanToolCalls: pipe.budgets.mean_tool_calls,
+    },
+    robustness: {
+      edgeN: evals.edge.n,
+      attacks: evals.edge.attacks,
+      benign: evals.edge.benign,
+      parserErrors: evals.edge.parser_errors,
+      attackRecall: evals.edge.attack_recall,
+      byFamily: evals.edge.recall_by_family,
+      benignFalsePositives: evals.edge.benign_false_positive_rate,
+      windows: evals.robustness.n,
+      severityInvariant: evals.robustness.severity_invariant,
+      toolUseInvariant: evals.robustness.tool_use_invariant,
+      reportsWithInjectedText: evals.robustness.reports_with_injected_text,
+    },
+    parsing: {
+      systems: evals.parsing.n_systems,
+      lines: evals.parsing.lines,
+      meanAccuracy: evals.parsing.mean_grouping_accuracy,
+      bySystem: evals.parsing.systems,
+    },
+    live: {
+      createdAt: live.created_at,
+      n: livePipe.n,
+      valid: livePipe.groundedness.valid_reports,
+      cited: livePipe.groundedness.every_claim_cited,
+      leadingCorrect: livePipe.investigation.leading_hypothesis_correct,
+      incidentRuns: livePipe.retrieval.n,
+      p50s: livePipe.latency.time_to_review_p50_s,
+      p95s: livePipe.latency.time_to_review_p95_s,
+      exhausted: livePipe.budgets.runs_with_exhausted_budget,
+      maxTokens: livePipe.budgets.max_tokens_used,
+      tokenLimit: livePipe.budgets.token_limit,
+      stageP50: livePipe.latency.stage_p50_ms as Record<string, number>,
+      latencyBudgetS: 180,
+      providers: liveProviders,
+    },
+  };
+}
+
+export type Evaluation = ReturnType<typeof evaluation>;

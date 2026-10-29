@@ -1,0 +1,7 @@
+.next
+node_modules
+pnpm-lock.yaml
+src/lib/api/schema.ts
+src/data
+playwright-report
+test-results

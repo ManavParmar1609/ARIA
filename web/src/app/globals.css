@@ -1,0 +1,257 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * ARIA design tokens. Colour is OKLCH; every text pair below was checked for WCAG 2.2 AA
+ * (4.5:1 for text, 3:1 for control boundaries) in both themes. See web/DESIGN.md.
+ *
+ * Colour carries meaning only: severity (sev1-4), run state, and the one accent (manila in the
+ * dark theme, ink in the light one) for the thing you can act on.
+ */
+:root {
+  /* day shift (light) */
+  --background: oklch(0.975 0.005 258);
+  --foreground: oklch(0.25 0.03 258);
+  --raised: oklch(1 0 0);
+  --sunken: oklch(0.95 0.008 258);
+  --rule: oklch(0.89 0.01 258);
+  --control: oklch(0.62 0.02 258);
+  --muted-foreground: oklch(0.44 0.03 258);
+  --faint: oklch(0.52 0.025 258);
+
+  --primary: oklch(0.3 0.06 258);
+  --primary-foreground: oklch(0.975 0.008 85);
+  --highlight: oklch(0.93 0.055 88);
+  --highlight-foreground: oklch(0.25 0.03 258);
+
+  --sev1: oklch(0.68 0.2 27);
+  --sev2: oklch(0.77 0.16 58);
+  --sev3: oklch(0.87 0.15 98);
+  --sev4: oklch(0.76 0.06 236);
+  --sev-ink: oklch(0.25 0.03 258);
+  --sev1-fg: oklch(0.52 0.19 27);
+  --sev2-fg: oklch(0.55 0.13 55);
+  --sev3-fg: oklch(0.53 0.11 95);
+  --sev4-fg: oklch(0.5 0.06 240);
+  --sev-edge: oklch(0.25 0.03 258 / 0.28);
+
+  --danger: oklch(0.52 0.19 27);
+  --ok: oklch(0.5 0.1 160);
+
+  /* shadcn/ui aliases */
+  --card: var(--raised);
+  --card-foreground: var(--foreground);
+  --popover: var(--raised);
+  --popover-foreground: var(--foreground);
+  --secondary: var(--sunken);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--sunken);
+  --accent: var(--sunken);
+  --accent-foreground: var(--foreground);
+  --destructive: var(--danger);
+  --border: var(--rule);
+  --input: var(--control);
+  --ring: var(--primary);
+}
+
+.dark {
+  /* night shift (dark, the default) */
+  --background: oklch(0.235 0.03 258);
+  --foreground: oklch(0.955 0.012 85);
+  --raised: oklch(0.27 0.032 258);
+  --sunken: oklch(0.205 0.028 258);
+  --rule: oklch(0.37 0.03 258);
+  --control: oklch(0.56 0.03 258);
+  --muted-foreground: oklch(0.8 0.02 258);
+  --faint: oklch(0.7 0.02 258);
+
+  --primary: oklch(0.86 0.07 84);
+  --primary-foreground: oklch(0.205 0.028 258);
+  --highlight: oklch(0.86 0.07 84 / 0.2);
+  --highlight-foreground: oklch(0.97 0.01 85);
+
+  --sev-ink: oklch(0.205 0.028 258);
+  --sev1-fg: oklch(0.7 0.19 27);
+  --sev2-fg: oklch(0.78 0.15 58);
+  --sev3-fg: oklch(0.87 0.15 98);
+  --sev4-fg: oklch(0.78 0.06 236);
+  --sev-edge: oklch(0 0 0 / 0);
+
+  --danger: oklch(0.7 0.19 27);
+  --ok: oklch(0.78 0.1 160);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-raised: var(--raised);
+  --color-sunken: var(--sunken);
+  --color-rule: var(--rule);
+  --color-control: var(--control);
+  --color-faint: var(--faint);
+  --color-highlight: var(--highlight);
+  --color-highlight-foreground: var(--highlight-foreground);
+  --color-sev1: var(--sev1);
+  --color-sev2: var(--sev2);
+  --color-sev3: var(--sev3);
+  --color-sev4: var(--sev4);
+  --color-sev-ink: var(--sev-ink);
+  --color-sev1-fg: var(--sev1-fg);
+  --color-sev2-fg: var(--sev2-fg);
+  --color-sev3-fg: var(--sev3-fg);
+  --color-sev4-fg: var(--sev4-fg);
+  --color-sev-edge: var(--sev-edge);
+  --color-danger: var(--danger);
+  --color-ok: var(--ok);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --font-sans: var(--font-atkinson), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-atkinson-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  /* type scale: a major-third ladder from 12 px, display sizes for the landing page */
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.1rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.3rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.55rem;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.7rem;
+  --text-xl: 1.375rem;
+  --text-xl--line-height: 1.85rem;
+  --text-2xl: 1.75rem;
+  --text-2xl--line-height: 2.2rem;
+  --text-3xl: 2.25rem;
+  --text-3xl--line-height: 2.6rem;
+  --text-4xl: 3rem;
+  --text-4xl--line-height: 3.25rem;
+  --text-5xl: 4rem;
+  --text-5xl--line-height: 4.15rem;
+  --text-6xl: 5.5rem;
+  --text-6xl--line-height: 5.6rem;
+
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  /* motion: durations and easings used everywhere (GSAP reads the same values) */
+  --duration-instant: 80ms;
+  --duration-quick: 140ms;
+  --duration-moderate: 220ms;
+  --duration-slow: 360ms;
+  --duration-deliberate: 600ms;
+  --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+
+  --animate-pulse-dot: pulse-dot 1.6s var(--ease-in-out) infinite;
+
+  @keyframes pulse-dot {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    color-scheme: light;
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+    font-optical-sizing: auto;
+  }
+  ::selection {
+    background: var(--highlight);
+    color: var(--highlight-foreground);
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  code,
+  kbd,
+  samp,
+  pre {
+    @apply font-mono;
+    font-size: 0.9375em;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  /* the perforated edge between a triage tag's severity strip and its body */
+  .perforation {
+    background-image: repeating-linear-gradient(to bottom, var(--rule) 0 4px, transparent 4px 8px);
+    background-size: 1px 100%;
+    background-repeat: no-repeat;
+  }
+}
+
+/* Elements the landing page animates start hidden once script is known to run (the `js` class is
+   set before first paint); GSAP reveals them. If the animation never starts, they appear anyway. */
+@media (prefers-reduced-motion: no-preference) {
+  .js [data-anim] {
+    visibility: hidden;
+    animation: reveal-fallback 0s linear 2.5s forwards;
+  }
+}
+
+@keyframes reveal-fallback {
+  to {
+    visibility: visible;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

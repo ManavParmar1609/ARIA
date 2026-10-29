@@ -1,0 +1,493 @@
+{
+  "suite": "pipeline",
+  "created_at": "2026-10-29T06:06:45+00:00",
+  "git_sha": "b6a8261",
+  "llm": true,
+  "data": {
+    "synthetic": true,
+    "description": "semi-synthetic scenarios composed from real Loghub sample lines",
+    "test_seeds": [
+      41,
+      42
+    ],
+    "memory_seeds": [
+      51,
+      52
+    ],
+    "fixtures": false
+  },
+  "memory_incidents": 84,
+  "pipeline": {
+    "n": 3,
+    "statuses": {
+      "awaiting_review": 3
+    },
+    "severity": {
+      "n": 3,
+      "accuracy": 1.0,
+      "accuracy_ci95": [
+        1.0,
+        1.0
+      ],
+      "macro_f1": 1.0,
+      "macro_f1_ci95": [
+        1.0,
+        1.0
+      ],
+      "quadratic_kappa": 1.0,
+      "under_triage": 0.0,
+      "severe_under_triage": 0.0,
+      "over_triage": 0.0,
+      "per_class": {
+        "SEV1": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "SEV2": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "SEV3": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 2
+        },
+        "SEV4": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 1
+        }
+      },
+      "confusion": [
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          2,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    },
+    "groundedness": {
+      "valid_reports": 1.0,
+      "every_claim_cited": 1.0,
+      "mean_citation_coverage": 1.0,
+      "written_by": {
+        "llm": 3
+      }
+    },
+    "retrieval": {
+      "n": 2,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    "investigation": {
+      "n": 2,
+      "leading_hypothesis_correct": 0.5,
+      "has_supported_hypothesis": 1.0,
+      "replanned": 0.0,
+      "quiet_runs": 1,
+      "false_alarms": 0.0
+    },
+    "latency": {
+      "time_to_review_p50_s": 192.698,
+      "time_to_review_p95_s": 193.315,
+      "stage_p50_ms": {
+        "assess": 13.5,
+        "comms": 32555.8,
+        "investigate": 55807.5,
+        "merge": 115.4,
+        "parse_shard": 205.6,
+        "plan": 11.9,
+        "recall": 375.5,
+        "report": 23627.4,
+        "review": 11.7,
+        "severity": 16.1
+      },
+      "stage_p95_ms": {
+        "assess": 23.5,
+        "comms": 107081.4,
+        "investigate": 157115.9,
+        "merge": 129.9,
+        "parse_shard": 305.2,
+        "plan": 30.0,
+        "recall": 452.4,
+        "report": 30435.1,
+        "review": 12.3,
+        "severity": 28.3
+      },
+      "llm_call_p50_ms": 25553.8,
+      "llm_call_p95_ms": 61864.0
+    },
+    "budgets": {
+      "token_limit": 60000,
+      "max_tokens_used": 28345,
+      "runs_over_token_limit": 0,
+      "runs_with_exhausted_budget": 2,
+      "mean_llm_calls": 5.0,
+      "mean_tool_calls": 5.0
+    },
+    "providers": {
+      "nim": {
+        "calls": 5,
+        "failures": 1,
+        "models": [
+          "openai/gpt-oss-20b"
+        ],
+        "latency_p50_ms": 32524.1,
+        "latency_p95_ms": 66516.8,
+        "tokens_in": 9250,
+        "tokens_out": 2508,
+        "cost_usd": null
+      },
+      "nim-fallback": {
+        "calls": 11,
+        "failures": 0,
+        "models": [
+          "minimaxai/minimax-m3.1-flash"
+        ],
+        "latency_p50_ms": 23574.5,
+        "latency_p95_ms": 57660.7,
+        "tokens_in": 44479,
+        "tokens_out": 6597,
+        "cost_usd": null
+      }
+    }
+  },
+  "pipeline_cases": [
+    {
+      "id": "scn-quiet-openstack-41500",
+      "system": "openstack",
+      "failure_mode": "none",
+      "truth": "SEV4",
+      "benign": false,
+      "status": "awaiting_review",
+      "severity": "SEV4",
+      "decided_by": "rules",
+      "valid": true,
+      "all_cited": true,
+      "citation_coverage": 1.0,
+      "generated_by": "llm",
+      "retrieved_modes": [
+        "image_cache_missing",
+        "image_cache_missing",
+        "image_cache_missing"
+      ],
+      "leading_mode": null,
+      "supported": false,
+      "replans": 0,
+      "seconds": 192.698,
+      "stages_ms": {
+        "plan": 6.1,
+        "parse_shard": 205.6,
+        "merge": 115.4,
+        "severity": 16.1,
+        "recall": 84.6,
+        "investigate": 168372.4,
+        "assess": 8.9,
+        "report": 23627.4,
+        "comms": 23.9,
+        "review": 12.4
+      },
+      "llm_calls": 4,
+      "tool_calls": 4,
+      "tokens": 14338,
+      "exhausted": [
+        "latency"
+      ],
+      "llm_latency_ms": [
+        27437.4,
+        71879.6,
+        45065.8,
+        23670.1,
+        23574.5
+      ],
+      "llm_calls_detail": [
+        {
+          "task": "investigator_step",
+          "provider": "nim",
+          "model": "openai/gpt-oss-20b",
+          "input_tokens": 2009,
+          "output_tokens": 317,
+          "latency_ms": 27437.4,
+          "estimated": false,
+          "cost_usd": null
+        },
+        {
+          "task": "investigator_step",
+          "provider": "nim",
+          "model": "openai/gpt-oss-20b",
+          "input_tokens": 2550,
+          "output_tokens": 1600,
+          "latency_ms": 71879.6,
+          "estimated": false,
+          "cost_usd": null
+        },
+        {
+          "task": "investigator_step",
+          "provider": "nim",
+          "model": "openai/gpt-oss-20b",
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "latency_ms": 45065.8,
+          "estimated": false,
+          "error": "nim: stream stalled: ReadTimeout"
+        },
+        {
+          "task": "investigator_step",
+          "provider": "nim-fallback",
+          "model": "minimaxai/minimax-m3.1-flash",
+          "input_tokens": 2647,
+          "output_tokens": 498,
+          "latency_ms": 23670.1,
+          "estimated": false,
+          "cost_usd": null
+        },
+        {
+          "task": "narrative",
+          "provider": "nim-fallback",
+          "model": "minimaxai/minimax-m3.1-flash",
+          "input_tokens": 4341,
+          "output_tokens": 376,
+          "latency_ms": 23574.5,
+          "estimated": false,
+          "cost_usd": null
+        }
+      ]
+    },
+    {
+      "id": "scn-hdfs-block_serve_exceptions-41000",
+      "system": "hdfs",
+      "failure_mode": "block_serve_exceptions",
+      "truth": "SEV3",
+      "benign": false,
+      "status": "awaiting_review",
+      "severity": "SEV3",
+      "decided_by": "model",
+      "valid": true,
+      "all_cited": true,
+      "citation_coverage": 1.0,
+      "generated_by": "llm",
+      "retrieved_modes": [
+        "block_serve_exceptions",
+        "block_serve_exceptions",
+        "block_serve_exceptions"
+      ],
+      "leading_mode": "component_errors",
+      "supported": true,
+      "replans": 0,
+      "seconds": 193.384,
+      "stages_ms": {
+        "plan": 32.0,
+        "parse_shard": 316.3,
+        "merge": 131.5,
+        "severity": 16.0,
+        "recall": 375.5,
+        "investigate": 55807.5,
+        "assess": 24.6,
+        "report": 21123.8,
+        "comms": 115362.0,
+        "review": 11.7
+      },
+      "llm_calls": 6,
+      "tool_calls": 6,
+      "tokens": 28345,
+      "exhausted": [
+        "latency"
+      ],
+      "llm_latency_ms": [
+        34307.8,
+        21252.8,
+        19704.9,
+        1362.0,
+        58525.4,
+        56795.9
+      ],
+      "llm_calls_detail": [
+        {
+          "task": "investigator_step",
+          "provider": "nim-fallback",
+          "model": "minimaxai/minimax-m3.1-flash",
+          "input_tokens": 2304,
+          "output_tokens": 807,
+          "latency_ms": 34307.8,
+          "estimated": false,
+          "cost_usd": null
+        },
+        {
+          "task": "investigator_step",
+          "provider": "nim-fallback",
+          "model": "minimaxai/minimax-m3.1-flash",
+          "input_tokens": 3901,
+          "output_tokens": 437,
+          "latency_ms": 21252.8,
+          "estimated": false,
+          "cost_usd": null
+        },
+        {
+          "task": "narrative",
+          "provider": "nim-fallback",
+          "model": "minimaxai/minimax-m3.1-flash",
+          "input_tokens": 6248,
+          "output_tokens": 481,
+          "latency_ms": 19704.9,
+          "estimated": false,
+          "cost_usd": null
+        },
+        {
+          "task": "critic",
+          "provider": "nim-fallback",
+          "model": "minimaxai/minimax-m3.1-flash",
+          "input_tokens": 2973,
+          "output_tokens": 10,
+          "latency_ms": 1362.0,
+          "estimated": false,
+          "cost_usd": null
+        },
+        {
+          "task": "comms",
+          "provider": "nim-fallback",
+          "model": "minimaxai/minimax-m3.1-flash",
+          "input_tokens": 3764,
+          "output_tokens": 1200,
+          "latency_ms": 58525.4,
+          "estimated": false,
+          "cost_usd": null
+        },
+        {
+          "task": "comms",
+          "provider": "nim-fallback",
+          "model": "minimaxai/minimax-m3.1-flash",
+          "input_tokens": 5020,
+          "output_tokens": 1200,
+          "latency_ms": 56795.9,
+          "estimated": false,
+          "cost_usd": null
+        }
+      ]
+    },
+    {
+      "id": "scn-linux-auth_failures-41000",
+      "system": "linux",
+      "failure_mode": "auth_failures",
+      "truth": "SEV3",
+      "benign": false,
+      "status": "awaiting_review",
+      "severity": "SEV3",
+      "decided_by": "model",
+      "valid": true,
+      "all_cited": true,
+      "citation_coverage": 1.0,
+      "generated_by": "llm",
+      "retrieved_modes": [
+        "auth_failures",
+        "auth_failures",
+        "auth_failures"
+      ],
+      "leading_mode": "auth_failures",
+      "supported": true,
+      "replans": 0,
+      "seconds": 116.25,
+      "stages_ms": {
+        "plan": 11.9,
+        "parse_shard": 167.7,
+        "merge": 92.2,
+        "severity": 29.7,
+        "recall": 460.9,
+        "investigate": 51544.8,
+        "assess": 13.5,
+        "report": 31191.5,
+        "comms": 32555.8,
+        "review": 8.6
+      },
+      "llm_calls": 5,
+      "tool_calls": 5,
+      "tokens": 20151,
+      "exhausted": [],
+      "llm_latency_ms": [
+        35741.8,
+        15685.5,
+        17988.1,
+        13164.3,
+        32524.1
+      ],
+      "llm_calls_detail": [
+        {
+          "task": "investigator_step",
+          "provider": "nim-fallback",
+          "model": "minimaxai/minimax-m3.1-flash",
+          "input_tokens": 2546,
+          "output_tokens": 978,
+          "latency_ms": 35741.8,
+          "estimated": false,
+          "cost_usd": null
+        },
+        {
+          "task": "investigator_step",
+          "provider": "nim-fallback",
+          "model": "minimaxai/minimax-m3.1-flash",
+          "input_tokens": 4123,
+          "output_tokens": 190,
+          "latency_ms": 15685.5,
+          "estimated": false,
+          "cost_usd": null
+        },
+        {
+          "task": "narrative",
+          "provider": "nim-fallback",
+          "model": "minimaxai/minimax-m3.1-flash",
+          "input_tokens": 6612,
+          "output_tokens": 420,
+          "latency_ms": 17988.1,
+          "estimated": false,
+          "cost_usd": null
+        },
+        {
+          "task": "critic",
+          "provider": "nim",
+          "model": "openai/gpt-oss-20b",
+          "input_tokens": 2146,
+          "output_tokens": 37,
+          "latency_ms": 13164.3,
+          "estimated": false,
+          "cost_usd": null
+        },
+        {
+          "task": "comms",
+          "provider": "nim",
+          "model": "openai/gpt-oss-20b",
+          "input_tokens": 2545,
+          "output_tokens": 554,
+          "latency_ms": 32524.1,
+          "estimated": false,
+          "cost_usd": null
+        }
+      ]
+    }
+  ]
+}
