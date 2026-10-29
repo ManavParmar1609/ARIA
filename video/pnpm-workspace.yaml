@@ -7,6 +7,10 @@ minimumReleaseAge: 10080
 
 # pnpm runs no dependency install scripts unless listed here.
 onlyBuiltDependencies: []
+# Install scripts skipped on purpose (each package's prebuilt binary arrives as an optional
+# dependency), listed so pnpm does not suggest approving them.
+ignoredBuiltDependencies:
+  - esbuild
 
 # Security fixes for transitive dependencies (the same as web/). Remotion's studio pins zod 4.5,
 # which GHSA-mrhx-c7xc-m3w5 affects (memory exhaustion on oversized collections).

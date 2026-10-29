@@ -7,6 +7,10 @@ minimumReleaseAge: 10080
 
 # pnpm runs no dependency install scripts unless listed here.
 onlyBuiltDependencies: []
+# Install scripts skipped on purpose (each package's prebuilt binary arrives as an optional
+# dependency), listed so pnpm does not suggest approving them.
+ignoredBuiltDependencies:
+  - unrs-resolver
 
 # Security fixes for transitive dependencies. @ag-ui/client pins zod 3, which GHSA-mrhx-c7xc-m3w5
 # affects (memory exhaustion on oversized collections); it imports zod/v4, which zod 4 provides.
