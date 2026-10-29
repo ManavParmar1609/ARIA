@@ -28,6 +28,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from aria import __version__
 from aria.api.a2a import a2a_routes
 from aria.api.agui import router as agui_router
+from aria.api.jobs import start_background_jobs
 from aria.api.metrics import Metrics
 from aria.api.routers import catalog, intake, runs, system
 from aria.api.security import AuthMiddleware, KeyAuth, RateLimiter
@@ -126,13 +127,18 @@ def create_app(
         app.state.aria = state
         if auth.open:
             log.warning("api.open", hint="set ARIA_API_KEYS to require API keys")
+        stop = asyncio.Event()
+        background: list[asyncio.Task[None]] = []
         async with mcp.session_manager.run():
             if state.inprocess:
                 await worker.recover()
+                background.extend(start_background_jobs(svc, run, stop, on_run=worker.execute))
             log.info("api.started", version=__version__, worker=settings.worker_mode)
             try:
                 yield
             finally:
+                stop.set()
+                await asyncio.gather(*background, return_exceptions=True)
                 await worker.drain()
                 holder.pop("state", None)
                 if owned:

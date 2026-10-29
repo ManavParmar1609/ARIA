@@ -141,5 +141,9 @@ investigation:
 
 triggers:
   alert_group_window_s: 300
-  scan_interval_s: 0
+  # Periodic log scan (off at 0): tail these files and open a run on an error burst. Sources are
+  # "system=path" pairs, e.g. ARIA_SCAN_SOURCES="hdfs=/var/log/hdfs.log,openssh=/var/log/auth.log".
+  scan_interval_s: ${ARIA_SCAN_INTERVAL_S:-0}
   scan_min_burst_score: 3.0
+  scan_window_lines: 2000
+  scan_sources: ${ARIA_SCAN_SOURCES:-}

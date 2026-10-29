@@ -108,6 +108,18 @@ def list_runs(
         return [run_dict(row) for row in session.scalars(stmt.limit(limit))]
 
 
+def latest_run(engine: Engine, *, trigger: str, system: str) -> dict[str, Any] | None:
+    """The newest run with this trigger on this system (the scan's duplicate check)."""
+    with session_scope(engine) as session:
+        row = session.scalar(
+            select(RunRow)
+            .where(RunRow.trigger == trigger, RunRow.system == system)
+            .order_by(RunRow.created_at.desc(), RunRow.id.desc())
+            .limit(1)
+        )
+        return run_dict(row) if row is not None else None
+
+
 # --- events --------------------------------------------------------------------------------------
 
 

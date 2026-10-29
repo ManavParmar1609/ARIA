@@ -173,10 +173,32 @@ class RetrievalConfig(_Strict):
     rrf_k: int = Field(default=60, ge=1)
 
 
+class ScanSource(_Strict):
+    """A log file the periodic scan tails, and the log format (system) its lines are in."""
+
+    system: str = Field(min_length=1, max_length=48)
+    path: Path
+
+
 class TriggerConfig(_Strict):
     alert_group_window_s: int = Field(default=300, ge=10)
+    # The periodic log scan: off at 0. Every interval it reads the lines appended to each source
+    # and opens a run when the recent window's error burst score reaches the minimum.
     scan_interval_s: int = Field(default=0, ge=0)
     scan_min_burst_score: float = Field(default=3.0, ge=0)
+    scan_window_lines: int = Field(default=2000, ge=50, le=20000)
+    scan_sources: list[ScanSource] = Field(default_factory=list)
+
+    @field_validator("scan_sources", mode="before")
+    @classmethod
+    def _split_sources(cls, value: Any) -> Any:
+        # From an environment variable: "hdfs=/var/log/hdfs.log, openssh=/var/log/auth.log".
+        if isinstance(value, str):
+            items = [item.strip() for item in value.split(",") if item.strip()]
+            return [
+                dict(zip(("system", "path"), item.split("=", 1), strict=False)) for item in items
+            ]
+        return value
 
 
 class CommsConfig(_Strict):

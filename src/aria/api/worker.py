@@ -18,6 +18,7 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
+from aria.api.jobs import start_background_jobs
 from aria.db import repository as repo
 from aria.graph.runner import RunBusyError, TriageRunner
 from aria.observability.logging import get_logger
@@ -101,14 +102,16 @@ async def poll_forever(
     stop: asyncio.Event | None = None,
     heartbeat: Path | None = None,
 ) -> None:
-    """The external worker loop: claim runs from the database and execute them.
+    """The external worker loop: claim runs from the database and execute them, with the
+    periodic jobs (the log scan) running beside it.
 
     After each poll that reaches the database, ``heartbeat`` (when given) is touched, so a
     container health check can tell a live worker from a stuck one."""
     me = worker_id()
     worker = Worker(runner, concurrency=concurrency)
     stop = stop or asyncio.Event()
-    log.info("worker.started", worker=me, concurrency=concurrency)
+    background = start_background_jobs(runner.services, runner, stop)
+    log.info("worker.started", worker=me, concurrency=concurrency, jobs=len(background))
     try:
         while not stop.is_set():
             free = max(0, concurrency - worker.active)
@@ -121,5 +124,7 @@ async def poll_forever(
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(stop.wait(), timeout=interval_s)
     finally:
+        stop.set()
+        await asyncio.gather(*background, return_exceptions=True)
         await worker.drain()
         log.info("worker.stopped", worker=me)
