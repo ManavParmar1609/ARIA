@@ -1,5 +1,6 @@
 import { ArrowDownIcon } from "lucide-react";
 import Link from "next/link";
+import { Suspense } from "react";
 
 import { Orb } from "@/components/aria/orb";
 import { Term } from "@/components/aria/term";
@@ -258,7 +259,11 @@ export default function Landing() {
             </>
           }
         >
-          <TriageReplay data={data} />
+          {/* Suspense boundaries let React hydrate each interactive section as its own, shorter
+              task, so no single task blocks the main thread for long on a slow phone. */}
+          <Suspense>
+            <TriageReplay data={data} />
+          </Suspense>
         </Section>
 
         <Section
@@ -274,7 +279,9 @@ export default function Landing() {
             </>
           }
         >
-          <RunGraph steps={steps(facts)} />
+          <Suspense>
+            <RunGraph steps={steps(facts)} />
+          </Suspense>
         </Section>
 
         <Section

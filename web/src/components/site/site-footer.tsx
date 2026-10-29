@@ -23,7 +23,7 @@ export function SiteFooter({ recordedAt, gitSha }: { recordedAt: string; gitSha:
           <h2 className="eyebrow text-faint">Project</h2>
           <ul className="grid gap-2">
             <li>
-              <Link href="/console" className={LINK}>
+              <Link href="/console" prefetch={false} className={LINK}>
                 Console
               </Link>
             </li>

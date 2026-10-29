@@ -18,8 +18,10 @@ export const geistMono = localFont({
   weight: "100 900",
   variable: "--font-geist-mono",
   display: "swap",
-  // Preloaded too: log lines sit above the fold on the landing page and the run view. The fallback
-  // stays a real monospace face, so a late swap barely moves text.
+  // Not preloaded: on the landing page monospace text starts below the fold, and on a slow
+  // connection the preload would compete with what the first screen needs. The fallback is a real
+  // monospace face, so the late swap barely moves text.
+  preload: false,
   fallback: ["ui-monospace", "Menlo", "monospace"],
   adjustFontFallback: false,
 });

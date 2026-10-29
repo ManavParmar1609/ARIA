@@ -20,7 +20,8 @@ const LINK =
 export function SiteHeader() {
   return (
     <header className="relative z-20 mx-auto flex h-20 w-full max-w-[90rem] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-      <Link href="/" className="rounded-sm text-heading" aria-label="ARIA home">
+      {/* No prefetch: on the home page it would fetch and decode the page already showing. */}
+      <Link href="/" prefetch={false} className="rounded-sm text-heading" aria-label="ARIA home">
         <Wordmark />
       </Link>
       <nav aria-label="Page sections" className="hidden items-center gap-1 lg:flex">
