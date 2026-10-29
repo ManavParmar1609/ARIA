@@ -1,8 +1,6 @@
 "use client";
 
 import { LogOutIcon } from "lucide-react";
-import { useTheme } from "next-themes";
-import { useSyncExternalStore } from "react";
 
 import { ErrorState, LoadingRows, PageHeader } from "@/components/console/states";
 import { Button } from "@/components/ui/button";
@@ -22,9 +20,14 @@ import {
   type SettingsView,
 } from "@/lib/api/hooks";
 import { money } from "@/lib/format";
+import { useTheme, type ThemeChoice } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
-const subscribe = () => () => {};
+const THEMES: [ThemeChoice, string][] = [
+  ["dark", "Dark"],
+  ["light", "Light"],
+  ["system", "Match my system"],
+];
 
 function Section({
   id,
@@ -174,11 +177,6 @@ export function Settings() {
   const providers = useProviders();
   const view = useSettingsView();
   const { theme, setTheme } = useTheme();
-  const mounted = useSyncExternalStore(
-    subscribe,
-    () => true,
-    () => false,
-  );
 
   return (
     <div className="grid gap-8">
@@ -203,32 +201,35 @@ export function Settings() {
             </Button>
           ) : null}
         </div>
-        <div role="radiogroup" aria-label="Theme" className="flex flex-wrap gap-2">
-          {[
-            ["dark", "Dark"],
-            ["light", "Light"],
-            ["system", "Match my system"],
-          ].map(([value, label]) => {
-            const checked = mounted && (theme ?? "dark") === value;
-            return (
-              <button
-                key={value}
-                type="button"
-                role="radio"
-                aria-checked={checked}
-                onClick={() => setTheme(value ?? "dark")}
-                className={cn(
-                  "h-9 rounded-md border px-3 text-sm",
-                  checked
-                    ? "border-primary bg-highlight font-semibold text-highlight-foreground"
-                    : "border-rule text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
+        <fieldset className="grid gap-2">
+          <legend className="mb-2 text-sm font-semibold">Theme</legend>
+          <div className="flex flex-wrap gap-2">
+            {THEMES.map(([value, label]) => {
+              const checked = theme === value;
+              return (
+                <label
+                  key={value}
+                  className={cn(
+                    "relative inline-flex h-9 cursor-pointer items-center rounded-md border px-3 text-sm has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-ring",
+                    checked
+                      ? "border-primary bg-highlight font-semibold text-highlight-foreground"
+                      : "border-rule text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="theme"
+                    value={value}
+                    checked={checked}
+                    onChange={() => setTheme(value)}
+                    className="sr-only"
+                  />
+                  {label}
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
       </Section>
 
       <Section

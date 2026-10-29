@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { type ReactNode } from "react";
 
+import { DataProviders } from "@/components/console/data-providers";
 import { ConsoleShell } from "@/components/console/shell";
 
 export const metadata: Metadata = {
@@ -9,5 +10,9 @@ export const metadata: Metadata = {
 };
 
 export default function ConsoleLayout({ children }: { children: ReactNode }) {
-  return <ConsoleShell>{children}</ConsoleShell>;
+  return (
+    <DataProviders>
+      <ConsoleShell>{children}</ConsoleShell>
+    </DataProviders>
+  );
 }

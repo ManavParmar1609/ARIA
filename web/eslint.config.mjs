@@ -8,7 +8,11 @@ export default defineConfig([
   ...nextTypescript,
   {
     // eslint-config-next registers the jsx-a11y plugin; turn on its full recommended set.
-    rules: jsxA11y.flatConfigs.recommended.rules,
+    rules: {
+      ...jsxA11y.flatConfigs.recommended.rules,
+      // Scrollable regions must take focus (WCAG 2.1.1, axe scrollable-region-focusable).
+      "jsx-a11y/no-noninteractive-tabindex": ["error", { roles: ["tabpanel", "region"], tags: [] }],
+    },
   },
   {
     files: ["**/*.{ts,tsx}"],

@@ -277,7 +277,12 @@ export function NewRun() {
             <div key={s.title} className="grid gap-2 border-t border-rule pt-4">
               <h3 className="text-sm font-semibold">{s.title}</h3>
               <p className="text-sm text-muted-foreground">{s.body}</p>
-              <pre className="overflow-x-auto rounded-md border border-rule bg-sunken p-3 text-xs leading-5">
+              <pre
+                tabIndex={0}
+                role="region"
+                aria-label={s.title}
+                className="overflow-x-auto rounded-md border border-rule bg-sunken p-3 text-xs leading-5"
+              >
                 <code>{s.code}</code>
               </pre>
             </div>

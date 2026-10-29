@@ -109,6 +109,7 @@ function Confusion({ matrix }: { matrix: number[][] }) {
                 {row.map((n, j) => {
                   const share = n / total;
                   const under = j > i; // rated less severe than it was
+                  // tints stay light enough for text to keep 4.5:1 in both themes
                   return (
                     <TableCell
                       key={j}
@@ -120,7 +121,7 @@ function Confusion({ matrix }: { matrix: number[][] }) {
                       style={{
                         backgroundColor:
                           n > 0
-                            ? `color-mix(in oklch, var(${i === j ? "--primary" : under ? "--danger" : "--control"}) ${Math.round(8 + share * 40)}%, transparent)`
+                            ? `color-mix(in oklch, var(${i === j ? "--primary" : under ? "--danger" : "--control"}) ${Math.round(6 + share * 18)}%, transparent)`
                             : undefined,
                       }}
                     >

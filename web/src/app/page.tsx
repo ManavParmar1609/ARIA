@@ -8,6 +8,7 @@ import { Limitations, Standards } from "@/components/site/standards";
 import { TriageReplay } from "@/components/site/triage-replay";
 import { Button } from "@/components/ui/button";
 import { evaluation, replay, runFacts, type RunFacts } from "@/lib/site-data";
+import { cn } from "@/lib/utils";
 
 const ms = (value: number | undefined) =>
   value == null ? "" : value < 1 ? "under 1 ms" : `${Math.round(value)} ms`;
@@ -72,15 +73,26 @@ function Section({
   id,
   title,
   intro,
+  deferred = false,
   children,
 }: {
   id: string;
   title: string;
   intro?: string;
+  /** Skip layout and paint until the section nears the viewport (for sections far below the
+   * fold that nothing measures on load). */
+  deferred?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <section id={id} aria-labelledby={`${id}-title`} className="scroll-mt-8 border-t border-rule">
+    <section
+      id={id}
+      aria-labelledby={`${id}-title`}
+      className={cn(
+        "scroll-mt-8 border-t border-rule",
+        deferred && "[contain-intrinsic-size:auto_1400px] [content-visibility:auto]",
+      )}
+    >
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
         <div className="grid max-w-3xl gap-4">
           <h2 id={`${id}-title`} className="text-3xl font-extrabold tracking-tight sm:text-4xl">
@@ -120,7 +132,9 @@ export default function Landing() {
             </p>
             <div className="flex flex-wrap gap-3">
               <Button asChild variant="primary" size="lg">
-                <Link href="/console">Open the console</Link>
+                <Link href="/console" prefetch={false}>
+                  Open the console
+                </Link>
               </Button>
               <Button asChild variant="secondary" size="lg">
                 <a href="#results">See the measured results</a>
@@ -145,6 +159,7 @@ export default function Landing() {
 
         <Section
           id="results"
+          deferred
           title="Measured, caveats included"
           intro="ARIA is tested on incident windows built from real Loghub logs, against simpler baselines. Every number on this page comes from the committed evaluation results."
         >
@@ -153,13 +168,14 @@ export default function Landing() {
 
         <Section
           id="standards"
+          deferred
           title="Built on open agent standards"
           intro="ARIA works with the tools you already have, through protocols other agents and frontends speak."
         >
           <Standards />
         </Section>
 
-        <Section id="limits" title="Where it falls short">
+        <Section id="limits" title="Where it falls short" deferred>
           <Limitations />
         </Section>
       </main>

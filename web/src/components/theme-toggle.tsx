@@ -1,8 +1,6 @@
 "use client";
 
 import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
-import { useTheme } from "next-themes";
-import { useSyncExternalStore } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -12,18 +10,12 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-const subscribe = () => () => {};
+import { isThemeChoice, useTheme } from "@/lib/theme";
 
 export function ThemeToggle({ className }: { className?: string }) {
   const { theme, setTheme, resolvedTheme } = useTheme();
-  // The stored theme is only known in the browser; render a neutral icon until hydrated.
-  const mounted = useSyncExternalStore(
-    subscribe,
-    () => true,
-    () => false,
-  );
-  const Icon = !mounted ? MonitorIcon : resolvedTheme === "light" ? SunIcon : MoonIcon;
+  // The stored theme is only known in the browser; show a neutral icon until hydrated.
+  const Icon = !resolvedTheme ? MonitorIcon : resolvedTheme === "light" ? SunIcon : MoonIcon;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -33,8 +25,10 @@ export function ThemeToggle({ className }: { className?: string }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent>
         <DropdownMenuRadioGroup
-          value={mounted ? (theme ?? "dark") : "dark"}
-          onValueChange={setTheme}
+          value={theme ?? "dark"}
+          onValueChange={(value) => {
+            if (isThemeChoice(value)) setTheme(value);
+          }}
         >
           <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>

@@ -17,7 +17,7 @@ function ClaimList({ claims }: { claims: Claim[] }) {
       {claims.map((claim, i) => (
         <li
           key={`${i}-${claim.text}`}
-          className="grid grid-cols-[0.75rem_1fr] gap-2 leading-relaxed"
+          className="grid grid-cols-[0.75rem_minmax(0,1fr)] gap-2 leading-relaxed"
         >
           <span aria-hidden className="mt-2.5 block size-1.5 rounded-full bg-control" />
           <p>
@@ -49,7 +49,7 @@ export function ReportView({ report }: { report: IncidentReport }) {
   const validation = report.validation;
   const ok = validation?.ok ?? false;
   return (
-    <article aria-labelledby="report-title" className="grid gap-8">
+    <article aria-labelledby="report-title" className="grid gap-8 wrap-anywhere">
       <header className="grid gap-3">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground">
           <span>
@@ -225,7 +225,12 @@ export function LiveDraft({ text }: { text: string }) {
         <span aria-hidden className="block size-2 animate-pulse-dot rounded-full bg-primary" />
         Writing the report
       </p>
-      <pre className="max-h-80 overflow-auto font-mono text-xs leading-5 whitespace-pre-wrap text-muted-foreground">
+      <pre
+        tabIndex={0}
+        role="region"
+        aria-label="Report text so far"
+        className="max-h-80 overflow-auto font-mono text-xs leading-5 whitespace-pre-wrap text-muted-foreground"
+      >
         {text.slice(-4000)}
       </pre>
     </section>

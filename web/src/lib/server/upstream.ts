@@ -15,6 +15,13 @@ const FORWARD_REQUEST_HEADERS = ["accept", "content-type", "last-event-id"];
 const FORWARD_RESPONSE_HEADERS = ["content-type", "retry-after", "cache-control", "x-request-id"];
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
 
+/** The ARIA API path for this server's /api/v1/<segments>, or null if a segment is unsafe. */
+export function upstreamPath(segments: string[]): string | null {
+  if (segments.length === 0) return null;
+  if (segments.some((s) => s === "" || s === "." || s === ".." || /[\\/]/.test(s))) return null;
+  return "/api/v1/" + segments.map(encodeURIComponent).join("/");
+}
+
 export function keyFrom(request: NextRequest): string | undefined {
   const value = request.cookies.get(KEY_COOKIE)?.value;
   return value ? value : undefined;

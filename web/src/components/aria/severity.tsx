@@ -1,7 +1,7 @@
 import { type CSSProperties } from "react";
 
 import { SEVERITIES, SEVERITY_MEANING, type Severity } from "@/lib/api/types";
-import { cn } from "@/lib/utils";
+import { cx } from "@/lib/cx";
 
 export const SEVERITY_BG: Record<Severity, string> = {
   SEV1: "bg-sev1",
@@ -42,7 +42,7 @@ export function SeverityBadge({
   if (!severity) {
     return (
       <span
-        className={cn(
+        className={cx(
           "tabular inline-flex items-center rounded-xs border border-dashed border-control px-1.5 font-medium text-faint",
           size === "sm" ? "h-5 text-xs" : "h-6 text-xs",
           className,
@@ -54,11 +54,11 @@ export function SeverityBadge({
   }
   return (
     <span
-      className={cn("inline-flex items-center gap-2", className)}
+      className={cx("inline-flex items-center gap-2", className)}
       title={SEVERITY_MEANING[severity]}
     >
       <span
-        className={cn(
+        className={cx(
           "tabular inline-flex items-center rounded-xs border border-sev-edge px-1.5 font-bold text-sev-ink",
           SEVERITY_BG[severity],
           size === "sm" ? "h-5 text-[0.6875rem]" : "h-6 text-xs",
@@ -85,7 +85,7 @@ export function TagStrip({
 }) {
   return (
     <div
-      className={cn(
+      className={cx(
         "relative flex shrink-0 flex-col items-center gap-3 pt-4",
         severity ? SEVERITY_BG[severity] : "bg-sunken",
         className,
@@ -97,7 +97,7 @@ export function TagStrip({
         className="block size-3.5 rounded-full border-2 border-sev-ink/35 bg-background shadow-inner"
       />
       <span
-        className={cn(
+        className={cx(
           "tabular text-sm font-extrabold tracking-wide",
           severity ? "text-sev-ink" : "text-faint",
         )}
@@ -144,13 +144,13 @@ export function SeverityScale({
   ).join(", ");
   return (
     <figure
-      className={cn("grid gap-1", className)}
+      className={cx("grid gap-1", className)}
       aria-label={`Model probabilities: ${described}. ${setEmpty ? `No class is likely enough for the ${coverage}% prediction set.` : `${coverage}% prediction set: ${predictionSet.join(", ")}.`} Decided: ${decided}.${floor ? ` Safety floor: ${floor}.` : ""}`}
     >
       <div className="relative grid grid-cols-4 gap-1.5" aria-hidden>
         {setIdx.length > 0 ? (
           <div
-            className={cn(
+            className={cx(
               "pointer-events-none absolute -top-0.5 h-2 rounded-t-xs border-x border-t",
               setEmpty ? "border-dashed border-faint" : "border-foreground/60",
             )}
@@ -166,7 +166,7 @@ export function SeverityScale({
           return (
             <div key={s} className="flex flex-col items-center justify-end gap-1 pt-3">
               <span
-                className={cn(
+                className={cx(
                   "tabular text-xs",
                   isDecided ? "font-bold text-foreground" : "text-muted-foreground",
                 )}
@@ -176,7 +176,7 @@ export function SeverityScale({
               <div className="flex w-full items-end justify-center" style={{ height: barMax }}>
                 <div
                   data-bar
-                  className={cn(
+                  className={cx(
                     "w-full max-w-10 rounded-t-xs",
                     isDecided ? SEVERITY_BG[s] : inSet.has(s) ? "bg-control" : "bg-rule",
                   )}
@@ -191,7 +191,7 @@ export function SeverityScale({
         {SEVERITIES.map((s) => (
           <span
             key={s}
-            className={cn(
+            className={cx(
               "tabular text-center text-xs font-medium",
               s === decided ? "text-foreground" : "text-faint",
             )}

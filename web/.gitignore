@@ -10,3 +10,4 @@ blob-report/
 coverage/
 .env*
 !.env.example
+lighthouse/

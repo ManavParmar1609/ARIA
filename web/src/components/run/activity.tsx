@@ -4,6 +4,7 @@ import {
   BotIcon,
   CircleCheckIcon,
   CircleDotIcon,
+  CircleIcon,
   FlagIcon,
   GaugeIcon,
   OctagonAlertIcon,
@@ -33,7 +34,7 @@ export const NODE_LABEL: Record<string, string> = {
   assess: "Assess",
   widen: "Widen search",
   report: "Report",
-  comms: "Draft messages",
+  comms: "Messages",
   review: "Review",
   publish: "Publish",
   reject: "Reject",
@@ -77,7 +78,10 @@ function stepStates(events: RunEvent[]) {
   return { state, took };
 }
 
-/** Where the run is in the graph: each step done, running, paused for review or still to come. */
+/**
+ * Where the run is in the graph: each step done, running, paused for review or still to come.
+ * Steps sit in equal cells, so the layout does not move when timings arrive.
+ */
 export function GraphProgress({
   events,
   finalStatus,
@@ -89,40 +93,49 @@ export function GraphProgress({
   const path = finalStatus === "rejected" ? [...PATH.slice(0, -1), "reject"] : PATH;
   const replanned = events.some((e) => e.kind === "replan");
   return (
-    <ol aria-label="Run progress" className="flex flex-wrap gap-x-1 gap-y-2">
-      {path.map((node, i) => {
+    <ol
+      aria-label="Run progress"
+      className="grid grid-cols-3 gap-1.5 sm:grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))]"
+    >
+      {path.map((node) => {
         const s = state[node] ?? "pending";
         return (
-          <li key={node} className="flex items-center gap-1">
-            <span
-              className={cn(
-                "inline-flex h-7 items-center gap-1.5 rounded-xs border px-2 text-xs whitespace-nowrap",
-                s === "done" && "border-rule text-foreground",
-                s === "running" && "border-primary bg-highlight text-highlight-foreground",
-                s === "paused" &&
-                  "border-primary bg-highlight font-semibold text-highlight-foreground",
-                s === "failed" && "border-danger text-danger",
-                s === "pending" && "border-dashed border-rule text-faint",
-              )}
-            >
-              {s === "done" ? <CircleCheckIcon aria-hidden className="size-3 text-ok" /> : null}
-              {s === "running" ? (
-                <CircleDotIcon
-                  aria-hidden
-                  className="size-3 animate-pulse motion-reduce:animate-none"
-                />
-              ) : null}
-              {s === "paused" ? <UserRoundCheckIcon aria-hidden className="size-3" /> : null}
-              {NODE_LABEL[node] ?? node}
-              {node === "assess" && replanned ? (
-                <RefreshCwIcon aria-label="replanned" className="size-3" />
-              ) : null}
-              {took[node] != null && s === "done" ? (
-                <span className="tabular text-faint">{duration(took[node])}</span>
-              ) : null}
-              <span className="sr-only">: {s}</span>
-            </span>
-            {i < path.length - 1 ? <span aria-hidden className="h-px w-2 bg-rule" /> : null}
+          <li
+            key={node}
+            className={cn(
+              "flex h-8 min-w-0 items-center gap-1.5 rounded-xs border px-2 text-xs",
+              s === "done" && "border-rule text-foreground",
+              s === "running" && "border-primary bg-highlight text-highlight-foreground",
+              s === "paused" &&
+                "border-primary bg-highlight font-semibold text-highlight-foreground",
+              s === "failed" && "border-danger text-danger",
+              s === "pending" && "border-dashed border-rule text-faint",
+            )}
+          >
+            {s === "done" ? (
+              <CircleCheckIcon aria-hidden className="size-3 shrink-0 text-ok" />
+            ) : s === "running" ? (
+              <CircleDotIcon
+                aria-hidden
+                className="size-3 shrink-0 animate-pulse motion-reduce:animate-none"
+              />
+            ) : s === "paused" ? (
+              <UserRoundCheckIcon aria-hidden className="size-3 shrink-0" />
+            ) : s === "failed" ? (
+              <OctagonAlertIcon aria-hidden className="size-3 shrink-0" />
+            ) : (
+              <CircleIcon aria-hidden className="size-3 shrink-0" />
+            )}
+            <span className="truncate">{NODE_LABEL[node] ?? node}</span>
+            {node === "assess" && replanned ? (
+              <RefreshCwIcon aria-label="replanned" className="size-3 shrink-0" />
+            ) : null}
+            {took[node] != null && s === "done" ? (
+              <span className="tabular ml-auto hidden shrink-0 text-faint sm:inline">
+                {duration(took[node])}
+              </span>
+            ) : null}
+            <span className="sr-only">: {s}</span>
           </li>
         );
       })}
@@ -316,11 +329,11 @@ export function Activity({ events }: { events: RunEvent[] }) {
               className={cn("mt-0.5 size-4", row.tone ? TONE[row.tone] : "text-faint")}
             />
             <div className="grid min-w-0 gap-0.5">
-              <p className={cn("break-words", row.icon === WrenchIcon && "font-mono text-xs")}>
+              <p className={cn("wrap-anywhere", row.icon === WrenchIcon && "font-mono text-xs")}>
                 {row.title}
               </p>
               {row.detail ? (
-                <p className="text-xs break-words text-muted-foreground">{row.detail}</p>
+                <p className="text-xs wrap-anywhere text-muted-foreground">{row.detail}</p>
               ) : null}
               {row.evidence?.length ? <Citations ids={row.evidence} className="mt-1" /> : null}
             </div>

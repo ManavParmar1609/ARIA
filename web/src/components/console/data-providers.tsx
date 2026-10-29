@@ -1,7 +1,6 @@
 "use client";
 
 import { QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ThemeProvider } from "next-themes";
 import { useState, type ReactNode } from "react";
 
 import { Toaster } from "@/components/ui/sonner";
@@ -30,14 +29,13 @@ function makeQueryClient(): QueryClient {
   return client;
 }
 
-export function Providers({ children }: { children: ReactNode }) {
+/** The console's data layer: TanStack Query against the API proxy, plus toasts. */
+export function DataProviders({ children }: { children: ReactNode }) {
   const [client] = useState(makeQueryClient);
   return (
-    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
-      <QueryClientProvider client={client}>
-        {children}
-        <Toaster />
-      </QueryClientProvider>
-    </ThemeProvider>
+    <QueryClientProvider client={client}>
+      {children}
+      <Toaster />
+    </QueryClientProvider>
   );
 }

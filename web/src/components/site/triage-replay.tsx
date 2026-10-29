@@ -1,14 +1,11 @@
 "use client";
 
-import { useGSAP } from "@gsap/react";
-import gsap from "gsap";
 import { useMemo, useRef, useState } from "react";
 
 import { SeverityScale, TagStrip } from "@/components/aria/severity";
+import { useWideMotion } from "@/lib/motion";
 import type { Replay } from "@/lib/site-data";
-import { cn } from "@/lib/utils";
-
-gsap.registerPlugin(useGSAP);
+import { cx } from "@/lib/cx";
 
 const KIND_LABEL: Record<string, string> = {
   feature: "computed feature",
@@ -46,43 +43,27 @@ export function TriageReplay({ data }: { data: Replay }) {
   const p = Math.round((data.probabilities[data.severity] ?? 0) * 100);
   const firstShown = data.lines[0]?.lineNo ?? 1;
 
-  useGSAP(
-    () => {
-      const mm = gsap.matchMedia();
-      mm.add("(prefers-reduced-motion: no-preference)", () => {
-        const show = { autoAlpha: 1, x: 0, y: 0 };
-        gsap
-          .timeline({ defaults: { ease: "power3.out" } })
-          .fromTo(
-            "[data-anim=line]",
-            { autoAlpha: 0, y: 6 },
-            { ...show, duration: 0.3, stagger: 0.05 },
-          )
-          .fromTo(
-            "[data-anim=flag]",
-            { autoAlpha: 0, x: -8 },
-            { ...show, duration: 0.35 },
-            "-=0.05",
-          )
-          .fromTo("[data-anim=tag]", { autoAlpha: 0, y: 28 }, { ...show, duration: 0.7 }, "-=0.15")
-          .fromTo(
-            "[data-anim=tag] [data-bar]",
-            { scaleY: 0 },
-            { scaleY: 1, transformOrigin: "bottom", duration: 0.6, stagger: 0.07 },
-            "-=0.35",
-          )
-          .fromTo(
-            "[data-anim=claim]",
-            { autoAlpha: 0, y: 8 },
-            { ...show, duration: 0.4, stagger: 0.09 },
-            "-=0.3",
-          )
-          .fromTo("[data-anim=status]", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.4 });
-      });
-      return () => mm.revert();
-    },
-    { scope: root },
-  );
+  // Wide screens play the run in: lines, the flagged line, the tag's bars, then the claims.
+  useWideMotion(root, ({ gsap }) => {
+    const show = { autoAlpha: 1, x: 0, y: 0 };
+    gsap
+      .timeline({ defaults: { ease: "power3.out" } })
+      .fromTo("[data-anim=line]", { autoAlpha: 0, y: 6 }, { ...show, duration: 0.3, stagger: 0.05 })
+      .fromTo("[data-anim=flag]", { autoAlpha: 0, x: -8 }, { ...show, duration: 0.35 }, "-=0.05")
+      .fromTo(
+        "[data-tag] [data-bar]",
+        { scaleY: 0 },
+        { scaleY: 1, transformOrigin: "bottom", duration: 0.6, stagger: 0.07 },
+        "-=0.35",
+      )
+      .fromTo(
+        "[data-anim=claim]",
+        { autoAlpha: 0, y: 8 },
+        { ...show, duration: 0.4, stagger: 0.09 },
+        "-=0.3",
+      )
+      .fromTo("[data-anim=status]", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.4 });
+  });
 
   const chip = (id: string) => {
     const known = id in data.evidence;
@@ -98,7 +79,7 @@ export function TriageReplay({ data }: { data: Replay }) {
         onFocus={() => setHovered(id)}
         onBlur={() => setHovered(null)}
         onClick={() => setPinned((current) => (current === id ? null : id))}
-        className={cn(
+        className={cx(
           "inline-flex h-6 items-center rounded-xs border px-1.5 align-baseline font-mono text-xs transition-colors duration-(--duration-quick)",
           active === id
             ? "border-primary bg-highlight text-highlight-foreground"
@@ -135,18 +116,18 @@ export function TriageReplay({ data }: { data: Replay }) {
                   </span>
                 ) : null}
                 <span
-                  className={cn(
+                  className={cx(
                     "grid grid-cols-[2.25rem_3rem_1fr] items-baseline gap-2 border-l-2 px-4 transition-colors duration-(--duration-quick)",
                     isLit ? "border-primary bg-highlight" : "border-transparent",
                     line.quarantined && "text-muted-foreground",
                   )}
                 >
                   <span className="tabular text-right text-faint">{line.lineNo}</span>
-                  <span className={cn(line.level === "WARN" ? "text-sev2-fg" : "text-faint")}>
+                  <span className={cx(line.level === "WARN" ? "text-sev2-fg" : "text-faint")}>
                     {line.level}
                   </span>
                   <span
-                    className={cn(
+                    className={cx(
                       "truncate",
                       line.quarantined && "line-through decoration-danger/70",
                     )}
@@ -188,7 +169,7 @@ export function TriageReplay({ data }: { data: Replay }) {
 
       {/* the tag ARIA wrote */}
       <article
-        data-anim="tag"
+        data-tag
         aria-label={`Triage tag: ${data.severity}, ${data.title}`}
         className="relative z-10 -mt-6 ml-0 flex overflow-hidden rounded-md border border-rule bg-raised shadow-2xl shadow-black/25 sm:ml-10 lg:-ml-8 xl:ml-10"
       >

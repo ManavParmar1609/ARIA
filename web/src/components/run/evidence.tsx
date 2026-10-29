@@ -105,7 +105,7 @@ function EvidencePreview({ evidence, lines }: { evidence: Evidence; lines: LogEv
           {evidence.detail}
         </p>
       ) : null}
-      <LogLines lines={lines} limit={4} />
+      <LogLines lines={lines} limit={4} wrap />
       <p className="text-[0.6875rem] text-faint">
         Click the citation to keep it in the evidence panel.
       </p>
@@ -195,32 +195,60 @@ function DataTable({ data }: { data: Record<string, unknown> }) {
   );
 }
 
-export function LogLines({ lines, limit = 12 }: { lines: LogEvent[]; limit?: number }) {
+export function LogLines({
+  lines,
+  limit = 12,
+  wrap = false,
+}: {
+  lines: LogEvent[];
+  limit?: number;
+  /** Wrap long lines instead of scrolling (inside hover cards, where nothing can take focus). */
+  wrap?: boolean;
+}) {
   if (lines.length === 0) return null;
+  const list = (
+    <ol>
+      {lines.slice(0, limit).map((line) => (
+        <li
+          key={line.idx}
+          className={cn(
+            "grid grid-cols-[2.5rem_2.75rem_1fr] gap-2 px-2",
+            wrap ? "break-all whitespace-pre-wrap" : "whitespace-pre",
+          )}
+        >
+          <span className="tabular text-right text-faint">{line.line_no ?? line.idx + 1}</span>
+          <span
+            className={
+              line.level === "WARN"
+                ? "text-sev2-fg"
+                : line.level && /ERR|FATAL|CRIT|SEVERE/.test(line.level)
+                  ? "text-sev1-fg"
+                  : "text-faint"
+            }
+          >
+            {line.level ?? ""}
+          </span>
+          <span>{line.message}</span>
+        </li>
+      ))}
+    </ol>
+  );
+  const frame =
+    "rounded-sm border border-rule bg-sunken py-1.5 font-mono text-[0.6875rem] leading-5";
   return (
     <div className="grid gap-1">
-      <ol className="overflow-x-auto rounded-sm border border-rule bg-sunken py-1.5 font-mono text-[0.6875rem] leading-5">
-        {lines.slice(0, limit).map((line) => (
-          <li
-            key={line.idx}
-            className="grid grid-cols-[2.5rem_2.75rem_1fr] gap-2 px-2 whitespace-pre"
-          >
-            <span className="tabular text-right text-faint">{line.line_no ?? line.idx + 1}</span>
-            <span
-              className={
-                line.level === "WARN"
-                  ? "text-sev2-fg"
-                  : line.level && /ERR|FATAL|CRIT|SEVERE/.test(line.level)
-                    ? "text-sev1-fg"
-                    : "text-faint"
-              }
-            >
-              {line.level ?? ""}
-            </span>
-            <span>{line.message}</span>
-          </li>
-        ))}
-      </ol>
+      {wrap ? (
+        <div className={frame}>{list}</div>
+      ) : (
+        <div
+          tabIndex={0}
+          role="region"
+          aria-label="Log lines"
+          className={cn(frame, "overflow-x-auto")}
+        >
+          {list}
+        </div>
+      )}
       {lines.length > limit ? (
         <p className="text-xs text-muted-foreground">
           and {(lines.length - limit).toLocaleString("en")} more lines like these
@@ -275,7 +303,12 @@ export function EvidencePanel({ className }: { className?: string }) {
             )}
           </div>
           {evidence.detail ? (
-            <pre className="max-h-48 overflow-auto rounded-sm bg-sunken p-2 text-xs leading-5 whitespace-pre-wrap">
+            <pre
+              tabIndex={0}
+              role="region"
+              aria-label="Evidence detail"
+              className="max-h-48 overflow-auto rounded-sm bg-sunken p-2 text-xs leading-5 whitespace-pre-wrap"
+            >
               {evidence.detail}
             </pre>
           ) : null}

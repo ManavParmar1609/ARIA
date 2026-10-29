@@ -83,7 +83,12 @@ function ActionChoice({
         </Button>
       </div>
       {open ? (
-        <pre className="max-h-56 overflow-auto rounded-sm bg-sunken p-2.5 font-sans text-xs leading-5 whitespace-pre-wrap">
+        <pre
+          tabIndex={0}
+          role="region"
+          aria-label="Message"
+          className="max-h-56 overflow-auto rounded-sm bg-sunken p-2.5 font-sans text-xs leading-5 whitespace-pre-wrap"
+        >
           {action.body}
         </pre>
       ) : null}

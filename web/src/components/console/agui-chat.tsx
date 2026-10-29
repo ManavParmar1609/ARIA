@@ -299,7 +299,12 @@ export function AguiChat() {
                       <BotIcon aria-hidden className="size-4" />
                       ARIA&apos;s report{item.done ? "" : " (streaming)"}
                     </p>
-                    <div className="max-h-[32rem] overflow-auto">
+                    <div
+                      tabIndex={0}
+                      role="region"
+                      aria-label="Report"
+                      className="max-h-[32rem] overflow-auto"
+                    >
                       <Markdown>{item.text}</Markdown>
                     </div>
                   </li>
@@ -397,6 +402,7 @@ export function AguiChat() {
                 key={s.id}
                 size="sm"
                 variant="ghost"
+                className="h-auto min-h-8 shrink py-1.5 text-left whitespace-normal"
                 onClick={() => {
                   setSystem(s.system);
                   setText(s.lines.join("\n"));

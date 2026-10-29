@@ -3,8 +3,15 @@ import { type ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 
 export function Table({ className, ...props }: ComponentProps<"table">) {
+  // The wrapper scrolls on narrow screens, so it takes focus (keyboard users can scroll it).
+  // Inline-size containment keeps a wide table from widening the page instead of scrolling.
   return (
-    <div className="relative w-full overflow-x-auto">
+    <div
+      className="relative w-full overflow-x-auto [contain:inline-size]"
+      tabIndex={0}
+      role="region"
+      aria-label={props["aria-label"] ?? "Table"}
+    >
       <table
         className={cn("w-full caption-bottom border-collapse text-sm", className)}
         {...props}

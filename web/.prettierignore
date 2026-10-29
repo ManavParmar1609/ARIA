@@ -5,3 +5,4 @@ src/lib/api/schema.ts
 src/data
 playwright-report
 test-results
+lighthouse

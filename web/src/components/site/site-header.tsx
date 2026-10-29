@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { Wordmark } from "@/components/aria/wordmark";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { ThemeSwitch } from "@/components/theme-switch";
 import { Button } from "@/components/ui/button";
 import { REPO_URL } from "@/lib/site-data";
 
@@ -35,9 +35,11 @@ export function SiteHeader() {
         </a>
       </nav>
       <div className="flex items-center gap-2">
-        <ThemeToggle />
+        <ThemeSwitch />
         <Button asChild variant="primary" size="sm">
-          <Link href="/console">Open the console</Link>
+          <Link href="/console" prefetch={false}>
+            Open the console
+          </Link>
         </Button>
       </div>
     </header>

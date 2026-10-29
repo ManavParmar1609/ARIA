@@ -135,6 +135,29 @@ function DeleteRun({ runId }: { runId: string }) {
   );
 }
 
+/** The run page's shape while it loads: header, progress rail, report and side panels. */
+function RunSkeleton() {
+  return (
+    <div role="status" className="grid gap-6">
+      <span className="sr-only">Loading the run</span>
+      <Skeleton className="h-8 w-64 max-w-full" />
+      <Skeleton className="h-32 w-full" />
+      <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))]">
+        {Array.from({ length: 11 }, (_, i) => (
+          <Skeleton key={i} className="h-8" />
+        ))}
+      </div>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:gap-8">
+        <Skeleton className="h-[40rem] w-full" />
+        <div className="grid content-start gap-4">
+          <Skeleton className="h-[26rem] w-full" />
+          <Skeleton className="h-28 w-full" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function RunView({ runId }: { runId: string }) {
   const run = useRun(runId);
   const [checkpoint, setCheckpoint] = useState<string | null>(null);
@@ -142,24 +165,17 @@ export function RunView({ runId }: { runId: string }) {
   const status = run.data?.status;
   const mode = !run.data ? "off" : ACTIVE.has(run.data.status) ? "live" : "stored";
   const timeline = useRunTimeline(runId, mode);
-  const state = useRunState(runId, checkpoint, Boolean(run.data) && status !== "queued");
+  // Fetched alongside the run, not after it; a queued run has no state yet.
+  const state = useRunState(runId, checkpoint, status !== "queued");
   const values = state.data?.values;
   const evidence = useMemo(() => values?.evidence ?? values?.report?.evidence ?? [], [values]);
   const events = useMemo(() => values?.batch?.events ?? [], [values]);
   const cited = useMemo(() => new Set((values?.report?.evidence ?? []).map((e) => e.id)), [values]);
 
-  if (run.isPending) {
-    return (
-      <div role="status" className="grid gap-6">
-        <span className="sr-only">Loading the run</span>
-        <Skeleton className="h-28 w-full" />
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
-          <LoadingRows rows={5} />
-          <Skeleton className="h-72 w-full" />
-        </div>
-      </div>
-    );
-  }
+  // One placeholder in the page's final shape until the run and its state are both in, so the
+  // page does not jump as each part arrives. A running run shows at once: it changes as it goes.
+  const stateLoading = state.isPending && state.fetchStatus === "fetching" && status !== "running";
+  if (run.isPending || (run.isSuccess && stateLoading)) return <RunSkeleton />;
   if (run.isError) {
     if (run.error instanceof ApiError && run.error.status === 404) {
       return (
@@ -190,22 +206,18 @@ export function RunView({ runId }: { runId: string }) {
   return (
     <EvidenceProvider evidence={evidence} events={events}>
       <div className="grid gap-6">
-        <nav aria-label="Breadcrumb" className="text-sm text-muted-foreground">
-          <Link href="/console/runs" className="hover:text-foreground">
-            Incidents
-          </Link>
-          <span aria-hidden className="px-2 text-faint">
-            /
-          </span>
-          <span aria-current="page" className="font-mono text-xs">
-            {detail.id}
-          </span>
-        </nav>
-
-        <Header run={detail} severity={severity?.severity ?? detail.severity} />
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <GraphProgress events={timeline.events} finalStatus={detail.status} />
+        <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <nav aria-label="Breadcrumb" className="text-sm text-muted-foreground">
+            <Link href="/console/runs" className="hover:text-foreground">
+              Incidents
+            </Link>
+            <span aria-hidden className="px-2 text-faint">
+              /
+            </span>
+            <span aria-current="page" className="font-mono text-xs">
+              {detail.id}
+            </span>
+          </nav>
           <div className="flex flex-wrap gap-1.5">
             {detail.report_id ? (
               <>
@@ -234,6 +246,10 @@ export function RunView({ runId }: { runId: string }) {
             {terminal ? <DeleteRun runId={detail.id} /> : null}
           </div>
         </div>
+
+        <Header run={detail} severity={severity?.severity ?? detail.severity} />
+
+        <GraphProgress events={timeline.events} finalStatus={detail.status} />
 
         {viewing ? (
           <div

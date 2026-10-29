@@ -164,7 +164,14 @@ function Questions() {
             Ask ARIA
           </Button>
           {SUGGESTIONS.map((s) => (
-            <Button key={s} size="sm" variant="ghost" onClick={() => send(s)}>
+            <Button
+              key={s}
+              size="sm"
+              variant="ghost"
+              // Questions are long: let them wrap on a phone rather than widen the page.
+              className="h-auto min-h-8 shrink py-1.5 text-left whitespace-normal"
+              onClick={() => send(s)}
+            >
               {s}
             </Button>
           ))}

@@ -19,7 +19,7 @@
   --rule: oklch(0.89 0.01 258);
   --control: oklch(0.62 0.02 258);
   --muted-foreground: oklch(0.44 0.03 258);
-  --faint: oklch(0.52 0.025 258);
+  --faint: oklch(0.5 0.025 258);
 
   --primary: oklch(0.3 0.06 258);
   --primary-foreground: oklch(0.975 0.008 85);
@@ -31,14 +31,14 @@
   --sev3: oklch(0.87 0.15 98);
   --sev4: oklch(0.76 0.06 236);
   --sev-ink: oklch(0.25 0.03 258);
-  --sev1-fg: oklch(0.52 0.19 27);
-  --sev2-fg: oklch(0.55 0.13 55);
-  --sev3-fg: oklch(0.53 0.11 95);
-  --sev4-fg: oklch(0.5 0.06 240);
+  --sev1-fg: oklch(0.5 0.19 27);
+  --sev2-fg: oklch(0.52 0.13 55);
+  --sev3-fg: oklch(0.5 0.11 95);
+  --sev4-fg: oklch(0.48 0.06 240);
   --sev-edge: oklch(0.25 0.03 258 / 0.28);
 
-  --danger: oklch(0.52 0.19 27);
-  --ok: oklch(0.5 0.1 160);
+  --danger: oklch(0.5 0.19 27);
+  --ok: oklch(0.48 0.1 160);
 
   /* shadcn/ui aliases */
   --card: var(--raised);
@@ -230,9 +230,11 @@
   }
 }
 
-/* Elements the landing page animates start hidden once script is known to run (the `js` class is
-   set before first paint); GSAP reveals them. If the animation never starts, they appear anyway. */
-@media (prefers-reduced-motion: no-preference) {
+/* Small elements the landing page animates (on wide screens) start hidden once script is known to
+   run (the `js` class is set before first paint); GSAP reveals them. The large blocks are never
+   hidden, so the largest paint happens on first render. If the animation never starts, the hidden
+   elements appear anyway. */
+@media (min-width: 1024px) and (prefers-reduced-motion: no-preference) {
   .js [data-anim] {
     visibility: hidden;
     animation: reveal-fallback 0s linear 2.5s forwards;

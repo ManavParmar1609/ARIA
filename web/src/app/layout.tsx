@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { type ReactNode } from "react";
 
-import { Providers } from "@/components/providers";
+import { THEME_SCRIPT } from "@/lib/theme-script";
 
 import { atkinson, atkinsonMono } from "./fonts";
 import "./globals.css";
@@ -33,14 +33,15 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       suppressHydrationWarning
     >
       <head>
-        {/* Marks that script runs, before first paint, so animated elements can start hidden. */}
+        {/* Before first paint: apply the stored theme, and mark that script runs so animated
+            elements can start hidden. */}
         <script
-          dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.add('js')" }}
+          dangerouslySetInnerHTML={{
+            __html: `document.documentElement.classList.add('js');${THEME_SCRIPT}`,
+          }}
         />
       </head>
-      <body>
-        <Providers>{children}</Providers>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
