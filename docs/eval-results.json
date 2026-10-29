@@ -1,7 +1,7 @@
 {
   "suite": "all",
-  "created_at": "2026-10-29T18:47:58+00:00",
-  "git_sha": "aa5ee5d",
+  "created_at": "2026-10-29T22:19:21+00:00",
+  "git_sha": "23d7f36",
   "llm": false,
   "data": {
     "synthetic": true,
@@ -185,16 +185,17 @@
       },
       "judged": 5435,
       "judged_anomalous": 249,
+      "coverage": 0.6845,
       "lifecycle": {
         "precision": 0.9801,
         "precision_ci95": [
-          0.9589,
-          1.0
+          0.943,
+          0.9959
         ],
         "recall": 0.5944,
         "recall_ci95": [
-          0.5338,
-          0.6548
+          0.5306,
+          0.6559
         ],
         "f1": 0.74,
         "false_alarm_rate": 0.0006,
@@ -203,23 +204,38 @@
         "fn": 101,
         "tn": 5183
       },
-      "visible": {
-        "anomalous": 129,
-        "caught": 129,
-        "recall": 1.0,
-        "look_healthy": 120
+      "recall_all": 0.4728,
+      "recall_all_ci95": [
+        0.4164,
+        0.5298
+      ],
+      "steps": {
+        "distinct": {
+          "failures": 129,
+          "caught": 129
+        },
+        "look_alike": {
+          "failures": 120,
+          "caught": 19
+        },
+        "missed": {
+          "failures": 101,
+          "patterns": 2,
+          "healthy_twins_min": 346,
+          "healthy_twins_max": 4826
+        }
       },
       "baselines": {
         "engine_per_block": {
           "precision": 1.0,
           "precision_ci95": [
-            1.0,
+            0.9362,
             1.0
           ],
           "recall": 0.2249,
           "recall_ci95": [
-            0.1769,
-            0.2794
+            0.1746,
+            0.2819
           ],
           "f1": 0.3672,
           "false_alarm_rate": 0.0,
@@ -231,13 +247,13 @@
         "keyword_per_block": {
           "precision": 0.0246,
           "precision_ci95": [
-            0.0207,
-            0.0291
+            0.0206,
+            0.0292
           ],
           "recall": 0.5261,
           "recall_ci95": [
-            0.4624,
-            0.5878
+            0.4621,
+            0.5895
           ],
           "f1": 0.0471,
           "false_alarm_rate": 0.9998,
@@ -245,8 +261,130 @@
           "fp": 5185,
           "fn": 118,
           "tn": 1
+        },
+        "rare_steps": {
+          "precision": 0.9801,
+          "precision_ci95": [
+            0.943,
+            0.9959
+          ],
+          "recall": 0.5944,
+          "recall_ci95": [
+            0.5306,
+            0.6559
+          ],
+          "f1": 0.74,
+          "false_alarm_rate": 0.0006,
+          "tp": 148,
+          "fp": 3,
+          "fn": 101,
+          "tn": 5183
+        },
+        "count_pairs": {
+          "precision": 0.9789,
+          "precision_ci95": [
+            0.9395,
+            0.9956
+          ],
+          "recall": 0.5582,
+          "recall_ci95": [
+            0.4942,
+            0.6209
+          ],
+          "f1": 0.711,
+          "false_alarm_rate": 0.0006,
+          "tp": 139,
+          "fp": 3,
+          "fn": 110,
+          "tn": 5183
+        },
+        "pca": {
+          "precision": 0.9787,
+          "precision_ci95": [
+            0.9252,
+            0.9974
+          ],
+          "recall": 0.3695,
+          "recall_ci95": [
+            0.3094,
+            0.4327
+          ],
+          "f1": 0.5364,
+          "false_alarm_rate": 0.0004,
+          "tp": 92,
+          "fp": 2,
+          "fn": 157,
+          "tn": 5184
+        },
+        "isolation_forest": {
+          "precision": 0.9091,
+          "precision_ci95": [
+            0.8522,
+            0.9494
+          ],
+          "recall": 0.5622,
+          "recall_ci95": [
+            0.4982,
+            0.6248
+          ],
+          "f1": 0.6948,
+          "false_alarm_rate": 0.0027,
+          "tp": 140,
+          "fp": 14,
+          "fn": 109,
+          "tn": 5172
         }
       },
+      "contiguous": {
+        "lines": 100000,
+        "minutes": 13.3,
+        "tail_lines": 4815,
+        "tail_new_blocks": 0,
+        "judged": 2981,
+        "precision": 1.0,
+        "recall": 0.5583,
+        "tp": 67,
+        "fp": 0,
+        "recall_all": 0.2141
+      },
+      "window_lengths": [
+        {
+          "window_min": 5,
+          "judged": 749,
+          "precision": 0.75,
+          "recall": 0.4615,
+          "tp": 12,
+          "fp": 4,
+          "recall_all": 0.0383
+        },
+        {
+          "window_min": 10,
+          "judged": 3771,
+          "precision": 0.978,
+          "recall": 0.5705,
+          "tp": 89,
+          "fp": 2,
+          "recall_all": 0.2843
+        },
+        {
+          "window_min": 15,
+          "judged": 5435,
+          "precision": 0.9801,
+          "recall": 0.5944,
+          "tp": 148,
+          "fp": 3,
+          "recall_all": 0.4728
+        },
+        {
+          "window_min": 20,
+          "judged": 5435,
+          "precision": 0.9801,
+          "recall": 0.5944,
+          "tp": 148,
+          "fp": 3,
+          "recall_all": 0.4728
+        }
+      ],
       "sensitivity": [
         {
           "min_support": 0.9,
@@ -353,7 +491,6 @@
           "reason": "4 \u00d7 \u201cBLOCK* NameSystem.addStoredBlock: blockMap updated: \u2026:50010\u2026\u201d but 3 \u00d7 \u201cPacketResponder \u2026 for block \u2026 \u2026\u201d"
         }
       ],
-      "missed_visible": [],
       "windows": [
         {
           "start": "2008-11-09T20:35:18+00:00",
@@ -1126,31 +1263,31 @@
       "false_alarms": 0.0
     },
     "latency": {
-      "time_to_review_p50_s": 0.655,
-      "time_to_review_p95_s": 1.327,
+      "time_to_review_p50_s": 0.658,
+      "time_to_review_p95_s": 1.436,
       "stage_p50_ms": {
-        "assess": 10.2,
-        "comms": 12.9,
-        "investigate": 116.0,
-        "merge": 84.4,
-        "parse_shard": 132.4,
-        "plan": 10.2,
-        "recall": 25.1,
-        "report": 18.2,
-        "review": 6.8,
-        "severity": 32.1
+        "assess": 7.2,
+        "comms": 13.4,
+        "investigate": 117.8,
+        "merge": 88.6,
+        "parse_shard": 133.4,
+        "plan": 11.8,
+        "recall": 24.7,
+        "report": 19.3,
+        "review": 7.3,
+        "severity": 28.6
       },
       "stage_p95_ms": {
-        "assess": 19.3,
-        "comms": 20.9,
-        "investigate": 195.7,
-        "merge": 214.5,
-        "parse_shard": 527.5,
-        "plan": 21.7,
-        "recall": 37.3,
-        "report": 27.3,
-        "review": 15.8,
-        "severity": 50.7
+        "assess": 25.8,
+        "comms": 22.5,
+        "investigate": 218.2,
+        "merge": 210.0,
+        "parse_shard": 510.1,
+        "plan": 20.5,
+        "recall": 41.2,
+        "report": 28.5,
+        "review": 16.6,
+        "severity": 45.0
       },
       "llm_call_p50_ms": 0.0,
       "llm_call_p95_ms": 0.0

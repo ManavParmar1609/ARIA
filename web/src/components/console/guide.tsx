@@ -211,8 +211,8 @@ function RealIncidents() {
           Replay a real incident
         </h2>
         <p className="max-w-3xl text-muted-foreground">
-          Real logs, as the system wrote them, with the label its experts gave every unit of work.
-          ARIA never sees the labels: the run page puts them next to what ARIA found.
+          Real lines from a real system&rsquo;s log, with the label its experts gave every unit of
+          work. ARIA never sees the labels: the run page puts them next to what ARIA found.
         </p>
       </div>
       {incidents.isPending ? (

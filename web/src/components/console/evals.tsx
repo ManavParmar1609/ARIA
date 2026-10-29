@@ -148,6 +148,7 @@ function Confusion({ matrix }: { matrix: number[][] }) {
 function RealSection({ real }: { real: RealLogs }) {
   const methods = [
     ["ARIA, following each block's steps", real.lifecycle],
+    ...real.detectors.map((d) => [d.label, d] as const),
     ["ARIA's severity engine, one block at a time", real.engine],
     ["Keyword rule, one block at a time", real.keyword],
   ] as const;
@@ -157,10 +158,11 @@ function RealSection({ real }: { real: RealLogs }) {
       title="Real logs, expert labels"
       intro={
         <>
-          {real.lines.toLocaleString("en")} lines from a real Hadoop cluster, replayed in{" "}
+          {real.lines.toLocaleString("en")} real lines from a Hadoop cluster, replayed offline in{" "}
           {real.windows} overlapping {real.windowMin}-minute windows, against the label Hadoop
-          experts gave each storage block. ARIA judged {real.judged.toLocaleString("en")} blocks,{" "}
-          {real.judgedFailed} of them failed. It never sees a label.
+          experts gave each storage block. ARIA judged {real.judged.toLocaleString("en")} of the{" "}
+          {real.blocks.toLocaleString("en")} blocks, {real.judgedFailed} of them failed. It never
+          sees a label.
           {real.fixture
             ? " These numbers come from the small committed cut, not the full sample."
             : ""}
@@ -170,20 +172,20 @@ function RealSection({ real }: { real: RealLogs }) {
       <Facts
         items={[
           ["Precision", pct(real.lifecycle.precision)],
-          ["Recall", pct(real.lifecycle.recall)],
+          ["Recall, judged blocks", pct(real.lifecycle.recall)],
+          ["Recall, all failures", pct(real.recallAll)],
           ["F1", real.lifecycle.f1.toFixed(3)],
           [
             "False alarms",
             `${real.lifecycle.falseAlarms} of ${real.lifecycle.healthy.toLocaleString("en")}`,
           ],
-          ["Visible failures caught", `${real.visible.caught} of ${real.visible.anomalous}`],
-          ["Look healthy in the sample", String(real.visible.lookHealthy)],
+          ["Blocks judged", pct(real.coverage)],
         ]}
       />
-      <Table aria-label="Finding failed blocks: ARIA against simpler methods">
+      <Table aria-label="Finding failed blocks: ARIA against standard detectors">
         <TableHeader>
           <TableRow>
-            <TableHead>Method, per block</TableHead>
+            <TableHead>Method, per judged block</TableHead>
             <TableHead className="text-right">Precision</TableHead>
             <TableHead className="text-right">Recall</TableHead>
             <TableHead className="text-right">F1</TableHead>
@@ -198,17 +200,59 @@ function RealSection({ real }: { real: RealLogs }) {
               <TableCell className="tabular text-right">{pct(m.recall)}</TableCell>
               <TableCell className="tabular text-right">{m.f1.toFixed(3)}</TableCell>
               <TableCell className="tabular text-right">
-                {pct(m.falseAlarmRate)} of healthy
+                {m.falseAlarms.toLocaleString("en")}
               </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
       <p className="max-w-3xl text-sm text-muted-foreground">
-        The {real.visible.lookHealthy} failures ARIA cannot see take exactly the steps a healthy
-        block takes within this stretch of log: their trouble shows later in the cluster&rsquo;s
-        full log. How the result moves with the two settings ARIA uses (it uses {real.minSupport}{" "}
-        and {real.settleQuantile}):
+        The standard detectors read the experts&rsquo; event templates and fit on the whole sample
+        at once; ARIA parses each window itself. ARIA flagged all {real.steps.distinctCaught}{" "}
+        failures whose step counts no healthy block shares, and {real.steps.lookAlikeCaught} of the{" "}
+        {real.steps.lookAlike} whose counts some healthy blocks share. Each of the{" "}
+        {real.steps.missed} it missed takes exactly the steps of one of {real.steps.missedPatterns}{" "}
+        common healthy patterns, shared by at least {real.steps.missedTwinsMin.toLocaleString("en")}{" "}
+        healthy blocks.
+        {real.head
+          ? ` The sample is the log's first ${real.head.lines.toLocaleString("en")} lines plus later lines of the same blocks; on those lines alone ARIA flags ${real.head.flagged} blocks, ${pct(real.head.precision)} of them real failures (${pct(real.head.recallAll)} of all failures).`
+          : ""}{" "}
+        The deployed log scan opens a run on a burst of errors, and this log has none.
+      </p>
+      <p className="max-w-3xl text-sm text-muted-foreground">
+        A block is judged only in a window that holds its whole life, so the window length moves the
+        result most (ARIA uses {real.windowMin} minutes):
+      </p>
+      <Table aria-label="How the real-log result depends on the window length">
+        <TableHeader>
+          <TableRow>
+            <TableHead>Window</TableHead>
+            <TableHead className="text-right">Judged</TableHead>
+            <TableHead className="text-right">Precision</TableHead>
+            <TableHead className="text-right">Recall, judged</TableHead>
+            <TableHead className="text-right">Recall, all failures</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {real.windowLengths.map((row) => (
+            <TableRow
+              key={row.window_min}
+              className={cn(row.window_min === real.windowMin && "bg-highlight/40")}
+            >
+              <TableCell className="tabular">{row.window_min} min</TableCell>
+              <TableCell className="tabular text-right">
+                {row.judged.toLocaleString("en")}
+              </TableCell>
+              <TableCell className="tabular text-right">{pct(row.precision)}</TableCell>
+              <TableCell className="tabular text-right">{pct(row.recall)}</TableCell>
+              <TableCell className="tabular text-right">{pct(row.recall_all)}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      <p className="max-w-3xl text-sm text-muted-foreground">
+        And with the two settings of the check (ARIA uses {real.minSupport} and{" "}
+        {real.settleQuantile}, chosen on this log with its labels in view):
       </p>
       <Table aria-label="How the real-log result depends on ARIA's two settings">
         <TableHeader>
@@ -259,9 +303,11 @@ export function Evals({ data, real }: { data: Evaluation; real?: RealLogs }) {
         title="Evaluation"
         description={
           <>
-            Measured on {data.dataDescription}. Results from commit <code>{data.gitSha}</code>, run{" "}
-            {data.createdAt.slice(0, 10)}; <code>make eval</code> reproduces them and CI fails on a
-            regression.{" "}
+            Severity, end-to-end and robustness results are measured on {data.dataDescription}; the
+            real-log section on a real HDFS log with expert labels. Results from commit{" "}
+            <code>{data.gitSha}</code>, run {data.createdAt.slice(0, 10)}; <code>make eval</code>{" "}
+            reproduces them, and CI&rsquo;s smoke gate fails on a regression in severity, parsing,
+            retrieval or reporting.{" "}
             <a
               href={EVAL_DOC_URL}
               className="text-foreground underline decoration-control underline-offset-4"

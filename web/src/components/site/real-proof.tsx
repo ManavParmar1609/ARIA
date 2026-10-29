@@ -27,8 +27,7 @@ function Headline({ value, label, note }: { value: string; label: string; note: 
 function Comparison({ data }: { data: RealLogs }) {
   const rows = [
     { key: "aria", label: "ARIA, following each block's steps", ...data.lifecycle },
-    { key: "engine", label: "ARIA's severity engine, one block at a time", ...data.engine },
-    { key: "keyword", label: "A keyword rule, one block at a time", ...data.keyword },
+    ...data.detectors,
   ];
   const bar = (value: number, strong: boolean) => (
     <span aria-hidden className="relative block h-2.5 rounded-xs bg-sunken">
@@ -41,10 +40,11 @@ function Comparison({ data }: { data: RealLogs }) {
   return (
     <figure className="grid gap-4 rounded-lg bg-raised p-5 sm:p-8">
       <figcaption className="grid gap-1">
-        <span className="text-lg tracking-heading">Three ways to find the failed blocks</span>
+        <span className="text-lg tracking-heading">ARIA beside standard detectors</span>
         <span className="text-sm text-muted-foreground">
-          Precision: of the blocks flagged, the share that failed. Recall: of the failed blocks
-          judged, the share flagged.
+          On the same {n(data.judged)} blocks. Precision: of the blocks flagged, the share that
+          failed. Recall: of the failed blocks, the share flagged. The four standard detectors see
+          the whole sample at once; ARIA sees one window at a time.
         </span>
       </figcaption>
       <ul className="grid gap-6">
@@ -78,29 +78,24 @@ function Comparison({ data }: { data: RealLogs }) {
 
 /** The landing page's proof on real logs, every number from the committed evaluation. */
 export function RealProof({ data }: { data: RealLogs }) {
-  const allVisible = data.visible.caught === data.visible.anomalous;
+  const matched = data.detectors.filter((d) => data.lifecycle.f1 >= d.f1).length;
   return (
     <div className="grid gap-16 lg:gap-20">
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-12 lg:grid-cols-4">
+      <dl className="grid gap-x-6 gap-y-12 sm:grid-cols-3">
         <Headline
           value={pct(data.lifecycle.precision)}
           label="Flags that were real failures"
           note={`${n(data.lifecycle.falseAlarms)} false alarms among ${n(data.lifecycle.healthy)} healthy blocks`}
         />
         <Headline
-          value={pct(data.visible.recall, allVisible ? 0 : 1)}
-          label="Visible failures caught"
-          note={`${n(data.visible.caught)} of the ${n(data.visible.anomalous)} failed blocks whose log differs from a healthy one`}
-        />
-        <Headline
           value={pct(data.lifecycle.recall)}
-          label="Of all labelled failures"
-          note={`the other ${n(data.visible.lookHealthy)} take exactly a healthy block's steps in this stretch of log`}
+          label="Failures caught, of those judged"
+          note={`${n(data.lifecycle.flagged - data.lifecycle.falseAlarms)} of ${n(data.judgedFailed)}; ${pct(data.recallAll)} of all ${n(data.failedBlocks)}, counting blocks no window saw whole`}
         />
         <Headline
-          value={pct(data.keyword.precision)}
-          label="A keyword rule's flags that were real"
-          note={`it flags ${pct(data.keyword.falseAlarmRate, 0)} of healthy blocks too, which is why ARIA follows each block instead`}
+          value={`${matched} of ${data.detectors.length}`}
+          label="Standard detectors matched or beaten"
+          note="PCA, an isolation forest and count pairs; a rule that flags rare step counts ties it"
         />
       </dl>
 
@@ -112,8 +107,8 @@ export function RealProof({ data }: { data: RealLogs }) {
           <p className="text-muted-foreground">
             A block written to three datanodes should be received three times and confirmed three
             times. ARIA learns from each window which steps come in equal numbers, then flags the
-            blocks whose steps don&rsquo;t add up. It needs no labels and no training, so it works
-            on a system it has never seen.
+            blocks whose steps don&rsquo;t add up. It needs no labels and no training. The failures
+            it misses take exactly the steps of a common healthy block.
           </p>
           {data.topPattern ? (
             <p className="text-muted-foreground">
@@ -122,8 +117,12 @@ export function RealProof({ data }: { data: RealLogs }) {
             </p>
           ) : null}
           <p className="text-sm text-faint">
-            Replayed as ARIA&rsquo;s log scan would: {data.windows} overlapping {data.windowMin}
-            -minute windows, {n(data.judged)} blocks judged. Labels: {data.citation}
+            An offline replay of the check: {data.windows} overlapping {data.windowMin}-minute
+            windows, {n(data.judged)} of {n(data.blocks)} blocks judged.
+            {data.head
+              ? ` The sample is the log's first ${n(data.head.lines)} lines plus later lines of the same blocks; on those ${n(data.head.lines)} lines alone, ARIA flags ${n(data.head.flagged)} blocks with ${n(data.head.falseAlarms)} false alarms.`
+              : ""}{" "}
+            Measured on this one log; other systems are untested. Labels: {data.citation}
           </p>
           <div className="flex flex-wrap gap-3">
             <Button asChild variant="raised" size="md" className="pr-1.5">

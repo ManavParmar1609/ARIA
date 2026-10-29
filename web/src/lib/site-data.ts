@@ -322,8 +322,8 @@ export type Evaluation = ReturnType<typeof evaluation>;
 export function realLogs() {
   const hdfs = evals.real.hdfs;
   const life = hdfs.lifecycle;
-  const engine = hdfs.baselines.engine_per_block;
-  const keyword = hdfs.baselines.keyword_per_block;
+  const base = hdfs.baselines;
+  const head = hdfs.contiguous;
   const detection = (d: typeof life) => ({
     precision: d.precision,
     precisionCi: d.precision_ci95,
@@ -346,20 +346,49 @@ export function realLogs() {
     peakLinesPerMin: hdfs.peak_lines_per_min,
     judged: hdfs.judged,
     judgedFailed: hdfs.judged_anomalous,
+    coverage: hdfs.coverage,
+    recallAll: hdfs.recall_all,
+    recallAllCi: hdfs.recall_all_ci95,
     windows: hdfs.replay.windows,
     windowMin: hdfs.replay.window_min,
     stepMin: hdfs.replay.step_min,
     minSupport: hdfs.replay.min_support,
     settleQuantile: hdfs.replay.settle_quantile,
     lifecycle: detection(life),
-    engine: detection(engine),
-    keyword: detection(keyword),
-    visible: {
-      anomalous: hdfs.visible.anomalous,
-      caught: hdfs.visible.caught,
-      recall: hdfs.visible.recall,
-      lookHealthy: hdfs.visible.look_healthy,
+    engine: detection(base.engine_per_block),
+    keyword: detection(base.keyword_per_block),
+    // Standard unsupervised detectors on the same blocks, fitted on the whole sample at once.
+    detectors: [
+      {
+        key: "rare",
+        label: "Rare step counts (under 1% of blocks)",
+        ...detection(base.rare_steps),
+      },
+      { key: "pairs", label: "Count pairs over the whole sample", ...detection(base.count_pairs) },
+      { key: "forest", label: "Isolation forest", ...detection(base.isolation_forest) },
+      { key: "pca", label: "PCA (Xu et al. 2009)", ...detection(base.pca) },
+    ],
+    steps: {
+      distinct: hdfs.steps.distinct.failures,
+      distinctCaught: hdfs.steps.distinct.caught,
+      lookAlike: hdfs.steps.look_alike.failures,
+      lookAlikeCaught: hdfs.steps.look_alike.caught,
+      missed: hdfs.steps.missed.failures,
+      missedPatterns: hdfs.steps.missed.patterns,
+      missedTwinsMin: hdfs.steps.missed.healthy_twins_min,
     },
+    head: head
+      ? {
+          lines: head.lines,
+          minutes: head.minutes,
+          judged: head.judged,
+          flagged: head.tp + head.fp,
+          falseAlarms: head.fp,
+          precision: head.precision,
+          recallAll: head.recall_all,
+        }
+      : null,
+    windowLengths: hdfs.window_lengths,
     topPattern: hdfs.top_patterns[0] ?? null,
     patterns: hdfs.top_patterns,
     falseAlarmExamples: hdfs.false_alarms,

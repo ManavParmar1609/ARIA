@@ -44,9 +44,13 @@ export function Results({ data }: { data: Evaluation }) {
         <Headline
           value={pct(s.accuracy)}
           label="Severity accuracy"
-          note={`on ${s.n} held-out incident windows`}
+          note={`on ${s.n} held-out semi-synthetic incident windows`}
         />
-        <Headline value={pct(p.cited, 0)} label="Claims cited" note={`across ${p.n} full runs`} />
+        <Headline
+          value={pct(p.cited, 0)}
+          label="Claims cited"
+          note={`across ${p.n} full offline runs, each to evidence that exists`}
+        />
         <Headline
           value={`${p.p50s.toFixed(2)} s`}
           label="Median time to review"
@@ -155,8 +159,8 @@ export function Results({ data }: { data: Evaluation }) {
           samples ({data.parsing.systems} systems, mean {data.parsing.meanAccuracy.toFixed(3)}); it
           is weakest on{" "}
           {weakest.map(([name, v]) => `${name} (${v.grouping_accuracy.toFixed(2)})`).join(" and ")}.
-          Results from commit {data.gitSha}; <code>make eval</code> reproduces them and CI fails on
-          a regression.
+          Results from commit {data.gitSha}; <code>make eval</code> reproduces them, and CI&apos;s
+          smoke gate fails on a regression in severity, parsing, retrieval or reporting.
         </p>
         <a
           href={EVAL_DOC_URL}

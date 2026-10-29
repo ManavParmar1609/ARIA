@@ -390,10 +390,10 @@ export default function Landing() {
             title="Tested on a real cluster, against its experts"
             intro={
               <>
-                {real.lines.toLocaleString("en")} lines from a Hadoop cluster of more than 200
-                nodes, replayed as it wrote them, and the label Hadoop experts gave each of its{" "}
-                {real.blocks.toLocaleString("en")} storage blocks. ARIA never sees a label. The
-                failures that matter most here log no error at all.
+                {real.lines.toLocaleString("en")} real lines from a Hadoop cluster of more than 200
+                nodes, and the label Hadoop experts gave each of its{" "}
+                {real.blocks.toLocaleString("en")} storage blocks. ARIA never sees a label, and no
+                line in this log is an error: every failure in it is silent.
               </>
             }
           >
@@ -429,7 +429,7 @@ export default function Landing() {
                 <Scribble>Measured,</Scribble> caveats included
               </>
             }
-            intro="ARIA is tested on incident windows built from real Loghub logs, against simpler baselines. Every number on this page comes from the committed evaluation results."
+            intro="These results come from semi-synthetic incidents: real Loghub log lines, composed into incident windows by ARIA's scenario builder, scored against simpler baselines. Every number here comes from the committed evaluation results."
           >
             <Results data={evals} />
           </Section>
