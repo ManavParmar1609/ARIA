@@ -68,8 +68,9 @@ def compute_features(
     else:
         burst, peak = 0.0, float(len(errors) > 0)
 
+    lowered = [line.message.lower() for line in lines]
     keyword_hits = {
-        name: sum(1 for line in lines if pattern.search(line.message))
+        name: sum(1 for text in lowered if pattern.search(text))
         for name, pattern in lexicon.items()
     }
     nodes = {line.node for line in lines if line.node}

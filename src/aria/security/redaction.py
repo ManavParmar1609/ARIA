@@ -47,6 +47,20 @@ _IPV4 = re.compile(
     r"(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?![\d.])"
 )
 _IPV6 = re.compile(r"(?<![\w:])(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}(?![\w:])")
+_DIGIT_RUN = re.compile(r"\d{4}")  # every card shape contains four consecutive digits
+# Literal parts at least one of which must appear (lowercased) for each secret pattern to match.
+_TRIGGERS: dict[str, tuple[str, ...]] = {
+    "private_key": ("private key-----",),
+    "jwt": ("eyj",),
+    "aws_access_key": ("akia", "asia"),
+    "nvidia_key": ("nvapi-",),
+    "openai_key": ("sk-",),
+    "github_token": ("ghp_", "gho_", "ghu_", "ghs_", "ghr_"),
+    "slack_token": ("xoxa-", "xoxb-", "xoxp-", "xoxr-", "xoxs-"),
+    "bearer_token": ("bearer",),
+    "url_credentials": ("://",),
+    "assigned_secret": ("pass", "pwd", "secret", "key", "token"),
+}
 
 
 def _luhn_ok(digits: str) -> bool:
@@ -82,7 +96,10 @@ class Redactor:
         return pseudonym
 
     def redact(self, text: str) -> str:
+        lowered = text.lower()
         for kind, pattern in _SECRET_PATTERNS:
+            if not any(word in lowered for word in _TRIGGERS[kind]):
+                continue  # the pattern cannot match without one of its literal parts
             if kind == "assigned_secret":
                 text, n = pattern.subn(lambda m: f"{m.group(1)}{m.group(2)}[REDACTED]", text)
             else:
@@ -97,21 +114,25 @@ class Redactor:
                 return "[REDACTED]"
             return match.group(0)
 
-        text = _CARD.sub(card, text)
+        if _DIGIT_RUN.search(text):
+            text = _CARD.sub(card, text)
 
         def email(match: re.Match[str]) -> str:
             self._count("email")
             return self._pseudonym("email", match.group(0).lower())
 
-        text = _EMAIL.sub(email, text)
+        if "@" in text:
+            text = _EMAIL.sub(email, text)
         if self.pseudonymize_ips:
 
             def ip(match: re.Match[str]) -> str:
                 self._count("ip")
                 return self._pseudonym("ip", match.group(0))
 
-            text = _IPV4.sub(ip, text)
-            text = _IPV6.sub(ip, text)
+            if text.count(".") >= 3:
+                text = _IPV4.sub(ip, text)
+            if text.count(":") >= 7:
+                text = _IPV6.sub(ip, text)
         return text
 
     def summary(self) -> RedactionSummary:

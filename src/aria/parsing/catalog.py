@@ -45,7 +45,23 @@ def load_catalog(path: Path = CATALOG_PATH) -> ServiceCatalog:
     return ServiceCatalog(float(raw.get("default", 0.4)), exact, patterns)
 
 
+_UPPER_ESCAPE = re.compile(r"\\[A-Z]")
+
+
 @lru_cache(maxsize=4)
 def load_lexicon(path: Path = LEXICON_PATH) -> dict[str, re.Pattern[str]]:
+    """Keyword categories as case-sensitive patterns over **lowercased** text.
+
+    Matching lowercased text with lowercase patterns gives the same hits as ``re.IGNORECASE``
+    at about a third of the cost, which matters on large log batches.
+    """
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return {name: re.compile(pattern, re.IGNORECASE) for name, pattern in raw["categories"].items()}
+    lexicon: dict[str, re.Pattern[str]] = {}
+    for name, pattern in raw["categories"].items():
+        if _UPPER_ESCAPE.search(pattern):
+            msg = (
+                f"lexicon category {name}: uppercase escapes such as \\S do not survive lowercasing"
+            )
+            raise ValueError(msg)
+        lexicon[name] = re.compile(pattern.lower())
+    return lexicon

@@ -32,6 +32,8 @@ from aria.security.redaction import Redactor, new_salt
 MAX_TEMPLATE_EVIDENCE = 12
 MAX_LINE_EVIDENCE = 15
 MAX_INJECTION_EVIDENCE = 5
+QUARANTINE_FLAG = "injection_suspect"
+QUARANTINE_TEMPLATE = "<quarantined: possible prompt injection>"
 
 
 @dataclass(slots=True)
@@ -59,8 +61,9 @@ class ShardResult:
 @dataclass
 class ParseOutput:
     batch: ParsedBatch
-    lines: list[ParsedLine]
+    lines: list[ParsedLine]  # analysed lines; quarantined ones are excluded
     evidence_ids: list[str]
+    quarantined: list[ParsedLine] = field(default_factory=list)
 
 
 def split_shards(lines: Sequence[str], shards: int) -> list[tuple[int, list[str]]]:
@@ -93,11 +96,18 @@ def parse_shard(
         flags: list[str] = []
         if guard.detect_injection and (finding := scan_line(line_text, idx)) is not None:
             injections.append(finding)
-            flags.append("injection_suspect")
+            flags.append(QUARANTINE_FLAG)
         text = redactor.redact(line_text) if guard.redact_pii else line_text
         if text != line_text:
             flags.append("redacted")
         record = parse_raw_line(system, text, idx + 1)
+        if QUARANTINE_FLAG in flags:
+            # Quarantined lines never reach the template miner, so they cannot reshape the
+            # templates (or the features) computed from the genuine lines.
+            parsed.append(
+                ParsedLine(idx=idx, record=record, shard_template=QUARANTINE_TEMPLATE, flags=flags)
+            )
+            continue
         cluster = drain.add(record.message)
         parsed.append(
             ParsedLine(idx=idx, record=record, shard_template=str(id(cluster)), flags=flags)
@@ -105,7 +115,7 @@ def parse_shard(
     # Resolve shard-local cluster references to final shard templates.
     final = {str(id(c)): c.template for c in drain.clusters}
     for line in parsed:
-        line.shard_template = final[line.shard_template]
+        line.shard_template = final.get(line.shard_template, line.shard_template)
     return ShardResult(
         system,
         offset,
@@ -123,13 +133,20 @@ def _unify_templates(
 ) -> tuple[dict[str, str], set[str]]:
     """Map shard templates to merged templates; return the set of novel template ids."""
     merger: Drain = drain_for(system)
-    shard_templates = sorted({line.shard_template for shard in shards for line in shard.lines})
+    shard_templates = sorted(
+        {line.shard_template for shard in shards for line in shard.lines} - {QUARANTINE_TEMPLATE}
+    )
     owners = {t: merger.add(t) for t in shard_templates}
     mapping = {t: c.template for t, c in owners.items()}
+    mapping[QUARANTINE_TEMPLATE] = QUARANTINE_TEMPLATE
     known = drain_for(system)
     known.seed(known_templates)
     novel = (
-        {template_id(system, t) for t in set(mapping.values()) if known.match(t) is None}
+        {
+            template_id(system, t)
+            for t in set(mapping.values()) - {QUARANTINE_TEMPLATE}
+            if known.match(t) is None
+        }
         if known.clusters
         else set()
     )
@@ -146,10 +163,14 @@ def merge_shards(
     n_raw_lines: int | None = None,
 ) -> ParseOutput:
     mapping, novel_ids = _unify_templates(shards, system, list(known_templates))
-    lines = sorted((line for shard in shards for line in shard.lines), key=lambda line: line.idx)
-    for line in lines:
+    every_line = sorted(
+        (line for shard in shards for line in shard.lines), key=lambda line: line.idx
+    )
+    for line in every_line:
         line.template = mapping[line.shard_template]
         line.template_id = template_id(system, line.template)
+    quarantined = [line for line in every_line if QUARANTINE_FLAG in line.flags]
+    lines = [line for line in every_line if QUARANTINE_FLAG not in line.flags]
 
     features = compute_features(
         [
@@ -302,6 +323,7 @@ def merge_shards(
     if len(keep) < context_lines:
         kept = {pl.idx for pl in keep}
         keep += [pl for pl in lines if pl.idx not in kept][: context_lines - len(keep)]
+    keep += quarantined[:MAX_INJECTION_EVIDENCE]  # shown to reviewers, flagged, never analysed
     keep.sort(key=lambda pl: pl.idx)
     redactions: Counter[str] = Counter()
     for shard in shards:
@@ -336,7 +358,7 @@ def merge_shards(
         ),
         shards=len(shards),
     )
-    return ParseOutput(batch=batch, lines=lines, evidence_ids=evidence_ids)
+    return ParseOutput(batch=batch, lines=lines, evidence_ids=evidence_ids, quarantined=quarantined)
 
 
 def parse_lines(
