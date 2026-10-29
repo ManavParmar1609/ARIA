@@ -553,6 +553,7 @@ async def investigate(state: TriageState, runtime: Runtime[TriageContext]) -> Js
         batch=batch,
         severity=assessment,
         similar=retrieval.incidents,
+        runbooks=retrieval.runbooks,
     )
     async with belt:
         result = await investigator.run(

@@ -27,6 +27,9 @@ import type { components } from "./schema";
 
 export type SettingsView = components["schemas"]["SettingsOut"];
 export type FeedbackView = components["schemas"]["FeedbackOut"];
+export type RealIncident = components["schemas"]["RealIncidentOut"];
+export type ReplayRequest = components["schemas"]["ReplayRequest"];
+export type ExpertCheck = components["schemas"]["ExpertCheckOut"];
 
 export const keys = {
   session: ["session"] as const,
@@ -47,6 +50,7 @@ export const keys = {
   providers: ["providers"] as const,
   settings: ["settings"] as const,
   feedback: ["feedback"] as const,
+  realIncidents: ["real-incidents"] as const,
 };
 
 const v1 = (path: string) => `/api/v1${path}`;
@@ -203,12 +207,39 @@ export function useFeedback(limit = 8) {
   });
 }
 
+export function useRealIncidents() {
+  return useQuery({
+    queryKey: keys.realIncidents,
+    queryFn: () => apiFetch<RealIncident[]>(v1("/real-incidents")),
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** A replayed real incident's flagged units next to the experts' labels; polls until parsed. */
+export function useExpertCheck(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["run", id, "expert-check"] as const,
+    queryFn: () => apiFetch<ExpertCheck>(runPath(id, "/expert-check")),
+    enabled,
+    refetchInterval: (query) => (query.state.data?.ready ? false : 2_000),
+  });
+}
+
 // --- writes ------------------------------------------------------------------------------------
 
 export function useCreateRun() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (request: TriageRequest) => postJson<RunAccepted>(v1("/runs"), request),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["runs"] }),
+  });
+}
+
+export function useReplay() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: ReplayRequest }) =>
+      postJson<RunAccepted>(v1(`/real-incidents/${encodeURIComponent(id)}/replay`), body),
     onSuccess: () => client.invalidateQueries({ queryKey: ["runs"] }),
   });
 }

@@ -30,7 +30,7 @@ from aria.api.a2a import a2a_routes
 from aria.api.agui import router as agui_router
 from aria.api.jobs import start_background_jobs
 from aria.api.metrics import Metrics
-from aria.api.routers import catalog, intake, learning, runs, system
+from aria.api.routers import catalog, intake, learning, replays, runs, system
 from aria.api.security import AuthMiddleware, BodyLimit, KeyAuth, RateLimiter
 from aria.api.state import AppState
 from aria.api.worker import Worker
@@ -167,8 +167,9 @@ def create_app(
     app.add_middleware(BodyLimit, max_bytes=settings.max_body_bytes)
     app.add_middleware(SecurityHeaders)
 
-    for module in (system, runs, catalog, intake, learning):
+    for module in (system, runs, catalog, intake, learning, replays):
         app.include_router(module.router)
+    app.include_router(replays.runs_router)
     app.include_router(agui_router)
     app.router.routes.extend(mcp_app.routes)
     card_routes, rpc_routes = a2a_routes(lambda: current().runner, settings, secured=not auth.open)

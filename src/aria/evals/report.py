@@ -231,8 +231,9 @@ def _real(section: Mapping[str, Any]) -> list[str]:
             "of a block's life come in equal numbers, and flags blocks that break them. It never "
             "sees a label. Each block was judged in the first window that saw it from start to "
             f"finish: {hdfs['judged']:,} blocks, {hdfs['judged_anomalous']} of them failures. The "
-            "cluster logged about 7,500 lines a minute, so the replay raises the per-run line cap "
-            f"from 20,000 to {rp['max_lines']:,}."
+            f"cluster logged up to {hdfs['peak_lines_per_min']:,} lines a minute, so the replay "
+            f"raises the per-run line cap from {rp['default_max_lines']:,} to "
+            f"{rp['max_lines']:,}."
         ),
         "",
         "| Method, per block | Precision (95% CI) | Recall (95% CI) | F1 | False alarms |",

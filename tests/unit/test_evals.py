@@ -15,6 +15,7 @@ from hypothesis import strategies as st
 from aria.config import GuardrailConfig, get_app_config
 from aria.contracts.parsing import WindowFeatures
 from aria.contracts.run import EventKind, RunEvent
+from aria.data import real as real_data
 from aria.data.scenarios import LinePools, ScenarioBuilder
 from aria.evals import edge as ed
 from aria.evals import metrics as m
@@ -430,7 +431,7 @@ def test_real_suite_judges_the_committed_hdfs_cut_against_the_experts() -> None:
 def test_real_suite_says_when_the_hdfs_sample_is_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(real, "HDFS_FIXTURE", tmp_path / "no-fixture")
+    monkeypatch.setattr(real_data, "HDFS_FIXTURE", tmp_path / "no-fixture")
     result = real.summarize(
         engine=SeverityEngine.load(get_app_config().severity), hdfs_dir=tmp_path
     )

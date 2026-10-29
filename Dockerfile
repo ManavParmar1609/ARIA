@@ -87,6 +87,7 @@ COPY --chown=aria:aria models/severity_log.json models/severity_log.report.json 
 COPY --chown=aria:aria docs/eval-results.json ./docs/eval-results.json
 # Small public Loghub samples: `aria seed` falls back to them when the full set is not downloaded.
 COPY --chown=aria:aria tests/fixtures/loghub ./tests/fixtures/loghub
+COPY --chown=aria:aria tests/fixtures/real ./tests/fixtures/real
 USER aria
 VOLUME ["/var/lib/aria"]
 

@@ -129,7 +129,7 @@ async def test_health_is_public_and_everything_else_needs_a_key(api: Api) -> Non
     anonymous = {"Authorization": ""}
     assert (await api.client.get("/healthz", headers=anonymous)).json()["status"] == "ok"
     ready = (await api.client.get("/readyz", headers=anonymous)).json()
-    assert (ready["database"], ready["incidents"], ready["runbooks"]) == (True, 3, 18)
+    assert (ready["database"], ready["incidents"], ready["runbooks"]) == (True, 3, 19)
     card = await api.client.get("/.well-known/agent-card.json", headers=anonymous)
     assert card.status_code == 200
     assert "bearer" in card.json()["securitySchemes"]
@@ -327,6 +327,52 @@ async def test_an_untitled_run_takes_its_report_title(api: Api) -> None:
     )
     assert edited.status_code == 200, edited.text
     assert edited.json()["title"] == "Kernel panics on rack R02"
+
+
+async def test_a_real_incident_replays_as_an_ordinary_run(api: Api) -> None:
+    listed = (await api.client.get("/api/v1/real-incidents")).json()
+    assert [i["id"] for i in listed] == ["hdfs-silent-block-failures"]
+    incident = listed[0]
+    assert (incident["lines"], incident["units"], incident["labelled_failures"]) == (9914, 873, 37)
+    assert incident["system"] == "hdfs"
+    assert "SOSP 2009" in incident["citation"]
+    missing = await api.client.post("/api/v1/real-incidents/no-such-incident/replay")
+    assert missing.status_code == 404
+
+    created = await api.client.post(
+        "/api/v1/real-incidents/hdfs-silent-block-failures/replay",
+        json={"options": {"use_llm": False}},
+    )
+    assert created.status_code == 202, created.text
+    run_id = created.json()["run_id"]
+    detail = await wait_for(api, run_id, "awaiting_review", timeout_s=120)
+    assert detail["trigger"] == "replay"
+    assert detail["title"].endswith("HDFS blocks stopping partway")
+    values = (await api.client.get(f"/api/v1/runs/{run_id}/state")).json()["values"]
+    assert values["request"]["synthetic"] is False
+    assert values["batch"]["features"]["broken_flows"] >= 3
+    assert values["severity"]["severity"] in ("SEV1", "SEV2", "SEV3")
+    investigation = values["investigation"]
+    lead = next(
+        h for h in investigation["hypotheses"] if h["id"] == investigation["leading_hypothesis"]
+    )
+    assert lead["failure_mode"] == "unfinished_work"
+    assert lead["status"] == "supported"
+    report = (await api.client.get(f"/api/v1/runs/{run_id}/report")).json()["report"]
+    assert any(a.get("runbook_slug") == "hdfs-unfinished-writes" for a in report["actions"])
+
+    check = (await api.client.get(f"/api/v1/runs/{run_id}/expert-check")).json()
+    assert check["ready"]
+    assert (check["units"], check["labelled_failures"]) == (873, 37)
+    flagged = check["flagged"]
+    assert len(flagged) == values["batch"]["features"]["broken_flows"]
+    assert all(f["key"].startswith("blk_") and f["failed"] is not None for f in flagged)
+    assert check["flagged_failed"] + check["flagged_healthy"] == len(flagged)
+    assert check["flagged_failed"] >= check["flagged_healthy"]
+    assert flagged[0]["reason"]
+    ordinary = await start(api)
+    refused = await api.client.get(f"/api/v1/runs/{ordinary['id']}/expert-check")
+    assert refused.status_code == 404
 
 
 async def test_review_errors_are_reported_without_losing_the_pause(api: Api) -> None:

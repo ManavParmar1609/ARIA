@@ -10,7 +10,7 @@ numbers and flags blocks that break them (parsing/flows.py). ARIA never sees a l
 is judged in the first window that saw it from start to finish; blocks that started too close to
 either end of the sample are not judged, and are counted.
 
-The cluster logged about 7,500 lines a minute, more than a run's default line cap (20,000, a
+The cluster logged several thousand lines a minute, more than a run's default line cap (a
 guardrail each deployment sets) allows in a window of useful length, so the replay raises the
 cap to ``MAX_LINES``.
 
@@ -27,21 +27,19 @@ ARIA needs is varied to show the result does not hang on one setting.
 from __future__ import annotations
 
 import bisect
-import csv
 import dataclasses
-import gzip
-import io
 import re
 from collections import Counter
-from collections.abc import Callable, Iterator, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
 from aria.config import GuardrailConfig
 from aria.contracts.base import Severity
-from aria.data.loghub import LogRecord, format_raw_line, record_from_fields
+from aria.data.loghub import format_raw_line
+from aria.data.real import HDFS_CITATION, HDFS_DIR, HDFS_FIXTURE, HdfsSample, find_hdfs, load_hdfs
 from aria.evals import metrics as m
 from aria.evals.severity import keyword_severity
 from aria.evidence import EvidenceStore
@@ -58,8 +56,6 @@ from aria.severity.engine import SeverityEngine
 from aria.severity.policy import decide
 from aria.severity.training import features_for
 
-HDFS_DIR = Path("data/raw/hdfs-100k")
-HDFS_FIXTURE = Path("tests/fixtures/real/hdfs")
 WINDOW_MIN = 15
 STEP_MIN = 5
 MAX_LINES = 150_000
@@ -67,55 +63,7 @@ SUPPORTS = (0.9, 0.95, 0.98)
 SETTLE_QUANTILES = (0.99, 0.999)
 SALT = b"aria-eval-real"
 _BLOCK = re.compile(r"blk_-?\d+")
-CITATION = (
-    "W. Xu, L. Huang, A. Fox, D. Patterson, M. I. Jordan. Detecting Large-Scale System Problems "
-    "by Mining Console Logs. SOSP 2009."
-)
-
-
-@dataclass
-class HdfsSample:
-    records: list[LogRecord]
-    anomalous: dict[str, bool]  # block id -> labelled Anomaly by the experts
-    source: str
-    fixture: bool
-    blocks: dict[str, list[int]] = field(default_factory=dict)  # block id -> record indices
-
-    def __post_init__(self) -> None:
-        for i, rec in enumerate(self.records):
-            for block in set(_BLOCK.findall(rec.message)):
-                self.blocks.setdefault(block, []).append(i)
-
-
-def _rows(path: Path) -> Iterator[dict[str, str]]:
-    if path.suffix == ".gz":
-        with gzip.open(path, "rb") as raw, io.TextIOWrapper(raw, encoding="utf-8") as text:
-            yield from csv.DictReader(text)
-    else:
-        with path.open(newline="", encoding="utf-8") as handle:
-            yield from csv.DictReader(handle)
-
-
-def load_hdfs(directory: Path, *, fixture: bool = False) -> HdfsSample | None:
-    """The structured HDFS lines and the experts' block labels, if downloaded."""
-    structured = next(
-        (p for p in sorted(directory.rglob("*.log_structured.csv*")) if "HDFS" in p.name), None
-    )
-    labels_path = next(directory.rglob("anomaly_label.csv"), None)
-    if structured is None or labels_path is None:
-        return None
-    records = [record_from_fields("hdfs", int(r["LineId"]), r) for r in _rows(structured)]
-    records = sorted(
-        (r for r in records if r.ts is not None),
-        key=lambda r: (r.ts.timestamp() if r.ts else 0.0, r.line_no),
-    )
-    anomalous = {row["BlockId"]: row["Label"] == "Anomaly" for row in _rows(labels_path)}
-    return HdfsSample(records, anomalous, source=str(structured), fixture=fixture)
-
-
-def find_hdfs(hdfs_dir: Path = HDFS_DIR) -> HdfsSample | None:
-    """The full sample when downloaded, otherwise the committed fixture (not for measurement)."""
-    return load_hdfs(hdfs_dir) or load_hdfs(HDFS_FIXTURE, fixture=True)
+__all__ = ["HDFS_DIR", "HDFS_FIXTURE", "HdfsSample", "evaluate_hdfs", "load_hdfs", "summarize"]
 
 
 Setting = tuple[float, float]  # (min_support, settle_quantile)
@@ -303,19 +251,22 @@ def evaluate_hdfs(
 
     all_blocks = [b for b in sample.blocks if b in sample.anomalous]
     stamps = [r.ts for r in sample.records if r.ts is not None]
+    per_minute = Counter(ts.replace(second=0, microsecond=0) for ts in stamps)
     result: dict[str, Any] = {
         "source": "loglizer HDFS_100k sample of HDFS_v1 (Loghub)",
-        "citation": CITATION,
+        "citation": HDFS_CITATION,
         "fixture": sample.fixture,
         "lines": len(sample.records),
         "minutes": round((stamps[-1] - stamps[0]).total_seconds() / 60, 1),
         "blocks": len(all_blocks),
         "anomalous_blocks": sum(1 for b in all_blocks if sample.anomalous[b]),
+        "peak_lines_per_min": max(per_minute.values(), default=0),
         "replay": {
             "window_min": window_min,
             "step_min": step_min,
             "windows": len(run.windows),
             "max_lines": MAX_LINES,
+            "default_max_lines": GuardrailConfig().max_lines,
             "min_support": run.default[0],
             "settle_quantile": run.default[1],
         },

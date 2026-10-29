@@ -32,6 +32,7 @@ import { systemName, triggerLabel } from "@/lib/systems";
 
 import { Activity, GraphProgress } from "./activity";
 import { EvidencePanel, EvidenceProvider } from "./evidence";
+import { ExpertCheck } from "./expert-check";
 import { History } from "./history";
 import { LiveDraft, ReportView } from "./report-view";
 import { ReviewPanel } from "./review-panel";
@@ -307,6 +308,7 @@ export function RunView({ runId }: { runId: string }) {
                   : "ARIA writes the report after it has rated severity, recalled similar incidents and investigated."}
               </EmptyState>
             )}
+            {detail.trigger === "replay" ? <ExpertCheck runId={detail.id} /> : null}
           </div>
           <aside className="grid min-w-0 content-start gap-4 lg:sticky lg:top-6 lg:self-start">
             {severity ? (

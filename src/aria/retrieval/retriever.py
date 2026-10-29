@@ -76,6 +76,8 @@ def build_query(batch: ParsedBatch, hypotheses: Sequence[Hypothesis] = ()) -> Re
     ][:4]
     components = signal_components(batch, 4) or batch.features.components[:4]
     hints = [h.failure_mode for h in hypotheses if h.status in ("open", "supported")][:3]
+    if batch.flows.broken and "unfinished_work" not in hints:
+        hints.append("unfinished_work")  # units of work that stopped partway (parsing/flows.py)
     text = " ".join([*hints, *components, *keywords, *terms])
     return RetrievalQuery(
         system=batch.system,
@@ -302,8 +304,19 @@ class Retriever:
             )
 
         modes = [*query.failure_mode_hints, *(i.failure_mode for i in incidents)]
+        # Runbooks for what this window shows (the investigator's hypotheses and the parser's
+        # findings) come before those of past incidents that merely look alike.
+        hinted = [
+            rb
+            for mode in query.failure_mode_hints
+            for rb in self.runbooks.values()
+            if not rb.generic and mode in rb.failure_modes
+        ]
         slugs = [i.runbook_slug for i in incidents if i.runbook_slug]
-        runbooks = [self.runbooks[s] for s in dict.fromkeys(slugs) if s in self.runbooks]
+        runbooks: list[Runbook] = []
+        for runbook in [*hinted, *(self.runbooks[s] for s in slugs if s in self.runbooks)]:
+            if runbook not in runbooks:
+                runbooks.append(runbook)
         for extra in self.runbooks_for(query.system, modes):
             if extra not in runbooks:
                 runbooks.append(extra)

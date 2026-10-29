@@ -23,8 +23,8 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from aria.contracts.base import Claim, Evidence, EvidenceKind
-from aria.contracts.parsing import ParsedBatch
-from aria.contracts.retrieval import Hypothesis, Investigation, SimilarIncident
+from aria.contracts.parsing import BrokenUnit, ParsedBatch
+from aria.contracts.retrieval import Hypothesis, Investigation, RunbookRef, SimilarIncident
 from aria.contracts.severity import SeverityAssessment
 from aria.evidence import EvidenceStore
 from aria.llm.base import BudgetExceededError, LLMError
@@ -40,6 +40,7 @@ from aria.llm.schemas import (
     ToolRequest,
 )
 from aria.mcp.client import ToolBelt, ToolNotAllowedError
+from aria.parsing.flows import load_flow_settings
 from aria.parsing.signals import signal_components, signal_templates
 
 INVESTIGATOR_TOOLS = (
@@ -52,6 +53,7 @@ INVESTIGATOR_TOOLS = (
 )
 _WORDS = re.compile(r"[a-z][a-z0-9_]{2,}")
 GENERIC_CAUSE = "component_errors"  # "<component> is failing": the window's own signal
+LIFECYCLE_CAUSE = "unfinished_work"  # units of work that stop partway (parsing/flows.py)
 Emit = Callable[[str, dict[str, Any]], None]
 Mode = Literal["auto", "llm", "deterministic"]
 
@@ -63,6 +65,7 @@ class InvestigationInputs:
     batch: ParsedBatch
     severity: SeverityAssessment
     similar: list[SimilarIncident] = field(default_factory=list)
+    runbooks: list[RunbookRef] = field(default_factory=list)
 
 
 @dataclass
@@ -124,12 +127,51 @@ def _component_for(
     )
 
 
+def _broken_units(batch: ParsedBatch) -> list[BrokenUnit]:
+    """Units of work the parser saw stop partway, of the kind with the most of them."""
+    examples = batch.flows.examples
+    if not examples:
+        return []
+    kind = max(batch.flows.checked, key=lambda k: sum(1 for e in examples if e.kind == k))
+    return [e for e in examples if e.kind == kind]
+
+
+def _lifecycle_hypothesis(batch: ParsedBatch) -> NewHypothesis | None:
+    """Work that started but never finished: the cause to test when a window logs no error."""
+    broken = _broken_units(batch)
+    if not broken:
+        return None
+    kind = broken[0].kind
+    missing = next((e.steps[-1] for e in broken if e.problem == "mismatch" and e.steps), None)
+    template = next((t for t in batch.templates if t.template_id == missing), None)
+    component = template.components[0] if template is not None and template.components else None
+    n = sum(1 for e in batch.flows.examples if e.kind == kind)
+    count = batch.flows.broken if n == len(batch.flows.examples) else n
+    return NewHypothesis(
+        statement=(
+            f"Work on {kind}s stops partway: {count} of {batch.flows.checked.get(kind, 0)} "
+            "never finished every step, with no error logged"
+        ),
+        failure_mode=LIFECYCLE_CAUSE,
+        component=component,
+    )
+
+
+def _is_unit_key(query: str) -> bool:
+    return any(kind.pattern.search(query) for kind in load_flow_settings().kinds)
+
+
 def candidate_hypotheses(inputs: InvestigationInputs, *, limit: int = 3) -> list[NewHypothesis]:
-    """Plausible causes to test, from similar incidents and the window's own signal."""
+    """Plausible causes to test: work the parser saw stop partway, similar incidents, and the
+    window's own signal."""
     batch = inputs.batch
     component = _top_component(batch)
     seen: set[str] = set()
     out: list[NewHypothesis] = []
+    lifecycle = _lifecycle_hypothesis(batch)
+    if lifecycle is not None:
+        seen.add(LIFECYCLE_CAUSE)
+        out.append(lifecycle)
     for incident in inputs.similar:
         if incident.failure_mode in seen or incident.failure_mode == "none":
             continue
@@ -158,9 +200,18 @@ def candidate_hypotheses(inputs: InvestigationInputs, *, limit: int = 3) -> list
 
 def suggested_plan(inputs: InvestigationInputs) -> list[dict[str, Any]]:
     """A sensible default sequence of tool calls; the LLM may deviate within the allowlist."""
-    plan: list[dict[str, Any]] = []
     signal = signal_templates(inputs.batch)
     component = _top_component(inputs.batch)
+    # Read the whole life of two units that stopped partway, from the run's own lines.
+    plan: list[dict[str, Any]] = [
+        {"tool": "search_logs", "arguments": {"query": unit.key, "limit": 20}}
+        for unit in _broken_units(inputs.batch)[:2]
+    ]
+    lifecycle_runbook = next(
+        (r.slug for r in inputs.runbooks if LIFECYCLE_CAUSE in r.failure_modes), None
+    )
+    if lifecycle_runbook and _broken_units(inputs.batch):
+        plan.append({"tool": "get_runbook", "arguments": {"slug": lifecycle_runbook}})
     if signal:
         plan.append(
             {
@@ -176,7 +227,7 @@ def suggested_plan(inputs: InvestigationInputs) -> list[dict[str, Any]]:
         if len(words) >= 2:
             plan.append({"tool": "search_incidents", "arguments": {"query": words, "limit": 3}})
     runbook = next((i.runbook_slug for i in inputs.similar if i.runbook_slug), None)
-    if runbook:
+    if runbook and runbook != lifecycle_runbook:
         plan.append({"tool": "get_runbook", "arguments": {"slug": runbook}})
     # A rival cause on another component gets its own timeline, so the two can be told apart.
     rival = next(
@@ -211,6 +262,16 @@ def supports(hypothesis: Hypothesis, observation: Observation) -> bool:
     if observation.tool == "search_incidents":
         top = data.get("incidents", [])[:2]
         return any(i.get("failure_mode") == hypothesis.failure_mode for i in top)
+    if hypothesis.failure_mode == LIFECYCLE_CAUSE:
+        # The unit's own lines, fetched by its ID, show the steps it took and the ones it did not.
+        return (
+            observation.tool == "search_logs"
+            and _is_unit_key(str(observation.arguments.get("query", "")))
+            and bool(data.get("lines"))
+        ) or (
+            observation.tool == "get_runbook"
+            and hypothesis.failure_mode in data.get("failure_modes", [])
+        )
     if observation.tool in ("get_template_examples", "search_logs"):
         lines = data.get("lines", [])
         return bool(lines) and (
@@ -223,10 +284,12 @@ def supports(hypothesis: Hypothesis, observation: Observation) -> bool:
 
 
 def refutes(hypothesis: Hypothesis, observation: Observation) -> bool:
-    """A clean timeline (no errors or warnings) for the suspected component counts against it."""
+    """A clean timeline (no errors or warnings) for the suspected component counts against it,
+    except for work that stops partway, which by its nature logs nothing."""
     data = observation.data or {}
     return (
-        observation.ok
+        hypothesis.failure_mode != LIFECYCLE_CAUSE
+        and observation.ok
         and observation.tool == "component_timeline"
         and hypothesis.component is not None
         and hypothesis.component == observation.arguments.get("component")

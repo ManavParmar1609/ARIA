@@ -162,6 +162,26 @@ test.describe("console", () => {
     await expect(page).toHaveURL(/\/console\/guide#read-a-run$/);
     await expect(page.getByRole("heading", { name: "How to read a run" })).toBeVisible();
   });
+
+  test("replays a real incident and checks ARIA against the experts", async ({ page }) => {
+    await page.goto("/console/guide");
+    const card = page.locator("li", { hasText: "Silent block failures on a Hadoop cluster" });
+    await expect(card.getByText("labelled failed by its experts")).toBeVisible();
+    await card.getByRole("button", { name: /^Replay it: Silent block failures/ }).click();
+
+    await expect(page).toHaveURL(/\/console\/runs\/run-/);
+    await expect(page.getByText("a real incident, replayed")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 1, name: /HDFS blocks stopping partway/ }),
+    ).toBeVisible({ timeout: 60_000 });
+    const check = page.locator("section", {
+      has: page.getByRole("heading", { name: "Check ARIA against the experts" }),
+    });
+    await expect(check.getByText(/^ARIA flagged \d+ blocks?\./)).toBeVisible();
+    await expect(check.getByRole("table")).toContainText("Failed");
+    await expect(check.getByRole("cell", { name: /^blk_/ }).first()).toBeVisible();
+    await expectAccessible(page, "run view, real incident replay");
+  });
 });
 
 test.describe("console at 320 px", () => {

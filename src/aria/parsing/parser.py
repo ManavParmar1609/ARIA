@@ -42,6 +42,7 @@ MAX_LINE_EVIDENCE = 15
 MAX_INJECTION_EVIDENCE = 5
 MAX_FLOW_EVIDENCE = 5  # broken units shown as evidence; the batch keeps up to MAX_FLOW_EXAMPLES
 MAX_FLOW_EXAMPLES = 20
+MAX_BROKEN_KEYS = 2_000
 QUARANTINE_FLAG = "injection_suspect"
 QUARANTINE_TEMPLATE = "<quarantined: possible prompt injection>"
 _SURROGATES = re.compile("[\ud800-\udfff]")
@@ -454,6 +455,7 @@ def _flow_evidence(
         units=flows.units,
         checked=flows.checked,
         broken=len(flows.broken),
+        broken_keys=[b.key for b in flows.broken[:MAX_BROKEN_KEYS]],
         settle_s=flows.settle_s,
         pairs=[
             FlowPair(
@@ -527,6 +529,7 @@ def _flow_evidence(
                 key=unit.key,
                 problem=unit.problem,
                 reason=unit.reason,
+                steps=list(unit.steps),
                 first_ts=unit.first,
                 last_ts=unit.last,
                 lines=list(unit.lines),

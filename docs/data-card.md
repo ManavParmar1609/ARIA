@@ -92,7 +92,7 @@ In git:
   model and its training report. See the [model card](model-card.md).
 - [`config/`](../config/): the failure-mode catalog, the labelling rubric, the severity rules,
   the keyword lexicon and the service catalog.
-- [`runbooks/`](../runbooks/): 18 example runbooks written for this project. They supply the
+- [`runbooks/`](../runbooks/): 19 example runbooks written for this project. They supply the
   fixes that incident memory and reports cite. They are examples to adapt, not procedures
   validated anywhere.
 - Results and recordings derived from the data:

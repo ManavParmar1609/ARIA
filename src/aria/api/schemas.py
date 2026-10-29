@@ -174,6 +174,47 @@ class RunbookOut(BaseModel):
     escalate: str
 
 
+class RealIncidentOut(BaseModel):
+    """A stretch of a real system's log, with its experts' labels, ready to replay."""
+
+    id: str
+    title: str
+    system: str
+    summary: str
+    source: str
+    citation: str
+    lines: int
+    unit: str
+    units: int
+    labelled_failures: int
+
+
+class ReplayRequest(BaseModel):
+    options: RunOptions = Field(default_factory=RunOptions)
+
+
+class FlaggedUnit(BaseModel):
+    key: str
+    reason: str | None = None  # why ARIA flagged it (kept for the first few)
+    evidence_id: str | None = None  # the evidence item that shows it, when there is one
+    failed: bool | None = None  # the experts' label; None when they did not label it
+
+
+class ExpertCheckOut(BaseModel):
+    """A replayed run's flagged units of work, next to the labels the system's experts gave."""
+
+    incident_id: str
+    title: str
+    unit: str
+    citation: str
+    ready: bool  # False until the run has parsed its logs
+    flagged: list[FlaggedUnit]
+    flagged_failed: int
+    flagged_healthy: int
+    units: int
+    labelled_failures: int
+
+
 class ProviderOut(BaseModel):
     name: str
     kind: str

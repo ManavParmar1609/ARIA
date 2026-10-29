@@ -14,14 +14,20 @@ import pytest
 from aria.agents.investigator import (
     GENERIC_CAUSE,
     INVESTIGATOR_TOOLS,
+    LIFECYCLE_CAUSE,
     InvestigationInputs,
     Investigator,
+    Observation,
     _Loop,
+    candidate_hypotheses,
+    refutes,
     suggested_plan,
+    supports,
 )
 from aria.config import BudgetConfig, GuardrailConfig
 from aria.contracts.base import EvidenceKind
-from aria.contracts.retrieval import Hypothesis
+from aria.contracts.retrieval import Hypothesis, RunbookRef
+from aria.data.real import real_incident
 from aria.data.scenarios import LinePools, ScenarioBuilder
 from aria.db.engine import get_engine, init_db
 from aria.evidence import EvidenceStore
@@ -315,3 +321,51 @@ def test_a_named_cause_leads_over_the_generic_one() -> None:
     assert Investigator._conclude(loop, steps=0, stopped="finished").leading_hypothesis == "H2"
     loop.hypotheses = loop.hypotheses[:1]
     assert Investigator._conclude(loop, steps=0, stopped="finished").leading_hypothesis == "H1"
+
+
+# --- units of work that stop partway ------------------------------------------------------------
+
+
+def _real_hdfs_inputs(evidence: EvidenceStore) -> InvestigationInputs:
+    """The committed cut of a real Hadoop cluster's log, where some blocks never finish."""
+    lines = real_incident("hdfs-silent-block-failures").lines()  # type: ignore[union-attr]
+    out = parse_lines(lines, system="hdfs", guard=GuardrailConfig(), evidence=evidence)
+    assert out.batch.flows.broken >= 3
+    runbook = RunbookRef(
+        slug="hdfs-unfinished-writes", title="HDFS block writes", failure_modes=[LIFECYCLE_CAUSE]
+    )
+    severity = cast("Any", SimpleNamespace(severity="SEV3"))
+    return InvestigationInputs("run-real", "hdfs", out.batch, severity, [], [runbook])
+
+
+def test_work_that_stops_partway_is_the_first_cause_to_test() -> None:
+    inputs = _real_hdfs_inputs(EvidenceStore())
+    first = candidate_hypotheses(inputs)[0]
+    assert first.failure_mode == LIFECYCLE_CAUSE
+    assert first.statement.startswith("Work on HDFS blocks stops partway")
+    plan = suggested_plan(inputs)
+    keys = inputs.batch.flows.examples
+    assert plan[0] == {"tool": "search_logs", "arguments": {"query": keys[0].key, "limit": 20}}
+    assert {"tool": "get_runbook", "arguments": {"slug": "hdfs-unfinished-writes"}} in plan
+
+
+def test_a_units_own_lines_support_it_and_a_quiet_timeline_does_not_refute_it() -> None:
+    hypothesis = Hypothesis(
+        id="H1",
+        statement="Work on HDFS blocks stops partway",
+        failure_mode=LIFECYCLE_CAUSE,
+        confidence=0.4,
+    )
+    lines = Observation("search_logs", {"query": "blk_123"}, True, "", [], {"lines": [{"x": 1}]})
+    other = Observation("search_logs", {"query": "exception"}, True, "", [], {"lines": [{"x": 1}]})
+    quiet = Observation(
+        "component_timeline",
+        {"component": "dfs.DataNode"},
+        True,
+        "",
+        [],
+        {"buckets": [{"lines": 40, "errors": 0, "warnings": 0}]},
+    )
+    assert supports(hypothesis, lines)
+    assert not supports(hypothesis, other)
+    assert not refutes(hypothesis.model_copy(update={"component": "dfs.DataNode"}), quiet)

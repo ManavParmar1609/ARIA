@@ -126,6 +126,12 @@ def compose_title(ctx: ReportContext) -> str:
     features = ctx.batch.features
     lead = ctx.leading
     top = ctx.retrieval.incidents[0] if ctx.retrieval.incidents else None
+    broken = ctx.batch.flows.examples
+    if broken and (lead is None or lead.failure_mode == "unfinished_work"):
+        # Work that stopped partway names itself: "HDFS blocks stopping partway".
+        kind = broken[0].kind
+        where = "" if kind.lower().startswith(ctx.system_name.lower()) else f" in {ctx.system_name}"
+        return f"{ctx.severity.severity} · {kind}s stopping partway{where}"[:140]
     if lead is not None:
         what = _mode_words(lead.failure_mode).capitalize()
     elif top is not None and top.score > 0:
@@ -152,6 +158,8 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
     spread = ctx.find(EvidenceKind.FEATURE, source="parser", key="error_nodes")
     warn_spread = ctx.find(EvidenceKind.FEATURE, source="parser", key="warn_nodes")
     floor_ev = next((e for e in rule_evs if e.data.get("effect") == "floor"), None)
+    flows_ev = ctx.find(EvidenceKind.FEATURE, source="parser.flows", key="checked")
+    flow_example = ctx.find(EvidenceKind.LOG, source="parser.flows", key="key")
     by_id = ctx.by_id
     signal = signal_templates(ctx.batch)
 
@@ -178,13 +186,18 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
         elif warn_spread is not None:
             scale += f", warnings on {features.warn_nodes} of {features.distinct_nodes} nodes"
         summary.append(_claim(f"{scale}.", window, spread or warn_spread))
+        if flows_ev is not None:
+            example = f" For example, {flow_example.title}." if flow_example is not None else ""
+            summary.append(_claim(f"{flows_ev.title}.{example}", flows_ev, flow_example))
         if not signal:
             quiet = (
                 "No errors, and every warning matches a template already in this system's history."
                 if warnings
                 else "No error or warning lines in this window."
             )
-            summary.append(_claim(quiet, window))
+            if flows_ev is not None:
+                quiet += " The failure shows only as work that never finished."
+            summary.append(_claim(quiet, window, flows_ev))
     if burst is not None and features.burst_score >= 2:
         summary.append(
             _claim(

@@ -1384,6 +1384,136 @@
         }
       }
     },
+    "/api/v1/real-incidents": {
+      "get": {
+        "tags": [
+          "real incidents"
+        ],
+        "summary": "List Real Incidents",
+        "description": "The real incidents this server can replay (their logs ship with ARIA).",
+        "operationId": "list_real_incidents_api_v1_real_incidents_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RealIncidentOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Real Incidents Api V1 Real Incidents Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/real-incidents/{incident_id}/replay": {
+      "post": {
+        "tags": [
+          "real incidents"
+        ],
+        "summary": "Replay Real Incident",
+        "description": "Triage a real incident's logs as a normal run; follow it on ``links.stream``.",
+        "operationId": "replay_real_incident_api_v1_real_incidents__incident_id__replay_post",
+        "parameters": [
+          {
+            "name": "incident_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Incident Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ReplayRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunAccepted"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{run_id}/expert-check": {
+      "get": {
+        "tags": [
+          "real incidents"
+        ],
+        "summary": "Expert Check",
+        "description": "For a replayed real incident: the units ARIA flagged, with the experts' label for each.",
+        "operationId": "expert_check_api_v1_runs__run_id__expert_check_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpertCheckOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/agui": {
       "post": {
         "tags": [
@@ -2024,6 +2154,68 @@
         ],
         "title": "EvidenceKind"
       },
+      "ExpertCheckOut": {
+        "properties": {
+          "incident_id": {
+            "type": "string",
+            "title": "Incident Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "citation": {
+            "type": "string",
+            "title": "Citation"
+          },
+          "ready": {
+            "type": "boolean",
+            "title": "Ready"
+          },
+          "flagged": {
+            "items": {
+              "$ref": "#/components/schemas/FlaggedUnit"
+            },
+            "type": "array",
+            "title": "Flagged"
+          },
+          "flagged_failed": {
+            "type": "integer",
+            "title": "Flagged Failed"
+          },
+          "flagged_healthy": {
+            "type": "integer",
+            "title": "Flagged Healthy"
+          },
+          "units": {
+            "type": "integer",
+            "title": "Units"
+          },
+          "labelled_failures": {
+            "type": "integer",
+            "title": "Labelled Failures"
+          }
+        },
+        "type": "object",
+        "required": [
+          "incident_id",
+          "title",
+          "unit",
+          "citation",
+          "ready",
+          "flagged",
+          "flagged_failed",
+          "flagged_healthy",
+          "units",
+          "labelled_failures"
+        ],
+        "title": "ExpertCheckOut",
+        "description": "A replayed run's flagged units of work, next to the labels the system's experts gave."
+      },
       "FeedbackOut": {
         "properties": {
           "calibration": {
@@ -2043,6 +2235,52 @@
           "reviews"
         ],
         "title": "FeedbackOut"
+      },
+      "FlaggedUnit": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "evidence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          },
+          "failed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key"
+        ],
+        "title": "FlaggedUnit"
       },
       "ForkRequest": {
         "properties": {
@@ -2511,6 +2749,74 @@
           "roles"
         ],
         "title": "ProviderOut"
+      },
+      "RealIncidentOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "system": {
+            "type": "string",
+            "title": "System"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "citation": {
+            "type": "string",
+            "title": "Citation"
+          },
+          "lines": {
+            "type": "integer",
+            "title": "Lines"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "units": {
+            "type": "integer",
+            "title": "Units"
+          },
+          "labelled_failures": {
+            "type": "integer",
+            "title": "Labelled Failures"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "system",
+          "summary",
+          "source",
+          "citation",
+          "lines",
+          "unit",
+          "units",
+          "labelled_failures"
+        ],
+        "title": "RealIncidentOut",
+        "description": "A stretch of a real system's log, with its experts' labels, ready to replay."
+      },
+      "ReplayRequest": {
+        "properties": {
+          "options": {
+            "$ref": "#/components/schemas/RunOptions"
+          }
+        },
+        "type": "object",
+        "title": "ReplayRequest"
       },
       "ReportEdits": {
         "properties": {
@@ -4118,6 +4424,18 @@
             "type": "boolean",
             "title": "Synthetic",
             "default": false
+          },
+          "replay_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replay Of"
           }
         },
         "additionalProperties": false,

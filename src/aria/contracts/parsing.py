@@ -114,6 +114,8 @@ class BrokenUnit(Contract):
     key: str
     problem: Literal["mismatch", "unusual_step"]
     reason: str
+    # Template ids: the step seen more often then the one seen less (mismatch), or the rare step.
+    steps: list[str] = Field(default_factory=list)
     first_ts: datetime | None = None
     last_ts: datetime | None = None
     lines: list[int] = Field(default_factory=list)  # 0-based line indices, at most 12
@@ -129,6 +131,7 @@ class FlowCheck(Contract):
     settle_s: dict[str, float] = Field(default_factory=dict)
     pairs: list[FlowPair] = Field(default_factory=list)
     examples: list[BrokenUnit] = Field(default_factory=list)
+    broken_keys: list[str] = Field(default_factory=list)  # every broken unit, at most 2,000
     evidence_id: EvidenceId | None = None
 
 

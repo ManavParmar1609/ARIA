@@ -65,6 +65,9 @@ class TriageRequest(Contract):
     options: RunOptions = Field(default_factory=RunOptions)
     # True when the logs come from a semi-synthetic scenario; reports and memory label it.
     synthetic: bool = False
+    # The real incident these logs replay (aria.data.real), so a run can be checked against the
+    # labels its experts gave. Set by the replay endpoint.
+    replay_of: Annotated[str, StringConstraints(max_length=64)] | None = None
 
     @model_validator(mode="after")
     def _has_something_to_triage(self) -> TriageRequest:

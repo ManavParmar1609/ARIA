@@ -274,6 +274,46 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/real-incidents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Real Incidents
+         * @description The real incidents this server can replay (their logs ship with ARIA).
+         */
+        get: operations["list_real_incidents_api_v1_real_incidents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/real-incidents/{incident_id}/replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Replay Real Incident
+         * @description Triage a real incident's logs as a normal run; follow it on ``links.stream``.
+         */
+        post: operations["replay_real_incident_api_v1_real_incidents__incident_id__replay_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runbooks": {
         parameters: {
             query?: never;
@@ -376,6 +416,26 @@ export type paths = {
         };
         /** List Events */
         get: operations["list_events_api_v1_runs__run_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/expert-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Expert Check
+         * @description For a replayed real incident: the units ARIA flagged, with the experts' label for each.
+         */
+        get: operations["expert_check_api_v1_runs__run_id__expert_check_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -833,11 +893,48 @@ export type components = {
          * @enum {string}
          */
         EvidenceKind: "log" | "template" | "feature" | "rule" | "model" | "alert" | "incident" | "tickets" | "runbook" | "tool" | "hypothesis" | "feedback" | "review";
+        /**
+         * ExpertCheckOut
+         * @description A replayed run's flagged units of work, next to the labels the system's experts gave.
+         */
+        ExpertCheckOut: {
+            /** Citation */
+            citation: string;
+            /** Flagged */
+            flagged: components["schemas"]["FlaggedUnit"][];
+            /** Flagged Failed */
+            flagged_failed: number;
+            /** Flagged Healthy */
+            flagged_healthy: number;
+            /** Incident Id */
+            incident_id: string;
+            /** Labelled Failures */
+            labelled_failures: number;
+            /** Ready */
+            ready: boolean;
+            /** Title */
+            title: string;
+            /** Unit */
+            unit: string;
+            /** Units */
+            units: number;
+        };
         /** FeedbackOut */
         FeedbackOut: {
             calibration: components["schemas"]["CalibrationOut"];
             /** Reviews */
             reviews: components["schemas"]["ReviewOut"][];
+        };
+        /** FlaggedUnit */
+        FlaggedUnit: {
+            /** Evidence Id */
+            evidence_id?: string | null;
+            /** Failed */
+            failed?: boolean | null;
+            /** Key */
+            key: string;
+            /** Reason */
+            reason?: string | null;
         };
         /** ForkRequest */
         ForkRequest: {
@@ -1108,6 +1205,36 @@ export type components = {
             roles: string[];
             /** Verified */
             verified: boolean;
+        };
+        /**
+         * RealIncidentOut
+         * @description A stretch of a real system's log, with its experts' labels, ready to replay.
+         */
+        RealIncidentOut: {
+            /** Citation */
+            citation: string;
+            /** Id */
+            id: string;
+            /** Labelled Failures */
+            labelled_failures: number;
+            /** Lines */
+            lines: number;
+            /** Source */
+            source: string;
+            /** Summary */
+            summary: string;
+            /** System */
+            system: string;
+            /** Title */
+            title: string;
+            /** Unit */
+            unit: string;
+            /** Units */
+            units: number;
+        };
+        /** ReplayRequest */
+        ReplayRequest: {
+            options?: components["schemas"]["RunOptions"];
         };
         /** ReportEdits */
         ReportEdits: {
@@ -1647,6 +1774,8 @@ export type components = {
             /** Logs */
             logs?: string[];
             options?: components["schemas"]["RunOptions"];
+            /** Replay Of */
+            replay_of?: string | null;
             /** Service */
             service?: string | null;
             /**
@@ -2080,6 +2209,61 @@ export interface operations {
             };
         };
     };
+    list_real_incidents_api_v1_real_incidents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RealIncidentOut"][];
+                };
+            };
+        };
+    };
+    replay_real_incident_api_v1_real_incidents__incident_id__replay_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ReplayRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunAccepted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     runbooks_api_v1_runbooks_get: {
         parameters: {
             query?: {
@@ -2320,6 +2504,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunEvent"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    expert_check_api_v1_runs__run_id__expert_check_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpertCheckOut"];
                 };
             };
             /** @description Validation Error */

@@ -8,8 +8,9 @@ import { toast } from "sonner";
 
 import { ErrorState, PageHeader } from "@/components/console/states";
 import { ArrowCircle, Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import samples from "@/data/samples.json";
-import { useCreateRun } from "@/lib/api/hooks";
+import { type RealIncident, useCreateRun, useRealIncidents, useReplay } from "@/lib/api/hooks";
 import { GLOSSARY } from "@/lib/glossary";
 import { systemName } from "@/lib/systems";
 
@@ -128,6 +129,115 @@ function SampleCard({ sample, index }: { sample: (typeof samples)[number]; index
   );
 }
 
+function RealFact({ value, label }: { value: number; label: string }) {
+  return (
+    <div className="grid gap-1">
+      <dt className="order-2 text-sm text-muted-foreground">{label}</dt>
+      <dd className="stat order-1 text-3xl">{value.toLocaleString("en")}</dd>
+    </div>
+  );
+}
+
+function RealIncidentCard({ incident }: { incident: RealIncident }) {
+  const router = useRouter();
+  const replay = useReplay();
+  const [started, setStarted] = useState(false);
+  const busy = replay.isPending || started;
+  const start = () => {
+    replay.mutate(
+      {
+        id: incident.id,
+        body: { options: { use_llm: true, investigate: true, require_approval: true } },
+      },
+      {
+        onSuccess: (accepted) => {
+          setStarted(true);
+          toast.success("Replay started", { description: "Following the run live." });
+          router.push(`/console/runs/${encodeURIComponent(accepted.run_id)}` as never);
+        },
+      },
+    );
+  };
+  return (
+    <li className="grid gap-6 rounded-lg bg-raised p-5 sm:p-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:gap-10">
+      <div className="grid gap-4">
+        <p className="eyebrow flex items-center gap-2 text-muted-foreground">
+          <span aria-hidden className="size-2 rounded-full bg-grass" />
+          {systemName(incident.system)}, real logs
+        </p>
+        <h3 className="text-2xl leading-tight tracking-heading sm:text-3xl">{incident.title}</h3>
+        <p className="max-w-2xl text-muted-foreground">{incident.summary}</p>
+        <dl className="flex flex-wrap gap-x-10 gap-y-4">
+          <RealFact value={incident.lines} label="real log lines" />
+          <RealFact value={incident.units} label={`${incident.unit}s in the log`} />
+          <RealFact value={incident.labelled_failures} label="labelled failed by its experts" />
+        </dl>
+        <p className="text-xs text-faint">
+          {incident.source}. Labels: {incident.citation}
+        </p>
+      </div>
+      <div className="grid gap-3 lg:justify-items-end">
+        <Button
+          variant="primary"
+          size="lg"
+          className="justify-self-start pr-2 lg:justify-self-end"
+          onClick={start}
+          disabled={busy}
+          aria-label={`${busy ? "Starting" : "Replay it"}: ${incident.title}`}
+        >
+          {busy ? "Starting" : "Replay it"}
+          {busy ? (
+            <span aria-hidden className="grid size-10 place-items-center rounded-full bg-white">
+              <LoaderCircleIcon className="size-5 animate-spin" />
+            </span>
+          ) : (
+            <ArrowCircle tone="white" size="lg" />
+          )}
+        </Button>
+        {replay.isError ? (
+          <ErrorState error={replay.error} title="The replay could not be started" />
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
+function RealIncidents() {
+  const incidents = useRealIncidents();
+  return (
+    <section aria-labelledby="real-title" className="grid gap-5">
+      <div className="grid gap-2">
+        <h2 id="real-title" className="text-xl tracking-heading">
+          Replay a real incident
+        </h2>
+        <p className="max-w-3xl text-muted-foreground">
+          Real logs, as the system wrote them, with the label its experts gave every unit of work.
+          ARIA never sees the labels: the run page puts them next to what ARIA found.
+        </p>
+      </div>
+      {incidents.isPending ? (
+        <Skeleton className="h-64 w-full" />
+      ) : incidents.isError ? (
+        <ErrorState
+          error={incidents.error}
+          title="The real incidents could not be listed"
+          onRetry={() => void incidents.refetch()}
+        />
+      ) : incidents.data.length ? (
+        <ul className="grid gap-4">
+          {incidents.data.map((incident) => (
+            <RealIncidentCard key={incident.id} incident={incident} />
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          This server ships no real incidents to replay. The samples below still run.
+        </p>
+      )}
+    </section>
+  );
+}
+
 /** The console's front door for a first visit: try a sample, learn to read a run, look up a word. */
 export function Guide() {
   return (
@@ -135,8 +245,10 @@ export function Guide() {
       <PageHeader
         eyebrow="Start here"
         title="How to use ARIA"
-        description="ARIA reads an alert and its logs, rates severity, checks what happened last time and drafts a cited report that waits for your approval. The quickest way in is a sample: it runs in seconds, and nothing is sent anywhere."
+        description="ARIA reads an alert and its logs, rates severity, checks what happened last time and drafts a cited report that waits for your approval. The quickest way in is a real incident or a sample: each runs in seconds, and nothing is sent anywhere."
       />
+
+      <RealIncidents />
 
       <section aria-labelledby="samples-title" className="grid gap-5">
         <div className="grid gap-2">
