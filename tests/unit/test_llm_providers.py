@@ -301,3 +301,44 @@ async def test_missing_models_raise_clear_errors() -> None:
         await provider.rerank("q", ["p"])
     with pytest.raises(ValueError, match="no base_url"):
         OpenAICompatibleProvider("x", ProviderConfig(kind=ProviderKind.NVIDIA_NIM))
+
+
+@respx.mock
+async def test_reasoning_effort_and_stream_always_are_sent(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test-key")
+    cfg = ProviderConfig(
+        kind=ProviderKind.NVIDIA_NIM,
+        base_url=NIM,
+        api_key_env="NVIDIA_API_KEY",
+        chat_model="openai/gpt-oss-20b",
+        reasoning_effort="low",
+        stream_always=True,
+        stall_timeout_s=5,
+    )
+    body = 'data: {"choices": [{"delta": {"content": "OK"}}]}\n\ndata: [DONE]\n\n'
+    route = respx.post(f"{NIM}/chat/completions").mock(
+        return_value=httpx.Response(200, text=body, headers={"content-type": "text/event-stream"})
+    )
+    text, _ = await OpenAICompatibleProvider("nim", cfg).chat(MESSAGES)  # no on_token callback
+    sent = json.loads(route.calls.last.request.content)
+    assert text == "OK"
+    assert sent["stream"] is True
+    assert sent["reasoning_effort"] == "low"
+    assert route.calls.last.request.extensions["timeout"]["read"] == 5
+
+
+@respx.mock
+async def test_a_stalled_stream_fails_over_as_retryable(nim: OpenAICompatibleProvider) -> None:
+    nim.config = nim.config.model_copy(update={"stream_always": True, "max_retries": 0})
+    respx.post(f"{NIM}/chat/completions").mock(side_effect=httpx.ReadTimeout("no bytes"))
+    with pytest.raises(ProviderError) as info:
+        await nim.chat(MESSAGES)
+    assert info.value.retryable
+
+
+def test_blank_env_values_mean_not_configured() -> None:
+    cfg = ProviderConfig(
+        kind=ProviderKind.NVIDIA_NIM, base_url=" ", rerank_model="", reasoning_effort=""
+    )
+    assert (cfg.base_url, cfg.rerank_model, cfg.reasoning_effort) == (None, None, None)
+    assert not cfg.is_enabled()

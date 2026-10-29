@@ -71,6 +71,11 @@ class ProviderConfig(_Strict):
     safety_model: str | None = None
     structured_output: StructuredOutputMode = StructuredOutputMode.JSON_SCHEMA
     supports_streaming: bool = True
+    # Stream every request, so a model that stalls (sends nothing for stall_timeout_s) fails
+    # over quickly instead of holding the run until the full timeout.
+    stream_always: bool = False
+    stall_timeout_s: float | None = Field(default=None, gt=0)
+    reasoning_effort: str | None = None  # sent only when set: low | medium | high
     extra_body: dict[str, Any] = Field(default_factory=dict)
     timeout_s: float = Field(default=60.0, gt=0)
     max_retries: int = Field(default=2, ge=0, le=6)
@@ -78,6 +83,21 @@ class ProviderConfig(_Strict):
     price_output_per_mtok: float | None = Field(default=None, ge=0)
     verified: bool = False
     notes: str | None = None
+
+    @field_validator(
+        "base_url",
+        "chat_model",
+        "embedding_model",
+        "rerank_model",
+        "rerank_url",
+        "safety_model",
+        "reasoning_effort",
+        mode="before",
+    )
+    @classmethod
+    def _blank_is_unset(cls, value: Any) -> Any:
+        # `${VAR:-}` interpolates to "" when VAR is unset; treat that as "not configured".
+        return None if isinstance(value, str) and not value.strip() else value
 
     def api_key(self) -> SecretStr | None:
         if not self.api_key_env:
@@ -248,6 +268,22 @@ def get_settings() -> Settings:
 @lru_cache(maxsize=1)
 def get_app_config() -> AppConfig:
     return load_app_config(get_settings().config_file)
+
+
+def load_dotenv_file(path: Path = Path(".env")) -> bool:
+    """Load ``.env`` into the process environment without overriding variables already set.
+
+    Provider keys (``NVIDIA_API_KEY``, ``AZURE_OPENAI_API_KEY``, ...) are read with
+    ``os.environ``, so entry points call this once at startup for local development. Real
+    deployments set environment variables (or Key Vault references) instead.
+    """
+    if not path.is_file() or os.environ.get("ARIA_ENV") == "test":
+        return False  # tests stay hermetic: a developer's real keys never leak into them
+    from dotenv import load_dotenv  # noqa: PLC0415 - ships with pydantic-settings
+
+    loaded = bool(load_dotenv(path, override=False))
+    reset_caches()
+    return loaded
 
 
 def register_reset_hook(hook: Callable[[], None]) -> None:

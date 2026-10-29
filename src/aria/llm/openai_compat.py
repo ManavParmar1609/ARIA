@@ -7,6 +7,7 @@ steps down (json_schema -> guided_json -> json_object -> prompt) and remembers w
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from collections.abc import Sequence
@@ -93,7 +94,18 @@ class OpenAICompatibleProvider:
 
     async def _post(self, url: str, payload: dict[str, Any], *, stream: bool) -> httpx.Response:
         headers = await self._headers(stream=stream)
-        request = self._client.build_request("POST", url, json=payload, headers=headers)
+        timeout = httpx.Timeout(
+            self.config.timeout_s,
+            connect=15.0,
+            # While streaming, the read timeout bounds the gap between chunks: a stalled model
+            # fails fast and the router moves on.
+            read=(self.config.stall_timeout_s or self.config.timeout_s)
+            if stream
+            else self.config.timeout_s,
+        )
+        request = self._client.build_request(
+            "POST", url, json=payload, headers=headers, timeout=timeout
+        )
         try:
             response = await self._client.send(request, stream=stream)
         except (httpx.TimeoutException, httpx.TransportError) as exc:
@@ -135,6 +147,8 @@ class OpenAICompatibleProvider:
         }
         if stream:
             payload["stream_options"] = {"include_usage": True}
+        if self.config.reasoning_effort:
+            payload["reasoning_effort"] = self.config.reasoning_effort
         if json_schema is not None:
             if mode is StructuredOutputMode.JSON_SCHEMA:
                 payload["response_format"] = {
@@ -193,7 +207,9 @@ class OpenAICompatibleProvider:
         if not model:
             msg = f"{self.name} has no chat model configured"
             raise ProviderError(msg)
-        stream = on_token is not None and self.config.supports_streaming
+        stream = (
+            on_token is not None or self.config.stream_always
+        ) and self.config.supports_streaming
         started = time.perf_counter()
         while True:
             payload = self._payload(
@@ -239,14 +255,21 @@ class OpenAICompatibleProvider:
         url = self._url("chat/completions", model)
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(self.config.max_retries + 1),
-            wait=wait_exponential_jitter(initial=0.5, max=8),
+            wait=wait_exponential_jitter(multiplier=0.5, max=8),
             retry=retry_if_exception(_retryable),
             reraise=True,
         ):
             with attempt:
                 response = await self._post(url, payload, stream=stream)
                 if stream:
-                    return await self._read_stream(response, on_token)
+                    try:
+                        # Overall deadline, so a model that trickles tokens cannot run forever.
+                        async with asyncio.timeout(self.config.timeout_s):
+                            return await self._read_stream(response, on_token)
+                    except (TimeoutError, httpx.TimeoutException, httpx.TransportError) as exc:
+                        raise ProviderError(
+                            f"{self.name}: stream stalled: {type(exc).__name__}", retryable=True
+                        ) from exc
                 body = response.json()
                 choices = body.get("choices") or []
                 message = choices[0].get("message", {}) if choices else {}

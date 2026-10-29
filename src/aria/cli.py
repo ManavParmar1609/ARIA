@@ -26,6 +26,14 @@ app.add_typer(providers_app, name="providers")
 console = Console()
 
 
+@app.callback()
+def main() -> None:
+    """Load a local .env file (if present) before any command runs."""
+    from aria.config import load_dotenv_file
+
+    load_dotenv_file()
+
+
 @app.command()
 def version() -> None:
     """Print the installed ARIA version."""
@@ -180,6 +188,57 @@ def providers_list() -> None:
             ", ".join(status.roles),
         )
     console.print(table)
+
+
+@providers_app.command("check")
+def providers_check(
+    name: Annotated[str | None, typer.Argument(help="Only this provider.")] = None,
+    probe: Annotated[bool, typer.Option(help="Send one tiny chat and embedding request.")] = True,
+) -> None:
+    """Verify keys, reachability and model IDs for the configured LLM providers."""
+    from aria.llm.health import ProviderCheck, check_provider
+    from aria.llm.router import get_router
+
+    router = get_router()
+    names = [name] if name else [n for n in router.config.providers if n not in ("fake", "local")]
+
+    async def run() -> list[ProviderCheck]:
+        try:
+            reports = []
+            for n in names:
+                cfg = router.config.providers[n]
+                provider = router.provider(n) if cfg.is_enabled() else None
+                reports.append(await check_provider(n, cfg, provider, probe=probe))
+            return reports
+        finally:
+            await router.aclose()
+
+    table = Table(
+        "provider", "credential", "reachable", "models in catalog", "chat", "embed", "problems"
+    )
+
+    def mark(value: bool | None) -> str:
+        return "-" if value is None else ("yes" if value else "NO")
+
+    failed = False
+    for report in asyncio.run(run()):
+        models = (
+            ", ".join(f"{k.removesuffix('_model')}: {mark(v)}" for k, v in report.models.items())
+            or "-"
+        )
+        failed = failed or (report.enabled and bool(report.problems))
+        table.add_row(
+            report.name,
+            report.credential,
+            mark(report.reachable),
+            models,
+            mark(report.chat_ok),
+            mark(report.embed_ok),
+            "; ".join(report.problems) or "ok",
+        )
+    console.print(table)
+    if failed:
+        raise typer.Exit(code=1)
 
 
 @providers_app.command("models")

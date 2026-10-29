@@ -85,8 +85,8 @@ def test_default_config_routes_offline_to_fake_but_never_adjudicates_with_it() -
 def test_a_key_enables_the_hosted_nim_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-x")
     router = LLMRouter(get_app_config().llm)
-    assert router.chain("adjudicator") == ["nim"]
-    assert router.chain("reporter") == ["nim", "fake"]
+    assert router.chain("adjudicator") == ["nim", "nim-fallback"]
+    assert router.chain("reporter") == ["nim", "nim-fallback", "fake"]
     assert router.has_real_llm("reporter")
 
 

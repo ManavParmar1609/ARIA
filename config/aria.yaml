@@ -4,21 +4,21 @@
 # a provider without a key (or endpoint) is disabled and fallback chains skip it, ending at the
 # deterministic `fake` provider so every path still works offline.
 #
-# Model IDs move quickly. `verified: false` marks IDs taken from provider announcements that have
-# not been checked against a live model list; run `aria providers models <name>` to read the
-# provider's /v1/models catalog and confirm before relying on them.
+# Model IDs move quickly. `verified: true` means the default IDs answered live calls on the date
+# in the notes; `verified: false` marks IDs not yet checked. `aria providers check` reads each
+# provider's catalog, confirms the configured IDs and sends one tiny request.
 
 llm:
   # The adjudicator has no fake fallback: without a real model, the conservative severity policy
   # decides (most severe class in the prediction set, flagged for review).
   routing:
-    adjudicator: [nim, azure, openai_compat]
-    investigator: [nim, azure, openai_compat, fake]
-    reporter: [nim, azure, openai_compat, fake]
-    critic: [nim, azure, openai_compat, fake]
-    comms: [nim, azure, openai_compat, fake]
-    ask: [nim, azure, openai_compat, fake]
-    default: [nim, azure, openai_compat, fake]
+    adjudicator: [nim, nim-fallback, azure, openai_compat]
+    investigator: [nim, nim-fallback, azure, openai_compat, fake]
+    reporter: [nim, nim-fallback, azure, openai_compat, fake]
+    critic: [nim, nim-fallback, azure, openai_compat, fake]
+    comms: [nim, nim-fallback, azure, openai_compat, fake]
+    ask: [nim, nim-fallback, azure, openai_compat, fake]
+    default: [nim, nim-fallback, azure, openai_compat, fake]
   embeddings: [nim, azure, local]
   rerank: [nim]
   safety: [nim]
@@ -28,17 +28,39 @@ llm:
       kind: nvidia_nim
       base_url: ${NVIDIA_NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}
       api_key_env: NVIDIA_API_KEY
-      chat_model: ${NVIDIA_NIM_CHAT_MODEL:-nvidia/nemotron-3-super-120b-a12b}
+      chat_model: ${NVIDIA_NIM_CHAT_MODEL:-openai/gpt-oss-20b}
+      reasoning_effort: ${NVIDIA_NIM_REASONING_EFFORT:-low}
       embedding_model: ${NVIDIA_NIM_EMBED_MODEL:-nvidia/nemotron-3.5-embed-1b}
-      rerank_model: ${NVIDIA_NIM_RERANK_MODEL:-nvidia/nemotron-3.5-rerank-8b}
-      rerank_url: ${NVIDIA_NIM_RERANK_URL:-https://ai.api.nvidia.com/v1/retrieval/nvidia/reranking}
-      safety_model: ${NVIDIA_NIM_SAFETY_MODEL:-nvidia/nemotron-content-safety-reasoning-4b}
+      rerank_model: ${NVIDIA_NIM_RERANK_MODEL:-}
+      rerank_url: ${NVIDIA_NIM_RERANK_URL:-}
+      safety_model: ${NVIDIA_NIM_SAFETY_MODEL:-nvidia/nemotron-3.5-content-safety}
       structured_output: json_schema
-      verified: false
+      stream_always: true
+      stall_timeout_s: 25
+      timeout_s: 90
+      verified: true
       notes: >-
-        Hosted NVIDIA NIM (build.nvidia.com). OpenAI-compatible chat and embeddings; embeddings
-        take input_type=query|passage. Set NVIDIA_NIM_BASE_URL to a self-hosted NIM container
-        (for example http://nim:8000/v1) to run on your own GPUs.
+        Hosted NVIDIA NIM (build.nvidia.com), OpenAI-compatible. Verified 2026-10-29 with live
+        calls: openai/gpt-oss-20b (strict JSON schema, streaming) and nvidia/nemotron-3.5-embed-1b
+        (2048-dim, input_type=query|passage). z-ai/glm-5.3-flash is listed but did not answer
+        within 100 s that day. Reranking is off until NVIDIA_NIM_RERANK_MODEL and
+        NVIDIA_NIM_RERANK_URL are set (the retrieval API runs on ai.api.nvidia.com). Set
+        NVIDIA_NIM_BASE_URL to a self-hosted NIM (for example http://nim:8000/v1) to use your
+        own GPUs.
+
+    nim-fallback:
+      kind: nvidia_nim
+      base_url: ${NVIDIA_NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}
+      api_key_env: NVIDIA_API_KEY
+      chat_model: ${NVIDIA_NIM_FALLBACK_MODEL:-minimaxai/minimax-m3.1-flash}
+      structured_output: json_schema
+      stream_always: true
+      stall_timeout_s: 25
+      timeout_s: 90
+      verified: true
+      notes: >-
+        Second hosted NIM model on the same key, tried when the first fails or stalls.
+        minimaxai/minimax-m3.1-flash was verified 2026-10-29 (strict JSON schema).
 
     nim-local:
       kind: nvidia_nim
