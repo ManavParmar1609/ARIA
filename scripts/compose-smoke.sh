@@ -64,7 +64,10 @@ echo "run ${run_id}: triaged, reviewed and published"
 # The web app: its own health, the landing page, and the same run read through the console's
 # proxy (in dev mode the API needs no key, so no session is required).
 curl -fsS "${web}/api/healthz" >/dev/null
-curl -fsS "${web}/" | grep -q "Incident triage that shows its work" \
+# Fetch the whole page before searching it: `curl | grep -q` fails under pipefail whenever grep
+# stops reading at its match while curl is still writing a page larger than the pipe buffer.
+landing=$(curl -fsS "${web}/")
+grep -q "Incident triage that shows its work" <<<"${landing}" \
   || { echo "the landing page did not render" >&2; exit 1; }
 seen=$(curl -fsS "${web}/api/v1/runs/${run_id}" | json '["status"]')
 [[ "${seen}" == "published" ]] || { echo "the console proxy saw '${seen}'" >&2; exit 1; }
