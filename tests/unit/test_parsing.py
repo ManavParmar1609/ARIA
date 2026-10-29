@@ -228,6 +228,14 @@ def test_without_a_history_every_warning_is_signal(builder: ScenarioBuilder) -> 
     assert "serving" in signal_templates(batch)[0].template
 
 
+def test_lines_are_made_safe_to_hash_and_store() -> None:
+    lines = ["\ud800 lone surrogate from a JSON body", "a\x00b \x1b[31mERROR\x1b[0m red"]
+    out = parse_lines(lines, system="linux", guard=GuardrailConfig(), evidence=EvidenceStore())
+    messages = [line.record.message for line in out.lines]
+    assert messages == ["\ufffd lone surrogate from a JSON body", "ab ERROR red"]
+    assert all("sanitized" in line.flags for line in out.lines)
+
+
 def test_guard_caps_lines_and_truncates_long_ones() -> None:
     guard = GuardrailConfig(max_lines=50, max_line_chars=100)
     lines = ["x" * 500] + ["ERROR something failed"] * 99

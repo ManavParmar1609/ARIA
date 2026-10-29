@@ -13,9 +13,13 @@ in the lowercased line, which keeps scanning cheap on large batches without chan
 
 from __future__ import annotations
 
+import base64
+import binascii
 import re
 import unicodedata
+from collections.abc import Iterator
 from dataclasses import dataclass
+from urllib.parse import unquote_plus
 
 from aria.contracts.parsing import InjectionFinding
 
@@ -45,16 +49,32 @@ def _p(pattern_id: str, regex: str, weight: float, *triggers: tuple[str, ...]) -
 PATTERNS: tuple[_Pattern, ...] = (
     _p(
         "override_instructions",
-        r"\b(ignore|disregard|forget|override)\b.{0,40}\b(previous|prior|above|earlier|all|any|system|developer)\b.{0,30}\b(instructions?|prompts?|rules?|messages?|context)\b",
+        r"\b(ignore|disregard|forget|override)\b.{0,40}\b(previous|prior|above|earlier|all|any|system|developer|your)\b.{0,30}\b(instructions?|prompts?|rules?|messages?|context)\b"
+        r"|\b(ignore|disregard|forget)\b.{0,20}\b(instructions?|prompts?|rules?)\b.{0,20}\b(above|before|earlier|previously|so far)\b",
         0.9,
         ("ignore", "disregard", "forget", "override"),
         ("instruction", "prompt", "rule", "message", "context"),
     ),
     _p(
+        "override_other_languages",
+        r"(\bignor\w*\b.{0,40}\b(instructions?|instrucciones|anweisungen|istruzioni|instruções)\b"
+        r"|忽略.{0,12}(指令|指示|提示)|無視.{0,12}(指示|命令))",
+        0.9,
+        ("ignor", "忽略", "無視"),
+        ("instruc", "anweisung", "istruzion", "指令", "指示", "提示", "命令"),
+    ),
+    _p(
         "role_hijack",
-        r"\b(you are now|from now on you|act as|pretend to be|roleplay as)\b",
+        r"\b(you are now|from now on,? you|pretend (to be|you are)|role-?play as)\b",
         0.6,
-        ("you are now", "from now on you", "act as", "pretend to be", "roleplay as"),
+        ("you are now", "from now on", "pretend", "roleplay as", "role-play as"),
+    ),
+    _p(
+        # "Act as" is common in ordinary logs ("act as primary"); it only counts with company.
+        "role_hint",
+        r"\bact as\b",
+        0.3,
+        ("act as",),
     ),
     _p(
         "chat_markup",
@@ -90,14 +110,14 @@ PATTERNS: tuple[_Pattern, ...] = (
     ),
     _p(
         "suppress_alerting",
-        r"\b(do not|don't|never|stop)\b.{0,15}\b(alert|page|escalate|report|notify|flag)\b",
+        r"\b(do not|don't|never|stop)\b.{0,15}\b(alert|page|escalat|report|notif|flag)\w*",
         0.6,
         ("do not", "don't", "never", "stop"),
-        ("alert", "page", "escalate", "report", "notify", "flag"),
+        ("alert", "page", "escalat", "report", "notif", "flag"),
     ),
     _p(
         "approval_tampering",
-        r"\b(auto-?approve|approve (this|the) (report|action|change)|skip (the )?(review|approval))\b",
+        r"\b(auto[- ]?approve|approve (this|the) (report|action|change)|skip (the )?(review|approval))\b",
         0.8,
         ("approve", "review", "approval"),
     ),
@@ -123,6 +143,10 @@ PATTERNS: tuple[_Pattern, ...] = (
 )
 
 _ZERO_WIDTH = dict.fromkeys(map(ord, "\u200b‌‍⁠﻿"))
+_URL_ENCODED = re.compile(r"%[0-9A-Fa-f]{2}|\w\+\w")
+_LEET_TOKEN = re.compile(r"[a-z][0-9@$]|[0-9@$][a-z]")
+_LEET = str.maketrans("0134578@$", "oieastbas")
+_BASE64 = re.compile(r"[A-Za-z0-9+/]{16,}={0,2}")
 
 
 def normalize_for_detection(text: str) -> str:
@@ -131,25 +155,56 @@ def normalize_for_detection(text: str) -> str:
     return re.sub(r"\s+", " ", text)
 
 
-def scan_line(text: str, line_idx: int) -> InjectionFinding | None:
+def _decoded_base64(text: str) -> Iterator[str]:
+    for token in _BASE64.findall(text):
+        try:
+            raw = base64.b64decode(token + "=" * (-len(token) % 4), validate=True)
+        except (binascii.Error, ValueError):
+            continue
+        decoded = raw.decode("utf-8", errors="ignore")
+        if decoded and sum(ch.isprintable() for ch in decoded) / len(decoded) > 0.9:
+            yield decoded
+
+
+def variants(text: str) -> Iterator[str]:
+    """The line as written, then as a reader would decode it: URL-encoded request paths and
+    query strings, leetspeak, and base64 payloads. Detection only; the stored line is unchanged."""
     normalized = normalize_for_detection(text)
-    lowered = normalized.lower()
-    hits = [p for p in PATTERNS if p.may_match(lowered) and p.regex.search(normalized)]
+    readings = [normalized]
+    if _URL_ENCODED.search(normalized):
+        readings.append(normalize_for_detection(unquote_plus(normalized)))
+    for reading in readings:
+        yield reading
+        lowered = reading.lower()
+        if _LEET_TOKEN.search(lowered):
+            yield lowered.translate(_LEET)
+        if len(reading) >= 16:
+            yield from (normalize_for_detection(d) for d in _decoded_base64(reading))
+
+
+def scan_line(text: str, line_idx: int) -> InjectionFinding | None:
+    hits: dict[str, tuple[_Pattern, str, re.Match[str]]] = {}
+    for variant in variants(text):
+        lowered = variant.lower()
+        for pattern in PATTERNS:
+            if pattern.id in hits or not pattern.may_match(lowered):
+                continue
+            if match := pattern.regex.search(variant):
+                hits[pattern.id] = (pattern, variant, match)
     if not hits:
         return None
     score = 1.0
-    for pattern in hits:
+    for pattern, _, _ in hits.values():
         score *= 1.0 - pattern.weight
     score = round(1.0 - score, 3)
     if score < 0.5:
         return None
-    strongest = max(hits, key=lambda p: p.weight)
-    match = strongest.regex.search(normalized)
-    start = max(0, (match.start() if match else 0) - 20)
+    _, variant, match = max(hits.values(), key=lambda hit: hit[0].weight)
+    start = max(0, match.start() - 20)
     return InjectionFinding(
         line_idx=line_idx,
-        pattern="+".join(p.id for p in hits),
-        excerpt=normalized[start : start + 160],
+        pattern="+".join(hits),
+        excerpt=variant[start : start + 160],
         score=score,
     )
 

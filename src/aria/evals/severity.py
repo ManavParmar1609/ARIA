@@ -6,8 +6,9 @@ confident and the conformal set has one class, otherwise the most severe class i
 is the conservative floor of ARIA's behaviour; an LLM adjudicator can only choose within the
 same set.
 
-Baselines: the majority class; rules alone; the calibrated model's top class without the
-policy; and TF-IDF over raw log text with logistic regression, trained on the training seeds.
+Baselines: the majority class; keyword matching alone; rules alone; the calibrated model's top
+class without the policy; and TF-IDF over raw log text with logistic regression, trained on the
+training seeds.
 """
 
 from __future__ import annotations
@@ -31,6 +32,13 @@ from aria.severity.policy import decide
 from aria.severity.training import SplitSeeds, features_for, known_templates
 
 REPORT_PATH = Path("models/severity_log.report.json")
+# The keyword baseline: the most severe category with at least KEYWORD_MIN_LINES matching lines.
+KEYWORD_SEVERITY = (
+    (Severity.SEV1, ("crash", "data_risk")),
+    (Severity.SEV2, ("unavailable", "resource")),
+    (Severity.SEV3, ("security", "hardware", "storage", "network")),
+)
+KEYWORD_MIN_LINES = 3
 
 
 @dataclass
@@ -40,6 +48,7 @@ class SeverityCase:
     failure_mode: str
     truth: str
     label_source: str
+    keyword: str
     rules: str
     model: str
     model_floored: str
@@ -79,6 +88,14 @@ def featurize(
     return [features_for(*item) for item in zip(*args, strict=True)]
 
 
+def keyword_severity(features: WindowFeatures) -> str:
+    """Severity from keyword categories alone, the way a keyword-frequency triage rule works."""
+    for severity, categories in KEYWORD_SEVERITY:
+        if any(features.keyword_hits.get(c, 0) >= KEYWORD_MIN_LINES for c in categories):
+            return str(severity)
+    return str(Severity.SEV4)
+
+
 def score(
     engine: SeverityEngine, scenarios: Sequence[Scenario], features: Sequence[WindowFeatures]
 ) -> list[SeverityCase]:
@@ -95,6 +112,7 @@ def score(
                 failure_mode=scenario.failure_mode,
                 truth=str(scenario.severity),
                 label_source=scenario.label_source,
+                keyword=keyword_severity(feats),
                 rules=str(pre.rule_severity),
                 model=model_top,
                 model_floored=str(pre.top),
@@ -156,6 +174,7 @@ def summarize(
         "model_with_floors": [c.model_floored for c in cases],
         "model_only": [c.model for c in cases],
         "rules_only": [c.rules for c in cases],
+        "keyword": [c.keyword for c in cases],
         "majority_class": [majority] * len(cases),
     }
     if tfidf is not None:
@@ -181,6 +200,11 @@ def summarize(
             "ece": round(m.expected_calibration_error([c.probabilities for c in cases], truth), 4),
             "brier": round(m.brier([c.probabilities for c in cases], truth), 4),
         },
+        # The calibrated model abstaining on its least confident windows.
+        "risk_coverage": m.risk_coverage(
+            [max(c.probabilities.values()) for c in cases],
+            [c.model == c.truth for c in cases],
+        ),
         "conformal": {
             "alpha": alpha,
             "target_coverage": round(1 - alpha, 3),

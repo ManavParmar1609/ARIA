@@ -126,6 +126,7 @@ class PipelineCase:
     tokens: int
     exhausted: list[str]
     llm_latency_ms: list[float] = field(default_factory=list)
+    llm_calls_detail: list[dict[str, Any]] = field(default_factory=list)
 
 
 def stage_durations(events: Sequence[RunEvent]) -> dict[str, float]:
@@ -207,10 +208,40 @@ async def run_case(
         llm_latency_ms=[
             float(e.payload.get("latency_ms", 0)) for e in events if e.kind == "llm_call"
         ],
+        llm_calls_detail=[dict(e.payload) for e in events if e.kind == "llm_call"],
     )
 
 
-def summarize(cases: Sequence[PipelineCase], *, budget_tokens: int) -> dict[str, Any]:
+def provider_stats(cases: Sequence[PipelineCase]) -> dict[str, dict[str, Any]]:
+    """Calls, failures, latency and tokens per LLM provider; cost only where it is priced."""
+    calls = [c for case in cases for c in case.llm_calls_detail]
+    out: dict[str, dict[str, Any]] = {}
+    for name in sorted({str(c.get("provider") or "unknown") for c in calls}):
+        mine = [c for c in calls if str(c.get("provider") or "unknown") == name]
+        ok = [c for c in mine if not c.get("error")]
+        costs = [c.get("cost_usd") for c in ok]
+        latency = [float(c.get("latency_ms") or 0) for c in mine]
+        out[name] = {
+            "calls": len(mine),
+            "failures": len(mine) - len(ok),
+            "models": sorted({str(c.get("model") or "") for c in mine} - {""}),
+            "latency_p50_ms": round(m.percentile(latency, 50), 1),
+            "latency_p95_ms": round(m.percentile(latency, 95), 1),
+            "tokens_in": sum(int(c.get("input_tokens") or 0) for c in ok),
+            "tokens_out": sum(int(c.get("output_tokens") or 0) for c in ok),
+            "cost_usd": (
+                round(sum(float(c) for c in costs if c is not None), 6)
+                if costs and all(c is not None for c in costs)
+                else None
+            ),
+        }
+    return out
+
+
+def summarize(
+    cases: Sequence[PipelineCase], *, budget_tokens: int, relevant_per_mode: int | None = None
+) -> dict[str, Any]:
+    """``relevant_per_mode`` is how many memory incidents share each failure mode (for nDCG)."""
     truth = [c.truth for c in cases]
     incident = [c for c in cases if c.failure_mode != "none" and not c.benign]
     quiet = [c for c in cases if c.failure_mode == "none"]
@@ -244,6 +275,7 @@ def summarize(cases: Sequence[PipelineCase], *, budget_tokens: int) -> dict[str,
             "recall_at_1": round(m.recall_at_k(ranked, wanted, 1), 4),
             "recall_at_3": round(m.recall_at_k(ranked, wanted, 3), 4),
             "mrr": round(m.mean_reciprocal_rank(ranked, wanted), 4),
+            "ndcg_at_3": round(m.ndcg_at_k(ranked, wanted, 3, relevant=relevant_per_mode), 4),
         },
         "investigation": {
             "n": len(incident),

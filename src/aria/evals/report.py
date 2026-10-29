@@ -10,6 +10,7 @@ METHOD_NAMES = {
     "model_with_floors": "Calibrated model + rule floors",
     "model_only": "Calibrated model only",
     "rules_only": "Rules only",
+    "keyword": "Keyword categories only",
     "tfidf_logreg": "TF-IDF + logistic regression (raw text)",
     "majority_class": "Majority class",
 }
@@ -54,9 +55,18 @@ def _severity(section: Mapping[str, Any]) -> list[str]:
             f"{_pct(r['under_triage'])} | {_pct(r['severe_under_triage'])} |"
         )
     cal, conf, auto = section["calibration"], section["conformal"], section["automation"]
+    risk = section.get("risk_coverage") or {"points": [], "aurc": 0.0}
+    curve = ", ".join(
+        f"{_pct(p['risk'])} error at {_pct(p['coverage'])} coverage" for p in risk["points"]
+    )
     lines += [
         "",
         f"Calibration of the model's probabilities: ECE {cal['ece']:.3f}, Brier {cal['brier']:.3f}.",
+        "",
+        (
+            "Risk–coverage (the calibrated model answering only its most confident windows): "
+            f"{curve or 'n/a'}; AURC {risk['aurc']:.3f}."
+        ),
         "",
         (
             f"Conformal prediction sets (alpha {conf['alpha']}, target coverage "
@@ -126,8 +136,8 @@ def _pipeline(section: Mapping[str, Any], title: str) -> list[str]:
         ),
         (
             f"- Similar incidents ({r['n']} incident runs): Recall@1 {_pct(r['recall_at_1'])}, "
-            f"Recall@3 {_pct(r['recall_at_3'])}, MRR {r['mrr']:.3f} (a hit shares the true failure "
-            "mode)."
+            f"Recall@3 {_pct(r['recall_at_3'])}, MRR {r['mrr']:.3f}, nDCG@3 "
+            f"{r.get('ndcg_at_3', 0.0):.3f} (a hit shares the true failure mode)."
         ),
         (
             f"- Investigation: leading hypothesis names the true failure mode in "
@@ -150,6 +160,83 @@ def _pipeline(section: Mapping[str, Any], title: str) -> list[str]:
         "| Stage | p50 ms | p95 ms |",
         "|---|---|---|",
         *stage_rows,
+        "",
+        *_providers(section.get("providers") or {}),
+    ]
+
+
+def _cost(value: float | None) -> str:
+    return "not priced" if value is None else f"${value:.4f}"
+
+
+def _providers(providers: Mapping[str, Mapping[str, Any]]) -> list[str]:
+    if not providers:
+        return []
+    rows = [
+        f"| {name} | {', '.join(p['models']) or 'n/a'} | {p['calls']} | {p['failures']} | "
+        f"{p['latency_p50_ms'] / 1000:.1f} | {p['latency_p95_ms'] / 1000:.1f} | "
+        f"{p['tokens_in']} / {p['tokens_out']} | "
+        f"{_cost(p['cost_usd'])} |"
+        for name, p in providers.items()
+    ]
+    return [
+        "| Provider | Models | Calls | Failed | p50 s | p95 s | Tokens in / out | Cost |",
+        "|---|---|---|---|---|---|---|---|",
+        *rows,
+        "",
+    ]
+
+
+def _parsing(section: Mapping[str, Any]) -> list[str]:
+    rows = [
+        f"| {system} | {r['lines']} | {r['events']} | {r['templates']} | "
+        f"{r['grouping_accuracy']:.3f} |"
+        for system, r in section["systems"].items()
+    ]
+    return [
+        "## Log parsing",
+        "",
+        (
+            f"Grouping accuracy against Loghub's hand-labelled templates, {section['lines']} lines "
+            f"from {section['n_systems']} systems, through the production parser (redaction, "
+            "injection guard, per-system Drain settings from the Loghub benchmark). Mean "
+            f"{section['mean_grouping_accuracy']:.3f}. Real log lines flagged as injection: "
+            f"{section['real_lines_flagged_as_injection']}."
+        ),
+        "",
+        "| System | Lines | True events | Templates found | Grouping accuracy |",
+        "|---|---|---|---|---|",
+        *rows,
+        "",
+    ]
+
+
+def _edge(section: Mapping[str, Any]) -> list[str]:
+    families = ", ".join(
+        f"{family.replace('_', ' ')} {_pct(recall)}"
+        for family, recall in section["recall_by_family"].items()
+    )
+    return [
+        "## Edge cases and prompt injection",
+        "",
+        (
+            f"{section['n']} inputs, each parsed on its own: {section['attacks']} injection "
+            f"attempts in eleven families, hidden in messages, usernames, request paths and user "
+            f"agents, and {section['benign']} benign inputs (malformed and extreme lines, and log "
+            "messages that use the same words for ordinary reasons)."
+        ),
+        "",
+        f"- Parser errors: {section['parser_errors']}.",
+        f"- Attacks quarantined: {_pct(section['attack_recall'])} ({families}).",
+        f"- Benign inputs quarantined: {_pct(section['benign_false_positive_rate'])}.",
+        (
+            "- The attack families come from public prompt-injection taxonomies, but this project "
+            "wrote both the corpus and the detector, and the detector was tuned on it (URL "
+            "encoding, leetspeak, base64 and five other languages were added after the first run "
+            "missed them). Treat the recall as an upper bound. An attack that is not caught is "
+            "analysed as an ordinary log line, and reaches a model only as fenced, untrusted "
+            "evidence."
+        ),
         "",
     ]
 
@@ -208,11 +295,18 @@ def render(results: Mapping[str, Any], live: Mapping[str, Any] | None = None) ->
         lines += _pipeline(results["pipeline"], "## End to end (offline: no LLM steps)")
     if live and "pipeline" in live:
         lines += _pipeline(live["pipeline"], "## End to end with a live LLM")
-        lines.insert(
-            len(lines) - 1,
-            f"_Live run on {live['created_at']} through the configured provider chain "
-            "(NVIDIA NIM first). Latency depends on the provider's load at the time._",
-        )
+        lines += [
+            (
+                f"_Live run on {live['created_at']} (commit {live.get('git_sha') or 'unknown'}) "
+                "through the configured provider chain, NVIDIA NIM first. Latency depends on the "
+                "provider's load at the time._"
+            ),
+            "",
+        ]
+    if "parsing" in results:
+        lines += _parsing(results["parsing"])
+    if "edge" in results:
+        lines += _edge(results["edge"])
     if "robustness" in results:
         lines += _robustness(results["robustness"])
     lines += [

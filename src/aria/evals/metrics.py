@@ -7,6 +7,7 @@ precisely they are known.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Mapping, Sequence
 from itertools import pairwise
 from typing import Any
@@ -145,6 +146,42 @@ def mean_reciprocal_rank(ranked: Sequence[Sequence[str]], wanted: Sequence[str])
     if not pairs:
         return 0.0
     return float(np.mean([1.0 / (r.index(w) + 1) if w in r else 0.0 for r, w in pairs]))
+
+
+def ndcg_at_k(
+    ranked: Sequence[Sequence[str]], wanted: Sequence[str], k: int, *, relevant: int | None = None
+) -> float:
+    """Binary-relevance nDCG@k: a hit shares the wanted label. ``relevant`` is how many relevant
+    items exist per query (default ``k``), which sets the ideal ranking."""
+    pairs = [(list(r)[:k], w) for r, w in zip(ranked, wanted, strict=True) if w]
+    if not pairs:
+        return 0.0
+    ideal = sum(1 / math.log2(i + 2) for i in range(min(k, relevant or k)))
+    gains = [sum(1 / math.log2(i + 2) for i, x in enumerate(r) if x == w) for r, w in pairs]
+    return float(np.mean([min(1.0, g / ideal) for g in gains]))
+
+
+def risk_coverage(
+    confidence: Sequence[float], correct: Sequence[bool], *, points: Sequence[float] = ()
+) -> dict[str, Any]:
+    """Selective prediction: keep the most confident share of cases and measure the error rate.
+
+    Returns the error at each requested coverage and the area under the risk-coverage curve
+    (AURC, lower is better)."""
+    order = sorted(range(len(confidence)), key=lambda i: -confidence[i])
+    errors = np.cumsum([0 if correct[i] else 1 for i in order])
+    n = len(order)
+    if not n:
+        return {"points": [], "aurc": 0.0}
+    risk = errors / np.arange(1, n + 1)
+    chosen = points or (0.5, 0.6, 0.7, 0.8, 0.9, 1.0)
+    return {
+        "points": [
+            {"coverage": c, "risk": round(float(risk[max(0, math.ceil(c * n) - 1)]), 4)}
+            for c in chosen
+        ],
+        "aurc": round(float(risk.mean()), 4),
+    }
 
 
 def percentile(values: Sequence[float], q: float) -> float:

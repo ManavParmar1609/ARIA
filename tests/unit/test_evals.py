@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 import json
+import math
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
 from aria.config import GuardrailConfig
-from aria.contracts.run import RunEvent
+from aria.contracts.parsing import WindowFeatures
+from aria.contracts.run import EventKind, RunEvent
 from aria.data.scenarios import LinePools, ScenarioBuilder
+from aria.evals import edge as ed
 from aria.evals import metrics as m
+from aria.evals import parsing as ps
 from aria.evals import pipeline as pl
 from aria.evals import report
 from aria.evals import run as ev
@@ -87,12 +92,109 @@ def test_calibration_scores() -> None:
     assert m.brier(sure_and_wrong, truth) == pytest.approx(2.0)
 
 
+def test_ndcg_rewards_hits_near_the_top() -> None:
+    assert m.ndcg_at_k([["a", "a", "a"]], ["a"], 3) == pytest.approx(1.0)
+    assert m.ndcg_at_k([["b", "a"]], ["a"], 3, relevant=1) == pytest.approx(1 / math.log2(3))
+    assert m.ndcg_at_k([["a", "b"]], ["a"], 3, relevant=1) == pytest.approx(1.0)
+    assert m.ndcg_at_k([["b", "c"]], ["a"], 3) == 0.0
+
+
+def test_risk_coverage_keeps_the_confident_cases() -> None:
+    confidence = [0.9, 0.8, 0.7, 0.6]
+    correct = [True, True, False, False]
+    curve = m.risk_coverage(confidence, correct, points=(0.5, 1.0))
+    assert curve["points"] == [{"coverage": 0.5, "risk": 0.0}, {"coverage": 1.0, "risk": 0.5}]
+    assert curve["aurc"] == pytest.approx((0 + 0 + 1 / 3 + 0.5) / 4, abs=1e-4)
+
+
 def test_retrieval_ranks() -> None:
     ranked = [["a", "b", "c"], ["b", "a"], ["c"]]
     wanted = ["a", "a", "a"]
     assert m.recall_at_k(ranked, wanted, 1) == pytest.approx(1 / 3)
     assert m.recall_at_k(ranked, wanted, 3) == pytest.approx(2 / 3)
     assert m.mean_reciprocal_rank(ranked, wanted) == pytest.approx((1 + 0.5 + 0) / 3)
+
+
+def test_keyword_baseline_takes_the_most_severe_category() -> None:
+    def window(**hits: int) -> WindowFeatures:
+        return WindowFeatures(
+            n_events=100,
+            n_templates=5,
+            duration_s=600,
+            events_per_min=10,
+            error_events=0,
+            error_ratio=0,
+            keyword_hits=hits,
+            burst_score=0,
+            peak_errors_per_min=0,
+            distinct_nodes=1,
+            error_nodes=0,
+            node_spread=0,
+            novel_templates=0,
+            novel_error_templates=0,
+            max_component_criticality=0,
+            persistence_s=0,
+        )
+
+    assert sv.keyword_severity(window(crash=3, network=9)) == "SEV1"
+    assert sv.keyword_severity(window(crash=2, unavailable=4)) == "SEV2"  # two crash lines: noise
+    assert sv.keyword_severity(window(network=5)) == "SEV3"
+    assert sv.keyword_severity(window(degradation=50)) == "SEV4"
+
+
+def test_grouping_accuracy_needs_exact_groups() -> None:
+    truth = ["E1", "E1", "E2", "E2"]
+    assert ps.grouping_accuracy(["a", "a", "b", "b"], truth) == 1.0
+    assert ps.grouping_accuracy(["a", "a", "a", "b"], truth) == 0.0  # E1 merged into E2's lines
+    assert ps.grouping_accuracy(["a", "b", "c", "c"], truth) == 0.5  # E1 split, E2 right
+    assert ps.grouping_accuracy(["a", "a", ps.QUARANTINED, "b"], truth) == 0.5
+
+
+def test_parsing_suite_scores_every_downloaded_sample() -> None:
+    summary = ps.summarize(FIXTURES)
+    assert summary["n_systems"] >= 10
+    assert 0.0 < summary["mean_grouping_accuracy"] <= 1.0
+    assert summary["real_lines_flagged_as_injection"] == 0
+    assert ps.system_accuracy(FIXTURES / "Missing", "hdfs") is None
+
+
+def test_edge_suite_parses_everything_and_quarantines_attacks() -> None:
+    inputs = ed.generate(n_attacks=110, n_benign=90, seed=5)
+    assert {i.family for i in inputs if i.kind == "attack"} == set(ed.ATTACKS)
+    result = ed.evaluate(inputs)
+    assert result["parser_errors"] == 0
+    assert result["attack_recall"] >= 0.9
+    assert result["benign_false_positive_rate"] <= 0.02
+    assert set(result["recall_by_family"]) == set(ed.ATTACKS)
+
+
+def test_provider_stats_price_only_what_is_priced() -> None:
+    case = _pipeline_case("block_serve_exceptions", supported=True)
+    case.llm_calls_detail = [
+        {
+            "provider": "nim",
+            "model": "m",
+            "latency_ms": 1000,
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cost_usd": None,
+        },
+        {"provider": "nim", "model": "m", "latency_ms": 3000, "error": "timeout"},
+        {
+            "provider": "azure",
+            "model": "g",
+            "latency_ms": 500,
+            "input_tokens": 4,
+            "output_tokens": 2,
+            "cost_usd": 0.001,
+        },
+    ]
+    stats = pl.provider_stats([case])
+    assert stats["nim"]["calls"] == 2
+    assert stats["nim"]["failures"] == 1
+    assert stats["nim"]["tokens_in"] == 10
+    assert stats["nim"]["cost_usd"] is None
+    assert stats["azure"]["cost_usd"] == pytest.approx(0.001)
 
 
 # --- gate, sampling and saving -----------------------------------------------------------------
@@ -153,7 +255,7 @@ def test_poisoned_windows_hide_attacks_in_the_systems_own_format(builder: Scenar
 def test_stage_durations_sum_repeated_nodes() -> None:
     t0 = datetime(2026, 1, 1, tzinfo=UTC)
 
-    def event(seq: int, kind: str, node: str, ms: int) -> RunEvent:
+    def event(seq: int, kind: EventKind, node: str, ms: int) -> RunEvent:
         return RunEvent(
             seq=seq, run_id="r", kind=kind, node=node, ts=t0 + timedelta(milliseconds=ms)
         )
@@ -179,6 +281,7 @@ def _severity_case(truth: str, aria: str, *, review: bool = False) -> sv.Severit
         failure_mode="block_serve_exceptions",
         truth=truth,
         label_source="policy",
+        keyword=aria,
         rules=aria,
         model=aria,
         model_floored=aria,
@@ -229,12 +332,14 @@ def test_report_states_provenance_results_and_limitations() -> None:
         _pipeline_case("block_serve_exceptions", supported=True),
         _pipeline_case("none", supported=False),
     ]
-    results = {
+    results: dict[str, Any] = {
         "created_at": "2026-10-29T00:00:00+00:00",
         "git_sha": "abc1234",
         "data": {"test_seeds": [41, 42], "fixtures": False},
         "severity": sv.summarize(cases, alpha=0.1, majority="SEV3"),
         "pipeline": pl.summarize(runs, budget_tokens=60_000),
+        "parsing": ps.summarize(FIXTURES),
+        "edge": ed.evaluate(ed.generate(n_attacks=22, n_benign=10)),
         "robustness": pl.summarize_robustness(
             [
                 {
@@ -253,6 +358,11 @@ def test_report_states_provenance_results_and_limitations() -> None:
     assert "## End to end (offline: no LLM steps)" in text
     assert "## Prompt-injection robustness" in text
     assert "## Limitations" in text
+    assert "## Log parsing" in text
+    assert "## Edge cases and prompt injection" in text
+    assert "Keyword categories only" in text
+    assert "Risk–coverage" in text
+    assert "nDCG@3" in text
     assert "False alarms: 0.0% of 1 quiet windows" in text
     assert "test fixtures" not in text
     flagged = report.render({**results, "data": {**results["data"], "fixtures": True}})

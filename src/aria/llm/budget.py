@@ -60,6 +60,7 @@ class BudgetGuard:
                 "output_tokens": usage.output_tokens,
                 "latency_ms": usage.latency_ms,
                 "estimated": usage.estimated,
+                "cost_usd": usage.cost_usd,
             }
         )
         self.usage.llm_calls += 1

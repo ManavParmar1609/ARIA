@@ -8,6 +8,7 @@ template statistics, window features and evidence are computed over all lines.
 
 from __future__ import annotations
 
+import re
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
@@ -37,6 +38,16 @@ MAX_LINE_EVIDENCE = 15
 MAX_INJECTION_EVIDENCE = 5
 QUARANTINE_FLAG = "injection_suspect"
 QUARANTINE_TEMPLATE = "<quarantined: possible prompt injection>"
+_SURROGATES = re.compile("[\ud800-\udfff]")
+_ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
+
+
+def sanitize(line: str) -> str:
+    """Make a line safe to hash, store and show: lone surrogates (valid in JSON, not in UTF-8)
+    become U+FFFD, and NUL bytes and terminal colour codes are dropped."""
+    if "\x1b" in line:
+        line = _ANSI.sub("", line)
+    return _SURROGATES.sub("\ufffd", line).replace("\x00", "")
 
 
 @dataclass(slots=True)
@@ -93,10 +104,10 @@ def parse_shard(
     truncated = 0
     for i, raw in enumerate(lines):
         idx = offset + i
-        line_text = raw
+        line_text = sanitize(raw)
+        flags: list[str] = [] if line_text == raw else ["sanitized"]
         if len(line_text) > guard.max_line_chars:
             line_text, truncated = line_text[: guard.max_line_chars], truncated + 1
-        flags: list[str] = []
         if guard.detect_injection and (finding := scan_line(line_text, idx)) is not None:
             injections.append(finding)
             flags.append(QUARANTINE_FLAG)

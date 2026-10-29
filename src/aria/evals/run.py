@@ -22,12 +22,15 @@ import yaml
 
 from aria.config import get_app_config
 from aria.data.scenarios import LinePools, Scenario, ScenarioBuilder
+from aria.evals import edge as ed
+from aria.evals import parsing as ps
 from aria.evals import pipeline as pl
 from aria.evals import severity as sv
+from aria.retrieval.seed import MEMORY_SEEDS
 from aria.severity.engine import SeverityEngine
 from aria.severity.training import SplitSeeds
 
-SUITES = ("smoke", "severity", "pipeline", "robustness", "all")
+SUITES = ("smoke", "severity", "pipeline", "robustness", "parsing", "edge", "all")
 THRESHOLDS = Path("config/eval_thresholds.yaml")
 FIXTURES_DIR = Path("tests/fixtures/loghub")  # tiny samples for tests, not for measurement
 
@@ -107,10 +110,14 @@ async def run(
             "synthetic": True,
             "description": "semi-synthetic scenarios composed from real Loghub sample lines",
             "test_seeds": list(size.severity_seeds),
-            "memory_seeds": [51, 52],
+            "memory_seeds": list(MEMORY_SEEDS),
             "fixtures": is_fixtures(loghub_dir),
         },
     }
+    if suite in ("smoke", "parsing", "all"):
+        results["parsing"] = ps.summarize(loghub_dir)
+    if suite in ("smoke", "edge", "all"):
+        results["edge"] = ed.evaluate(ed.generate())
     test = sv.held_out(
         builder,
         seeds=size.severity_seeds,
@@ -154,8 +161,11 @@ async def run(
                         for scenario in picked
                     ]
                     results["pipeline"] = pl.summarize(
-                        runs, budget_tokens=config.budgets.max_tokens
+                        runs,
+                        budget_tokens=config.budgets.max_tokens,
+                        relevant_per_mode=len(MEMORY_SEEDS) * size.memory_per_mode,
                     )
+                    results["pipeline"]["providers"] = pl.provider_stats(runs)
                     results["pipeline_cases"] = [asdict(r) for r in runs]
                 if suite in ("smoke", "robustness", "all"):
                     attackable = [s for s in test if s.failure_mode != "none"]
