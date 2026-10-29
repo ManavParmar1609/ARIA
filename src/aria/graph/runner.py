@@ -148,6 +148,9 @@ def run_fields(values: Json) -> Json:
     report = values.get("report") or {}
     if report:
         fields["report_id"] = report.get("report_id")
+        if report.get("title") and not (values.get("request") or {}).get("title"):
+            # A run started without a title takes its report's (and follows a reviewer's edit).
+            fields["title"] = str(report["title"])[:300]
     meta = values.get("report_meta") or {}
     if meta.get("provider"):
         fields["providers"] = [f"{meta['provider']}/{meta.get('model')}"]

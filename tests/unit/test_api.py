@@ -240,6 +240,20 @@ async def test_run_lifecycle_over_http(api: Api) -> None:
     assert "aria_time_to_review_seconds_count" in metrics
 
 
+async def test_an_untitled_run_takes_its_report_title(api: Api) -> None:
+    created = await api.client.post("/api/v1/runs", json={"system": "bgl", "logs": logs(api)})
+    run_id = created.json()["run_id"]
+    detail = await wait_for(api, run_id, "awaiting_review")
+    report = (await api.client.get(f"/api/v1/runs/{run_id}/report")).json()["report"]
+    assert detail["title"] == report["title"]
+    edited = await api.client.post(
+        f"/api/v1/runs/{run_id}/review",
+        json={"decision": "edit", "edits": {"title": "Kernel panics on rack R02"}},
+    )
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["title"] == "Kernel panics on rack R02"
+
+
 async def test_review_errors_are_reported_without_losing_the_pause(api: Api) -> None:
     run_id = (await start(api))["id"]
     unknown = await api.client.post(
