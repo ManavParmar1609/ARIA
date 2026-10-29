@@ -61,6 +61,19 @@ test.describe("landing page", () => {
     await expectNoSidewaysScroll(page, "landing");
   });
 
+  test("proves itself on real logs and links to the replay", async ({ page }) => {
+    await page.goto("/#real");
+    const real = page.locator("section#real");
+    await expect(
+      real.getByRole("heading", { name: "Tested on a real cluster, against its experts" }),
+    ).toBeVisible();
+    await expect(real.getByText("Flags that were real failures")).toBeVisible();
+    await expect(real.getByRole("figure")).toContainText("ARIA, following each block's steps");
+    await real.getByRole("link", { name: /Replay it yourself/ }).click();
+    await expect(page).toHaveURL(/\/console\/guide$/);
+    await expect(page.getByRole("heading", { name: "Replay a real incident" })).toBeVisible();
+  });
+
   test("reaches every section from the menu on a phone", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.setViewportSize({ width: 375, height: 800 });

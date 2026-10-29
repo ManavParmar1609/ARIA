@@ -32,6 +32,8 @@ docs
 research_notes
 tests
 !tests/fixtures/loghub
+# The real incident the console replays (a small, licence-noted cut of a real log)
+!tests/fixtures/real
 models/embed_local.npz
 
 # Front ends build in their own stages

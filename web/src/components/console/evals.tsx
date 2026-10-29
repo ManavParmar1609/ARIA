@@ -9,7 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SEVERITIES } from "@/lib/api/types";
-import { EVAL_DOC_URL, type Evaluation } from "@/lib/site-data";
+import { EVAL_DOC_URL, type Evaluation, type RealLogs } from "@/lib/site-data";
 import { systemName } from "@/lib/systems";
 import { cn } from "@/lib/utils";
 
@@ -142,7 +142,109 @@ function Confusion({ matrix }: { matrix: number[][] }) {
   );
 }
 
-export function Evals({ data }: { data: Evaluation }) {
+function RealSection({ real }: { real: RealLogs }) {
+  const methods = [
+    ["ARIA, following each block's steps", real.lifecycle],
+    ["ARIA's severity engine, one block at a time", real.engine],
+    ["Keyword rule, one block at a time", real.keyword],
+  ] as const;
+  return (
+    <Section
+      id="ev-real"
+      title="Real logs, expert labels"
+      intro={
+        <>
+          {real.lines.toLocaleString("en")} lines from a real Hadoop cluster, replayed in{" "}
+          {real.windows} overlapping {real.windowMin}-minute windows, against the label Hadoop
+          experts gave each storage block. ARIA judged {real.judged.toLocaleString("en")} blocks,{" "}
+          {real.judgedFailed} of them failed. It never sees a label.
+          {real.fixture
+            ? " These numbers come from the small committed cut, not the full sample."
+            : ""}
+        </>
+      }
+    >
+      <Facts
+        items={[
+          ["Precision", pct(real.lifecycle.precision)],
+          ["Recall", pct(real.lifecycle.recall)],
+          ["F1", real.lifecycle.f1.toFixed(3)],
+          [
+            "False alarms",
+            `${real.lifecycle.falseAlarms} of ${real.lifecycle.healthy.toLocaleString("en")}`,
+          ],
+          ["Visible failures caught", `${real.visible.caught} of ${real.visible.anomalous}`],
+          ["Look healthy in the sample", String(real.visible.lookHealthy)],
+        ]}
+      />
+      <Table aria-label="Finding failed blocks: ARIA against simpler methods">
+        <TableHeader>
+          <TableRow>
+            <TableHead>Method, per block</TableHead>
+            <TableHead className="text-right">Precision</TableHead>
+            <TableHead className="text-right">Recall</TableHead>
+            <TableHead className="text-right">F1</TableHead>
+            <TableHead className="text-right">False alarms</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {methods.map(([name, m]) => (
+            <TableRow key={name}>
+              <TableHead scope="row">{name}</TableHead>
+              <TableCell className="tabular text-right">{pct(m.precision)}</TableCell>
+              <TableCell className="tabular text-right">{pct(m.recall)}</TableCell>
+              <TableCell className="tabular text-right">{m.f1.toFixed(3)}</TableCell>
+              <TableCell className="tabular text-right">
+                {pct(m.falseAlarmRate)} of healthy
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      <p className="max-w-3xl text-sm text-muted-foreground">
+        The {real.visible.lookHealthy} failures ARIA cannot see take exactly the steps a healthy
+        block takes within this stretch of log: their trouble shows later in the cluster&rsquo;s
+        full log. How the result moves with the two settings ARIA uses (it uses {real.minSupport}{" "}
+        and {real.settleQuantile}):
+      </p>
+      <Table aria-label="How the real-log result depends on ARIA's two settings">
+        <TableHeader>
+          <TableRow>
+            <TableHead>Pair support</TableHead>
+            <TableHead>Settle quantile</TableHead>
+            <TableHead className="text-right">Judged</TableHead>
+            <TableHead className="text-right">Precision</TableHead>
+            <TableHead className="text-right">Recall</TableHead>
+            <TableHead className="text-right">False alarms</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {real.sensitivity.map((row) => (
+            <TableRow
+              key={`${row.min_support}-${row.settle_quantile}`}
+              className={cn(
+                row.min_support === real.minSupport &&
+                  row.settle_quantile === real.settleQuantile &&
+                  "bg-highlight/40",
+              )}
+            >
+              <TableCell className="tabular">{row.min_support}</TableCell>
+              <TableCell className="tabular">{row.settle_quantile}</TableCell>
+              <TableCell className="tabular text-right">
+                {row.judged.toLocaleString("en")}
+              </TableCell>
+              <TableCell className="tabular text-right">{pct(row.precision)}</TableCell>
+              <TableCell className="tabular text-right">{pct(row.recall)}</TableCell>
+              <TableCell className="tabular text-right">{row.fp}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Section>
+  );
+}
+
+export function Evals({ data, real }: { data: Evaluation; real?: RealLogs }) {
   const s = data.severity;
   const p = data.pipeline;
   const r = data.robustness;
@@ -167,6 +269,8 @@ export function Evals({ data }: { data: Evaluation }) {
           </>
         }
       />
+
+      {real ? <RealSection real={real} /> : null}
 
       <Section
         id="ev-severity"

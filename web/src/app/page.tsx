@@ -5,6 +5,7 @@ import { Suspense, type ReactNode } from "react";
 
 import { Term } from "@/components/aria/term";
 import { HeroScene } from "@/components/illustrations/scenes";
+import { RealProof } from "@/components/site/real-proof";
 import { Results } from "@/components/site/results";
 import { RunGraph, type GraphStep } from "@/components/site/run-graph";
 import { SiteFooter } from "@/components/site/site-footer";
@@ -13,7 +14,7 @@ import { Limitations, Standards } from "@/components/site/standards";
 import { Story } from "@/components/site/story";
 import { TriageReplay } from "@/components/site/triage-replay";
 import { ArrowCircle, Button } from "@/components/ui/button";
-import { evaluation, REPO_URL, replay, runFacts, type RunFacts } from "@/lib/site-data";
+import { evaluation, realLogs, REPO_URL, replay, runFacts, type RunFacts } from "@/lib/site-data";
 import { cn } from "@/lib/utils";
 
 const ms = (value: number | undefined) =>
@@ -340,6 +341,7 @@ export default function Landing() {
   const data = replay();
   const facts = runFacts();
   const evals = evaluation();
+  const real = realLogs();
   return (
     <>
       <a
@@ -375,6 +377,23 @@ export default function Landing() {
             <Suspense>
               <TriageReplay data={data} />
             </Suspense>
+          </Section>
+
+          <Section
+            id="real"
+            label="Real logs"
+            dot="sky"
+            title="Tested on a real cluster, against its experts"
+            intro={
+              <>
+                {real.lines.toLocaleString("en")} lines from a Hadoop cluster of more than 200
+                nodes, replayed as it wrote them, and the label Hadoop experts gave each of its{" "}
+                {real.blocks.toLocaleString("en")} storage blocks. ARIA never sees a label. The
+                failures that matter most here log no error at all.
+              </>
+            }
+          >
+            <RealProof data={real} />
           </Section>
 
           <Section

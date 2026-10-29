@@ -317,3 +317,55 @@ export function evaluation() {
 }
 
 export type Evaluation = ReturnType<typeof evaluation>;
+
+/** The real-log evaluation (HDFS, expert labels), shaped for the landing and evaluation pages. */
+export function realLogs() {
+  const hdfs = evals.real.hdfs;
+  const life = hdfs.lifecycle;
+  const engine = hdfs.baselines.engine_per_block;
+  const keyword = hdfs.baselines.keyword_per_block;
+  const detection = (d: typeof life) => ({
+    precision: d.precision,
+    precisionCi: d.precision_ci95,
+    recall: d.recall,
+    recallCi: d.recall_ci95,
+    f1: d.f1,
+    falseAlarms: d.fp,
+    healthy: d.fp + d.tn,
+    falseAlarmRate: d.false_alarm_rate,
+    flagged: d.tp + d.fp,
+  });
+  return {
+    fixture: hdfs.fixture,
+    source: hdfs.source,
+    citation: hdfs.citation,
+    lines: hdfs.lines,
+    minutes: hdfs.minutes,
+    blocks: hdfs.blocks,
+    failedBlocks: hdfs.anomalous_blocks,
+    peakLinesPerMin: hdfs.peak_lines_per_min,
+    judged: hdfs.judged,
+    judgedFailed: hdfs.judged_anomalous,
+    windows: hdfs.replay.windows,
+    windowMin: hdfs.replay.window_min,
+    stepMin: hdfs.replay.step_min,
+    minSupport: hdfs.replay.min_support,
+    settleQuantile: hdfs.replay.settle_quantile,
+    lifecycle: detection(life),
+    engine: detection(engine),
+    keyword: detection(keyword),
+    visible: {
+      anomalous: hdfs.visible.anomalous,
+      caught: hdfs.visible.caught,
+      recall: hdfs.visible.recall,
+      lookHealthy: hdfs.visible.look_healthy,
+    },
+    topPattern: hdfs.top_patterns[0] ?? null,
+    patterns: hdfs.top_patterns,
+    falseAlarmExamples: hdfs.false_alarms,
+    sensitivity: hdfs.sensitivity,
+    caughtBy: hdfs.caught_by as Record<string, number>,
+  };
+}
+
+export type RealLogs = ReturnType<typeof realLogs>;

@@ -7,6 +7,7 @@ import { REPO_URL } from "@/lib/site-data";
 // The same names label the sections themselves, so a link and its destination always match.
 export const SECTIONS = [
   { href: "#run", label: "Example run" },
+  { href: "#real", label: "Real logs" },
   { href: "#how", label: "How it works" },
   { href: "#results", label: "Results" },
   { href: "#standards", label: "Standards" },
