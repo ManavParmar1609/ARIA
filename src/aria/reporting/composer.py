@@ -23,11 +23,11 @@ from aria.parsing.signals import signal_templates
 from aria.retrieval.runbooks import Runbook
 
 DECIDED_BY_TEXT = {
-    "rules": "decided by rules",
-    "model": "decided by the calibrated model",
-    "llm": "chosen by the LLM within the model's prediction set",
-    "fallback": "most severe option in the prediction set, pending review",
-    "human": "set by a reviewer",
+    "rules": "Decided by rules",
+    "model": "Decided by the calibrated model",
+    "llm": "Chosen by the LLM from the model's prediction set",
+    "fallback": "The most severe class in the prediction set, pending review",
+    "human": "Set by a reviewer",
 }
 SYSTEM_NAMES = {
     "bgl": "BlueGene/L",
@@ -158,7 +158,7 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
     summary: list[ClaimOut | None] = []
     p = sev.probabilities.get(sev.severity, 0.0)
     how = DECIDED_BY_TEXT[sev.decided_by]
-    severity_text = f"{sev.severity}: {SEVERITY_DESCRIPTIONS[sev.severity]} Severity {how}"
+    severity_text = f"{sev.severity}: {SEVERITY_DESCRIPTIONS[sev.severity]} {how}"
     if sev.decided_by in ("model", "llm", "fallback") and model_ev is not None:
         severity_text += f" (model probability {p:.2f})"
     summary.append(
@@ -286,11 +286,17 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
             for step in steps
         )
     if sev.needs_review and model_ev is not None:
-        options = " or ".join(sev.prediction_set)
+        if len(sev.prediction_set) > 1:
+            doubt = f"the model could not rule out {' or '.join(sev.prediction_set)}"
+        else:
+            p_set = sev.probabilities.get(sev.severity, 0.0)
+            doubt = (
+                f"the model's confidence in {sev.severity} ({p_set:.0%}) is too low to decide alone"
+            )
         actions.insert(
             0,
             ActionOut(
-                text=f"Confirm the severity: ARIA could not choose confidently between {options}.",
+                text=f"Confirm the severity: {doubt}.",
                 risk="low",
                 evidence_ids=[model_ev.id],
             ),

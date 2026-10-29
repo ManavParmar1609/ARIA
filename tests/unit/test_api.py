@@ -145,6 +145,22 @@ async def test_health_is_public_and_everything_else_needs_a_key(api: Api) -> Non
     assert page.headers["x-content-type-options"] == "nosniff"
 
 
+async def test_me_and_settings_show_the_caller_and_limits_without_secrets(api: Api) -> None:
+    assert (await api.client.get("/api/v1/me")).json() == {
+        "name": "ana",
+        "authenticated": True,
+        "auth_required": True,
+    }
+    assert (await api.client.get("/api/v1/me", headers=RAJ)).json()["name"] == "raj"
+    assert (await api.client.get("/api/v1/me", headers={"Authorization": ""})).status_code == 401
+    view = (await api.client.get("/api/v1/settings")).json()
+    assert view["require_approval"] is True
+    assert view["budgets"]["max_tokens"] > 0
+    assert view["guardrails"]["detect_injection"] is True
+    assert view["routing"]["reporter"][0] == "nim-local"
+    assert "k-ana" not in json.dumps(view)
+
+
 async def test_rate_limit_answers_429_with_retry_after(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ARIA_API_KEYS", "ana:k-ana")
     monkeypatch.setenv("ARIA_RATE_LIMIT_PER_MINUTE", "3")

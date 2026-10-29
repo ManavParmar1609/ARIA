@@ -186,6 +186,31 @@ class ProviderOut(BaseModel):
     roles: list[str]
 
 
+class Me(BaseModel):
+    """Who is calling. With no API keys configured the API is open and nobody signs in."""
+
+    name: str
+    authenticated: bool
+    auth_required: bool
+
+
+class SettingsOut(BaseModel):
+    """The configuration a reviewer may see: limits, guardrails and routing, never secrets."""
+
+    environment: str
+    require_approval: bool
+    worker_mode: str
+    rate_limit_per_minute: int
+    budgets: dict[str, Any]
+    guardrails: dict[str, Any]
+    severity: dict[str, Any]
+    retrieval: dict[str, Any]
+    investigation: dict[str, Any]
+    routing: dict[str, list[str]]
+    embeddings: list[str]
+    safety: list[str]
+
+
 class Health(BaseModel):
     status: Literal["ok", "degraded"]
     version: str

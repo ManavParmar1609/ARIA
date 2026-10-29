@@ -10,12 +10,14 @@ from sqlalchemy import text
 
 from aria import __version__
 from aria.api.metrics import CONTENT_TYPE
-from aria.api.schemas import Health, ProviderOut
-from aria.api.state import AppState, app_state
+from aria.api.schemas import Health, Me, ProviderOut, SettingsOut
+from aria.api.security import Principal
+from aria.api.state import AppState, app_state, current_principal
 from aria.db.engine import session_scope
 
 router = APIRouter(tags=["system"])
 State = Annotated[AppState, Depends(app_state)]
+Caller = Annotated[Principal, Depends(current_principal)]
 
 
 @router.get("/healthz")
@@ -65,3 +67,31 @@ async def providers(state: State) -> list[ProviderOut]:
     return [
         ProviderOut.model_validate(s, from_attributes=True) for s in state.services.router.status()
     ]
+
+
+@router.get("/api/v1/me", response_model=Me)
+async def me(state: State, caller: Caller) -> Me:
+    """The caller's key name, and whether this API needs a key at all."""
+    return Me(
+        name=caller.name, authenticated=caller.authenticated, auth_required=not state.auth.open
+    )
+
+
+@router.get("/api/v1/settings", response_model=SettingsOut)
+async def settings_view(state: State) -> SettingsOut:
+    """Budgets, guardrails, severity, retrieval and routing settings in force. No secrets."""
+    settings, config = state.services.settings, state.services.config
+    return SettingsOut(
+        environment=str(settings.env),
+        require_approval=settings.require_approval,
+        worker_mode=settings.worker_mode,
+        rate_limit_per_minute=settings.rate_limit_per_minute,
+        budgets=config.budgets.model_dump(mode="json"),
+        guardrails=config.guardrails.model_dump(mode="json"),
+        severity={"alpha": config.severity.alpha},
+        retrieval=config.retrieval.model_dump(mode="json"),
+        investigation=config.investigation.model_dump(mode="json"),
+        routing=config.llm.routing,
+        embeddings=config.llm.embeddings,
+        safety=config.llm.safety,
+    )

@@ -39,9 +39,10 @@ _SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         ),
     ),
 )
-# Card shapes only: one contiguous run, or 4-digit groups split by one space or dash. Combined with
-# an issuer prefix (3-6) and the Luhn check this avoids eating timestamps and counters in logs.
-_CARD = re.compile(r"(?<![\d.:-])(?:\d{4}(?:[ -]\d{4}){2}[ -]\d{1,7}|\d{13,19})(?![\d.:-])")
+# Card shapes only: one contiguous run, or 4-digit groups split by one space or dash, standing
+# alone (not glued to letters, "_" or "-", as in HDFS's blk_5165786360127153975). Combined with an
+# issuer prefix (3-6) and the Luhn check this avoids eating IDs, timestamps and counters in logs.
+_CARD = re.compile(r"(?<![\w.:-])(?:\d{4}(?:[ -]\d{4}){2}[ -]\d{1,7}|\d{13,19})(?![\w.:-])")
 _EMAIL = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 _IPV4 = re.compile(
     r"(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?![\d.])"

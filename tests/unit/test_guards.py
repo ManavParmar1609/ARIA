@@ -71,6 +71,8 @@ def test_ip_pseudonymisation_can_be_disabled() -> None:
         "2026-03-02-01.00.02.763394 R61-M0-NB-C:J05-U01 RAS KERNEL INFO",  # BGL timestamps
         "1131566461123 epoch-millis counter 1772413202 1772413203",
         "blk_-1608999687919862906 served to /10.251.43.21",
+        "Receiving block blk_5165786360127153975 src: /10.250.19.102",  # Luhn-valid block id
+        "user7_4111111111111111x and id-5739119717322549945",
         "version 6.1.7601.23505 build 1234567890123",
     ],
 )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -183,6 +184,36 @@ async def test_the_draft_is_grounded_by_construction(builder: ScenarioBuilder) -
     ids = {e.id for e in report.evidence}
     assert all(set(c.evidence_ids) <= ids for _, c in report.claims())
     assert outcome.critic == "offline"
+
+
+async def test_the_severity_check_says_why_a_person_must_confirm(builder: ScenarioBuilder) -> None:
+    ctx = await _context(builder)
+    sev = ctx.severity
+    one = replace(
+        ctx,
+        severity=sev.model_copy(
+            update={
+                "needs_review": True,
+                "decided_by": "fallback",
+                "prediction_set": [sev.severity],
+            }
+        ),
+    )
+    first = compose_draft(one).actions[0].text
+    assert first.startswith(f"Confirm the severity: the model's confidence in {sev.severity} (")
+    assert first.endswith("is too low to decide alone.")
+    two = replace(
+        ctx,
+        severity=sev.model_copy(
+            update={"needs_review": True, "prediction_set": [Severity.SEV2, Severity.SEV3]}
+        ),
+    )
+    assert compose_draft(two).actions[0].text == (
+        "Confirm the severity: the model could not rule out SEV2 or SEV3."
+    )
+    summary = compose_draft(one).summary[0].text
+    assert "The most severe class in the prediction set, pending review" in summary
+    assert "Severity " not in summary
 
 
 async def test_validator_catches_every_kind_of_defect(builder: ScenarioBuilder) -> None:
