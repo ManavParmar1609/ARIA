@@ -1,13 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
 import { useWideMotion } from "@/lib/motion";
 import { cx } from "@/lib/cx";
 
 export interface GraphStep {
   title: string;
-  body: string;
+  body: ReactNode;
   fact: string;
   nodes: string[];
 }

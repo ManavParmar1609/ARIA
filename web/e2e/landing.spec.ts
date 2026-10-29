@@ -14,6 +14,17 @@ test.describe("landing page", () => {
     await expect(page.getByRole("heading", { name: "Measured, caveats included" })).toBeVisible();
   });
 
+  test("opens a plain-English definition from a dotted term", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "safety floors" }).click();
+    const card = page.locator("#term-safety-floor");
+    await expect(card).toBeVisible();
+    await expect(card).toContainText("lowest severity a dangerous pattern can get");
+    await expectAccessible(page, "landing, definition open");
+    await page.keyboard.press("Escape");
+    await expect(card).toBeHidden();
+  });
+
   test("meets WCAG 2.2 AA in both themes", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/");

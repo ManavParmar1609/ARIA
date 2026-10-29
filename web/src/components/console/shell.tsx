@@ -2,6 +2,7 @@
 
 import {
   BookOpenIcon,
+  CompassIcon,
   FlaskConicalIcon,
   GaugeIcon,
   InboxIcon,
@@ -51,6 +52,7 @@ const NAV: { label: string; items: NavItem[] }[] = [
       { href: "/console/memory", label: "Incident memory", icon: LibraryIcon },
       { href: "/console/runbooks", label: "Runbooks", icon: BookOpenIcon },
       { href: "/console/evals", label: "Evaluation", icon: FlaskConicalIcon },
+      { href: "/console/guide", label: "How to use ARIA", icon: CompassIcon },
     ],
   },
   {

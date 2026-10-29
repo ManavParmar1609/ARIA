@@ -121,6 +121,21 @@ test.describe("console", () => {
     await expect(page.getByRole("radio", { name: "Dark" })).toBeChecked();
     await expect(page.locator("html")).toHaveClass(/\bdark\b/);
   });
+
+  test("guides a first visit and triages a sample in one click", async ({ page }) => {
+    await page.goto("/console");
+    await page.getByRole("link", { name: "How to use ARIA" }).first().click();
+    await expect(page.getByRole("heading", { level: 1, name: "How to use ARIA" })).toBeVisible();
+    await expect(page.getByRole("term").filter({ hasText: "Prediction set" })).toBeVisible();
+    await expectAccessible(page, "guide");
+
+    await page.getByRole("button", { name: "Triage it: SSH brute-force attempts" }).click();
+    await expect(page).toHaveURL(/\/console\/runs\/run-/);
+    await expect(page.getByRole("heading", { name: "Severity", exact: true })).toBeVisible();
+    await page.getByRole("link", { name: "How to read this" }).click();
+    await expect(page).toHaveURL(/\/console\/guide#read-a-run$/);
+    await expect(page.getByRole("heading", { name: "How to read a run" })).toBeVisible();
+  });
 });
 
 test.describe("console at 320 px", () => {
@@ -133,6 +148,7 @@ test.describe("console at 320 px", () => {
       "/console/memory",
       "/console/runbooks",
       "/console/settings",
+      "/console/guide",
       "/console/ask",
     ]) {
       await page.goto(path);

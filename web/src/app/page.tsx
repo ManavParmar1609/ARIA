@@ -2,6 +2,7 @@ import { ArrowDownIcon } from "lucide-react";
 import Link from "next/link";
 
 import { Orb } from "@/components/aria/orb";
+import { Term } from "@/components/aria/term";
 import { Results } from "@/components/site/results";
 import { RunGraph, type GraphStep } from "@/components/site/run-graph";
 import { SiteFooter } from "@/components/site/site-footer";
@@ -25,25 +26,53 @@ function steps(f: RunFacts): GraphStep[] {
     },
     {
       title: "Parse and guard the logs",
-      body: "Workers group lines into templates with Drain, pseudonymise IP and e-mail addresses with a keyed hash, and quarantine lines that read like instructions to a model. Large inputs fan out across up to 32 workers.",
+      body: (
+        <>
+          Workers group lines into <Term name="log-template">templates</Term> with Drain,{" "}
+          <Term name="pseudonymise">pseudonymise</Term> IP and e-mail addresses with a keyed hash,
+          and <Term name="quarantine">quarantine</Term> lines that read like instructions to a
+          model. Large inputs fan out across up to 32 workers.
+        </>
+      ),
       fact: `${f.lines} lines became ${f.templates} templates; ${f.pseudonyms} addresses pseudonymised; ${f.quarantined} line quarantined.`,
       nodes: ["parse1", "parse2", "parse3", "parse4", "merge"],
     },
     {
       title: "Rate severity and recall the past, in parallel",
-      body: "Rules and a calibrated model score the window. Conformal prediction turns the model's probabilities into a set that holds the true severity 90% of the time, and safety floors stop a dangerous pattern being rated too low. Meanwhile hybrid search finds similar past incidents.",
+      body: (
+        <>
+          Rules and a <Term name="calibrated">calibrated</Term> model score the window. Conformal
+          prediction turns the model&apos;s probabilities into a{" "}
+          <Term name="prediction-set">set</Term> that holds the true severity 90% of the time, and{" "}
+          <Term name="safety-floor">safety floors</Term> stop a dangerous pattern being rated too
+          low. Meanwhile hybrid search finds similar past incidents.
+        </>
+      ),
       fact: `${f.severity} at ${Math.round(f.probability * 100)}% probability; ${f.similar} similar past incidents found.`,
       nodes: ["severity", "recall"],
     },
     {
       title: "Investigate with read-only tools",
-      body: "An agent proposes hypotheses and tests them through ARIA's MCP server: example lines for a template, a component's timeline, which nodes are affected, incident search, runbooks. Every result becomes evidence a claim can cite.",
+      body: (
+        <>
+          An agent proposes hypotheses and tests them through ARIA&apos;s{" "}
+          <Term name="mcp">MCP server</Term>: example lines for a template, a component&apos;s
+          timeline, which nodes are affected, incident search, runbooks. Every result becomes{" "}
+          <Term name="evidence">evidence</Term> a claim can cite.
+        </>
+      ),
       fact: `${f.toolCalls} tool calls; the leading hypothesis is supported at ${Math.round((f.leadingConfidence ?? 0) * 100)}%.`,
       nodes: ["investigate"],
     },
     {
       title: "Check there is enough to go on",
-      body: "If no hypothesis holds up or the matches look weak, the graph widens the search and investigates again, at most twice. A quiet window with nothing new stops here.",
+      body: (
+        <>
+          If no hypothesis holds up or the matches look weak, the graph widens the search and
+          investigates again (a <Term name="replan">replan</Term>), at most twice. A quiet window
+          with nothing new stops here.
+        </>
+      ),
       fact:
         f.replans === 0
           ? "Enough evidence on the first pass; no replan."
@@ -58,7 +87,13 @@ function steps(f: RunFacts): GraphStep[] {
     },
     {
       title: "Wait for a person",
-      body: "The graph pauses and keeps its checkpoint, through restarts if need be. A reviewer approves, edits or rejects, and only the messages they approve go out.",
+      body: (
+        <>
+          The graph pauses and keeps its <Term name="checkpoint">checkpoint</Term>, through restarts
+          if need be. A reviewer approves, edits or rejects, and only the messages they approve go
+          out.
+        </>
+      ),
       fact: `Ready for review ${(f.timeToReviewMs / 1000).toFixed(1)} s after the logs arrived.`,
       nodes: ["review"],
     },
@@ -228,7 +263,14 @@ export default function Landing() {
           id="how"
           label="How it works"
           title="What happens in a run"
-          intro="A run is a LangGraph state machine with a checkpoint after every step, so it can stop for a person, carry on after a restart, or be rewound and forked. The numbers come from the recorded run above."
+          intro={
+            <>
+              A run is a LangGraph state machine with a checkpoint after every step, so it can stop
+              for a person, carry on after a restart, or be rewound and{" "}
+              <Term name="fork">forked</Term>. The numbers come from the recorded run above. Words
+              with a dotted underline open a short definition.
+            </>
+          }
         >
           <RunGraph steps={steps(facts)} />
         </Section>

@@ -1,6 +1,6 @@
 "use client";
 
-import { InboxIcon, PlusIcon } from "lucide-react";
+import { ArrowRightIcon, InboxIcon, PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
 
@@ -9,6 +9,7 @@ import { RunRow } from "@/components/console/run-row";
 import { EmptyState, ErrorState, LoadingRows, PageHeader } from "@/components/console/states";
 import { RunStatus } from "@/components/console/status";
 import { Button } from "@/components/ui/button";
+import samples from "@/data/samples.json";
 import { useProviders, useRuns } from "@/lib/api/hooks";
 import { isSeverity, SEVERITIES, type RunSummary, type Severity } from "@/lib/api/types";
 import { duration, median, money, percent } from "@/lib/format";
@@ -83,6 +84,33 @@ function SeverityMix({ mix, rated }: { mix: Record<Severity, number>; rated: num
   );
 }
 
+/** A way in for a first visit, shown until a handful of runs exist. */
+function StartHere() {
+  return (
+    <section
+      aria-labelledby="start-title"
+      className="grid gap-5 rounded-lg bg-raised p-6 sm:p-8 md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
+    >
+      <div className="grid gap-2">
+        <p className="eyebrow text-muted-foreground">New to ARIA?</p>
+        <h2 id="start-title" className="text-xl tracking-heading">
+          Triage a sample in one click
+        </h2>
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          Pick one of {samples.length} short incidents built from real logs and watch ARIA work
+          through it. The guide also explains how to read a run and the words ARIA uses.
+        </p>
+      </div>
+      <Button asChild variant="secondary" className="justify-self-start">
+        <Link href="/console/guide">
+          Open the guide
+          <ArrowRightIcon aria-hidden />
+        </Link>
+      </Button>
+    </section>
+  );
+}
+
 export function Overview() {
   const runs = useRuns("all", 200);
   const providers = useProviders();
@@ -118,6 +146,8 @@ export function Overview() {
         <ErrorState error={runs.error} onRetry={() => void runs.refetch()} />
       ) : (
         <>
+          {stats.total < 5 ? <StartHere /> : null}
+
           <section aria-labelledby="waiting-title" className="grid gap-4">
             <div className="flex items-baseline justify-between gap-4">
               <h2 id="waiting-title" className="text-xl tracking-heading">

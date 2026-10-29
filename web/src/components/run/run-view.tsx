@@ -1,6 +1,6 @@
 "use client";
 
-import { DownloadIcon, HistoryIcon, Trash2Icon } from "lucide-react";
+import { CircleHelpIcon, DownloadIcon, HistoryIcon, Trash2Icon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -219,6 +219,12 @@ export function RunView({ runId }: { runId: string }) {
             </span>
           </nav>
           <div className="flex flex-wrap gap-1.5">
+            <Button asChild size="sm" variant="ghost">
+              <Link href="/console/guide#read-a-run">
+                <CircleHelpIcon aria-hidden />
+                How to read this
+              </Link>
+            </Button>
             {detail.report_id ? (
               <>
                 <Button asChild size="sm" variant="ghost">
