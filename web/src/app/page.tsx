@@ -224,7 +224,7 @@ function Hero() {
             className="text-pop-ink hover:bg-pop-ink/8 hover:text-pop-ink"
           >
             <a href="#run">
-              Watch a real run
+              Watch a recorded run
               <ArrowDownIcon aria-hidden />
             </a>
           </Button>
