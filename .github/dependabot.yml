@@ -1,4 +1,7 @@
 version: 2
+# Only ecosystems whose manifests exist are listed: Dependabot fails a run for a directory with
+# nothing to update. The npm (web/, video/), docker (docker/) and github-actions entries are
+# added in the commits that create those directories.
 updates:
   - package-ecosystem: uv
     directory: /
@@ -7,22 +10,3 @@ updates:
     groups:
       python:
         patterns: ["*"]
-  - package-ecosystem: npm
-    directory: /web
-    schedule:
-      interval: weekly
-    groups:
-      web:
-        patterns: ["*"]
-  - package-ecosystem: npm
-    directory: /video
-    schedule:
-      interval: monthly
-  - package-ecosystem: github-actions
-    directory: /
-    schedule:
-      interval: weekly
-  - package-ecosystem: docker
-    directory: /docker
-    schedule:
-      interval: weekly
