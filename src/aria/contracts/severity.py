@@ -31,6 +31,9 @@ class SeverityAssessment(Contract):
     rule_hits: list[RuleHit] = Field(default_factory=list)
     probabilities: dict[Severity, float]
     prediction_set: list[Severity] = Field(min_length=1)
+    # True when no class cleared the conformal threshold: the set then holds only the most likely
+    # class as a stand-in, and says "the model does not know", not "the model is sure".
+    set_empty: bool = False
     alpha: float = Field(gt=0, lt=1)
     floor: Severity | None = None
     confidence: float = Field(ge=0, le=1)

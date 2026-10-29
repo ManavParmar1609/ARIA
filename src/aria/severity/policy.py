@@ -34,6 +34,7 @@ class Preliminary:
     rule_evidence: list[str] = field(default_factory=list)
     model_evidence: str | None = None
     conformal: bool = True
+    set_empty: bool = False  # no class cleared the conformal threshold (raw_set is the argmax)
 
     @property
     def prediction_set(self) -> list[Severity]:
@@ -83,13 +84,14 @@ def _base_claims(pre: Preliminary) -> list[Claim]:
     claims: list[Claim] = []
     if pre.model_evidence:
         pset = ", ".join(pre.prediction_set)
-        claims.append(
-            Claim(
-                text=f"Calibrated model: {pre.top} is most likely (p={pre.confidence:.2f}); the "
-                f"{1 - pre.alpha:.0%} prediction set is {{{pset}}}.",
-                evidence_ids=_cite([pre.model_evidence]),
-            )
+        text = (
+            f"Calibrated model: {pre.top} is most likely (p={pre.confidence:.2f}), but no severity "
+            f"is likely enough to enter the {1 - pre.alpha:.0%} prediction set on its own."
+            if pre.set_empty
+            else f"Calibrated model: {pre.top} is most likely (p={pre.confidence:.2f}); the "
+            f"{1 - pre.alpha:.0%} prediction set is {{{pset}}}."
         )
+        claims.append(Claim(text=text, evidence_ids=_cite([pre.model_evidence])))
     floors = [hit for hit in pre.rule_hits if hit.effect == "floor"]
     if floors and pre.floor is not None:
         claims.append(
@@ -128,6 +130,7 @@ def decide(
         "rule_hits": pre.rule_hits,
         "probabilities": {s: round(pre.probabilities.get(s, 0.0), 6) for s in SEVERITY_ORDER},
         "prediction_set": pset,
+        "set_empty": pre.set_empty,
         "alpha": pre.alpha,
         "floor": pre.floor,
         "model_version": pre.model_version,

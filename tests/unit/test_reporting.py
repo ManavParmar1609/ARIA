@@ -214,6 +214,13 @@ async def test_the_severity_check_says_why_a_person_must_confirm(builder: Scenar
     summary = compose_draft(one).summary[0].text
     assert "The most severe class in the prediction set, pending review" in summary
     assert "Severity " not in summary
+    unsure = replace(one, severity=one.severity.model_copy(update={"set_empty": True}))
+    assert (
+        compose_draft(unsure)
+        .actions[0]
+        .text.startswith("Confirm the severity: no severity was likely enough to decide alone (")
+    )
+    assert "Too uncertain to decide alone" in compose_draft(unsure).summary[0].text
 
 
 async def test_validator_catches_every_kind_of_defect(builder: ScenarioBuilder) -> None:

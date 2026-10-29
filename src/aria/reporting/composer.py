@@ -158,6 +158,8 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
     summary: list[ClaimOut | None] = []
     p = sev.probabilities.get(sev.severity, 0.0)
     how = DECIDED_BY_TEXT[sev.decided_by]
+    if sev.set_empty and sev.decided_by == "fallback":
+        how = "Too uncertain to decide alone: the most likely class, pending review"
     severity_text = f"{sev.severity}: {SEVERITY_DESCRIPTIONS[sev.severity]} {how}"
     if sev.decided_by in ("model", "llm", "fallback") and model_ev is not None:
         severity_text += f" (model probability {p:.2f})"
@@ -286,7 +288,13 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
             for step in steps
         )
     if sev.needs_review and model_ev is not None:
-        if len(sev.prediction_set) > 1:
+        if sev.set_empty:
+            p_top = sev.probabilities.get(sev.severity, 0.0)
+            doubt = (
+                f"no severity was likely enough to decide alone ({sev.severity} is the most "
+                f"likely, at {p_top:.0%})"
+            )
+        elif len(sev.prediction_set) > 1:
             doubt = f"the model could not rule out {' or '.join(sev.prediction_set)}"
         else:
             p_set = sev.probabilities.get(sev.severity, 0.0)

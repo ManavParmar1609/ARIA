@@ -92,6 +92,7 @@ class SeverityEngine:
         if self.model is None:
             probabilities = evaluation.probabilities
             raw_set = [s for s in SEVERITY_ORDER if probabilities[s] >= RULES_ONLY_MIN_P]
+            set_empty = not raw_set
             raw_set = raw_set or [evaluation.rule_severity]
             version, conformal, extra = f"rules-only:{self.rules.version}", False, {}
         else:
@@ -104,6 +105,8 @@ class SeverityEngine:
             raw_set = [Severity(c) for c in self.model.prediction_sets(probs[None, :])[0]]
             top = max(probabilities, key=lambda s: probabilities[s])
             version, conformal = self.model.version, self.model.conformal_q is not None
+            q = self.model.conformal_q
+            set_empty = q is not None and not any(float(p) >= 1.0 - q for p in probs)
             extra = {
                 "conformal_q": self.model.conformal_q,
                 "temperature": round(self.model.temperature, 4),
@@ -115,13 +118,19 @@ class SeverityEngine:
             f"Severity probabilities: {shown}",
             source="severity.model",
             detail=(
-                f"{1 - self.alpha:.0%} prediction set: {{{', '.join(raw_set)}}}"
+                (
+                    f"No severity is likely enough for the {1 - self.alpha:.0%} prediction set on "
+                    f"its own; it falls back to the most likely class, {raw_set[0]}."
+                    if set_empty
+                    else f"{1 - self.alpha:.0%} prediction set: {{{', '.join(raw_set)}}}"
+                )
                 if conformal
                 else "No calibrated model is loaded; probabilities are normalised rule scores."
             ),
             data={
                 "probabilities": {str(k): round(v, 6) for k, v in probabilities.items()},
                 "prediction_set": [str(s) for s in raw_set],
+                "set_empty": set_empty,
                 "alpha": self.alpha,
                 "coverage_target": round(1 - self.alpha, 4),
                 "model_version": version,
@@ -141,6 +150,7 @@ class SeverityEngine:
             rule_evidence=rule_ids,
             model_evidence=model_eid,
             conformal=conformal,
+            set_empty=set_empty,
         )
 
     async def assess(

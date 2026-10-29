@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -287,6 +288,19 @@ def test_low_confidence_singleton_needs_adjudication() -> None:
     assert (fallback.decided_by, fallback.needs_review) == ("fallback", True)
 
 
+def test_an_empty_conformal_set_is_reported_as_uncertainty() -> None:
+    flat = {Severity.SEV1: 0.05, Severity.SEV2: 0.28, Severity.SEV3: 0.35, Severity.SEV4: 0.32}
+    pre = replace(_pre(flat, [Severity.SEV3]), set_empty=True)
+    assessment = decide(pre, gate=0.85)
+    assert (assessment.severity, assessment.decided_by) == (Severity.SEV3, "fallback")
+    assert assessment.set_empty
+    assert assessment.needs_review
+    assert "no severity is likely enough to enter the 90% prediction set" in (
+        assessment.rationale[0].text
+    )
+    assert not decide(_pre(P, [Severity.SEV3]), gate=0.85).set_empty
+
+
 def test_fallback_takes_the_most_severe_class_in_the_set() -> None:
     assessment = decide(
         _pre(P, [Severity.SEV2, Severity.SEV3]), gate=0.85, llm_unavailable_reason="budget spent"
@@ -354,6 +368,19 @@ async def test_uncertain_without_llm_falls_back_conservatively(rules: RuleSet) -
     assert result.preliminary.prediction_set == [Severity.SEV1, Severity.SEV2]
     assert (result.assessment.severity, result.assessment.decided_by) == (Severity.SEV1, "fallback")
     assert result.assessment.needs_review
+    assert not result.assessment.set_empty
+
+
+async def test_a_flat_model_says_no_class_clears_the_threshold(rules: RuleSet) -> None:
+    flat = {"SEV1": 0.25, "SEV2": 0.25, "SEV3": 0.3, "SEV4": 0.2}
+    evidence = EvidenceStore()
+    engine = SeverityEngine(rules, constant_model(flat, 0.5), alpha=0.1)  # threshold p >= 0.5
+    result = await engine.assess(WINDOW, system="bgl", evidence=evidence, router=None)
+    assert result.assessment.set_empty
+    assert result.assessment.prediction_set == [Severity.SEV3]
+    model = next(e for e in evidence.all() if e.kind == EvidenceKind.MODEL)
+    assert model.data["set_empty"] is True
+    assert "falls back to the most likely class, SEV3" in model.detail
 
 
 async def test_llm_adjudicates_within_the_set(rules: RuleSet) -> None:
