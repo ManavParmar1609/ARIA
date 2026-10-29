@@ -75,17 +75,33 @@ class KeyAuth:
 
 
 class RateLimiter:
-    """A token bucket per key: ``per_minute`` requests a minute, bursting up to the same."""
+    """A token bucket per key: ``per_minute`` requests a minute, bursting up to the same.
 
-    def __init__(self, per_minute: int, *, clock: Callable[[], float] = time.monotonic) -> None:
+    Past ``max_buckets`` callers it forgets the ones idle long enough to have refilled, which
+    changes no answer, at most once per refill time, so many addresses cannot grow it unbounded.
+    """
+
+    def __init__(
+        self,
+        per_minute: int,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+        max_buckets: int = 10_000,
+    ) -> None:
         self.capacity = float(per_minute)
         self.rate = per_minute / 60.0
         self.clock = clock
+        self.max_buckets = max_buckets
         self._buckets: dict[str, tuple[float, float]] = {}
+        self._pruned_at = clock()
 
     def allow(self, key: str) -> tuple[bool, float]:
         """Whether the request may go ahead, and if not, seconds until it could."""
         now = self.clock()
+        refill_s = self.capacity / self.rate
+        if len(self._buckets) >= self.max_buckets and now - self._pruned_at >= refill_s:
+            self.prune(idle_s=refill_s)
+            self._pruned_at = now
         tokens, last = self._buckets.get(key, (self.capacity, now))
         tokens = min(self.capacity, tokens + (now - last) * self.rate)
         if tokens >= 1:
@@ -95,6 +111,7 @@ class RateLimiter:
         return False, (1 - tokens) / self.rate
 
     def prune(self, idle_s: float = 3_600) -> None:
+        """Forget callers idle for ``idle_s``; past the refill time a bucket is full anyway."""
         cutoff = self.clock() - idle_s
         for key in [k for k, (_, last) in self._buckets.items() if last < cutoff]:
             del self._buckets[key]

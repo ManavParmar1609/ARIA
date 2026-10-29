@@ -28,6 +28,10 @@ const securityHeaders = [
     key: "Permissions-Policy",
     value: "camera=(), microphone=(), geolocation=(), browsing-topics=()",
   },
+  // Browsers act on this only over HTTPS, so plain-HTTP local runs are unaffected.
+  ...(isDev
+    ? []
+    : [{ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" }]),
 ];
 
 const nextConfig: NextConfig = {

@@ -36,6 +36,11 @@ planted in the logs.
 4. **Decision.**
    - A single-class set whose calibrated probability reaches the gate (`auto_confidence`, 0.85)
      is decided without an LLM, as `rules` or `model`.
+   - A window whose features sit far outside the model's training data (more than six training
+     standard deviations from the mean on any feature) skips the model: the rules supply the
+     probabilities and the set, and a person always confirms. A linear model extrapolates
+     without limit, so a single line or an alert with no logs would otherwise read as a
+     confident SEV1.
    - Otherwise the LLM adjudicator ([`adjudicator.py`](../../src/aria/severity/adjudicator.py))
      may choose. Its JSON schema offers only the classes in the set, and its answer is checked
      again: a class outside the set, or a citation of evidence that does not exist, is repaired

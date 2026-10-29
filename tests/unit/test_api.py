@@ -129,7 +129,9 @@ async def test_health_is_public_and_everything_else_needs_a_key(api: Api) -> Non
     anonymous = {"Authorization": ""}
     assert (await api.client.get("/healthz", headers=anonymous)).json()["status"] == "ok"
     ready = (await api.client.get("/readyz", headers=anonymous)).json()
-    assert (ready["database"], ready["incidents"], ready["runbooks"]) == (True, 3, 19)
+    assert (ready["database"], ready["providers"], ready["incidents"]) == (True, None, None)
+    known = (await api.client.get("/readyz", headers=RAJ)).json()
+    assert (known["database"], known["incidents"], known["runbooks"]) == (True, 3, 19)
     card = await api.client.get("/.well-known/agent-card.json", headers=anonymous)
     assert card.status_code == 200
     assert "bearer" in card.json()["securitySchemes"]
@@ -202,6 +204,21 @@ async def test_rate_limit_answers_429_with_retry_after(monkeypatch: pytest.Monke
             assert (await c.get("/healthz")).status_code == 200  # health is never limited
 
 
+def test_the_rate_limiter_forgets_idle_callers_without_changing_an_answer() -> None:
+    from aria.api.security import RateLimiter
+
+    now = [0.0]
+    limiter = RateLimiter(2, clock=lambda: now[0], max_buckets=3)
+    assert limiter.allow("busy") == (True, 0.0)
+    assert limiter.allow("busy") == (True, 0.0)
+    assert limiter.allow("busy")[0] is False  # out of tokens for now
+    for i in range(5):
+        limiter.allow(f"ip:10.0.0.{i}")
+    now[0] = 61.0  # every bucket has refilled
+    assert limiter.allow("busy") == (True, 0.0)
+    assert len(limiter._buckets) == 1  # the idle callers were forgotten, not limited
+
+
 async def test_guessed_keys_are_rate_limited_and_huge_bodies_refused(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -252,11 +269,41 @@ def test_one_alert_payload_cannot_store_unbounded_alerts_or_labels() -> None:
     assert len(alerts[0].labels) == MAX_LABELS
 
 
+def test_alert_secrets_are_redacted_before_anything_stores_them() -> None:
+    from aria.api.alerts import normalize, title_for
+
+    payload = {
+        "commonLabels": {"service": "api", "token": "abc123"},
+        "alerts": [
+            {
+                "labels": {"alertname": "DbDown password=hunter2", "dsn": "pg://app:s3cr3t@db/x"},
+                "annotations": {
+                    "summary": "key " + "AIza" + "SyA1234567890abcdefghijklmnopqrstuv \x1b[31m"
+                },
+            }
+        ],
+    }
+    _, alerts, common = normalize(payload, source="alertmanager")
+    stored = json.dumps([a.model_dump(mode="json") for a in alerts]) + json.dumps(common)
+    for secret in ("hunter2", "s3cr3t", "abc123", "SyA1234567890", "\\u001b"):
+        assert secret not in stored + title_for(alerts, common)
+    assert alerts[0].name == "DbDown password=[REDACTED]"
+
+
 def test_production_refuses_to_start_without_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     reset_caches()
     settings = get_settings().model_copy(update={"env": Environment.PROD, "api_keys": None})
     with pytest.raises(RuntimeError, match="ARIA_API_KEYS"):
         create_app(settings=settings)
+
+
+def test_production_serves_no_api_docs(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ARIA_API_KEYS", "ana:k-ana")
+    reset_caches()
+    prod = create_app(settings=get_settings().model_copy(update={"env": Environment.PROD}))
+    dev = create_app(settings=get_settings())
+    assert (prod.docs_url, prod.redoc_url, prod.openapi_url) == (None, None, None)
+    assert dev.openapi_url == "/openapi.json"
 
 
 # --- the run lifecycle ----------------------------------------------------------------------------
@@ -280,6 +327,16 @@ async def test_run_lifecycle_over_http(api: Api) -> None:
         headers={**ANA, "Last-Event-ID": str(events[5]["seq"])},
     )
     assert int(sse(resumed.text)[0]["id"]) == events[6]["seq"]
+    for odd in ("²", "9" * 40, "-3"):  # a non-ASCII digit or a huge id restarts from the top
+        replayed = await api.client.get(
+            f"/api/v1/runs/{run_id}/stream",
+            params={"until": "review"},
+            headers={**ANA, "Last-Event-ID": odd.encode("latin-1")},
+        )
+        assert replayed.status_code == 200
+        assert int(sse(replayed.text)[0]["id"]) == events[0]["seq"]
+    huge = await api.client.get(f"/api/v1/runs/{run_id}/events", params={"after": 2**63})
+    assert huge.status_code == 422  # not a 500 from the database
 
     state = (await api.client.get(f"/api/v1/runs/{run_id}/state")).json()
     assert state["values"]["request"]["logs"]["omitted"] is True
@@ -326,7 +383,8 @@ async def test_an_untitled_run_takes_its_report_title(api: Api) -> None:
         json={"decision": "edit", "edits": {"title": "Kernel panics on rack R02"}},
     )
     assert edited.status_code == 200, edited.text
-    assert edited.json()["title"] == "Kernel panics on rack R02"
+    # Like every report heading, the edited one leads with the severity.
+    assert edited.json()["title"] == f"{report['severity']} · Kernel panics on rack R02"
 
 
 async def test_a_real_incident_replays_as_an_ordinary_run(api: Api) -> None:
@@ -363,7 +421,11 @@ async def test_a_real_incident_replays_as_an_ordinary_run(api: Api) -> None:
     assert rivals
     assert all(h["status"] == "refuted" for h in rivals)
     report = (await api.client.get(f"/api/v1/runs/{run_id}/report")).json()["report"]
-    assert "Held there by a safety floor" in report["summary"][0]["text"]
+    # Real HDFS traffic runs far faster than the scenarios the model learned from, so the model
+    # steps aside: the rules and their floor set the severity, and a person confirms it.
+    assert values["severity"]["needs_review"] is True
+    assert "A safety floor keeps it at SEV3 or worse" in report["summary"][0]["text"]
+    assert "model was not used" in report["summary"][0]["text"]
     assert any(a.get("runbook_slug") == "hdfs-unfinished-writes" for a in report["actions"])
 
     check = (await api.client.get(f"/api/v1/runs/{run_id}/expert-check")).json()
@@ -389,6 +451,16 @@ async def test_review_errors_are_reported_without_losing_the_pause(api: Api) -> 
     assert "unknown action ids" in unknown.json()["detail"]
     bad = await api.client.post(f"/api/v1/runs/{run_id}/review", json={"decision": "maybe"})
     assert bad.status_code == 422
+    for edits in (
+        {"summary": [" "]},
+        {"summary": ["x" * 801]},
+        {"add_actions": [""]},
+        {"title": ""},
+    ):
+        refused = await api.client.post(
+            f"/api/v1/runs/{run_id}/review", json={"decision": "edit", "edits": edits}
+        )
+        assert refused.status_code == 422, edits  # refused as sent, not failed when applied
     assert (await api.client.get(f"/api/v1/runs/{run_id}")).json()["status"] == "awaiting_review"
     rejected = await api.client.post(
         f"/api/v1/runs/{run_id}/review", json={"decision": "reject", "comment": "dup"}
@@ -398,6 +470,11 @@ async def test_review_errors_are_reported_without_losing_the_pause(api: Api) -> 
     assert again.status_code == 409
     bad_fork = await api.client.post(f"/api/v1/runs/{run_id}/fork", json={"checkpoint_id": "nope"})
     assert bad_fork.status_code in (404, 409)
+    for options in ({"max_tokens": -5}, {"bogus": True}, {"use_llm": "notabool"}):
+        refused = await api.client.post(
+            f"/api/v1/runs/{run_id}/fork", json={"checkpoint_id": "x", "options": options}
+        )
+        assert refused.status_code == 422, options
     assert (await api.client.get("/api/v1/runs/run-missing/report")).status_code == 404
 
 
@@ -452,6 +529,41 @@ async def test_alert_storms_become_one_grouped_run(api: Api) -> None:
     assert empty.status_code == 422
 
 
+async def test_malformed_or_unrelated_alerts_never_fail_or_merge(api: Api) -> None:
+    for body in (
+        {"alerts": "boom"},
+        {"alerts": {"a": 1}},
+        {"alerts": ["x", None]},
+        {"commonLabels": ["x"], "alerts": []},
+    ):
+        bad = await api.client.post("/api/v1/alerts/alertmanager", json=body)
+        assert bad.status_code == 422, body  # Alertmanager retries a 500, not a 422
+    first = await api.client.post("/api/v1/alerts", json=[{"name": "DiskFull", "fingerprint": "a"}])
+    other = await api.client.post(
+        "/api/v1/alerts", json=[{"name": "PaymentsDown", "fingerprint": "b"}]
+    )
+    assert first.json()["run_id"] != other.json()["run_id"]  # no shared labels, no shared run
+    deleted = first.json()["run_id"]
+    await wait_for(api, deleted, "awaiting_review")
+    assert (await api.client.delete(f"/api/v1/runs/{deleted}")).status_code == 204
+    again = await api.client.post("/api/v1/alerts", json=[{"name": "DiskFull", "fingerprint": "a"}])
+    assert again.json()["run_id"] not in (None, deleted)  # a deleted run's group is closed
+
+
+async def test_requests_are_checked_before_a_run_starts(api: Api) -> None:
+    dotted = await api.client.post("/api/v1/runs", json={"system": "payments.api", "logs": ["x"]})
+    assert dotted.status_code == 422  # it would name a memory namespace
+    long = await api.client.post("/api/v1/runs", json={"logs": ["x"], "service": "s" * 121})
+    assert long.status_code == 422
+    faked = await api.client.post(
+        "/api/v1/runs", json={"logs": logs(api), "replay_of": "hdfs-silent-block-failures"}
+    )
+    run_id = faked.json()["run_id"]
+    check = await api.client.get(f"/api/v1/runs/{run_id}/expert-check")
+    assert check.status_code == 404  # only the replay endpoint ties a run to expert labels
+    await wait_for(api, run_id, "awaiting_review")
+
+
 async def test_ask_cites_run_evidence(api: Api, monkeypatch: pytest.MonkeyPatch) -> None:
     run_id = (await start(api))["id"]
     retrieval = (
@@ -472,6 +584,16 @@ async def test_ask_cites_run_evidence(api: Api, monkeypatch: pytest.MonkeyPatch)
     ).json()
     assert llm["answered_by"] == "llm"
     assert llm["model"]
+    from aria.api import ask
+
+    spent = ask.ASK_BUDGET.model_copy(update={"max_llm_calls": 0})
+    monkeypatch.setattr(ask, "ASK_BUDGET", spent)  # each question has its own, small budget
+    capped = (
+        await api.client.post(
+            "/api/v1/ask", json={"question": "Which kernel errors happened?", "run_id": run_id}
+        )
+    ).json()
+    assert capped["answered_by"] == "retrieval"
     memory = (
         await api.client.post("/api/v1/ask", json={"question": "brute force ssh logins"})
     ).json()

@@ -8,7 +8,6 @@ template statistics, window features and evidence are computed over all lines.
 
 from __future__ import annotations
 
-import re
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
@@ -34,8 +33,9 @@ from aria.parsing.drain import Drain, drain_for, template_id
 from aria.parsing.features import ERROR_LEVELS, FeatureInput, compute_features
 from aria.parsing.flows import FlowResult, Step, check_flows, pair_groups, short_step
 from aria.parsing.signals import WARN, line_rank
+from aria.security.fields import sanitize
 from aria.security.injection import scan_line
-from aria.security.redaction import Redactor, new_salt
+from aria.security.redaction import Redactor, new_salt, shard_end
 
 MAX_TEMPLATE_EVIDENCE = 12
 MAX_LINE_EVIDENCE = 15
@@ -45,16 +45,6 @@ MAX_FLOW_EXAMPLES = 20
 MAX_BROKEN_KEYS = 2_000
 QUARANTINE_FLAG = "injection_suspect"
 QUARANTINE_TEMPLATE = "<quarantined: possible prompt injection>"
-_SURROGATES = re.compile("[\ud800-\udfff]")
-_ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
-
-
-def sanitize(line: str) -> str:
-    """Make a line safe to hash, store and show: lone surrogates (valid in JSON, not in UTF-8)
-    become U+FFFD, and NUL bytes and terminal colour codes are dropped."""
-    if "\x1b" in line:
-        line = _ANSI.sub("", line)
-    return _SURROGATES.sub("\ufffd", line).replace("\x00", "")
 
 
 @dataclass(slots=True)
@@ -91,9 +81,15 @@ class ParseOutput:
 def split_shards(lines: Sequence[str], shards: int) -> list[tuple[int, list[str]]]:
     shards = max(1, min(shards, len(lines) or 1))
     size = -(-len(lines) // shards) if lines else 0
-    return (
-        [(i, list(lines[i : i + size])) for i in range(0, len(lines), size)] if size else [(0, [])]
-    )
+    if not size:
+        return [(0, [])]
+    cuts: list[tuple[int, list[str]]] = []
+    start = 0
+    while start < len(lines):
+        end = shard_end(lines, start, min(len(lines), start + size))
+        cuts.append((start, list(lines[start:end])))
+        start = end
+    return cuts
 
 
 def parse_shard(

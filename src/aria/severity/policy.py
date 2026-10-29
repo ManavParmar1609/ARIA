@@ -3,7 +3,9 @@
 1. Floors from rules are absolute: classes less severe than the floor leave the prediction set.
 2. A single-class set with calibrated probability at or above the gate (0.85 by default) is
    decided without an LLM. It counts as decided by ``rules`` when a floor fixed it or the rules
-   agree, otherwise by ``model``. Both are auditable.
+   agree, otherwise by ``model``. Both are auditable. Nothing is decided automatically when the
+   window is unlike anything the model learned from: the rules then supply the set, and a
+   person always confirms.
 3. Otherwise an LLM may choose, but only a class inside the set and never below the floor.
 4. With no LLM (none configured, budget spent, or invalid output), the most severe class in the
    set is chosen and flagged for human review: under-triage costs more than over-triage.
@@ -35,6 +37,8 @@ class Preliminary:
     model_evidence: str | None = None
     conformal: bool = True
     set_empty: bool = False  # no class cleared the conformal threshold (raw_set is the argmax)
+    # Features too far from the model's training data for it to be used; rules decided the set.
+    outside_training: list[str] = field(default_factory=list)
 
     @property
     def prediction_set(self) -> list[Severity]:
@@ -69,7 +73,7 @@ class Preliminary:
 
     def auto_decision(self, gate: float) -> DecidedBy | None:
         pset = self.prediction_set
-        if len(pset) != 1:
+        if len(pset) != 1 or self.outside_training:
             return None
         if self.floor_applied():
             return "rules"  # the floor alone settled it
@@ -85,7 +89,16 @@ def _cite(ids: Sequence[str | None]) -> list[str]:
 
 def _base_claims(pre: Preliminary) -> list[Claim]:
     claims: list[Claim] = []
-    if pre.model_evidence:
+    if pre.outside_training and pre.model_evidence:
+        claims.append(
+            Claim(
+                text=f"The calibrated model was not used: this window is unlike the ones it "
+                f"learned from, so the rules set the choices ({', '.join(pre.prediction_set)}) and "
+                "a person confirms the severity.",
+                evidence_ids=_cite([pre.model_evidence]),
+            )
+        )
+    elif pre.model_evidence:
         pset = ", ".join(pre.prediction_set)
         text = (
             f"Calibrated model: {pre.top} is most likely (p={pre.confidence:.2f}), but no severity "
@@ -158,7 +171,7 @@ def decide(
             decided_by="llm",
             confidence=float(pre.probabilities.get(llm_choice, 0.0)),
             auditable=False,
-            needs_review=len(pset) >= 3,
+            needs_review=len(pset) >= 3 or bool(pre.outside_training),
             rationale=[*llm_claims, *_base_claims(pre)][:5],
             **common,
         )

@@ -14,6 +14,7 @@ from aria.contracts.base import Claim, EvidenceKind
 from aria.contracts.report import ActionItem, IncidentReport, ReportEdits, ReviewDecision
 from aria.contracts.severity import SeverityAssessment
 from aria.evidence import EvidenceStore
+from aria.reporting.comms import headline
 
 
 def review_evidence(
@@ -60,8 +61,10 @@ def apply_review(
         return report.model_copy(update=update), severity
 
     update["version"] = report.version + 1
-    if edits.title:
-        update["title"] = edits.title
+    final = edits.severity or report.severity
+    if edits.title or final != report.severity:
+        # The heading leads with the severity it now has, whichever of the two the reviewer changed.
+        update["title"] = f"{final} · {headline(edits.title or report.title)}"[:140]
     summary = list(report.summary)
     if edits.summary:
         summary = [Claim(text=text, evidence_ids=[eid]) for text in edits.summary]

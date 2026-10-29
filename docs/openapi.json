@@ -38,7 +38,7 @@
           "system"
         ],
         "summary": "Readyz",
-        "description": "Readiness: the database answers. Without a real LLM ARIA still works (deterministic).",
+        "description": "Readiness: the database answers. Without a real LLM ARIA still works (deterministic).\n\nIt needs no key, for the platform's probes. When the API requires keys, a caller without\none learns only whether ARIA is ready, not its providers or what its memory holds.",
         "operationId": "readyz_readyz_get",
         "responses": {
           "200": {
@@ -406,6 +406,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 9007199254740992,
               "minimum": -1,
               "default": -1,
               "title": "After"
@@ -477,6 +478,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 9007199254740992,
               "minimum": -1,
               "default": -1,
               "title": "After"
@@ -2357,18 +2359,39 @@
             "title": "Llm"
           },
           "providers": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Providers"
           },
           "incidents": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Incidents"
           },
           "runbooks": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Runbooks"
           }
         },
@@ -2377,10 +2400,7 @@
           "status",
           "version",
           "database",
-          "llm",
-          "providers",
-          "incidents",
-          "runbooks"
+          "llm"
         ],
         "title": "Health"
       },
@@ -2823,7 +2843,9 @@
           "title": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
               },
               {
                 "type": "null"
@@ -2845,9 +2867,12 @@
             "anyOf": [
               {
                 "items": {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 800,
+                  "minLength": 1
                 },
-                "type": "array"
+                "type": "array",
+                "maxItems": 10
               },
               {
                 "type": "null"
@@ -2857,15 +2882,19 @@
           },
           "add_actions": {
             "items": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 800,
+              "minLength": 1
             },
             "type": "array",
+            "maxItems": 10,
             "title": "Add Actions"
           },
           "note": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 2000
               },
               {
                 "type": "null"
@@ -2876,7 +2905,8 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "title": "ReportEdits"
+        "title": "ReportEdits",
+        "description": "A reviewer's changes, bounded like the report they change. A bad edit is refused with 422\nwhen it is sent, instead of failing the run (a summary line too long for a claim) or\npublishing a blank claim or action when it is applied."
       },
       "ReportOut": {
         "properties": {
@@ -4357,13 +4387,15 @@
             "type": "string",
             "maxLength": 64,
             "minLength": 1,
+            "pattern": "^[A-Za-z0-9_-]+$",
             "title": "System",
             "default": "generic"
           },
           "service": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 120
               },
               {
                 "type": "null"
@@ -4374,7 +4406,8 @@
           "environment": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 64
               },
               {
                 "type": "null"

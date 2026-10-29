@@ -283,6 +283,9 @@ class TriageRunner:
     ) -> str:
         """Record a new run (queued); ``execute`` runs it."""
         run_id = run_id or new_run_id()
+        if trigger != "replay" and request.replay_of is not None:
+            # Only the replay endpoint may tie a run to a real incident's expert labels.
+            request = request.model_copy(update={"replay_of": None})
         repo.create_run(
             self.engine,
             run_id,
@@ -389,7 +392,8 @@ class TriageRunner:
                 },
             )
         interrupt = _jsonable(interrupts[0]) if interrupts else None
-        if status.terminal:
+        # Only on the change: settling a finished run again (a client reconnecting) adds nothing.
+        if status.terminal and (run is None or run.get("status") != str(status)):
             await self._event(run_id, "run_finished", payload={"status": str(status)})
         return RunOutcome(run_id, status, interrupt=interrupt, error=fields.get("error"))
 

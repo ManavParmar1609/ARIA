@@ -86,7 +86,7 @@ from aria.parsing.signals import (
     signal_templates,
     warning_count,
 )
-from aria.reporting.comms import AUDIENCE, action_id, draft_comms
+from aria.reporting.comms import AUDIENCE, action_id, draft_comms, redraft
 from aria.reporting.composer import ReportContext
 from aria.reporting.grounding import validate_report
 from aria.reporting.markdown import render_markdown
@@ -95,7 +95,7 @@ from aria.reporting.writer import ReportWriter
 from aria.retrieval import runlog
 from aria.retrieval.memory import MemoryIncident, run_incident_id
 from aria.retrieval.retriever import build_query
-from aria.security.injection import scan_line
+from aria.security.fields import clean_request
 from aria.services import Services
 
 SHARD_LINES = 4_000  # fan parsing out above this many lines
@@ -148,6 +148,20 @@ def run_salt(settings: Settings, run_id: str) -> bytes:
     """The run's pseudonym key: stable across retries and resumes, never stored in state."""
     key = settings.pseudonym_key.get_secret_value().encode() if settings.pseudonym_key else None
     return hmac.new(key or _PROCESS_KEY, run_id.encode(), hashlib.sha256).digest()
+
+
+def run_link(settings: Settings, run_id: str) -> str:
+    """Where a message's reader opens the run: the console when its URL is set, else the API."""
+    if settings.console_url:
+        return f"{settings.console_url.rstrip('/')}/console/runs/{run_id}"
+    return f"{settings.public_base_url.rstrip('/')}/api/v1/runs/{run_id}"
+
+
+def service_name(request: TriageRequest) -> str:
+    """What messages call the affected service; never the "generic" log format's name."""
+    if request.service:
+        return request.service
+    return "our service" if request.system == "generic" else request.system
 
 
 def report_id_for(run_id: str) -> str:
@@ -257,6 +271,10 @@ async def plan(state: TriageState, runtime: Runtime[TriageContext]) -> Command[A
     if not lines and request.window_id:
         lines = await _db(load_window_lines, services.engine, request.window_id, request.system)
     guard_cfg = services.config.guardrails
+    # Alert fields and the title are untrusted too: clean them once, for every node after this.
+    request, withheld = clean_request(
+        request, guard_cfg, run_salt(services.settings, state["run_id"])
+    )
     capped = lines[: guard_cfg.max_lines]
     dropped = max(0, len(lines) - guard_cfg.max_lines)
     shards = 1
@@ -273,7 +291,8 @@ async def plan(state: TriageState, runtime: Runtime[TriageContext]) -> Command[A
             [f"{dropped} lines over the {guard_cfg.max_lines}-line limit dropped"]
             if dropped
             else []
-        ),
+        )
+        + withheld,
     )
     sends = [
         Send(
@@ -291,6 +310,7 @@ async def plan(state: TriageState, runtime: Runtime[TriageContext]) -> Command[A
     usage = BudgetUsage()  # the run's clock starts here
     return Command(
         update={
+            "request": request.model_dump(mode="json"),
             "plan": run_plan.model_dump(mode="json"),
             "status": str(RunStatus.RUNNING),
             "budget": usage.model_dump(mode="json"),
@@ -321,7 +341,8 @@ async def _known_templates(store: BaseStore | None, system: str) -> list[str]:
 
 
 def _alert_evidence(request: TriageRequest, evidence: EvidenceStore) -> list[str]:
-    notes = []
+    """Alerts as evidence. ``plan`` has already cleaned them (``security.fields``)."""
+    notes: list[str] = []
     for alert in request.alerts[:MAX_ALERT_EVIDENCE]:
         parts = {
             "name": alert.name,
@@ -329,9 +350,6 @@ def _alert_evidence(request: TriageRequest, evidence: EvidenceStore) -> list[str
             "severity": alert.labels.get("severity", ""),
             "service": alert.labels.get("service", ""),
         }
-        if any(scan_line(value, 0) for value in parts.values() if value):
-            notes.append(f"alert {alert.fingerprint}: instruction-like text withheld from evidence")
-            parts = {"name": "(withheld)", "status": alert.status, "severity": "", "service": ""}
         evidence.add(
             EvidenceKind.ALERT,
             f"Alert {parts['name']} ({parts['status']}) from {alert.source}",
@@ -691,8 +709,8 @@ async def comms(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
     before = guard.snapshot()
     outcome = await draft_comms(
         incident,
-        service=request.service or request.system,
-        run_url=f"{services.settings.public_base_url.rstrip('/')}/runs/{state['run_id']}",
+        service=service_name(request),
+        run_url=run_link(services.settings, state["run_id"]),
         router=_router(services, request, run_plan),
         budget=guard,
         use_llm=run_plan.use_llm,
@@ -872,9 +890,8 @@ async def publish(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
     decision = ReviewDecision.model_validate(state["review"])
     original = SeverityAssessment.model_validate(state["severity"])
     evidence = EvidenceStore(evidence_of(state))
-    incident, assessment = apply_review(
-        IncidentReport.model_validate(state["report"]), original, decision, evidence
-    )
+    drafted = IncidentReport.model_validate(state["report"])
+    incident, assessment = apply_review(drafted, original, decision, evidence)
     validation = validate_report(
         incident,
         evidence=evidence.all(),
@@ -897,17 +914,19 @@ async def publish(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
 
     approved = set(decision.approve_actions)
     already = await _db(repo.action_statuses, services.engine, run_id)
-    run_url = f"{services.settings.public_base_url.rstrip('/')}/runs/{run_id}"
+    run_url = run_link(services.settings, run_id)
+    proposed = [OutboundAction.model_validate(raw) for raw in state.get("actions", [])]
+    if (incident.title, incident.severity) != (drafted.title, drafted.severity):
+        proposed = redraft(proposed, incident, service=service_name(request), run_url=run_url)
     actions: list[OutboundAction] = []
-    for raw in state.get("actions", []):
-        action = OutboundAction.model_validate(raw)
-        if action.action_id not in approved:
-            action = action.model_copy(update={"status": "rejected"})
-        elif already.get(action.action_id) == "sent":
-            action = action.model_copy(update={"status": "sent"})
+    for proposal in proposed:
+        if proposal.action_id not in approved:
+            action = proposal.model_copy(update={"status": "rejected"})
+        elif already.get(proposal.action_id) == "sent":
+            action = proposal.model_copy(update={"status": "sent"})
         else:
             action = await send_action(
-                action.model_copy(update={"status": "approved"}),
+                proposal.model_copy(update={"status": "approved"}),
                 services.config.comms,
                 run_url=run_url,
             )

@@ -667,6 +667,9 @@ export type paths = {
         /**
          * Readyz
          * @description Readiness: the database answers. Without a real LLM ARIA still works (deterministic).
+         *
+         *     It needs no key, for the platform's probes. When the API requires keys, a caller without
+         *     one learns only whether ARIA is ready, not its providers or what its memory holds.
          */
         get: operations["readyz_readyz_get"];
         put?: never;
@@ -972,13 +975,13 @@ export type components = {
             /** Database */
             database: boolean;
             /** Incidents */
-            incidents: number;
+            incidents?: number | null;
             /** Llm */
             llm: boolean;
             /** Providers */
-            providers: string[];
+            providers?: string[] | null;
             /** Runbooks */
-            runbooks: number;
+            runbooks?: number | null;
             /**
              * Status
              * @enum {string}
@@ -1236,7 +1239,12 @@ export type components = {
         ReplayRequest: {
             options?: components["schemas"]["RunOptions"];
         };
-        /** ReportEdits */
+        /**
+         * ReportEdits
+         * @description A reviewer's changes, bounded like the report they change. A bad edit is refused with 422
+         *     when it is sent, instead of failing the run (a summary line too long for a claim) or
+         *     publishing a blank claim or action when it is applied.
+         */
         ReportEdits: {
             /** Add Actions */
             add_actions?: string[];

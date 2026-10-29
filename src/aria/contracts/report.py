@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import Field
+from pydantic import Field, StringConstraints
 
 from aria.contracts.base import Claim, Contract, Evidence, EvidenceId, JsonDict, Severity, utcnow
 from aria.contracts.retrieval import SimilarIncident, TicketHistoryStats
@@ -90,12 +90,23 @@ class OutboundAction(Contract):
     result: JsonDict = Field(default_factory=dict)
 
 
+# A reviewer's line: each becomes a claim or an action, so it has a claim's bounds.
+EditLine = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=800)]
+
+
 class ReportEdits(Contract):
-    title: str | None = None
+    """A reviewer's changes, bounded like the report they change. A bad edit is refused with 422
+    when it is sent, instead of failing the run (a summary line too long for a claim) or
+    publishing a blank claim or action when it is applied."""
+
+    title: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+        | None
+    ) = None
     severity: Severity | None = None
-    summary: list[str] | None = None
-    add_actions: list[str] = Field(default_factory=list)
-    note: str | None = None
+    summary: Annotated[list[EditLine], Field(max_length=10)] | None = None  # empty: keep it
+    add_actions: Annotated[list[EditLine], Field(max_length=10)] = Field(default_factory=list)
+    note: Annotated[str, StringConstraints(max_length=2_000)] | None = None
 
 
 class ReviewDecision(Contract):

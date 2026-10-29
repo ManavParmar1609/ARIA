@@ -54,11 +54,16 @@ order:
 4. **A confident one-class set is decided without an LLM.** This happens when the model gives
    the class at least 0.85 (the `gate` in the rules file), or when a floor alone settled it.
    `decided_by` is `rules` when a floor settled it or the rules agree, and `model` otherwise.
-   Both are auditable.
+   Both are auditable. A window unlike the ones the model learned from is never decided this
+   way: when a feature sits more than six training standard deviations from the training mean,
+   as with a handful of lines or an alert with no logs, the model is not used at all. The rules
+   supply the probabilities and the set, as with no model file, the evidence says why, and a
+   person always confirms.
 5. **Otherwise an LLM may choose, but only within the set.** The severity enum in its JSON
    schema is the set, and its answer is checked again: the class must be in the set and every
    cited evidence ID must exist. `decided_by` is `llm`. These decisions are not auditable, and
-   they are flagged for review when the set holds three or more classes.
+   they are flagged for review when the set holds three or more classes or the model was not
+   used.
 6. **Without an LLM, ARIA takes the most severe class in the set.** This applies when no LLM is
    configured, the run's budget is spent, or the LLM's answers fail validation. The severity is
    flagged for review, and `decided_by` is `fallback`. Under-triage costs more than

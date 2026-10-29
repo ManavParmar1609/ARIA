@@ -55,9 +55,12 @@ class TriageRequest(Contract):
     """Input to a triage run. At least one of logs, window_id, alerts or ticket is required."""
 
     title: Annotated[str, StringConstraints(max_length=200)] | None = None
-    system: Annotated[str, StringConstraints(min_length=1, max_length=64)] = "generic"
-    service: str | None = None
-    environment: str | None = None
+    # A system names a log format and a memory namespace: letters, digits, "_" and "-" only.
+    system: Annotated[
+        str, StringConstraints(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    ] = "generic"
+    service: Annotated[str, StringConstraints(max_length=120)] | None = None
+    environment: Annotated[str, StringConstraints(max_length=64)] | None = None
     logs: list[str] = Field(default_factory=list)
     window_id: str | None = None
     alerts: list[AlertSignal] = Field(default_factory=list)

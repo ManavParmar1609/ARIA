@@ -53,6 +53,8 @@ _SECURITY_HEADERS = [
     (b"referrer-policy", b"no-referrer"),
     (b"x-frame-options", b"DENY"),
 ]
+# Sent only over HTTPS (behind a proxy, once uvicorn trusts its forwarded scheme).
+_HSTS = (b"strict-transport-security", b"max-age=31536000; includeSubDomains")
 
 
 class SecurityHeaders:
@@ -64,9 +66,11 @@ class SecurityHeaders:
             await self.app(scope, receive, send)
             return
 
+        extra = [*_SECURITY_HEADERS, _HSTS] if scope.get("scheme") == "https" else _SECURITY_HEADERS
+
         async def with_headers(message: Message) -> None:
             if message["type"] == "http.response.start":
-                message["headers"] = [*message.get("headers", []), *_SECURITY_HEADERS]
+                message["headers"] = [*message.get("headers", []), *extra]
             await send(message)
 
         await self.app(scope, receive, with_headers)
@@ -150,11 +154,15 @@ def create_app(
                 if owned:
                     await svc.aclose()
 
+    docs = not settings.is_prod  # production serves no API docs; docs/openapi.json has them
     app = FastAPI(
         title="ARIA",
         version=__version__,
         description="First-pass incident triage with auditable agents.",
         lifespan=lifespan,
+        docs_url="/docs" if docs else None,
+        redoc_url="/redoc" if docs else None,
+        openapi_url="/openapi.json" if docs else None,
     )
     app.add_middleware(AuthMiddleware, auth=auth, limiter=limiter)
     app.add_middleware(

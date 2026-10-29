@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from aria.contracts.base import SEVERITY_DESCRIPTIONS, Severity
@@ -50,6 +51,14 @@ class CommsOutcome:
     rejected: dict[str, list[str]] = field(default_factory=dict)
 
 
+_SEVERITY_PREFIX = re.compile(r"^SEV[1-4]\s*·\s*")
+
+
+def headline(title: str) -> str:
+    """A report title without the severity it leads with ("SEV3 · ")."""
+    return _SEVERITY_PREFIX.sub("", title)
+
+
 def deterministic_drafts(
     report: IncidentReport, *, service: str, run_url: str
 ) -> dict[str, MessageDraft]:
@@ -60,9 +69,8 @@ def deterministic_drafts(
     if report.actions:
         bullets.append(f"• Next step: {report.actions[0].text}")
     # Report titles already lead with the severity ("SEV3 · ..."); say it once, in brackets.
-    headline = re.sub(r"^SEV[1-4]\s*·\s*", "", report.title)
     responders = MessageDraft(
-        title=f"[{report.severity}] {headline}"[:140],
+        title=f"[{report.severity}] {headline(report.title)}"[:140],
         body=("\n".join(bullets) + f"\nReport: {run_url}")[:1_500],
         evidence_ids=ids,
     )
@@ -151,15 +159,37 @@ async def draft_comms(
         if problems:  # deterministic drafts should never fail; keep them out if they somehow do
             outcome.rejected.setdefault(key, []).extend(problems)
             continue
-        outcome.actions.append(
-            OutboundAction(
-                action_id=action_id(report.report_id, key),
-                kind=KIND[key],  # type: ignore[arg-type]
-                audience=AUDIENCE[key],  # type: ignore[arg-type]
-                title=draft.title,
-                body=draft.body,
-                payload={"text": f"*{draft.title}*\n{draft.body}"} if KIND[key] == "slack" else {},
-                evidence_ids=draft.evidence_ids,
-            )
-        )
+        outcome.actions.append(_action(report, key, draft))
     return outcome
+
+
+def _action(report: IncidentReport, key: str, draft: MessageDraft) -> OutboundAction:
+    return OutboundAction(
+        action_id=action_id(report.report_id, key),
+        kind=KIND[key],  # type: ignore[arg-type]
+        audience=AUDIENCE[key],  # type: ignore[arg-type]
+        title=draft.title,
+        body=draft.body,
+        payload={"text": f"*{draft.title}*\n{draft.body}"} if KIND[key] == "slack" else {},
+        evidence_ids=draft.evidence_ids,
+    )
+
+
+def redraft(
+    actions: Sequence[OutboundAction], report: IncidentReport, *, service: str, run_url: str
+) -> list[OutboundAction]:
+    """The actions rewritten from the reviewed report. Used when a reviewer changed its severity or
+    title: a draft written for the old facts must not go out under the new ones."""
+    drafts = {
+        action_id(report.report_id, key): (key, draft)
+        for key, draft in deterministic_drafts(report, service=service, run_url=run_url).items()
+    }
+    rewritten: list[OutboundAction] = []
+    for action in actions:
+        found = drafts.get(action.action_id)
+        rewritten.append(
+            action
+            if found is None
+            else _action(report, *found).model_copy(update={"status": action.status})
+        )
+    return rewritten

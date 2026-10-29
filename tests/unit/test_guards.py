@@ -6,6 +6,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from aria.parsing.parser import split_shards
 from aria.security.injection import fence_untrusted, normalize_for_detection, scan, scan_line
 from aria.security.redaction import Redactor
 
@@ -37,6 +38,105 @@ def test_secrets_are_removed(text: str, kind: str) -> None:
 
 def test_assigned_secret_keeps_the_key_name() -> None:
     assert Redactor().redact("api_key: 'abc123xyz'") == "api_key: [REDACTED]"
+
+
+@pytest.mark.parametrize(
+    ("text", "secret", "kind"),
+    [
+        ("DB_PASSWORD=hunter2 started", "hunter2", "assigned_secret"),
+        ("aws_secret_access_key = wJalrXUtnFEMIK7MDENG", "wJalrXUtnFEMIK7MDENG", "assigned_secret"),
+        ('{"user": "bob", "password": "hunter2"}', "hunter2", "assigned_secret"),
+        ('msg="{\\"password\\":\\"hunter2\\"}"', "hunter2", "assigned_secret"),
+        ("x-api-key: abcdef123456", "abcdef123456", "assigned_secret"),
+        ("--password=hunter2 --user=bob", "hunter2", "assigned_secret"),
+        ("spring.datasource.password=hunter2", "hunter2", "assigned_secret"),
+        ("Error: token=abc123 rejected", "abc123", "assigned_secret"),
+        ("AccountName=acct;AccountKey=abc123def456==;Suffix=x", "abc123def456", "assigned_secret"),
+        ("GET /b?sv=2021-08-06&sig=AbCd%2FeFgH%3D HTTP/1.1", "AbCd%2FeFgH", "assigned_secret"),
+        ("Authorization: Basic dXNlcjpwYXNzd29yZA==", "dXNlcjpwYXNzd29yZA", "basic_auth"),
+        # Fake tokens, split so secret scanners do not mistake the test file for a leak.
+        (
+            "key " + "AIza" + "SyA1234567890abcdefghijklmnopqrstuv",
+            "SyA1234567890",
+            "google_api_key",
+        ),
+        ("charge " + "sk_live_" + "FAKE0000000000000000test failed", "FAKE0000", "stripe_key"),
+        (
+            "SG." + "fakefakefakefakefake00." + "fake" * 10 + "000",
+            "fakefakefakefakefake00",
+            "sendgrid_key",
+        ),
+        ("github_pat_" + "11ABCDEFG0123456789_abcdefghijklmnop", "11ABCDEFG0123", "github_token"),
+        ("glpat-" + "abcdefghij0123456789 in CI", "abcdefghij0123456789", "gitlab_token"),
+        (
+            "https://hooks.slack.com/services/" + "T0000/B0000/XXXXXXXX",
+            "T0000/B0000",
+            "slack_webhook",
+        ),
+    ],
+)
+def test_secret_formats_that_used_to_slip_through_are_removed(
+    text: str, secret: str, kind: str
+) -> None:
+    redactor = Redactor()
+    out = redactor.redact(text)
+    assert secret not in out
+    assert redactor.counts == {kind: 1}
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "max_tokens: 4096 used",
+        "signal=SIGTERM received",
+        "uses basic configuration for the pool",
+        "Failed password for root port 22 ssh2",
+        "password: [REDACTED]",  # already redacted, so it is not counted again
+    ],
+)
+def test_ordinary_settings_are_not_mistaken_for_secrets(text: str) -> None:
+    redactor = Redactor(pseudonymize_ips=False)
+    assert redactor.redact(text) == text
+    assert redactor.counts == {}
+
+
+KEY_LINES = [
+    "2026-10-01 12:00:00 ERROR could not load -----BEGIN RSA PRIVATE KEY-----",
+    "Proc-Type: 4,ENCRYPTED",
+    "MIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo4lgOEePzNm0tRgeLezV6ffAt0gun",
+    "2026-10-01 12:00:00 ERROR VTLw7onLRnrq0/IzW7yWR7QkrmBL7jTKEn5u+qKhbwKfBstIs+bMY2Zkp18g",
+    "",
+    "LXoeMsheRlS==",
+    "-----END RSA PRIVATE KEY-----",
+    "2026-10-01 12:00:01 INFO pool started for blk_1608999687919862906",
+]
+
+
+def test_a_private_key_printed_over_several_lines_is_removed() -> None:
+    redactor = Redactor()
+    out = [redactor.redact(line) for line in KEY_LINES]
+    assert out[0] == "2026-10-01 12:00:00 ERROR could not load [REDACTED]"
+    assert out[2] == out[5] == out[6] == "[REDACTED]"
+    assert out[3] == "2026-10-01 12:00:00 ERROR [REDACTED]"
+    assert out[-1] == KEY_LINES[-1]  # the key is closed: ordinary lines are left alone
+    assert redactor.counts == {"private_key": 1}
+
+
+def test_a_key_without_its_end_line_stops_at_the_next_ordinary_line() -> None:
+    redactor = Redactor(pseudonymize_ips=False)
+    redactor.redact("key -----BEGIN PRIVATE KEY----- MIIEvQIBADANBgkqhkiG9w0BAQEF (truncated")
+    line = "081109 203615 148 INFO dfs.DataNode$PacketResponder: block blk_3886504906413 done"
+    assert redactor.redact(line) == line
+
+
+def test_shards_never_split_a_private_key() -> None:
+    lines = ["2026-10-01 12:00:00 INFO ok"] * 5 + KEY_LINES + ["2026-10-01 INFO ok"] * 5
+    shards = split_shards(lines, 3)
+    assert [offset for offset, _ in shards] == [0, 12]  # the first shard ends after the key
+    assert sum(len(chunk) for _, chunk in shards) == len(lines)
+    for _, chunk in shards:
+        redactor = Redactor()
+        assert not any("MIIEow" in redactor.redact(line) for line in chunk)
 
 
 def test_ips_and_emails_are_pseudonymised_consistently() -> None:

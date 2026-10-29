@@ -20,7 +20,7 @@ from aria.evidence import EvidenceStore
 from aria.llm.fake import FakeProvider
 from aria.llm.router import LLMRouter
 from aria.severity.engine import SeverityEngine
-from aria.severity.features import log_feature_names
+from aria.severity.features import log_feature_names, log_feature_row
 from aria.severity.model import (
     LinearModel,
     conformal_threshold,
@@ -63,16 +63,23 @@ def features(**overrides: Any) -> WindowFeatures:
     return WindowFeatures(**base)
 
 
-def constant_model(probs: dict[str, float], q: float | None) -> LinearModel:
-    """A model whose output ignores the input: logits are fixed intercepts."""
+def constant_model(
+    probs: dict[str, float],
+    q: float | None,
+    *,
+    mean: np.ndarray | None = None,
+    scale: float = 100.0,
+) -> LinearModel:
+    """A model whose output ignores the input: logits are fixed intercepts. Its training range
+    (``mean`` plus or minus a few ``scale``) covers any test window unless a test narrows it."""
     names = log_feature_names()
     classes = [str(s) for s in SEVERITY_ORDER]
     return LinearModel(
         name="test",
         classes=classes,
         feature_names=names,
-        mean=np.zeros(len(names)),
-        scale=np.ones(len(names)),
+        mean=np.zeros(len(names)) if mean is None else mean,
+        scale=np.full(len(names), scale),
         coef=np.zeros((4, len(names))),
         intercept=np.log(np.array([probs[c] for c in classes])),
         conformal_q=q,
@@ -293,6 +300,18 @@ def test_confident_singleton_is_decided_without_llm() -> None:
     )
 
 
+def test_a_window_unlike_the_training_data_is_never_decided_automatically() -> None:
+    confident = {Severity.SEV1: 0.01, Severity.SEV2: 0.01, Severity.SEV3: 0.01, Severity.SEV4: 0.97}
+    pre = _pre(confident, [Severity.SEV4], rule=Severity.SEV4)
+    pre.outside_training = ["log1p.n_events"]
+    assert pre.auto_decision(0.85) is None
+    assessment = decide(pre, gate=0.85)
+    assert assessment.needs_review
+    assert "was not used" in assessment.rationale[0].text
+    chosen = decide(pre, gate=0.85, llm_choice=Severity.SEV4)
+    assert (chosen.decided_by, chosen.needs_review) == ("llm", True)
+
+
 def test_low_confidence_singleton_needs_adjudication() -> None:
     pre = _pre(P, [Severity.SEV3])  # p=0.80 < 0.85
     assert pre.auto_decision(0.85) is None
@@ -339,6 +358,19 @@ WINDOW = features(
     keyword_hits={"network": 6},
     level_counts={"INFO": 588, "ERROR": 12},
 )
+TINY = features(
+    n_events=1,
+    n_templates=1,
+    duration_s=0.0,
+    events_per_min=1.0,
+    level_counts={"INFO": 1},
+    distinct_nodes=1,
+)
+
+
+def log_feature_row_for(window: WindowFeatures, rules: RuleSet) -> dict[str, float]:
+    values = feature_space(window)
+    return log_feature_row(values, rules.evaluate(values))
 
 
 def _router(provider: FakeProvider) -> LLMRouter:
@@ -372,6 +404,23 @@ async def test_confident_model_decides_and_cites_its_evidence(rules: RuleSet) ->
     cited = {eid for claim in a.rationale for eid in claim.evidence_ids}
     assert cited
     assert cited <= {e.id for e in store.all()}
+
+
+async def test_a_tiny_window_skips_the_model_and_asks_a_person(rules: RuleSet) -> None:
+    sure = {"SEV1": 0.01, "SEV2": 0.01, "SEV3": 0.97, "SEV4": 0.01}
+    trained_on = constant_model(sure, 0.5).matrix([log_feature_row_for(WINDOW, rules)])[0]
+    engine = SeverityEngine(rules, constant_model(sure, 0.5, mean=trained_on, scale=0.5), alpha=0.1)
+    usual = await engine.assess(WINDOW, system="bgl", evidence=EvidenceStore())
+    assert (usual.assessment.severity, usual.assessment.needs_review) == (Severity.SEV3, False)
+
+    evidence = EvidenceStore()
+    tiny = await engine.assess(TINY, system="bgl", evidence=evidence)
+    a = tiny.assessment
+    assert tiny.preliminary.outside_training
+    assert a.model_version.startswith("rules-only:")
+    assert (a.severity, a.needs_review) == (Severity.SEV4, True)  # what the rules say, confirmed
+    model = next(e for e in evidence.all() if e.kind == EvidenceKind.MODEL)
+    assert "was not used" in model.detail
 
 
 async def test_uncertain_without_llm_falls_back_conservatively(rules: RuleSet) -> None:

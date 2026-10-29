@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
+import signal
 from pathlib import Path
 from typing import Annotated
 
@@ -318,11 +320,18 @@ def worker(
 
     async def main() -> None:
         services = await Services.create()
+        # A platform stops a container with SIGTERM: stop claiming runs and finish the ones in
+        # hand, instead of dying mid-run and leaving them claimed until the claims expire.
+        stop = asyncio.Event()
+        for signum in (signal.SIGTERM, signal.SIGINT):
+            with contextlib.suppress(NotImplementedError):  # no signal handlers on Windows
+                asyncio.get_running_loop().add_signal_handler(signum, stop.set)
         try:
             await poll_forever(
                 TriageRunner(services),
                 concurrency=concurrency or settings.worker_concurrency,
                 interval_s=interval,
+                stop=stop,
                 heartbeat=heartbeat_file(settings.data_dir),
             )
         finally:

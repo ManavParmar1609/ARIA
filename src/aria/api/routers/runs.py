@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
@@ -34,6 +35,8 @@ from aria.reporting.markdown import render_postmortem
 
 router = APIRouter(prefix="/api/v1/runs", tags=["runs"])
 State = Annotated[AppState, Depends(app_state)]
+MAX_SEQ = 2**53  # event cursors past this cannot be stored, or read exactly in JavaScript
+_EVENT_ID = re.compile(r"[0-9]{1,15}")
 Caller = Annotated[Principal, Depends(current_principal)]
 
 
@@ -124,7 +127,7 @@ async def get_state(
 async def list_events(
     run_id: RunId,
     state: State,
-    after: Annotated[int, Query(ge=-1)] = -1,
+    after: Annotated[int, Query(ge=-1, le=MAX_SEQ)] = -1,
     limit: Annotated[int, Query(ge=1, le=5_000)] = 1_000,
 ) -> list[RunEvent]:
     await _run_or_404(state, run_id)
@@ -137,7 +140,7 @@ async def list_events(
 async def stream(
     run_id: RunId,
     state: State,
-    after: Annotated[int, Query(ge=-1)] = -1,
+    after: Annotated[int, Query(ge=-1, le=MAX_SEQ)] = -1,
     until: Annotated[Literal["finished", "review"], Query()] = "finished",
     last_event_id: Annotated[str | None, Header()] = None,
 ) -> EventSourceResponse:
@@ -146,7 +149,8 @@ async def stream(
     The stream ends when the run finishes, or with ``until=review`` when it pauses for review.
     """
     await _run_or_404(state, run_id)
-    start = int(last_event_id) if last_event_id and last_event_id.isdigit() else after
+    # A browser resends the last id it saw; anything else (not ASCII digits, too long) is ignored.
+    start = int(last_event_id) if last_event_id and _EVENT_ID.fullmatch(last_event_id) else after
     events = run_events(state.runner, run_id, after=start, until_review=until == "review")
     return EventSourceResponse(events, ping=15)
 
@@ -182,7 +186,7 @@ async def get_postmortem(run_id: RunId, state: State) -> PlainTextResponse:
 @router.post("/{run_id}/review", response_model=RunDetail)
 async def review(run_id: RunId, body: ReviewRequest, state: State, caller: Caller) -> RunDetail:
     """Approve, edit or reject the report. Approved actions are sent before this returns."""
-    await _run_or_404(state, run_id)
+    run = await _run_or_404(state, run_id)
     reviewer = caller.name if caller.authenticated else (body.reviewer or caller.name)
     decision = ReviewDecision(
         decision=body.decision,
@@ -193,8 +197,9 @@ async def review(run_id: RunId, body: ReviewRequest, state: State, caller: Calle
     )
     try:
         outcome = await state.runner.resume(run_id, decision)
-    except RunNotFoundError as exc:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except RunNotFoundError as exc:  # the run exists, but its graph has not reached review yet
+        detail = f"run {run_id} is {run['status']}, not waiting for review"
+        raise HTTPException(status.HTTP_409_CONFLICT, detail) from exc
     except (RunStateError, RunBusyError) as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     if outcome.interrupt and outcome.interrupt.get("error"):

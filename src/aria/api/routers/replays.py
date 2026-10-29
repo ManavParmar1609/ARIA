@@ -21,6 +21,7 @@ from aria.contracts.inputs import TriageRequest
 from aria.contracts.parsing import FlowCheck
 from aria.contracts.run import RunStatus
 from aria.data.real import REAL_INCIDENTS, RealIncident, real_incident
+from aria.db import repository as repo
 from aria.graph.runner import RunNotFoundError
 
 router = APIRouter(prefix="/api/v1/real-incidents", tags=["real incidents"])
@@ -82,7 +83,11 @@ async def expert_check(run_id: RunId, state: State) -> ExpertCheckOut:
     except RunNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"run {run_id} not found") from exc
     values = snapshot.values
-    incident = real_incident(str((values.get("request") or {}).get("replay_of") or ""))
+    request = values.get("request")
+    if request is None:  # queued: the graph has not started, so read the request as recorded
+        run = await asyncio.to_thread(repo.get_run, state.services.engine, run_id)
+        request = (run or {}).get("request")
+    incident = real_incident(str((request or {}).get("replay_of") or ""))
     if incident is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "this run does not replay a real incident")
     labels = await asyncio.to_thread(incident.labels)

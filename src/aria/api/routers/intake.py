@@ -78,7 +78,8 @@ async def alerts(signals: list[AlertSignal], state: State) -> AlertAccepted:
         ]
     }
     if signals:
-        payload["commonLabels"] = dict(set.intersection(*(set(s.labels.items()) for s in signals)))
+        named = [{"alertname": s.name, **s.labels}.items() for s in signals]
+        payload["commonLabels"] = dict(set.intersection(*(set(items) for items in named)))
     return await _accept(state, payload, "webhook")
 
 

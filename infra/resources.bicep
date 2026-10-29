@@ -421,6 +421,18 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
               name: 'ARIA_PUBLIC_BASE_URL'
               value: 'https://ca-api-${token}.${environment.properties.defaultDomain}'
             }
+            {
+              // Messages link reviewers to the run in the console.
+              name: 'ARIA_CONSOLE_URL'
+              value: 'https://ca-web-${token}.${environment.properties.defaultDomain}'
+            }
+            {
+              // The platform's ingress reaches the container from private addresses: trust the
+              // client address and scheme it appends (rate limits then see callers, and HTTPS
+              // gets HSTS). Not '*': uvicorn would then take the first, caller-written address.
+              name: 'FORWARDED_ALLOW_IPS'
+              value: '10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,100.64.0.0/10,127.0.0.1'
+            }
           ])
           resources: {
             cpu: json('1.0')

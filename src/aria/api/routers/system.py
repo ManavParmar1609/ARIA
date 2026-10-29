@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy import text
 
 from aria import __version__
@@ -36,22 +36,27 @@ def _database_ok(state: AppState) -> bool:
 
 
 @router.get("/readyz", response_model=Health)
-async def readyz(state: State, response: Response) -> Health:
-    """Readiness: the database answers. Without a real LLM ARIA still works (deterministic)."""
+async def readyz(state: State, request: Request, response: Response) -> Health:
+    """Readiness: the database answers. Without a real LLM ARIA still works (deterministic).
+
+    It needs no key, for the platform's probes. When the API requires keys, a caller without
+    one learns only whether ARIA is ready, not its providers or what its memory holds.
+    """
     database = await asyncio.to_thread(_database_ok, state)
     router = state.services.router
-    providers = [s.name for s in router.status() if s.enabled]
     llm = router.has_real_llm("reporter")
     if not database:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    headers = {k.lower(): v for k, v in request.headers.items()}
+    detail = state.auth.authenticate(headers) is not None
     return Health(
         status="ok" if database and llm else "degraded",
         version=__version__,
         database=database,
         llm=llm,
-        providers=providers,
-        incidents=len(state.services.memory.incidents),
-        runbooks=len(state.services.runbooks),
+        providers=[s.name for s in router.status() if s.enabled] if detail else None,
+        incidents=len(state.services.memory.incidents) if detail else None,
+        runbooks=len(state.services.runbooks) if detail else None,
     )
 
 

@@ -112,6 +112,14 @@ class LinearModel:
     def standardise(self, x: FloatArray) -> FloatArray:
         return (x - self.mean) / self.scale
 
+    def outside_training(self, x_row: FloatArray, limit: float) -> list[str]:
+        """Features of one row more than ``limit`` standard deviations from the training mean.
+
+        There the linear model extrapolates, and its probabilities mean nothing.
+        """
+        z = np.abs(self.standardise(x_row))
+        return [self.feature_names[i] for i in np.flatnonzero(z > limit)]
+
     def logits(self, x: FloatArray) -> FloatArray:
         return np.asarray(self.standardise(x) @ self.coef.T + self.intercept, dtype=np.float64)
 

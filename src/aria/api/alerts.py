@@ -2,8 +2,9 @@
 
 Alerts that share a group key (Alertmanager's ``groupKey``, else the common labels) and arrive
 within ``triggers.alert_group_window_s`` of the group's last alert join the open group instead
-of starting a new run, so an alert storm becomes one incident. Label and annotation values are
-untrusted: they reach models only as fenced evidence, and instruction-like ones are withheld.
+of starting a new run, so an alert storm becomes one incident. Names, labels and annotations are
+untrusted: secrets are redacted before they are stored, and when a run starts its addresses are
+pseudonymised and any value that reads like an instruction is withheld (``security.fields``).
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from aria.contracts.inputs import AlertSignal, RunOptions, TriageRequest
 from aria.contracts.run import RunStatus
 from aria.db.engine import session_scope
 from aria.db.models import AlertGroupRow, AlertRow, RunRow
+from aria.security.fields import clean_map, strip_secrets
 
 SYSTEM_LABELS = ("aria_system", "system", "job", "service")
 # What one webhook payload can store: Alertmanager groups rarely carry more than a few dozen.
@@ -49,30 +51,39 @@ def _fingerprint(labels: dict[str, str]) -> str:
     return hashlib.sha256(blob.encode()).hexdigest()[:16]
 
 
+def _clean_map(values: Any, limit: int) -> dict[str, str]:
+    """Labels or annotations as short strings, with secrets redacted before anything stores them."""
+    if not isinstance(values, dict):
+        return {}
+    bounded = {str(k)[:64]: str(v)[:limit] for k, v in list(values.items())[:MAX_LABELS]}
+    return clean_map(bounded, strip_secrets)
+
+
 def normalize(
     payload: dict[str, Any], *, source: str
 ) -> tuple[str, list[AlertSignal], dict[str, str]]:
     """Group key, alerts and common labels from an Alertmanager-format webhook payload."""
-    common = {
-        str(k)[:64]: str(v)[:256]
-        for k, v in list((payload.get("commonLabels") or {}).items())[:MAX_LABELS]
-    }
+    common = _clean_map(payload.get("commonLabels"), 256)
     alerts: list[AlertSignal] = []
-    for raw in (payload.get("alerts") or [])[:MAX_ALERTS_PER_PAYLOAD]:
-        labels = {
+    listed = payload.get("alerts")
+    # A payload of another shape (a string, a map, a list of non-objects) has no alerts: 422, so
+    # the sender does not retry it as it would a 500.
+    for raw in (listed if isinstance(listed, list) else [])[:MAX_ALERTS_PER_PAYLOAD]:
+        if not isinstance(raw, dict):
+            continue
+        given = raw.get("labels")
+        raw_labels = {
             str(k)[:64]: str(v)[:256]
-            for k, v in list((raw.get("labels") or {}).items())[:MAX_LABELS]
+            for k, v in list((given if isinstance(given, dict) else {}).items())[:MAX_LABELS]
         }
-        annotations = {
-            str(k)[:64]: str(v)[:1_000]
-            for k, v in list((raw.get("annotations") or {}).items())[:MAX_LABELS]
-        }
-        name = labels.get("alertname") or payload.get("title") or "alert"
+        labels = _clean_map(raw_labels, 256)
+        annotations = _clean_map(raw.get("annotations"), 1_000)
+        name = strip_secrets(str(labels.get("alertname") or payload.get("title") or ""))[:200]
         alerts.append(
             AlertSignal(
                 source=source,  # type: ignore[arg-type]
-                name=str(name)[:200],
-                fingerprint=str(raw.get("fingerprint") or _fingerprint(labels))[:128],
+                name=name.strip() or "alert",
+                fingerprint=str(raw.get("fingerprint") or _fingerprint(raw_labels))[:128],
                 status="resolved" if raw.get("status") == "resolved" else "firing",
                 labels=labels,
                 annotations=annotations,
@@ -80,7 +91,12 @@ def normalize(
                 ends_at=_ts(raw.get("endsAt")),
             )
         )
-    key = str(payload.get("groupKey") or "") or f"labels:{_fingerprint(common)}"
+    key = str(payload.get("groupKey") or "")
+    if not key:
+        # Without a group key, alerts group by the labels they share; alerts that share none group
+        # only with the same alerts again, so unrelated ones never merge into one run.
+        shared = common or {a.fingerprint: a.name for a in alerts}
+        key = f"{source}:{'labels' if common else 'alerts'}:{_fingerprint(shared)}"
     return key[:256], alerts, common
 
 
@@ -119,8 +135,11 @@ def record_alerts(
         if group is not None:
             last = group.last_at if group.last_at.tzinfo else group.last_at.replace(tzinfo=UTC)
             run = session.get(RunRow, group.run_id) if group.run_id else None
-            if now - last > timedelta(seconds=window_s) or (
-                run is not None and RunStatus(run.status).terminal
+            gone = group.run_id is not None and run is None  # its run was deleted
+            if (
+                gone
+                or now - last > timedelta(seconds=window_s)
+                or (run is not None and RunStatus(run.status).terminal)
             ):
                 group.status = "closed"
                 group = None
@@ -167,8 +186,8 @@ def triage_request(alerts: list[AlertSignal], common: dict[str, str], system: st
     return TriageRequest(
         title=title_for(alerts, common)[:200],
         system=system,
-        service=common.get("service"),
-        environment=common.get("env") or common.get("environment"),
+        service=(common.get("service") or "")[:120] or None,
+        environment=(common.get("env") or common.get("environment") or "")[:64] or None,
         alerts=alerts[:50],
         options=RunOptions(),
     )

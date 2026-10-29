@@ -168,9 +168,19 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
     how = DECIDED_BY_TEXT[sev.decided_by]
     if sev.set_empty and sev.decided_by == "fallback":
         how = "Too uncertain to decide alone: the most likely class, pending review"
+    # The model is skipped for a window far from its training data (the rules set the choices).
+    unlike = model_ev is not None and bool(model_ev.data.get("outside_training"))
+    if unlike:
+        how = (
+            "The calibrated model was not used, because this window is unlike the ones it "
+            "learned from: the rules set the choices, and a person confirms"
+        )
     severity_text = f"{sev.severity}: {SEVERITY_DESCRIPTIONS[sev.severity]} {how}"
     if sev.decided_by in ("model", "llm", "fallback") and model_ev is not None:
-        severity_text += f" (model probability {p:.2f})"
+        severity_text += f" ({'rule-score' if unlike else 'model'} probability {p:.2f})"
+    if unlike and floor_ev is not None and sev.floor is not None:
+        rule = floor_ev.title.split(": ", 1)[-1].rstrip(".")
+        severity_text += f". A safety floor keeps it at {sev.floor} or worse: {rule}"
     model_top = max(sev.probabilities, key=sev.probabilities.__getitem__, default=sev.severity)
     if sev.decided_by == "rules" and floor_ev is not None and model_top != sev.severity:
         # A floor lifted the severity above the model's own view: say which, and what the model

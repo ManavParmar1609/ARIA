@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -25,6 +26,10 @@ from aria.severity.rules import RuleSet, feature_space, load_rules
 
 log = get_logger(__name__)
 RULES_ONLY_MIN_P = 0.2
+# How far (in training standard deviations) a window's features may sit from the training mean
+# before the model is not used. No training or held-out window reaches it; a handful of lines or
+# an alert with no logs is far past it.
+MODEL_RANGE_Z = 6.0
 
 
 @dataclass
@@ -132,15 +137,20 @@ class SeverityEngine:
             hits.append(hit.model_copy(update={"evidence_ids": [eid]}))
             rule_ids.append(eid)
 
-        if self.model is None:
+        outside: list[str] = []
+        extra: dict[str, Any] = {}
+        if self.model is not None:
+            x = self.model.matrix([log_feature_row(values, evaluation)])
+            outside = self.model.outside_training(x[0], MODEL_RANGE_Z)
+        if self.model is None or outside:
             probabilities = evaluation.probabilities
             raw_set = [s for s in SEVERITY_ORDER if probabilities[s] >= RULES_ONLY_MIN_P]
             set_empty = not raw_set
             raw_set = raw_set or [evaluation.rule_severity]
-            version, conformal, extra = f"rules-only:{self.rules.version}", False, {}
+            version, conformal = f"rules-only:{self.rules.version}", False
+            if outside:
+                extra = {"outside_training": outside[:6]}
         else:
-            row = log_feature_row(values, evaluation)
-            x = self.model.matrix([row])
             probs = self.model.predict_proba(x)[0]
             probabilities = {
                 Severity(c): float(p) for c, p in zip(self.model.classes, probs, strict=True)
@@ -168,7 +178,12 @@ class SeverityEngine:
                     else f"{1 - self.alpha:.0%} prediction set: {{{', '.join(raw_set)}}}"
                 )
                 if conformal
-                else "No calibrated model is loaded; probabilities are normalised rule scores."
+                else (
+                    "The calibrated model was not used: this window is unlike the ones it learned "
+                    f"from ({', '.join(outside[:3])}), so probabilities are normalised rule scores."
+                    if outside
+                    else "No calibrated model is loaded; probabilities are normalised rule scores."
+                )
             ),
             data={
                 "probabilities": {str(k): round(v, 6) for k, v in probabilities.items()},
@@ -194,6 +209,7 @@ class SeverityEngine:
             model_evidence=model_eid,
             conformal=conformal,
             set_empty=set_empty,
+            outside_training=outside,
         )
 
     async def assess(

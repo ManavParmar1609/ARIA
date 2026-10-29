@@ -266,7 +266,9 @@ def _real(section: Mapping[str, Any]) -> list[str]:
         (
             "Intervals are exact (Clopper-Pearson). No baseline uses a label. The four standard "
             "detectors read the experts' event templates and fit on the whole sample at once; "
-            "ARIA parses each window itself and sees one window at a time."
+            "ARIA parses each window itself and sees one window at a time. The severity engine "
+            "rarely flags a block on its own: a block is a handful of lines, far from the windows "
+            "its model learned from, so the model steps aside and the rules alone decide."
         ),
         "",
         (

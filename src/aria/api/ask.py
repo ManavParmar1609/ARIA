@@ -11,9 +11,11 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 
+from aria.config import BudgetConfig
 from aria.contracts.base import Evidence, EvidenceKind
 from aria.evidence import EvidenceStore
 from aria.llm.base import BudgetExceededError, LLMError
+from aria.llm.budget import BudgetGuard
 from aria.llm.prompts import build_messages
 from aria.llm.schemas import AnswerOutput, ClaimOut
 from aria.reporting.grounding import ungrounded_numbers
@@ -29,6 +31,8 @@ _STOP = frozenset(
     }
 )  # fmt: skip
 MAX_EVIDENCE = 12
+# One question's LLM spending: an answer, a repair and one fallback provider at most.
+ASK_BUDGET = BudgetConfig(max_tokens=6_000, max_cost_usd=0.05, max_latency_s=30.0, max_llm_calls=3)
 
 
 def terms(text: str) -> set[str]:
@@ -122,6 +126,7 @@ async def answer(
                 build_messages("answer", facts, ranked, untrusted={"question": question}),
                 AnswerOutput,
                 validator=lambda output: check_answer(output, known),
+                budget=BudgetGuard(ASK_BUDGET),
                 temperature=0.0,
                 max_tokens=700,
             )

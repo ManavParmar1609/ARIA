@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 
 from aria.contracts.base import Evidence, Severity
 from aria.contracts.inputs import RunOptions
@@ -98,12 +98,16 @@ class ForkRequest(BaseModel):
     options: dict[str, Any] | None = None
     title: Annotated[str, StringConstraints(max_length=200)] | None = None
 
+    @field_validator("options")
+    @classmethod
+    def _valid_options(cls, value: dict[str, Any] | None) -> dict[str, Any] | None:
+        if value:
+            RunOptions.model_validate(value)  # unknown or ill-typed options: a 422, not a 500
+        return value
+
     def run_options(self) -> dict[str, Any] | None:
-        """Only the options the caller set, validated against ``RunOptions``."""
-        if not self.options:
-            return None
-        RunOptions.model_validate(self.options)
-        return dict(self.options)
+        """Only the options the caller set (validated against ``RunOptions`` when parsed)."""
+        return dict(self.options) if self.options else None
 
 
 class Checkpoint(BaseModel):
@@ -291,6 +295,7 @@ class Health(BaseModel):
     version: str
     database: bool
     llm: bool
-    providers: list[str]
-    incidents: int
-    runbooks: int
+    # Withheld (null) from callers without a key when the API requires one.
+    providers: list[str] | None = None
+    incidents: int | None = None
+    runbooks: int | None = None

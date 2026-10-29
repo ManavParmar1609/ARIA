@@ -375,11 +375,12 @@ order:
    - it reaches a model only as fenced, quoted evidence.
 4. **Redact** ([`src/aria/security/redaction.py`](../src/aria/security/redaction.py)).
    - These are replaced with `[REDACTED]`:
-     - private keys and JWTs;
-     - AWS, NVIDIA and OpenAI keys;
-     - GitHub and Slack tokens, and bearer tokens;
+     - private keys (also one printed over many lines) and JWTs;
+     - AWS, NVIDIA, OpenAI, Google, Stripe and SendGrid keys;
+     - GitHub, GitLab and Slack tokens, Slack webhook paths, bearer tokens and Basic credentials;
      - credentials in URLs;
-     - values assigned to password-, secret- or token-like keys;
+     - the value of any setting whose name holds a password, secret, token or key, as in
+       `DB_PASSWORD=…`, `"api_key": "…"` or a connection string's `AccountKey=…`;
      - payment card numbers that pass the Luhn check.
    - E-mail and IP addresses are pseudonymised with a keyed hash, for example `ip-3fa2c1d0`.
      A pseudonym is the same everywhere within a run. Each run uses a fresh key, so pseudonyms

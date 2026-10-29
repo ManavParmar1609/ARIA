@@ -180,7 +180,7 @@ class RetrievalConfig(_Strict):
 class ScanSource(_Strict):
     """A log file the periodic scan tails, and the log format (system) its lines are in."""
 
-    system: str = Field(min_length=1, max_length=48)
+    system: str = Field(min_length=1, max_length=48, pattern=r"^[A-Za-z0-9_-]+$")
     path: Path
 
 
@@ -262,6 +262,9 @@ class Settings(BaseSettings):
     # Largest request body the API reads; 20,000 lines of 2,000 characters fit with room to spare.
     max_body_bytes: int = Field(default=48 * 1024 * 1024, ge=1024)
     public_base_url: str = "http://localhost:8000"
+    # Where people open a run (the web console). Messages link there; without it they link to
+    # the run in the API.
+    console_url: str | None = None
     web_dist_dir: Path | None = None
     # Keys each run's pseudonym salt as HMAC(key, run id), so pseudonyms stay stable when a run
     # retries or resumes and no salt is stored in graph state. When unset, a random key is made
