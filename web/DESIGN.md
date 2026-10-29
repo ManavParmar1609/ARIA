@@ -67,9 +67,10 @@ quiet moments (a first visit, an empty queue, a search with no match, a missing 
    - The landing page plays the recorded run in as it scrolls past (wide screens only).
    - Larger animations are proposed to the owner and built only when chosen. The owner chose
      these six:
-     - **Hero entrance:** the scene settles in once, back to front (about 1.2 s). On wide screens
-       its loose pages then keep drifting; a phone keeps the scene still after it settles. CSS on
-       the scene's groups (`scenes.tsx`, `.hero-in`, `.hero-drift`).
+     - **Hero entrance:** the scene comes in once and then rests. Wide screens settle it back to
+       front (about 1.2 s, CSS on the scene's groups: `scenes.tsx`, `.hero-in`); narrower screens
+       raise it in as one piece (`.hero-scene`), which the compositor animates without repainting
+       the drawing every frame.
      - **Sliding nav pill:** a grass pill glides to the section being read on the landing page,
        and between pages in the console sidebar. It moves by FLIP, so only transforms animate.
      - **Rolling stats:** headline numbers roll up digit by digit as they come into view
@@ -80,9 +81,12 @@ quiet moments (a first visit, an empty queue, a search with no match, a missing 
      - **Evidence thread:** pointing at a citation sweeps the highlight across each line it cites
        (`.thread-lit` on the landing page, one pass of light, `.thread-pass`, in a run's panel).
      - **Dot bloom:** a ghost button's hover and focus fill grows out of a dot at its centre.
-   - Every animation moves only `transform` and `opacity`, so it runs on the compositor at 60 fps
-     and never shifts layout. Anything that starts larger than its box (the stamp) is clipped to
-     its card, so a transform can never make a narrow screen scroll sideways.
+   - Every animation moves only `transform` and `opacity`, so it never shifts layout. Anything
+     that starts larger than its box (the stamp) is clipped to its card, so a transform can never
+     make a narrow screen scroll sideways.
+   - Nothing moves on its own for more than a few seconds (WCAG 2.2.2). A dot pulses without end
+     only while work is under way (a reply or a report being written); a status that waits for a
+     person pulses three times, then rests.
    - `prefers-reduced-motion` shows final states.
 
 ## Tokens

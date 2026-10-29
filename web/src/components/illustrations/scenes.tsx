@@ -51,33 +51,12 @@ function settle(on: boolean, e: Entrance): SVGProps<SVGGElement> {
   };
 }
 
-/** Props that keep a loose page drifting (globals.css: .hero-drift), or none in the video. */
-function drift(
-  on: boolean,
-  dx: number,
-  dy: number,
-  turn: number,
-  seconds: number,
-): SVGProps<SVGGElement> {
-  if (!on) return {};
-  return {
-    className: "hero-drift",
-    style: {
-      "--drift-x": `${dx}px`,
-      "--drift-y": `${dy}px`,
-      "--drift-turn": `${turn}deg`,
-      "--drift-s": `${seconds}s`,
-      // A negative delay starts each page part-way through its swing, so they never move together.
-      "--drift-delay": `${-seconds / 2}s`,
-    } as CSSProperties,
-  };
-}
-
 /** The on-call crew riding a long sheet of log lines: one reads, one looks closer, one points on. */
 export function HeroScene({ className, t }: { className?: string; t?: number }) {
   // `t` (seconds) is for the video: the sheet bobs and the loose pages drift. The site leaves it
-  // out and animates with CSS instead (globals.css): the scene settles in once, back to front,
-  // then the loose pages keep drifting. Reduced motion shows the still frame.
+  // out and animates with CSS instead (globals.css): on wide screens the scene settles in once,
+  // back to front; on narrower ones it rises in as one piece. Then it rests. Reduced motion shows
+  // the still frame.
   const wave = (speed: number, amount: number, phase = 0) =>
     t == null ? 0 : Math.sin(t * speed + phase) * amount;
   const site = t == null;
@@ -87,7 +66,7 @@ export function HeroScene({ className, t }: { className?: string; t?: number }) 
     <svg
       viewBox={HERO_VIEWBOX}
       preserveAspectRatio="xMidYMax slice"
-      className={className}
+      className={site ? `hero-scene ${className ?? ""}` : className}
       aria-hidden
       focusable="false"
     >
@@ -122,27 +101,21 @@ export function HeroScene({ className, t }: { className?: string; t?: number }) 
           </g>
         </g>
 
-        {/* the loose pages fly in last, then keep drifting */}
+        {/* the loose pages fly in last */}
         <g {...settle(site, { delay: 700, y: -36, s: 0.8, ms: 550, spring: true })}>
-          <g {...drift(site, 6, -12, 6, 6.5)}>
-            <Sheet x={1000} y={330 + wave(2, 10)} w={50} rotate={16 + wave(1.4, 8)} mark="alert" />
-          </g>
+          <Sheet x={1000} y={330 + wave(2, 10)} w={50} rotate={16 + wave(1.4, 8)} mark="alert" />
         </g>
         <g {...settle(site, { delay: 780, y: -36, s: 0.8, ms: 550, spring: true })}>
-          <g {...drift(site, -5, -14, -7, 8)}>
-            <Sheet
-              x={1112}
-              y={150 + wave(1.7, 12, 1)}
-              w={40}
-              rotate={-12 + wave(1.2, 9, 2)}
-              mark="tick"
-            />
-          </g>
+          <Sheet
+            x={1112}
+            y={150 + wave(1.7, 12, 1)}
+            w={40}
+            rotate={-12 + wave(1.2, 9, 2)}
+            mark="tick"
+          />
         </g>
         <g {...settle(site, { delay: 740, y: -36, s: 0.8, ms: 550, spring: true })}>
-          <g {...drift(site, 7, -10, 5, 7.2)}>
-            <Sheet x={470} y={250 + wave(1.9, 10, 2)} w={44} rotate={-20 + wave(1.5, 7, 1)} />
-          </g>
+          <Sheet x={470} y={250 + wave(1.9, 10, 2)} w={44} rotate={-20 + wave(1.5, 7, 1)} />
         </g>
         <g {...settle(site, { delay: 820, y: 0, s: 0.6, ms: 500 })}>
           <Squiggle x={900} y={190} rotate={-18} w={80} />

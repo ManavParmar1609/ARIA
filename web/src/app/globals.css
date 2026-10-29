@@ -201,7 +201,10 @@
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
   --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
 
+  /* Infinite only while work is under way (a reply or a report being written); a status that
+     waits for a person pulses three times and then rests. */
   --animate-pulse-dot: pulse-dot 1.6s var(--ease-in-out) infinite;
+  --animate-pulse-dot-thrice: pulse-dot 1.6s var(--ease-in-out) 3;
 
   @keyframes pulse-dot {
     0%,
@@ -322,10 +325,12 @@
   }
 }
 
-/* The hero settles in once, back to front, then its loose pages drift, as in the video. Each part
-   sets its own offset and timing (scenes.tsx: settle, drift); lengths are viewBox units, so the
-   motion scales with the scene. Only transform and opacity move. */
-@media (prefers-reduced-motion: no-preference) {
+/* The hero comes in once, then rests: nothing on the page moves on its own for long (WCAG 2.2.2).
+   Wide screens settle the scene back to front, each part with its own offset and timing
+   (scenes.tsx: settle; lengths are viewBox units, so the motion scales with the scene). Chrome
+   repaints an SVG's moving parts on the main thread every frame, so narrower screens, mostly
+   phones, raise the whole scene in as one piece, which the compositor can animate alone. */
+@media (min-width: 1024px) and (prefers-reduced-motion: no-preference) {
   .hero-in {
     transform-box: fill-box;
     transform-origin: 50% 100%;
@@ -335,14 +340,9 @@
     animation-timing-function: cubic-bezier(0.34, 1.4, 0.64, 1);
   }
 }
-/* The drift never stops, and Chrome repaints an SVG's moving parts on the main thread every frame
-   (it can't hand them to the compositor), so it runs on wide screens only: on a phone the scene
-   rests once it has settled, and the page stops painting. */
-@media (min-width: 1024px) and (prefers-reduced-motion: no-preference) {
-  .hero-drift {
-    transform-box: fill-box;
-    transform-origin: center;
-    animation: hero-drift var(--drift-s) var(--ease-in-out) var(--drift-delay) infinite alternate;
+@media (max-width: 1023.98px) and (prefers-reduced-motion: no-preference) {
+  .hero-scene {
+    animation: hero-scene-in 700ms var(--ease-emphasized) both;
   }
 }
 
@@ -353,9 +353,10 @@
   }
 }
 
-@keyframes hero-drift {
-  to {
-    transform: translate(var(--drift-x), var(--drift-y)) rotate(var(--drift-turn));
+@keyframes hero-scene-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
   }
 }
 

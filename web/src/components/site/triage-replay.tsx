@@ -53,6 +53,7 @@ export function TriageReplay({ data }: { data: Replay }) {
   // bars, then the claims.
   useWideMotion(root, ({ gsap }) => {
     const show = { autoAlpha: 1, x: 0, y: 0 };
+    gsap.set("[data-tag] [data-stamp]", { autoAlpha: 0 });
     gsap
       .timeline({
         defaults: { ease: "power3.out" },
@@ -66,12 +67,14 @@ export function TriageReplay({ data }: { data: Replay }) {
         { scaleY: 1, transformOrigin: "bottom", duration: 0.6, stagger: 0.07 },
         "-=0.35",
       )
-      // the severity lands like a rubber stamp, then the prediction-set bracket draws across
+      // the severity lands like a rubber stamp (it scales and turns but never fades, so its label
+      // keeps its contrast), then the prediction-set bracket draws across
+      .set("[data-tag] [data-stamp]", { autoAlpha: 1 }, "-=0.2")
       .fromTo(
         "[data-tag] [data-stamp]",
-        { autoAlpha: 0, scale: 2.4, rotation: -14 },
-        { autoAlpha: 1, scale: 1, rotation: 0, duration: 0.5, ease: "back.out(2.2)" },
-        "-=0.2",
+        { scale: 2, rotation: -12 },
+        { scale: 1, rotation: 0, duration: 0.5, ease: "back.out(2.2)" },
+        "<",
       )
       .fromTo(
         "[data-tag] [data-bracket]",
@@ -85,7 +88,15 @@ export function TriageReplay({ data }: { data: Replay }) {
         { ...show, duration: 0.4, stagger: 0.09 },
         "-=0.3",
       )
-      .fromTo("[data-anim=status]", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.4 });
+      .fromTo("[data-anim=status]", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.4 })
+      // the waiting dot pulses three times as the status appears, then rests
+      .to("[data-pulse]", {
+        opacity: 0.35,
+        duration: 0.8,
+        ease: "sine.inOut",
+        repeat: 5,
+        yoyo: true,
+      });
   });
 
   const chip = (id: string) => {
@@ -250,7 +261,8 @@ export function TriageReplay({ data }: { data: Replay }) {
             <span className="inline-flex items-center gap-2 text-sm font-medium">
               <span
                 aria-hidden
-                className="block size-2.5 animate-pulse-dot rounded-full bg-grass ring-1 ring-pop-ink/40"
+                data-pulse
+                className="block size-2.5 rounded-full bg-grass ring-1 ring-pop-ink/40"
               />
               Waiting for a person to approve
             </span>

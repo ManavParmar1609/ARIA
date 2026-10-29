@@ -179,7 +179,10 @@ export function ReviewPanel({
     >
       <div className="grid gap-1">
         <h2 id={`${id}-title`} className="flex items-center gap-2 text-base font-medium">
-          <span aria-hidden className="block size-2 animate-pulse-dot rounded-full bg-primary" />
+          <span
+            aria-hidden
+            className="block size-2 animate-pulse-dot-thrice rounded-full bg-primary"
+          />
           Waiting for your review
         </h2>
         <p className="text-sm text-muted-foreground">
