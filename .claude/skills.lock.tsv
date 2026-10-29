@@ -54,4 +54,5 @@ ag-ui-a2ui-integration	ag-ui-protocol/ag-ui	7e7c1109f26e77cc32d87d351fb9e0b0bf56
 deep-agents-core	langchain-ai/langchain-skills	126c384d8552dcb476b226c244172186cc3f4328	config/skills/deep-agents-core
 deep-agents-orchestration	langchain-ai/langchain-skills	126c384d8552dcb476b226c244172186cc3f4328	config/skills/deep-agents-orchestration
 deep-agents-memory	langchain-ai/langchain-skills	126c384d8552dcb476b226c244172186cc3f4328	config/skills/deep-agents-memory
-opentelemetry	o11y-dev/opentelemetry-skill	e72d4ae45d2b67b4d4410dfadb1cccef04fd3626	SKILL.md+references+examples
+opentelemetry	o11y-dev/opentelemetry-skill	e72d4ae45d2b67b4d4410dfadb1cccef04fd3626	SKILL.md+references+examples+LICENSE
+prompt-master	nidhinjs/prompt-master	49b3a72469b1e7287d66387004ccfcca90e5968a	SKILL.md+references+LICENSE
