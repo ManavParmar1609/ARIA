@@ -19,7 +19,7 @@ from aria.llm.router import LLMRouter
 from aria.observability.logging import get_logger
 from aria.severity.adjudicator import Adjudication, adjudicate
 from aria.severity.features import log_feature_row
-from aria.severity.model import LinearModel
+from aria.severity.model import LinearModel, live_model_path
 from aria.severity.policy import Preliminary, decide
 from aria.severity.rules import RuleSet, feature_space, load_rules
 
@@ -61,13 +61,19 @@ class SeverityEngine:
         )
 
     @classmethod
-    def load(cls, config: SeverityConfig) -> SeverityEngine:
+    def load(cls, config: SeverityConfig, *, models_dir: Path | None = None) -> SeverityEngine:
+        """Load the rules and the model in use: the live (recalibrated) one, else the trained one.
+
+        The engine then watches the live path, so ``refresh`` picks up the first recalibration.
+        """
         rules = load_rules(config.rules_file)
-        path = Path(config.log_model_file)
+        trained = Path(config.log_model_file)
+        live = live_model_path(trained, models_dir) if models_dir is not None else trained
+        path = live if live.exists() else trained
         model = LinearModel.load(path) if path.exists() else None
         if model is None:
             log.warning("severity.model_missing", path=str(path))
-        return cls(rules, model, alpha=config.alpha, model_path=path)
+        return cls(rules, model, alpha=config.alpha, model_path=live)
 
     def refresh(self) -> bool:
         """Reload the model when its file changed (a recalibration in this or another process)."""

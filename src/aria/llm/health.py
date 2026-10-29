@@ -66,7 +66,9 @@ async def check_provider(
     except (LLMError, OSError) as exc:
         report.reachable = False
         report.problems.append(f"model catalog unavailable: {str(exc)[:160]}")
-    for field_name in ("chat_model", "embedding_model", "rerank_model"):
+    # The safety model is listed so its ID gets checked, but it is optional (the guardrail is off
+    # by default), so only a missing chat model counts as a problem.
+    for field_name in ("chat_model", "embedding_model", "rerank_model", "safety_model"):
         model = getattr(cfg, field_name)
         if not model:
             continue

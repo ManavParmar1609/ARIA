@@ -148,15 +148,19 @@ def recalibrate_from_feedback(
     alpha: float,
     min_new_reviews: int,
     dry_run: bool = False,
+    trained: Path | None = None,
 ) -> Recalibration | None:
     """Recalibrate when enough reviews have gathered since the loaded model was calibrated.
 
-    New reviews are counted against the model file's own record, not the ``used`` marks, so a
-    container that restarts from its image's model recalibrates again from the shared database.
-    Returns None when there is nothing to do."""
-    if not model_path.exists():
+    ``model_path`` is the live model, read and rewritten in place; until it exists, the
+    ``trained`` model is the starting point (and is never written). New reviews are counted
+    against the model file's own record, not the ``used`` marks, so a model restored from an
+    older file recalibrates again from the shared database. Returns None when there is nothing
+    to do."""
+    source = model_path if model_path.exists() else trained
+    if source is None or not source.exists():
         return None
-    model = LinearModel.load(model_path)
+    model = LinearModel.load(source)
     examples = reviewed_examples(engine, model)
     new = len(examples) - reviews_in(model)
     if new < max(1, min_new_reviews) or len(examples) < MIN_REVIEWED:

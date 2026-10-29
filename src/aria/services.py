@@ -67,7 +67,7 @@ class Services:
             runbooks=runbooks,
             memory=memory,
             retriever=retriever,
-            severity=SeverityEngine.load(config.severity),
+            severity=SeverityEngine.load(config.severity, models_dir=settings.models_dir),
             tickets=tickets,
         )
 

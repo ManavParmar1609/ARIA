@@ -43,9 +43,15 @@ def _safe_url(url: str) -> bool:
     return parts.scheme == "https" or (parts.scheme == "http" and parts.hostname in _LOCAL_HOSTS)
 
 
+def slack_escape(text: str) -> str:
+    """Escape Slack's control characters, so text from logs cannot mention @channel or link."""
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def build_payload(action: OutboundAction, *, run_url: str) -> dict[str, Any]:
     if action.kind == "slack":
-        return {"text": action.payload.get("text") or f"*{action.title}*\n{action.body}"}
+        text = action.payload.get("text") or f"*{action.title}*\n{action.body}"
+        return {"text": slack_escape(str(text))}
     if action.kind == "teams":
         card = {
             "type": "AdaptiveCard",

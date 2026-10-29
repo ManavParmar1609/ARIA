@@ -25,9 +25,11 @@ from a2a.helpers.proto_helpers import (
     new_text_part,
 )
 from a2a.server.agent_execution import AgentExecutor, RequestContext
+from a2a.server.context import ServerCallContext
 from a2a.server.events import EventQueue
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
+from a2a.server.routes.common import DefaultServerCallContextBuilder
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.server.tasks.task_updater import TaskUpdater
 from a2a.types.a2a_pb2 import (
@@ -44,6 +46,7 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils.errors import TaskNotCancelableError
 from pydantic import ValidationError
+from starlette.requests import Request
 from starlette.routing import BaseRoute
 
 from aria import __version__
@@ -130,12 +133,31 @@ def request_from(message: Message, metadata: dict[str, Any]) -> TriageRequest:
 def decision_from(message: Message, reviewer: str) -> ReviewDecision:
     for item in get_data_parts(message.parts):
         if isinstance(item, dict) and "decision" in item:
-            return ReviewDecision.model_validate({"reviewer": reviewer, **item})
+            return ReviewDecision.model_validate({**item, "reviewer": reviewer})
     word = " ".join(get_text_parts(message.parts)).strip().lower()
     if word in ("approve", "reject"):
         return ReviewDecision(decision=word, reviewer=reviewer)  # type: ignore[arg-type]
     msg = 'answer with {"decision": "approve" | "edit" | "reject"} or the word approve or reject'
     raise ValueError(msg)
+
+
+class PrincipalContextBuilder(DefaultServerCallContextBuilder):
+    """Hands the caller the API key identified (set by the auth middleware) to the executor."""
+
+    def build(self, request: Request) -> ServerCallContext:
+        context = super().build(request)
+        principal = getattr(request.state, "principal", None)
+        if principal is not None:
+            context.state["principal"] = principal
+        return context
+
+
+def reviewer_for(context: RequestContext, claimed: object) -> str:
+    """Who reviews: the API key's name when keys are on (as over REST), else what the client says."""
+    principal = context.call_context.state.get("principal") if context.call_context else None
+    if principal is not None and principal.authenticated:
+        return str(principal.name)
+    return str(claimed or "a2a")
 
 
 class AriaExecutor(AgentExecutor):
@@ -165,7 +187,7 @@ class AriaExecutor(AgentExecutor):
         metadata = {**dict(message.metadata.items()), **context.metadata}
         run = await asyncio.to_thread(repo.get_run, self.runner.engine, run_id)
         if run is not None and run["status"] == RunStatus.AWAITING_REVIEW:
-            reviewer = str(metadata.get("reviewer") or "a2a")
+            reviewer = reviewer_for(context, metadata.get("reviewer"))
             try:
                 decision = decision_from(message, reviewer)
             except (ValueError, ValidationError) as exc:
@@ -220,7 +242,9 @@ class AriaExecutor(AgentExecutor):
         run = await asyncio.to_thread(repo.get_run, self.runner.engine, run_id)
         if run is None or run["status"] != RunStatus.AWAITING_REVIEW:
             raise TaskNotCancelableError
-        decision = ReviewDecision(decision="reject", reviewer="a2a", comment="task cancelled")
+        decision = ReviewDecision(
+            decision="reject", reviewer=reviewer_for(context, None), comment="task cancelled"
+        )
         await self.runner.resume(run_id, decision)
         updater = TaskUpdater(event_queue, task_id, context.context_id or "")
         await updater.cancel()
@@ -235,5 +259,5 @@ def a2a_routes(
         agent_executor=AriaExecutor(get_runner), task_store=InMemoryTaskStore(), agent_card=card
     )
     return list(create_agent_card_routes(card)), list(
-        create_jsonrpc_routes(handler, rpc_url=A2A_PATH)
+        create_jsonrpc_routes(handler, rpc_url=A2A_PATH, context_builder=PrincipalContextBuilder())
     )

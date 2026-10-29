@@ -389,11 +389,14 @@ def claim_runs(
     return claimed
 
 
-def heartbeat(engine: Engine, run_id: str, worker: str) -> None:
+def renew_claims(engine: Engine, worker: str, run_ids: Sequence[str]) -> None:
+    """Keep ``worker``'s claims on runs it is still executing from going stale."""
+    if not run_ids:
+        return
     with session_scope(engine) as session:
         session.execute(
             update(RunRow)
-            .where(RunRow.id == run_id, RunRow.claimed_by == worker)
+            .where(RunRow.id.in_(list(run_ids)), RunRow.claimed_by == worker)
             .values(claimed_at=utcnow())
         )
 

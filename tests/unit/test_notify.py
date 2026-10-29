@@ -89,6 +89,16 @@ async def test_already_sent_actions_are_never_resent() -> None:
     assert not route.called
 
 
+def test_slack_text_cannot_mention_everyone_or_link() -> None:
+    hostile = action(
+        "slack", title="SEV2 <!channel>", body="see <https://evil.example|the fix> & reply"
+    )
+    text = build_payload(hostile, run_url="http://x/runs/1")["text"]
+    assert "<" not in text
+    assert ">" not in text
+    assert text == "*SEV2 &lt;!channel&gt;*\nsee &lt;https://evil.example|the fix&gt; &amp; reply"
+
+
 @pytest.mark.parametrize("kind", ["slack", "teams", "status_page"])
 def test_payload_shapes(kind: str) -> None:
     payload = build_payload(action(kind), run_url="http://x/runs/1")

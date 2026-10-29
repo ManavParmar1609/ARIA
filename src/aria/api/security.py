@@ -21,7 +21,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.exceptions import HTTPException
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 PUBLIC_PATHS = frozenset(
     {"/healthz", "/readyz", "/.well-known/agent-card.json", "/docs", "/openapi.json", "/redoc"}
@@ -99,6 +100,57 @@ class RateLimiter:
             del self._buckets[key]
 
 
+class BodyTooLargeError(HTTPException):
+    """A request body without a declared length grew past the limit while being read.
+
+    An HTTP error, so the app's own exception handling answers 413 (FastAPI turns any other
+    exception raised while it reads a body into a 400).
+    """
+
+    def __init__(self, limit: int) -> None:
+        super().__init__(413, f"request body larger than {limit} bytes")
+
+
+class BodyLimit:
+    """Refuses request bodies over ``max_bytes`` with 413 before the app holds them in memory."""
+
+    def __init__(self, app: ASGIApp, *, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        detail = f"request body larger than {self.max_bytes} bytes"
+        declared = next((v for k, v in scope["headers"] if k.lower() == b"content-length"), None)
+        if declared is not None:
+            try:
+                too_big = int(declared) > self.max_bytes
+            except ValueError:
+                too_big = True
+            if too_big:
+                await _reject(send, 413, detail, {})
+                return
+            await self.app(scope, receive, send)
+            return
+        received = 0
+
+        async def counted() -> Message:
+            nonlocal received
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > self.max_bytes:
+                    raise BodyTooLargeError(self.max_bytes)
+            return message
+
+        try:
+            await self.app(scope, counted, send)
+        except BodyTooLargeError:  # an app without its own HTTP error handling
+            await _reject(send, 413, detail, {})
+
+
 def is_protected(path: str) -> bool:
     if path in PUBLIC_PATHS:
         return False
@@ -119,10 +171,17 @@ class AuthMiddleware:
             return
         headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope["headers"]}
         principal = self.auth.authenticate(headers)
+        client = scope.get("client") or ("unknown", 0)
         if principal is None:
+            # Failed attempts spend the caller's address bucket, so keys cannot be guessed fast.
+            allowed, retry_after = self.limiter.allow(f"ip:{client[0]}")
+            if not allowed:
+                await _reject(
+                    send, 429, "rate limit exceeded", {"retry-after": str(math.ceil(retry_after))}
+                )
+                return
             await _reject(send, 401, "missing or invalid API key", {"www-authenticate": "Bearer"})
             return
-        client = scope.get("client") or ("unknown", 0)
         bucket = principal.name if principal.authenticated else f"ip:{client[0]}"
         allowed, retry_after = self.limiter.allow(bucket)
         if not allowed:

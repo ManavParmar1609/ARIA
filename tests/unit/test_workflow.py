@@ -531,3 +531,23 @@ async def test_delete_removes_the_run_everywhere(env: Env) -> None:
             ).first()
             is None
         )
+
+
+def test_a_request_can_tighten_its_budgets_but_never_raise_them() -> None:
+    from types import SimpleNamespace
+
+    from aria.config import get_app_config
+
+    config = get_app_config()
+    services: Any = SimpleNamespace(config=config)
+    greedy = TriageRequest(logs=["x"], options=RunOptions(max_tokens=10**9, max_cost_usd=1e3))
+    limits = workflow._limits(services, greedy)
+    assert (limits.max_tokens, limits.max_cost_usd) == (
+        config.budgets.max_tokens,
+        config.budgets.max_cost_usd,
+    )
+    frugal = workflow._limits(
+        services, TriageRequest(logs=["x"], options=RunOptions(max_tokens=500))
+    )
+    assert frugal.max_tokens == 500
+    assert frugal.max_cost_usd == config.budgets.max_cost_usd

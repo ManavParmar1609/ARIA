@@ -31,7 +31,7 @@ from aria.api.agui import router as agui_router
 from aria.api.jobs import start_background_jobs
 from aria.api.metrics import Metrics
 from aria.api.routers import catalog, intake, learning, runs, system
-from aria.api.security import AuthMiddleware, KeyAuth, RateLimiter
+from aria.api.security import AuthMiddleware, BodyLimit, KeyAuth, RateLimiter
 from aria.api.state import AppState
 from aria.api.worker import Worker
 from aria.config import Settings, get_settings, load_dotenv_file
@@ -164,6 +164,7 @@ def create_app(
         ],
         expose_headers=["retry-after"],
     )
+    app.add_middleware(BodyLimit, max_bytes=settings.max_body_bytes)
     app.add_middleware(SecurityHeaders)
 
     for module in (system, runs, catalog, intake, learning):

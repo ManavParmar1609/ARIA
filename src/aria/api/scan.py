@@ -35,6 +35,8 @@ from aria.parsing.parser import parse_lines
 log = get_logger(__name__)
 
 TRIGGER = "scan"
+# New bytes read from one file per poll; a bigger burst is read over the next polls.
+MAX_READ_BYTES = 8 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -86,8 +88,11 @@ class LogScanner:
             offset = 0
         with path.open("rb") as handle:
             handle.seek(offset)
-            data = handle.read(max(0, size - offset))
+            data = handle.read(min(max(0, size - offset), MAX_READ_BYTES))
         complete = data.rfind(b"\n") + 1
+        if not complete and len(data) == MAX_READ_BYTES:  # one line longer than a read: skip it
+            self._offsets[path] = offset + len(data)
+            return []
         self._offsets[path] = offset + complete
         return data[:complete].decode("utf-8", errors="replace").splitlines()
 

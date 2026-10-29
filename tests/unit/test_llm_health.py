@@ -55,6 +55,19 @@ async def test_healthy_provider_passes(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @respx.mock
+async def test_the_safety_model_id_is_checked_but_optional(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test")
+    _mock_nim(["openai/gpt-oss-20b", "nvidia/nemotron-3.5-embed-1b"])
+    cfg = _cfg(safety_model="nvidia/nemotron-3.5-content-safety")
+    report = await check_provider("nim", cfg, OpenAICompatibleProvider("nim", cfg), probe=False)
+    assert report.models["safety_model"] is False
+    assert report.ok  # reported in the table, not failed: the guardrail is optional
+    _mock_nim(["openai/gpt-oss-20b", "nvidia/nemotron-3.5-content-safety"])
+    found = await check_provider("nim", cfg, OpenAICompatibleProvider("nim", cfg), probe=False)
+    assert found.models["safety_model"] is True
+
+
+@respx.mock
 async def test_unknown_model_and_failed_chat_are_reported(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test")
     respx.get(f"{NIM}/models").mock(

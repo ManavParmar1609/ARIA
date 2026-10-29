@@ -9,6 +9,7 @@ many lines. Each run uses a fresh random key, so pseudonyms cannot be linked acr
 from __future__ import annotations
 
 import hmac
+import ipaddress
 import re
 import secrets
 from dataclasses import dataclass, field
@@ -47,7 +48,13 @@ _EMAIL = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 _IPV4 = re.compile(
     r"(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?![\d.])"
 )
-_IPV6 = re.compile(r"(?<![\w:])(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}(?![\w:])")
+_IPV6 = re.compile(
+    r"(?<![\w:])(?:"
+    r"(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}"  # the full form
+    r"|(?:[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4}){0,6})?"  # or compressed: groups, "::", groups
+    r"::(?:[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4}){0,6})?"
+    r")(?![\w:])"
+)
 _DIGIT_RUN = re.compile(r"\d{4}")  # every card shape contains four consecutive digits
 # Literal parts at least one of which must appear (lowercased) for each secret pattern to match.
 _TRIGGERS: dict[str, tuple[str, ...]] = {
@@ -130,10 +137,20 @@ class Redactor:
                 self._count("ip")
                 return self._pseudonym("ip", match.group(0))
 
+            def ip6(match: re.Match[str]) -> str:
+                value = match.group(0)
+                if value == "::":  # a separator, not the unspecified address
+                    return value
+                try:
+                    ipaddress.IPv6Address(value)
+                except ValueError:
+                    return value
+                return ip(match)
+
             if text.count(".") >= 3:
                 text = _IPV4.sub(ip, text)
-            if text.count(":") >= 7:
-                text = _IPV6.sub(ip, text)
+            if "::" in text or text.count(":") >= 7:
+                text = _IPV6.sub(ip6, text)
         return text
 
     def summary(self) -> RedactionSummary:

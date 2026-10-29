@@ -23,6 +23,9 @@ from aria.db.engine import session_scope
 from aria.db.models import AlertGroupRow, AlertRow, RunRow
 
 SYSTEM_LABELS = ("aria_system", "system", "job", "service")
+# What one webhook payload can store: Alertmanager groups rarely carry more than a few dozen.
+MAX_ALERTS_PER_PAYLOAD = 500
+MAX_LABELS = 64
 _KNOWN_SYSTEMS = frozenset(
     {
         "bgl", "thunderbird", "hdfs", "hadoop", "spark", "zookeeper", "openstack", "hpc",
@@ -50,12 +53,19 @@ def normalize(
     payload: dict[str, Any], *, source: str
 ) -> tuple[str, list[AlertSignal], dict[str, str]]:
     """Group key, alerts and common labels from an Alertmanager-format webhook payload."""
-    common = {str(k): str(v) for k, v in (payload.get("commonLabels") or {}).items()}
+    common = {
+        str(k)[:64]: str(v)[:256]
+        for k, v in list((payload.get("commonLabels") or {}).items())[:MAX_LABELS]
+    }
     alerts: list[AlertSignal] = []
-    for raw in payload.get("alerts") or []:
-        labels = {str(k)[:64]: str(v)[:256] for k, v in (raw.get("labels") or {}).items()}
+    for raw in (payload.get("alerts") or [])[:MAX_ALERTS_PER_PAYLOAD]:
+        labels = {
+            str(k)[:64]: str(v)[:256]
+            for k, v in list((raw.get("labels") or {}).items())[:MAX_LABELS]
+        }
         annotations = {
-            str(k)[:64]: str(v)[:1_000] for k, v in (raw.get("annotations") or {}).items()
+            str(k)[:64]: str(v)[:1_000]
+            for k, v in list((raw.get("annotations") or {}).items())[:MAX_LABELS]
         }
         name = labels.get("alertname") or payload.get("title") or "alert"
         alerts.append(

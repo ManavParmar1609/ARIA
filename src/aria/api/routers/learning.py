@@ -35,6 +35,7 @@ def _severity(value: Any) -> Severity | None:
 async def feedback(state: State, limit: Annotated[int, Query(ge=1, le=500)] = 50) -> FeedbackOut:
     """Human reviews (the active-learning queue) and where model recalibration stands."""
     services = state.services
+    await asyncio.to_thread(services.severity.refresh)  # the worker may have recalibrated
     engine, model = services.engine, services.severity.model
     rows = await asyncio.to_thread(repo.list_feedback, engine, limit=limit)
     reviewed = len(await asyncio.to_thread(reviewed_examples, engine, model)) if model else 0

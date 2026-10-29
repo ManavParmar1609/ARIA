@@ -259,6 +259,8 @@ class Settings(BaseSettings):
     worker_concurrency: int = Field(default=4, ge=1, le=64)
     require_approval: bool = True
     rate_limit_per_minute: int = Field(default=120, ge=1)
+    # Largest request body the API reads; 20,000 lines of 2,000 characters fit with room to spare.
+    max_body_bytes: int = Field(default=48 * 1024 * 1024, ge=1024)
     public_base_url: str = "http://localhost:8000"
     web_dist_dir: Path | None = None
     # Keys each run's pseudonym salt as HMAC(key, run id), so pseudonyms stay stable when a run

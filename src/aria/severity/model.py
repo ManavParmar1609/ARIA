@@ -76,6 +76,15 @@ def expected_calibration_error(probs: FloatArray, y: IntArray, bins: int = 10) -
     return float(ece)
 
 
+def live_model_path(trained: Path, models_dir: Path) -> Path:
+    """Where recalibrated models are written: ``models_dir``, a volume all containers share.
+
+    The trained model ships with the code at ``trained``; readers fall back to it until the first
+    recalibration writes the live file. In a checkout both paths are ``models/``.
+    """
+    return models_dir / trained.name
+
+
 @dataclass
 class LinearModel:
     """Softmax over ``coef @ standardised(x) + intercept``, divided by a temperature."""

@@ -61,6 +61,29 @@ def test_pseudonyms_agree_across_redactors_sharing_a_salt_only() -> None:
     assert Redactor(salt=salt).redact("10.1.1.1") != Redactor(salt=b"1" * 16).redact("10.1.1.1")
 
 
+@pytest.mark.parametrize(
+    "address",
+    ["fe80::1", "2001:db8::8a2e:370:7334", "::1", "2001:0db8:0000:0000:0000:ff00:0042:8329"],
+)
+def test_ipv6_addresses_are_pseudonymised_compressed_or_not(address: str) -> None:
+    text = Redactor().redact(f"connection from {address} port 22 closed")
+    assert address not in text
+    assert re.search(r"from ip-[0-9a-f]{8} port", text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "09:01:51 job started",  # a time, not an address
+        "key :: value",  # a separator
+        "Foo::bar() returned",  # a C++ scope
+        "mac aa:bb:cc:dd:ee:ff up",  # six groups and no "::" is not IPv6
+    ],
+)
+def test_colon_heavy_text_that_is_not_ipv6_is_left_alone(text: str) -> None:
+    assert Redactor().redact(text) == text
+
+
 def test_ip_pseudonymisation_can_be_disabled() -> None:
     assert "10.0.0.7" in Redactor(pseudonymize_ips=False).redact("from 10.0.0.7")
 

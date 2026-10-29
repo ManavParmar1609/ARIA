@@ -16,7 +16,8 @@ from aria.db import repository as repo
 from aria.db.engine import get_engine, init_db
 from aria.graph.runner import TriageRunner
 from aria.services import Services
-from aria.severity.model import LinearModel
+from aria.severity.engine import SeverityEngine
+from aria.severity.model import LinearModel, live_model_path
 from aria.severity.recalibration import (
     MIN_REVIEWED,
     ReviewedExample,
@@ -145,7 +146,23 @@ async def test_reviews_recalibrate_the_model_and_running_engines_reload_it(
     assert not services.severity.refresh()
 
     assert recalibrate_from_feedback(engine, path, alpha=0.1, min_new_reviews=1) is None
-    shutil.copy(trained_file, path)  # a container restarts from its image's model ...
+    shutil.copy(trained_file, path)  # a model restored from an older file ...
     again = recalibrate_from_feedback(engine, path, alpha=0.1, min_new_reviews=MIN_REVIEWED)
-    assert again is not None  # ... and recalibrates again from the shared database
+    assert again is not None  # ... recalibrates again from the shared database
     assert LinearModel.load(path).version == saved.version
+
+    # In containers the live model sits on the shared volume; the image only has the trained one.
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    live = live_model_path(trained_file, shared)
+    fresh = SeverityEngine.load(services.config.severity, models_dir=shared)
+    assert fresh.model is not None
+    assert (fresh.model.version, fresh.model_path) == (trained.version, live)
+    first = recalibrate_from_feedback(
+        engine, live, alpha=0.1, min_new_reviews=MIN_REVIEWED, trained=trained_file
+    )
+    assert first is not None
+    assert LinearModel.load(live).version == saved.version
+    assert LinearModel.load(trained_file).version == trained.version  # never written
+    assert fresh.refresh()  # every container sharing the volume picks it up
+    assert fresh.model.version == saved.version

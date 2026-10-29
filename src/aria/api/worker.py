@@ -32,11 +32,16 @@ class Worker:
     def __init__(self, runner: TriageRunner, *, concurrency: int = 4) -> None:
         self.runner = runner
         self._slots = asyncio.Semaphore(concurrency)
-        self._tasks: set[asyncio.Task[Any]] = set()
+        self._tasks: dict[asyncio.Task[Any], str] = {}
 
     @property
     def active(self) -> int:
         return len(self._tasks)
+
+    @property
+    def run_ids(self) -> list[str]:
+        """Runs with a job in flight."""
+        return sorted(set(self._tasks.values()))
 
     def spawn(self, run_id: str, job: Callable[[], Awaitable[Any]]) -> asyncio.Task[Any]:
         async def guarded() -> None:
@@ -49,8 +54,8 @@ class Worker:
                     log.exception("worker.job_failed", run_id=run_id)
 
         task = asyncio.create_task(guarded(), name=f"aria-run-{run_id}")
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+        self._tasks[task] = run_id
+        task.add_done_callback(lambda done: self._tasks.pop(done, None))
         return task
 
     def execute(self, run_id: str) -> asyncio.Task[Any]:
@@ -77,8 +82,17 @@ class Worker:
                 await task
 
 
+# Claims go stale after ten minutes without renewal (repo.claim_runs); renew well before that.
+CLAIM_RENEW_S = 60.0
+
+
 def worker_id() -> str:
     return f"{socket.gethostname()}:{os.getpid()}"
+
+
+def heartbeat_file(data_dir: Path) -> Path:
+    """This host's heartbeat: one file per container, even when they share a data volume."""
+    return data_dir / f"worker-{socket.gethostname()}.heartbeat"
 
 
 def _touch(path: Path) -> None:
@@ -105,13 +119,16 @@ async def poll_forever(
     """The external worker loop: claim runs from the database and execute them, with the
     periodic jobs (the log scan) running beside it.
 
-    After each poll that reaches the database, ``heartbeat`` (when given) is touched, so a
-    container health check can tell a live worker from a stuck one."""
+    Claims on runs still executing are renewed every ``CLAIM_RENEW_S``, so another worker takes
+    a run over only when this one has stopped. After each poll that reaches the database,
+    ``heartbeat`` (when given) is touched, so a container health check can tell a live worker
+    from a stuck one."""
     me = worker_id()
     worker = Worker(runner, concurrency=concurrency)
     stop = stop or asyncio.Event()
     background = start_background_jobs(runner.services, runner, stop)
     log.info("worker.started", worker=me, concurrency=concurrency, jobs=len(background))
+    renewed = time.monotonic()
     try:
         while not stop.is_set():
             free = max(0, concurrency - worker.active)
@@ -119,6 +136,9 @@ async def poll_forever(
                 claimed = await asyncio.to_thread(repo.claim_runs, runner.engine, me, limit=free)
                 for run_id in claimed:
                     worker.execute(run_id)
+            if time.monotonic() - renewed >= CLAIM_RENEW_S:
+                await asyncio.to_thread(repo.renew_claims, runner.engine, me, worker.run_ids)
+                renewed = time.monotonic()
             if heartbeat is not None:
                 await asyncio.to_thread(_touch, heartbeat)
             with contextlib.suppress(TimeoutError):

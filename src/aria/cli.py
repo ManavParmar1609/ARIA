@@ -14,7 +14,8 @@ from rich.table import Table
 
 app = typer.Typer(no_args_is_help=True, help="ARIA incident triage.")
 db_app = typer.Typer(no_args_is_help=True, help="Database migrations.")
-WORKER_HEARTBEAT = "worker.heartbeat"
+# The latest end-to-end run through a live LLM: committed, quoted by `make eval`.
+LIVE_RESULTS = Path("docs/eval-live.json")
 data_app = typer.Typer(no_args_is_help=True, help="Download and ingest the public datasets.")
 train_app = typer.Typer(
     help="Train and export the severity and ticket models.", invoke_without_command=True
@@ -157,17 +158,19 @@ def train_recalibrate(
     dry_run: Annotated[bool, typer.Option(help="Report the effect without saving.")] = False,
 ) -> None:
     """Recalibrate the severity model's prediction sets on reviewed incidents."""
-    from aria.config import get_app_config
+    from aria.config import get_app_config, get_settings
     from aria.db.engine import get_engine
+    from aria.severity.model import live_model_path
     from aria.severity.recalibration import recalibrate_from_feedback
 
     config = get_app_config().severity
     result = recalibrate_from_feedback(
         get_engine(),
-        config.log_model_file,
+        live_model_path(config.log_model_file, get_settings().models_dir),
         alpha=config.alpha,
         min_new_reviews=config.recalibrate_after if min_new_reviews is None else min_new_reviews,
         dry_run=dry_run,
+        trained=config.log_model_file,
     )
     if result is None:
         console.print("not enough new reviews to recalibrate yet")
@@ -295,27 +298,32 @@ def serve(
 
 @app.command()
 def worker(
-    concurrency: Annotated[int, typer.Option(min=1, max=64)] = 4,
+    concurrency: Annotated[
+        int | None,
+        typer.Option(min=1, max=64, help="Runs at once (default: ARIA_WORKER_CONCURRENCY)."),
+    ] = None,
     interval: Annotated[float, typer.Option(help="Seconds between queue polls.")] = 2.0,
 ) -> None:
     """Run queued triage runs from the database (for ARIA_WORKER_MODE=external)."""
-    from aria.api.worker import poll_forever
+    from aria.api.worker import heartbeat_file, poll_forever
     from aria.config import get_settings
     from aria.graph.runner import TriageRunner
     from aria.observability.logging import configure_logging
+    from aria.observability.tracing import configure_tracing
     from aria.services import Services
 
     settings = get_settings()
     configure_logging(settings.log_level, settings.log_format)
+    configure_tracing(settings.otel_exporter, endpoint=settings.otlp_endpoint)
 
     async def main() -> None:
         services = await Services.create()
         try:
             await poll_forever(
                 TriageRunner(services),
-                concurrency=concurrency,
+                concurrency=concurrency or settings.worker_concurrency,
                 interval_s=interval,
-                heartbeat=settings.data_dir / WORKER_HEARTBEAT,
+                heartbeat=heartbeat_file(settings.data_dir),
             )
         finally:
             await services.aclose()
@@ -328,10 +336,10 @@ def worker_health(
     max_age: Annotated[float, typer.Option(help="Seconds since the last poll.")] = 60.0,
 ) -> None:
     """Exit 0 when the worker polled recently (a container health check)."""
-    from aria.api.worker import heartbeat_age
+    from aria.api.worker import heartbeat_age, heartbeat_file
     from aria.config import get_settings
 
-    age = heartbeat_age(get_settings().data_dir / WORKER_HEARTBEAT)
+    age = heartbeat_age(heartbeat_file(get_settings().data_dir))
     if age is None or age > max_age:
         console.print(f"worker heartbeat stale: {'never' if age is None else f'{age:.0f} s ago'}")
         raise typer.Exit(1)
@@ -431,9 +439,11 @@ def eval_run(
                     for k in ("accuracy", "macro_f1", "severe_under_triage")
                 }
             console.print(f"[bold]{section}[/bold] {json.dumps(headline, default=str)}")
+    if suite == "pipeline" and llm:
+        LIVE_RESULTS.write_text(json.dumps(results, indent=2, default=str) + "\n", "utf-8")
+        console.print(f"wrote {LIVE_RESULTS}; `make eval` quotes it")
     if suite == "all" and not llm:
-        live_path = Path("reports/eval/pipeline-llm.json")
-        live = json.loads(live_path.read_text()) if live_path.exists() else None
+        live = json.loads(LIVE_RESULTS.read_text()) if LIVE_RESULTS.exists() else None
         docs.parent.mkdir(parents=True, exist_ok=True)
         docs.write_text(report.render(results, live), encoding="utf-8")
         Path("docs/eval-results.json").write_text(
@@ -442,6 +452,13 @@ def eval_run(
             encoding="utf-8",
         )
         console.print(f"wrote {docs}")
+        content = report.blocks(results, live)
+        for path in report.QUOTING_DOCS:
+            if path.is_file():
+                text = path.read_text(encoding="utf-8")
+                if (updated := report.fill(text, content)) != text:
+                    path.write_text(updated, encoding="utf-8")
+                    console.print(f"updated the results quoted in {path}")
     if gate:
         failures = check_gate(results, suite)
         for failure in failures:

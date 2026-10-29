@@ -14,6 +14,7 @@ from aria.api.scan import LogScanner, scan_forever
 from aria.graph.runner import TriageRunner
 from aria.observability.logging import get_logger
 from aria.services import Services
+from aria.severity.model import live_model_path
 from aria.severity.recalibration import recalibrate_from_feedback
 
 log = get_logger(__name__)
@@ -29,9 +30,10 @@ async def recalibrate_forever(
             result = await asyncio.to_thread(
                 recalibrate_from_feedback,
                 services.engine,
-                config.log_model_file,
+                live_model_path(config.log_model_file, services.settings.models_dir),
                 alpha=config.alpha,
                 min_new_reviews=config.recalibrate_after,
+                trained=config.log_model_file,
             )
             if result is not None:
                 services.severity.refresh()

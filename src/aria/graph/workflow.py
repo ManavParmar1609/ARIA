@@ -196,12 +196,18 @@ def _plan(state: TriageState) -> Plan:
 
 
 def _limits(services: Services, request: TriageRequest) -> BudgetConfig:
+    """The run's budgets: a request may tighten the configured limits, never raise them."""
+    limits = services.config.budgets
     overrides = {
         "max_tokens": request.options.max_tokens,
         "max_cost_usd": request.options.max_cost_usd,
     }
-    return services.config.budgets.model_copy(
-        update={k: v for k, v in overrides.items() if v is not None}
+    return limits.model_copy(
+        update={
+            key: min(value, getattr(limits, key))
+            for key, value in overrides.items()
+            if value is not None
+        }
     )
 
 

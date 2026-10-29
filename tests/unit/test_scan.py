@@ -106,6 +106,29 @@ def test_lines_are_read_whole_and_a_rotated_file_from_the_top(tmp_path: Path) ->
     assert finding.lines == [first]
 
 
+def test_reads_are_bounded_and_an_endless_line_is_skipped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("aria.api.scan.MAX_READ_BYTES", 256)
+    log = tmp_path / "bgl.log"
+    log.touch()
+    scan = scanner_for(log, min_burst=0.0)
+    assert scan.poll() == []
+    lines = quiet(2)  # eight lines, more than 256 bytes in all
+    append(log, lines)
+    read: list[str] = []
+    for _ in range(10):
+        read += [line for finding in scan.poll() for line in finding.lines]
+    assert read == lines  # a big burst arrives over several polls, every line whole
+    with log.open("a", encoding="utf-8") as handle:
+        handle.write("x" * 1_000 + "\n")  # longer than one read
+    append(log, lines[:1])
+    after: list[str] = []
+    for _ in range(10):
+        after += [line for finding in scan.poll() for line in finding.lines]
+    assert lines[0] in after  # the scan moved past the endless line instead of sticking
+
+
 def test_a_missing_file_is_skipped_until_it_appears(tmp_path: Path) -> None:
     log = tmp_path / "later.log"
     scan = scanner_for(log, min_burst=0.0)

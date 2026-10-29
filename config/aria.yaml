@@ -44,7 +44,9 @@ llm:
         Hosted NVIDIA NIM (build.nvidia.com), OpenAI-compatible. Verified 2026-10-29 with live
         calls: openai/gpt-oss-20b (strict JSON schema, streaming) and nvidia/nemotron-3.5-embed-1b
         (2048-dim, input_type=query|passage). z-ai/glm-5.3-flash is listed but did not answer
-        within 100 s that day. Reranking is off until NVIDIA_NIM_RERANK_MODEL and
+        within 100 s that day. nvidia/nemotron-3.5-content-safety (the optional guardrail, off by
+        default) is listed in the model catalog (checked 2026-10-29) but has not been called live,
+        so its verdict format is unverified. Reranking is off until NVIDIA_NIM_RERANK_MODEL and
         NVIDIA_NIM_RERANK_URL are set (the retrieval API runs on ai.api.nvidia.com). Set
         NVIDIA_NIM_BASE_URL to a self-hosted NIM (for example http://nim:8000/v1) to use your
         own GPUs.

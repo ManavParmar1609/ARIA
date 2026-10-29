@@ -8,7 +8,7 @@ import socket
 import threading
 import time
 from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -145,6 +145,31 @@ async def test_health_is_public_and_everything_else_needs_a_key(api: Api) -> Non
     assert page.headers["x-content-type-options"] == "nosniff"
 
 
+async def test_the_mcp_endpoint_refuses_other_hosts_and_origins(api: Api) -> None:
+    """DNS rebinding: a page on another site must not reach /mcp through the browser."""
+    initialize = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {},
+            "clientInfo": {"name": "test", "version": "1"},
+        },
+    }
+    headers = {"accept": "application/json, text/event-stream"}
+    ok = await api.client.post("/mcp", json=initialize, headers=headers)
+    assert ok.status_code == 200, ok.text
+    rebound = await api.client.post(
+        "/mcp", json=initialize, headers={**headers, "host": "attacker.example"}
+    )
+    assert rebound.status_code == 421
+    cross_site = await api.client.post(
+        "/mcp", json=initialize, headers={**headers, "origin": "https://attacker.example"}
+    )
+    assert cross_site.status_code == 403
+
+
 async def test_me_and_settings_show_the_caller_and_limits_without_secrets(api: Api) -> None:
     assert (await api.client.get("/api/v1/me")).json() == {
         "name": "ana",
@@ -175,6 +200,56 @@ async def test_rate_limit_answers_429_with_retry_after(monkeypatch: pytest.Monke
             limited = await c.get("/api/v1/runs", headers=ANA)
             assert int(limited.headers["retry-after"]) >= 1
             assert (await c.get("/healthz")).status_code == 200  # health is never limited
+
+
+async def test_guessed_keys_are_rate_limited_and_huge_bodies_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ARIA_API_KEYS", "ana:k-ana")
+    monkeypatch.setenv("ARIA_RATE_LIMIT_PER_MINUTE", "3")
+    monkeypatch.setenv("ARIA_MAX_BODY_BYTES", "2048")
+    reset_caches()
+    init_db(get_engine())
+    app = create_app()
+    async with LifespanManager(app) as manager:
+        transport = httpx.ASGITransport(app=manager.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://localhost:8000") as c:
+            guesses = [
+                (
+                    await c.get("/api/v1/runs", headers={"Authorization": f"Bearer k-{i}"})
+                ).status_code
+                for i in range(4)
+            ]
+            assert guesses == [401, 401, 401, 429]
+            big = {"system": "bgl", "logs": ["x" * 100] * 50}
+            declared = await c.post("/api/v1/runs", json=big, headers=ANA)
+            assert declared.status_code == 413
+
+            async def chunks() -> AsyncIterator[bytes]:
+                for _ in range(5):
+                    yield b"x" * 1_000
+
+            streamed = await c.post(
+                "/api/v1/runs",
+                content=chunks(),
+                headers={**ANA, "content-type": "application/json"},
+            )
+            assert streamed.status_code == 413
+
+
+def test_one_alert_payload_cannot_store_unbounded_alerts_or_labels() -> None:
+    from aria.api.alerts import MAX_ALERTS_PER_PAYLOAD, MAX_LABELS, normalize
+
+    labels = {f"k{i}": "v" * 1_000 for i in range(200)}
+    payload = {
+        "commonLabels": labels,
+        "alerts": [{"labels": labels, "fingerprint": f"f{i}"} for i in range(800)],
+    }
+    _, alerts, common = normalize(payload, source="alertmanager")
+    assert len(alerts) == MAX_ALERTS_PER_PAYLOAD
+    assert len(common) == MAX_LABELS
+    assert max(len(v) for v in common.values()) == 256
+    assert len(alerts[0].labels) == MAX_LABELS
 
 
 def test_production_refuses_to_start_without_keys(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -375,7 +450,7 @@ async def test_catalog_lists_incidents_and_runbooks(api: Api) -> None:
     assert (await api.client.get("/api/v1/runbooks/nope")).status_code == 404
 
 
-async def test_reviews_calibration_evaluation_and_tickets(api: Api) -> None:
+async def test_reviews_calibration_evaluation_and_tickets(api: Api, tmp_path: Path) -> None:
     run = await start(api)
     done = await api.client.post(f"/api/v1/runs/{run['id']}/review", json={"decision": "approve"})
     assert done.json()["status"] == "published"
@@ -394,6 +469,15 @@ async def test_reviews_calibration_evaluation_and_tickets(api: Api) -> None:
     assert calibration["recalibrated"] is False
     assert calibration["recalibrate_after"] == 30
     assert calibration["model_version"] == api.state.services.severity.model.version  # type: ignore[union-attr]
+
+    # A worker recalibrates the shared model file; the API's view follows without a restart.
+    severity = api.state.services.severity
+    assert severity.model is not None
+    live = tmp_path / "severity_log.json"
+    replace(severity.model, version="worker-recal", metadata={"recalibrated_from": "x"}).save(live)
+    severity.model_path = live
+    after = (await api.client.get("/api/v1/feedback")).json()["calibration"]
+    assert (after["model_version"], after["recalibrated"]) == ("worker-recal", True)
 
     results = await api.client.get("/api/v1/eval")
     assert results.status_code == 200
@@ -435,7 +519,9 @@ async def test_a2a_task_pauses_for_review_and_completes(api: Api) -> None:
     rpc = {"jsonrpc": "2.0", "id": 2, "method": "SendMessage", "params": {"message": reply}}
     asked = (await api.client.post("/a2a", json=rpc, headers=headers)).json()["result"]["task"]
     assert asked["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
-    reply["parts"] = [{"data": {"decision": "approve"}}]
+    # The client claims to be someone else; the review is recorded under its key's name.
+    reply["parts"] = [{"data": {"decision": "approve", "reviewer": "mallory"}}]
+    reply["metadata"] = {"reviewer": "mallory"}
     reply["messageId"] = "m3"
     rpc = {"jsonrpc": "2.0", "id": 3, "method": "SendMessage", "params": {"message": reply}}
     done = (await api.client.post("/a2a", json=rpc, headers=headers)).json()["result"]["task"]
@@ -443,6 +529,9 @@ async def test_a2a_task_pauses_for_review_and_completes(api: Api) -> None:
     run = repo.get_run(api.state.services.engine, f"a2a-{task['id']}")
     assert run is not None
     assert run["status"] == "published"
+    report = (await api.client.get(f"/api/v1/runs/a2a-{task['id']}/report")).json()["report"]
+    review = next(e for e in report["evidence"] if e["kind"] == "review")
+    assert review["data"]["reviewer"] == "ana"
 
 
 async def test_agui_streams_a_run_and_resumes_its_interrupt(api: Api) -> None:
@@ -599,6 +688,21 @@ async def test_unfinished_runs_continue_after_a_restart(monkeypatch: pytest.Monk
                     await asyncio.sleep(0.05)
     finally:
         await services.aclose()
+
+
+def test_a_worker_keeps_its_claims_alive_while_runs_execute() -> None:
+    init_db(get_engine())
+    engine = get_engine()
+    request = TriageRequest(system="bgl", logs=["x"]).model_dump(mode="json")
+    repo.create_run(engine, "run-claim", request=request, title="t", system="bgl")
+    assert repo.claim_runs(engine, "w1") == ["run-claim"]
+    assert repo.claim_runs(engine, "w2", stale_after_s=0.0) == ["run-claim"]  # w1 went quiet
+    repo.renew_claims(engine, "w2", ["run-claim"])
+    assert repo.claim_runs(engine, "w3") == []  # renewed: not stale
+    repo.renew_claims(engine, "w1", ["run-claim"])  # only the holder can renew
+    run = repo.get_run(engine, "run-claim")
+    assert run is not None
+    assert run["claimed_by"] == "w2"
 
 
 async def test_worker_heartbeat_follows_its_polls(tmp_path: Path) -> None:
