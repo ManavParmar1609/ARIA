@@ -42,3 +42,16 @@ modern-python	trailofbits/skills	2be6433b39e009cd2b6fd3be1895f6b1faa5af9a	plugin
 property-based-testing	trailofbits/skills	2be6433b39e009cd2b6fd3be1895f6b1faa5af9a	plugins/property-based-testing/skills/property-based-testing
 sharp-edges	trailofbits/skills	2be6433b39e009cd2b6fd3be1895f6b1faa5af9a	plugins/sharp-edges/skills/sharp-edges
 nemotron-policy-generator	NVIDIA/skills	ca116d60beafe1b4459f0ab790b7b450912c56b0	skills/nemotron-policy-generator
+copilotkit-agui	CopilotKit/skills	8d78cf908844a30d2909f7da4eb8cb6f51fa02ad	skills/copilotkit-agui
+copilotkit-setup	CopilotKit/skills	8d78cf908844a30d2909f7da4eb8cb6f51fa02ad	skills/copilotkit-setup
+copilotkit-develop	CopilotKit/skills	8d78cf908844a30d2909f7da4eb8cb6f51fa02ad	skills/copilotkit-develop
+copilotkit-integrations	CopilotKit/skills	8d78cf908844a30d2909f7da4eb8cb6f51fa02ad	skills/copilotkit-integrations
+copilotkit-debug	CopilotKit/skills	8d78cf908844a30d2909f7da4eb8cb6f51fa02ad	skills/copilotkit-debug
+copilotkit	CopilotKit/CopilotKit	ea0aa986e32cf7aeec46e7004bff8e48a81c6550	skills/copilotkit
+mcp-apps-builder	CopilotKit/CopilotKit	ea0aa986e32cf7aeec46e7004bff8e48a81c6550	examples/showcases/open-mcp-client/apps/mcp-use-server/.agent/skills/mcp-apps-builder
+langfuse	langfuse/skills	298b316eb9a5d302811c4182fb9c1ee81a449257	skills/langfuse
+ag-ui-a2ui-integration	ag-ui-protocol/ag-ui	7e7c1109f26e77cc32d87d351fb9e0b0bf56ff7f	skills/ag-ui-a2ui-integration
+deep-agents-core	langchain-ai/langchain-skills	126c384d8552dcb476b226c244172186cc3f4328	config/skills/deep-agents-core
+deep-agents-orchestration	langchain-ai/langchain-skills	126c384d8552dcb476b226c244172186cc3f4328	config/skills/deep-agents-orchestration
+deep-agents-memory	langchain-ai/langchain-skills	126c384d8552dcb476b226c244172186cc3f4328	config/skills/deep-agents-memory
+opentelemetry	o11y-dev/opentelemetry-skill	e72d4ae45d2b67b4d4410dfadb1cccef04fd3626	SKILL.md+references+examples

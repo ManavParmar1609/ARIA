@@ -82,7 +82,29 @@ approves, and approved reports feed back into memory. Every headline number come
    - report groundedness;
    - 2,000 edge-case and injection inputs;
    - p50/p95 latency and cost per provider.
-6. **Frontend (`web/`):**
+6. **Open agent standards** (all free and open source; most hosted by the Linux Foundation's
+   Agentic AI Foundation):
+   - **MCP** (spec 2026-07-28, Python SDK 2.3): read-only tools with annotations and structured
+     output, resources and prompts, over stdio and streamable HTTP; usable from any MCP client.
+   - **A2A 1.0** (`a2a-sdk`): an Agent Card at `/.well-known/agent-card.json` and JSON-RPC
+     task endpoints so other agents can delegate triage to ARIA; ARIA's human review maps to the
+     A2A `input-required` task state.
+   - **AG-UI 1.0** (`ag-ui-protocol`): the run stream the frontend consumes (lifecycle, steps,
+     text deltas, tool calls, state snapshots and deltas, interrupts), compatible with
+     CopilotKit.
+   - **OpenTelemetry GenAI** semantic conventions for traces, exportable over OTLP to Langfuse,
+     Arize Phoenix or Jaeger (a local Phoenix runs in docker compose), or to Azure Monitor.
+   - **AGENTS.md** for coding agents working on the repo, **Agent Skills** (`SKILL.md`) shipping
+     an ARIA skill so other agents can drive it, and **llms.txt** for the docs site.
+   - **LangGraph 1.2** capabilities: Send fan-out, Command routing, subgraphs, interrupts,
+     durable checkpoints with time travel and forking, a long-term memory Store, retry, timeout
+     and cache policies, and multi-mode streaming.
+   - **Deep-agent patterns** without the extra dependencies: an explicit plan (todo list) the
+     supervisor maintains, specialist sub-agents, context offloading to the evidence store, and
+     summarisation when context grows.
+   - **Open-weight models** through NVIDIA NIM (Nemotron) or any OpenAI-compatible server, and
+     NVIDIA's open Nemotron content-safety models as an optional guardrail.
+7. **Frontend (`web/`):**
    - Stack: Next.js App Router, strict TypeScript, Tailwind v4, shadcn/ui, 21st.dev components,
      React Bits, GSAP (ScrollTrigger), Motion.
    - Design system: OKLCH color tokens, dark-first with a light theme, a type scale with a mono
@@ -93,14 +115,14 @@ approves, and approved reports feed back into memory. Every headline number come
      report with hover-to-evidence; approvals; time travel), Ask ARIA, eval dashboard, memory
      and runbooks, and settings (providers including NIM, budgets, guardrails).
    - Every view has loading, empty and error states.
-7. **Video (`video/`):** a 60–90 s Remotion explainer and demo built from real run output,
+8. **Video (`video/`):** a 60–90 s Remotion explainer and demo built from real run output,
    rendered to MP4.
-8. **Deployment:** multi-stage Docker images (api, worker, web); docker compose with an optional
+9. **Deployment:** multi-stage Docker images (api, worker, web); docker compose with an optional
    NIM profile; Bicep + azd (Container Apps or App Service, Azure SQL, Azure OpenAI, Key Vault,
    App Insights, managed identity); GitHub Actions CI (lint, types, tests, eval gate, web
    checks, image builds, pip-audit, pnpm audit, Bicep build) and a manually triggered OIDC
    deploy.
-9. **Docs:** a README (architecture diagram, quickstart, provider setup including NIM, measured
+10. **Docs:** a README (architecture diagram, quickstart, provider setup including NIM, measured
    results, limitations), ADRs, a data card, a model card, a threat model and an ops runbook.
 
 ## Constraints
