@@ -262,7 +262,7 @@ async def _stream(
             job = runner.execute(run_id)  # continue, or report where the run already stands
 
         translator = Translator(runner, run_id)
-        task: asyncio.Task[RunOutcome] = asyncio.create_task(job)
+        task: asyncio.Task[RunOutcome] = asyncio.create_task(state.worker.gated(job))
         while True:
             getter = asyncio.create_task(queue.get())
             done, _ = await asyncio.wait({getter, task}, return_when=asyncio.FIRST_COMPLETED)

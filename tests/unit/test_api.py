@@ -10,7 +10,7 @@ import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -21,7 +21,7 @@ from mcp import Client
 
 from aria.api.app import create_app
 from aria.api.state import AppState
-from aria.api.worker import heartbeat_age, poll_forever
+from aria.api.worker import Worker, heartbeat_age, poll_forever
 from aria.config import Environment, get_settings, reset_caches
 from aria.contracts.inputs import TriageRequest
 from aria.data.scenarios import LinePools, ScenarioBuilder
@@ -797,3 +797,22 @@ async def test_the_api_can_migrate_its_database_on_start(
     tables = set(inspect(create_engine(url)).get_table_names())
     assert {"alembic_version", "runs", "incidents"} <= tables
     dispose_engines()
+
+
+async def test_streamed_runs_wait_for_a_worker_slot() -> None:
+    """AG-UI and A2A runs execute inside the request that streams them; however many streams are
+    open, no more of them run at once than the worker's concurrency allows."""
+    worker = Worker(cast("TriageRunner", None), concurrency=2)
+    running, peak = 0, 0
+
+    async def job() -> int:
+        nonlocal running, peak
+        running += 1
+        peak = max(peak, running)
+        await asyncio.sleep(0.01)
+        running -= 1
+        return 1
+
+    results = await asyncio.gather(*(worker.gated(job()) for _ in range(6)))
+    assert results == [1] * 6
+    assert peak == 2

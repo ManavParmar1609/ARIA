@@ -14,7 +14,7 @@ The Agent Card is served at ``/.well-known/agent-card.json`` and the JSON-RPC en
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from a2a.helpers.proto_helpers import (
@@ -161,10 +161,18 @@ def reviewer_for(context: RequestContext, claimed: object) -> str:
 
 
 class AriaExecutor(AgentExecutor):
-    """Runs A2A tasks as ARIA runs. The runner is looked up per task (it starts with the app)."""
+    """Runs A2A tasks as ARIA runs. The runner is looked up per task (it starts with the app).
 
-    def __init__(self, get_runner: Callable[[], TriageRunner]) -> None:
+    ``gate`` runs each job in the API worker's slots, so A2A tasks share its concurrency limit.
+    """
+
+    def __init__(
+        self,
+        get_runner: Callable[[], TriageRunner],
+        gate: Callable[[Awaitable[RunOutcome]], Awaitable[RunOutcome]] | None = None,
+    ) -> None:
         self._get_runner = get_runner
+        self._gate = gate or (lambda job: job)
 
     @property
     def runner(self) -> TriageRunner:
@@ -193,7 +201,7 @@ class AriaExecutor(AgentExecutor):
             except (ValueError, ValidationError) as exc:
                 await updater.requires_input(updater.new_agent_message([new_text_part(str(exc))]))
                 return
-            outcome = await self.runner.resume(run_id, decision)
+            outcome = await self._gate(self.runner.resume(run_id, decision))
         else:
             try:
                 request = request_from(message, metadata)
@@ -204,7 +212,7 @@ class AriaExecutor(AgentExecutor):
                 updater.new_agent_message([new_text_part("ARIA is triaging the incident.")])
             )
             await asyncio.to_thread(self.runner.submit, request, run_id=run_id, trigger="a2a")
-            outcome = await self.runner.execute(run_id)
+            outcome = await self._gate(self.runner.execute(run_id))
         await self._finish(updater, outcome)
 
     async def _attach_report(self, updater: TaskUpdater, run_id: str) -> None:
@@ -251,12 +259,18 @@ class AriaExecutor(AgentExecutor):
 
 
 def a2a_routes(
-    get_runner: Callable[[], TriageRunner], settings: Settings, *, secured: bool
+    get_runner: Callable[[], TriageRunner],
+    settings: Settings,
+    *,
+    secured: bool,
+    gate: Callable[[Awaitable[RunOutcome]], Awaitable[RunOutcome]] | None = None,
 ) -> tuple[list[BaseRoute], list[BaseRoute]]:
     """The Agent Card routes and the JSON-RPC routes."""
     card = agent_card(settings, secured=secured)
     handler = DefaultRequestHandler(
-        agent_executor=AriaExecutor(get_runner), task_store=InMemoryTaskStore(), agent_card=card
+        agent_executor=AriaExecutor(get_runner, gate),
+        task_store=InMemoryTaskStore(),
+        agent_card=card,
     )
     return list(create_agent_card_routes(card)), list(
         create_jsonrpc_routes(handler, rpc_url=A2A_PATH, context_builder=PrincipalContextBuilder())

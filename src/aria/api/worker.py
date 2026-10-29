@@ -61,6 +61,15 @@ class Worker:
     def execute(self, run_id: str) -> asyncio.Task[Any]:
         return self.spawn(run_id, lambda: self.runner.execute(run_id))
 
+    async def gated[T](self, job: Awaitable[T]) -> T:
+        """Await a run's job in one of the same slots the background jobs use.
+
+        AG-UI and A2A run a triage inside the request that streams it; going through here means
+        however many streams are open, no more runs execute at once than the worker allows.
+        """
+        async with self._slots:
+            return await job
+
     async def recover(self) -> list[str]:
         """Continue runs a stopped in-process worker left queued or running."""
         run_ids = await asyncio.to_thread(repo.unfinished_runs, self.runner.engine)

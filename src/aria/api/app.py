@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -35,7 +35,13 @@ from aria.api.security import AuthMiddleware, BodyLimit, KeyAuth, RateLimiter
 from aria.api.state import AppState
 from aria.api.worker import Worker
 from aria.config import Settings, get_settings, load_dotenv_file
-from aria.graph.runner import RunBusyError, RunNotFoundError, RunStateError, TriageRunner
+from aria.graph.runner import (
+    RunBusyError,
+    RunNotFoundError,
+    RunOutcome,
+    RunStateError,
+    TriageRunner,
+)
 from aria.mcp.server import build_server
 from aria.observability.logging import configure_logging, get_logger
 from aria.observability.tracing import configure_tracing
@@ -172,7 +178,14 @@ def create_app(
     app.include_router(replays.runs_router)
     app.include_router(agui_router)
     app.router.routes.extend(mcp_app.routes)
-    card_routes, rpc_routes = a2a_routes(lambda: current().runner, settings, secured=not auth.open)
+
+    def gate(job: Awaitable[RunOutcome]) -> Awaitable[RunOutcome]:
+        # Looked up per task: the worker starts with the app, after the routes exist.
+        return current().worker.gated(job)
+
+    card_routes, rpc_routes = a2a_routes(
+        lambda: current().runner, settings, secured=not auth.open, gate=gate
+    )
     add_a2a_routes_to_fastapi(app, agent_card_routes=card_routes, jsonrpc_routes=rpc_routes)
 
     @app.exception_handler(RunNotFoundError)
