@@ -1,22 +1,21 @@
 import { AbsoluteFill, useCurrentFrame } from "remotion";
 
+import { ApproveScene } from "../../../web/src/components/illustrations/scenes";
 import { Label, Lead } from "../components";
 import { REPO } from "../data";
 import { enter, progress } from "../motion";
-import { Orb } from "../orb";
-import { MONO, SAFE, SANS, color, gradient, radius, size } from "../theme";
+import { SAFE, SANS, color, mono, radius, size } from "../theme";
 
-/** Where to get it: the promise again, and the one call to action in aurora. */
+/** Where to get it: the promise again, a thumbs-up, and the message flying once approved. */
 export const Close = () => {
   const frame = useCurrentFrame();
   return (
     <AbsoluteFill
       style={{ backgroundColor: color.background, color: color.foreground, fontFamily: SANS }}
     >
-      <Orb
-        size={900}
-        style={{ position: "absolute", right: -80, top: 90, opacity: 0.9 * progress(frame, 0, 30) }}
-      />
+      <div style={{ position: "absolute", right: 60, top: 150, width: 860, ...enter(frame, 4) }}>
+        <ApproveScene planeAt={progress(frame, 40, 70)} />
+      </div>
       <div
         style={{
           position: "absolute",
@@ -33,32 +32,49 @@ export const Close = () => {
           style={{
             fontSize: size.display,
             fontWeight: 500,
-            letterSpacing: "-0.046em",
-            lineHeight: 1,
+            letterSpacing: "-0.06em",
+            lineHeight: 0.95,
             color: color.heading,
-            maxWidth: 1000,
+            maxWidth: 980,
             ...enter(frame, 6),
           }}
         >
           Open source, and offline by default.
         </div>
-        <Lead style={{ maxWidth: 940, ...enter(frame, 18) }}>
+        <Lead style={{ maxWidth: 900, ...enter(frame, 18) }}>
           Add an NVIDIA NIM key and the agents write with open models; Azure OpenAI and any
           OpenAI-compatible server are a config change away.
         </Lead>
         <div
           style={{
             alignSelf: "flex-start",
-            backgroundImage: gradient.aurora,
+            display: "flex",
+            alignItems: "center",
+            gap: 22,
+            backgroundColor: color.grass,
             color: color.ink,
             borderRadius: radius.small,
-            padding: "18px 30px",
-            fontFamily: MONO,
+            padding: "14px 14px 14px 30px",
             fontSize: 38,
+            ...mono,
             ...enter(frame, 32),
           }}
         >
           {REPO}
+          <span
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: 28,
+              backgroundColor: "#ffffff",
+              display: "grid",
+              placeItems: "center",
+              fontFamily: SANS,
+              fontSize: 34,
+            }}
+          >
+            ›
+          </span>
         </div>
       </div>
     </AbsoluteFill>

@@ -3,7 +3,7 @@ import { useCurrentFrame } from "remotion";
 import { Chip, Heading, Panel, Rail, SevBadge, Stage } from "../components";
 import { cited } from "../data";
 import { enter, progress } from "../motion";
-import { MONO, color, radius, size } from "../theme";
+import { mono, color, radius, size } from "../theme";
 
 const FOCUS_CLAIM = 1; // the claim about the new warning template, which cites E2
 
@@ -53,7 +53,7 @@ export const Report = () => {
             style={{
               flex: 1,
               backgroundColor: color.sunken,
-              outline: `3px solid ${color.accent}`,
+              outline: `4px solid ${color.ink}`,
               outlineOffset: -3,
               display: "flex",
               flexDirection: "column",
@@ -64,23 +64,23 @@ export const Report = () => {
           >
             <span
               style={{
-                fontSize: 24,
-                color: color.accent,
+                fontSize: 26,
+                color: color.ink,
+                backgroundColor: color.grass,
+                alignSelf: "flex-start",
+                padding: "4px 12px",
+                borderRadius: radius.small,
                 fontWeight: 500,
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
               }}
             >
               {cited.focus.id}: {cited.focus.kind}
             </span>
-            <span
-              style={{ fontFamily: MONO, fontSize: 28, lineHeight: 1.35, overflowWrap: "anywhere" }}
-            >
+            <span style={{ ...mono, fontSize: 28, lineHeight: 1.35, overflowWrap: "anywhere" }}>
               {cited.focus.title}
             </span>
             <span
               style={{
-                fontFamily: MONO,
+                ...mono,
                 fontSize: 26,
                 color: color.muted,
                 lineHeight: 1.35,

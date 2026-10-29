@@ -3,7 +3,7 @@ import { AbsoluteFill, useCurrentFrame } from "remotion";
 
 import { enter } from "./motion";
 import {
-  MONO,
+  mono,
   SAFE,
   SANS,
   color,
@@ -14,7 +14,7 @@ import {
   type Severity,
 } from "./theme";
 
-/** A full frame on the abyss, with the safe area as padding. */
+/** A full frame of cream paper, with the safe area as padding. */
 export const Stage = ({ children }: { children: ReactNode }) => (
   <AbsoluteFill
     style={{
@@ -59,7 +59,7 @@ export const Lead = ({ children, style }: { children: ReactNode; style?: CSSProp
   </p>
 );
 
-/** A kelp card: depth from the surface stack, never a border or a shadow. */
+/** A white card on the cream page: depth from the paper stack, never a border or a shadow. */
 export const Panel = ({ children, style }: { children: ReactNode; style?: CSSProperties }) => (
   <div
     style={{
@@ -73,9 +73,30 @@ export const Panel = ({ children, style }: { children: ReactNode; style?: CSSPro
   </div>
 );
 
-/** An uppercase instrument label above content; it names what follows. */
+/** A small sentence-case label with a grass dot; it names what follows. */
 export const Label = ({ children, style }: { children: ReactNode; style?: CSSProperties }) => (
-  <div style={{ ...labelStyle, color: color.muted, ...style }}>{children}</div>
+  <div
+    style={{
+      ...labelStyle,
+      color: color.muted,
+      display: "flex",
+      alignItems: "center",
+      gap: 14,
+      ...style,
+    }}
+  >
+    <span
+      style={{
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        backgroundColor: color.grass,
+        boxSizing: "border-box",
+        border: `2px solid ${color.ink}`,
+      }}
+    />
+    {children}
+  </div>
 );
 
 /** A severity label on its strip colour, always in dark ink so colour is never the only cue. */
@@ -85,8 +106,7 @@ export const SevBadge = ({ severity, scale = 1 }: { severity: Severity; scale?: 
       display: "inline-block",
       backgroundColor: sevColor[severity],
       color: color.ink,
-      fontWeight: 600,
-      letterSpacing: "0.02em",
+      fontWeight: 500,
       fontSize: 34 * scale,
       padding: `${6 * scale}px ${16 * scale}px`,
       borderRadius: radius.small,
@@ -102,12 +122,12 @@ export const Chip = ({ id, lit = false }: { id: string; lit?: boolean }) => (
   <span
     style={{
       display: "inline-block",
-      fontFamily: MONO,
+      ...mono,
       fontSize: 28,
       padding: "2px 10px",
       marginLeft: 10,
       borderRadius: radius.small,
-      border: `2px solid ${lit ? color.accent : color.faint}`,
+      border: `2px solid ${lit ? color.ink : color.faint}`,
       backgroundColor: lit ? color.highlight : "transparent",
       color: lit ? color.foreground : color.muted,
       verticalAlign: "middle",

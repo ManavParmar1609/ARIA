@@ -3,7 +3,7 @@ import { useCurrentFrame } from "remotion";
 import { Heading, Panel, Rail, SevBadge, Stage } from "../components";
 import { investigate } from "../data";
 import { enter, progress } from "../motion";
-import { MONO, color, size } from "../theme";
+import { mono, color, size } from "../theme";
 
 /** Read-only tool calls test the hypotheses; then memory brings back the closest past incidents. */
 export const Investigate = () => {
@@ -21,7 +21,7 @@ export const Investigate = () => {
                 display: "flex",
                 gap: 18,
                 alignItems: "center",
-                fontFamily: MONO,
+                ...mono,
                 fontSize: size.detail,
                 ...enter(frame, 16 + i * 16),
               }}
@@ -39,7 +39,7 @@ export const Investigate = () => {
                 key={h.name}
                 style={{
                   padding: 32,
-                  outline: lead ? `3px solid ${color.accent}` : "none",
+                  outline: lead ? `4px solid ${color.ink}` : "none",
                   outlineOffset: -3,
                   display: "flex",
                   justifyContent: "space-between",
@@ -90,7 +90,7 @@ export const Investigate = () => {
             </Panel>
           ))}
         </div>
-        <span style={{ fontFamily: MONO, fontSize: size.detail, color: color.accent }}>
+        <span style={{ ...mono, fontSize: size.detail, color: color.ink }}>
           runbook: {investigate.runbook}
         </span>
       </div>

@@ -1,68 +1,68 @@
-// The Auros palette and faces from web/DESIGN.md, at video scale: an abyssal teal surface stack,
-// Geist at weight 500 with tight tracking, lavender for large statistics, and the aurora gradient
-// for the one call to action.
+// The cream-paper palette and Inter from web/DESIGN.md, at video scale: cream page, white cards,
+// sandstone wells, ink text, grass panels and accents, and the four decorative pops.
 import { loadFont } from "@remotion/fonts";
-import mono from "@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2";
-import sans from "@fontsource-variable/geist/files/geist-latin-wght-normal.woff2";
+import inter from "@fontsource-variable/inter/files/inter-latin-opsz-normal.woff2";
 
-export const SANS = "Geist";
-export const MONO = "Geist Mono";
+export const SANS = "Inter";
+// Code and log lines use Inter too, with its disambiguation set (see `mono` below).
+export const MONO = "Inter";
 
-void loadFont({ family: SANS, url: sans, weight: "100 900" });
-void loadFont({ family: MONO, url: mono, weight: "100 900" });
+void loadFont({ family: SANS, url: inter, weight: "100 900" });
+
+/** Slashed zero, serifed I, l with a tail, and tabular figures, for log lines and IDs. */
+export const mono = { fontFamily: MONO, fontFeatureSettings: '"ss02", "tnum"' } as const;
 
 export const color = {
-  background: "#012624", // liquid abyss
-  raised: "#003734", // liquid kelp
-  sunken: "#011d1c", // liquid deep
-  rule: "rgba(255, 255, 255, 0.1)",
-  heading: "#ffffff",
-  foreground: "#edfffe", // liquid mist
-  muted: "#bbc7c6", // silver mist
-  faint: "#93a3a2",
-  accent: "#cbfffc", // aqua, the aurora's first stop
-  highlight: "rgba(203, 255, 252, 0.16)",
-  stat: "#fde9ff", // lavender phosphor
-  teal: "#00827c",
-  ink: "#011d1c",
-  danger: "oklch(0.8 0.13 18)",
-  ok: "oklch(0.86 0.1 175)",
-} as const;
-
-export const gradient = {
-  aurora: "linear-gradient(90deg, #cbfffc 0%, #edfffe 26.25%, #fffdfa 47.57%, #fad1ff 88.96%)",
-  bio: "linear-gradient(90deg, #00827c 0%, #cbfffc 100%)",
+  background: "#f5f1e4", // cream paper
+  raised: "#ffffff", // cards
+  sunken: "#e0dbce", // sandstone wells
+  rule: "#d5d5d4", // hairline mist
+  heading: "#2c2e2a", // ink
+  foreground: "#2c2e2a",
+  muted: "#50524e",
+  faint: "#5d5f5a",
+  accent: "#8ed462", // fresh grass
+  highlight: "#8ed462",
+  stat: "#2c2e2a",
+  teal: "#6fbf3f", // deeper grass, for steps already done
+  ink: "#2c2e2a",
+  danger: "oklch(0.5 0.18 25)",
+  ok: "oklch(0.47 0.11 145)",
+  grass: "#8ed462",
+  sky: "#2ba0ff",
+  coral: "#ff705d",
+  sunshine: "#f5e211",
+  lilac: "#ebc0ff",
 } as const;
 
 export type Severity = "SEV1" | "SEV2" | "SEV3" | "SEV4";
 
-// The four severity strips, tuned to sit inside the aurora palette; labels stay in dark ink.
+// The four severity strips: their own hues, kept apart from the pops; labels stay in ink.
 export const sevColor: Record<Severity, string> = {
-  SEV1: "oklch(0.74 0.15 18)",
-  SEV2: "oklch(0.83 0.12 68)",
-  SEV3: "oklch(0.91 0.1 100)",
-  SEV4: "oklch(0.85 0.05 195)",
+  SEV1: "oklch(0.72 0.15 15)",
+  SEV2: "oklch(0.8 0.14 60)",
+  SEV3: "oklch(0.87 0.13 95)",
+  SEV4: "oklch(0.83 0.04 235)",
 };
 
-// A major-third scale at video size (1920 x 1080), kept large enough to read on a phone.
+// The web's scale at video size (1920 x 1080), kept large enough to read on a phone.
 export const size = {
-  label: 24,
+  label: 26,
   detail: 30,
   body: 40,
   lead: 50,
-  title: 80,
-  display: 124,
+  title: 84,
+  display: 150,
 } as const;
 
-// Two radii, scaled from the web's 16 and 6 px to the video's 1920 px frame.
-export const radius = { card: 24, small: 8 } as const;
+// Crisp corners on cards and chips, 70 px only on whole panels (the web's 8, 6 and 50 px).
+export const radius = { card: 14, small: 10, sheet: 70 } as const;
 
 export const SAFE = { x: 140, y: 110 } as const;
 
-/** Uppercase instrument labels: section kickers, the rail, small captions. */
+/** Small labels: sentence case and medium weight, never uppercase. */
 export const labelStyle = {
   fontSize: size.label,
   fontWeight: 500,
-  letterSpacing: "0.12em",
-  textTransform: "uppercase",
+  letterSpacing: "-0.005em",
 } as const;

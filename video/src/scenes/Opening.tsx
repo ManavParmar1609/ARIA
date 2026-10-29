@@ -1,74 +1,74 @@
-import { AbsoluteFill, useCurrentFrame } from "remotion";
+import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
 
-import { Label, Lead } from "../components";
+import { HeroScene } from "../../../web/src/components/illustrations/scenes";
 import { run } from "../data";
 import { enter, progress } from "../motion";
-import { Orb } from "../orb";
 import { SAFE, SANS, color, size } from "../theme";
 
-/** The landing page's hero: the orb rising behind the promise. */
+/** The landing page's hero: the promise on a green panel, the crew riding in beneath it. */
 export const Opening = () => {
   const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const arrive = progress(frame, 8, 40);
   return (
-    <AbsoluteFill
-      style={{ backgroundColor: color.background, color: color.foreground, fontFamily: SANS }}
-    >
-      <Orb
-        size={1000}
-        style={{
-          position: "absolute",
-          left: 460,
-          top: -150,
-          opacity: progress(frame, 0, 45),
-          maskImage: "linear-gradient(to bottom, #000 36%, transparent 64%)",
-        }}
-      />
+    <AbsoluteFill style={{ backgroundColor: color.grass, color: color.ink, fontFamily: SANS }}>
       <div
         style={{
           position: "absolute",
           inset: 0,
-          padding: `${SAFE.y}px ${SAFE.x}px`,
+          padding: `${SAFE.y - 30}px ${SAFE.x}px`,
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          justifyContent: "flex-end",
           textAlign: "center",
-          gap: 30,
+          gap: 26,
         }}
       >
-        <Label style={enter(frame, 10)}>Open-source incident triage</Label>
         <h1
           style={{
             margin: 0,
             fontSize: size.display,
             fontWeight: 500,
-            letterSpacing: "-0.046em",
-            lineHeight: 1,
-            color: color.heading,
+            letterSpacing: "-0.06em",
+            lineHeight: 0.95,
             maxWidth: 1500,
-            ...enter(frame, 16, 32),
+            ...enter(frame, 4, 36),
           }}
         >
           Incident triage that shows its work.
         </h1>
-        <Lead style={{ maxWidth: 1260, ...enter(frame, 28) }}>
-          It reads the logs, rates severity, finds similar incidents and drafts a report in which
-          every claim cites evidence. A person approves it.
-        </Lead>
         <p
           style={{
             margin: 0,
-            marginTop: 20,
-            fontSize: 28,
-            color: color.faint,
-            ...enter(frame, 44),
+            fontSize: 46,
+            fontWeight: 500,
+            letterSpacing: "-0.03em",
+            lineHeight: 1.2,
+            maxWidth: 1180,
+            ...enter(frame, 18),
           }}
         >
+          Calibrated severity, a report that cites every claim, and nothing sent until a person
+          approves.
+        </p>
+        <p style={{ margin: 0, fontSize: 28, ...enter(frame, 34) }}>
           A recorded ARIA run.{" "}
           {run.synthetic
             ? "The incident is semi-synthetic: real Loghub lines, composed by ARIA's scenario builder."
             : ""}
         </p>
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          left: 360,
+          right: 360,
+          bottom: -90,
+          opacity: arrive,
+          translate: `${(1 - arrive) * -120}px ${(1 - arrive) * 60}px`,
+        }}
+      >
+        <HeroScene t={frame / fps} />
       </div>
     </AbsoluteFill>
   );

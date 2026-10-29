@@ -88,7 +88,7 @@ export const Severity = () => {
                         left: -14,
                         right: -14,
                         bottom: 54,
-                        border: `4px solid ${color.accent}`,
+                        border: `4px solid ${color.ink}`,
                         borderBottom: "none",
                         borderRadius: `${radius.small}px ${radius.small}px 0 0`,
                         opacity: bracket,
@@ -99,7 +99,7 @@ export const Severity = () => {
                     style={{
                       fontSize: 34,
                       fontVariantNumeric: "tabular-nums",
-                      fontWeight: set ? 600 : 400,
+                      fontWeight: set ? 500 : 400,
                       color: set ? color.heading : color.muted,
                     }}
                   >
@@ -118,7 +118,7 @@ export const Severity = () => {
               );
             })}
           </div>
-          <div style={{ fontSize: 32, color: color.accent, opacity: bracket }}>
+          <div style={{ fontSize: 32, color: color.ink, opacity: bracket }}>
             The {assessment.coverage} prediction set: {"{"}
             {assessment.set.join(", ")}
             {"}"}

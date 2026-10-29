@@ -40,7 +40,9 @@ The scenes follow the pipeline in order:
 6. human review;
 7. the measured results, with their caveat.
 
-The look follows [web/DESIGN.md](../web/DESIGN.md), the Auros style reference: an abyssal teal
-surface stack, Geist and Geist Mono, lavender statistics and an aurora call to action. The
-particle-sphere orb from the landing page opens and closes the film, and each scene has one
-moving thing.
+The look follows [web/DESIGN.md](../web/DESIGN.md), the cream-paper style reference: cream
+paper, white cards, ink text, Inter, and grass green for panels and highlights. The film opens on
+the landing page's green hero, with its illustrated crew riding in, and closes on the approval
+scene, where the message flies only after the thumbs-up. Both illustrations are imported from
+`web/src/components/illustrations`, so the site and the film never drift apart. Each scene has
+one moving thing.

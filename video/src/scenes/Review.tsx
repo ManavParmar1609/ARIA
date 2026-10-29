@@ -3,7 +3,7 @@ import { useCurrentFrame } from "remotion";
 import { Heading, Lead, Panel, Rail, SevBadge, Stage } from "../components";
 import { cited, review } from "../data";
 import { enter, progress } from "../motion";
-import { color, gradient, radius, size } from "../theme";
+import { color, radius, size } from "../theme";
 
 const KIND: Record<string, string> = {
   slack: "Slack message to responders",
@@ -29,7 +29,7 @@ export const Review = () => {
               marginLeft: "auto",
               fontSize: 34,
               fontWeight: 500,
-              color: approved > 0.5 ? color.ok : color.accent,
+              color: approved > 0.5 ? color.ok : color.ink,
             }}
           >
             {approved > 0.5 ? "Published" : "Waiting for a person to approve"}
@@ -57,15 +57,12 @@ export const Review = () => {
       <div style={{ display: "flex", gap: 32, alignItems: "center" }}>
         <div
           style={{
-            fontSize: 34,
+            fontSize: 36,
             fontWeight: 500,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
             padding: "18px 40px",
             borderRadius: radius.small,
-            backgroundImage: approved > 0.5 ? "none" : gradient.aurora,
-            backgroundColor: approved > 0.5 ? color.ok : undefined,
-            color: color.ink,
+            backgroundColor: approved > 0.5 ? color.ok : color.grass,
+            color: approved > 0.5 ? "#ffffff" : color.ink,
             scale: `${1 - 0.06 * Math.sin(Math.PI * approved)}`,
             ...enter(frame, 90),
           }}

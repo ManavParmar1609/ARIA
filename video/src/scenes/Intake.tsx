@@ -3,7 +3,7 @@ import { useCurrentFrame } from "remotion";
 import { Heading, Rail, Stage } from "../components";
 import { run } from "../data";
 import { enter, progress } from "../motion";
-import { MONO, color, radius, size } from "../theme";
+import { mono, color, radius, size } from "../theme";
 
 const ROW_EVERY = 10; // frames between rows
 
@@ -28,7 +28,7 @@ export const Intake = () => {
           display: "flex",
           flexDirection: "column",
           gap: 8,
-          fontFamily: MONO,
+          ...mono,
           fontSize: 28,
           overflow: "hidden",
         }}
@@ -52,7 +52,7 @@ export const Intake = () => {
             <span style={{ color: color.faint }}>{row.time}</span>
             <span
               style={{
-                color: row.level === "WARN" ? "oklch(0.86 0.11 68)" : color.faint,
+                color: row.level === "WARN" ? "oklch(0.5 0.12 55)" : color.faint,
                 width: 64,
               }}
             >
@@ -74,11 +74,9 @@ export const Intake = () => {
         <span
           style={{
             backgroundColor: color.danger,
-            color: color.ink,
-            fontWeight: 600,
+            color: "#ffffff",
+            fontWeight: 500,
             fontSize: 30,
-            letterSpacing: "0.1em",
-            textTransform: "uppercase",
             padding: "8px 18px",
             borderRadius: radius.small,
           }}
