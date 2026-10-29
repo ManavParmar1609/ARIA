@@ -13,7 +13,9 @@ import asyncio
 import contextlib
 import os
 import socket
+import time
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any
 
 from aria.db import repository as repo
@@ -78,14 +80,31 @@ def worker_id() -> str:
     return f"{socket.gethostname()}:{os.getpid()}"
 
 
+def _touch(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.touch()
+
+
+def heartbeat_age(path: Path) -> float | None:
+    """Seconds since the worker last polled, or None when it never has."""
+    try:
+        return max(0.0, time.time() - path.stat().st_mtime)
+    except FileNotFoundError:
+        return None
+
+
 async def poll_forever(
     runner: TriageRunner,
     *,
     concurrency: int = 4,
     interval_s: float = 2.0,
     stop: asyncio.Event | None = None,
+    heartbeat: Path | None = None,
 ) -> None:
-    """The external worker loop: claim runs from the database and execute them."""
+    """The external worker loop: claim runs from the database and execute them.
+
+    After each poll that reaches the database, ``heartbeat`` (when given) is touched, so a
+    container health check can tell a live worker from a stuck one."""
     me = worker_id()
     worker = Worker(runner, concurrency=concurrency)
     stop = stop or asyncio.Event()
@@ -97,6 +116,8 @@ async def poll_forever(
                 claimed = await asyncio.to_thread(repo.claim_runs, runner.engine, me, limit=free)
                 for run_id in claimed:
                     worker.execute(run_id)
+            if heartbeat is not None:
+                await asyncio.to_thread(_touch, heartbeat)
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(stop.wait(), timeout=interval_s)
     finally:

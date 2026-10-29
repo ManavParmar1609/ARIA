@@ -6,18 +6,22 @@ import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
 from aria.agents.investigator import (
+    GENERIC_CAUSE,
     INVESTIGATOR_TOOLS,
     InvestigationInputs,
     Investigator,
+    _Loop,
     suggested_plan,
 )
 from aria.config import BudgetConfig, GuardrailConfig
 from aria.contracts.base import EvidenceKind
+from aria.contracts.retrieval import Hypothesis
 from aria.data.scenarios import LinePools, ScenarioBuilder
 from aria.db.engine import get_engine, init_db
 from aria.evidence import EvidenceStore
@@ -284,3 +288,30 @@ async def test_a_window_without_signal_supports_no_hypothesis(hdfs: Hdfs) -> Non
     assert result.leading_hypothesis is None
     assert all(h.status != "supported" for h in result.hypotheses)
     assert "node_breakdown" not in {c.tool for c in result.tool_calls}  # nowhere to look
+
+
+def test_a_named_cause_leads_over_the_generic_one() -> None:
+    def hypothesis(hid: str, mode: str, confidence: float) -> Hypothesis:
+        return Hypothesis(
+            id=hid,
+            statement=f"{mode} on dfs.DataNode",
+            failure_mode=mode,
+            component="dfs.DataNode",
+            status="supported",
+            confidence=confidence,
+        )
+
+    loop = _Loop(
+        inputs=cast("InvestigationInputs", None),
+        belt=cast("ToolBelt", SimpleNamespace(records=[])),
+        evidence=EvidenceStore(),
+        budget=None,
+        plan=[],
+        hypotheses=[
+            hypothesis("H1", GENERIC_CAUSE, 0.95),
+            hypothesis("H2", "block_serve_exceptions", 0.7),
+        ],
+    )
+    assert Investigator._conclude(loop, steps=0, stopped="finished").leading_hypothesis == "H2"
+    loop.hypotheses = loop.hypotheses[:1]
+    assert Investigator._conclude(loop, steps=0, stopped="finished").leading_hypothesis == "H1"

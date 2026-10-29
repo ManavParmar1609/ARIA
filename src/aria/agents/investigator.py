@@ -51,6 +51,7 @@ INVESTIGATOR_TOOLS = (
     "get_runbook",
 )
 _WORDS = re.compile(r"[a-z][a-z0-9_]{2,}")
+GENERIC_CAUSE = "component_errors"  # "<component> is failing": the window's own signal
 Emit = Callable[[str, dict[str, Any]], None]
 Mode = Literal["auto", "llm", "deterministic"]
 
@@ -142,13 +143,13 @@ def candidate_hypotheses(inputs: InvestigationInputs, *, limit: int = 3) -> list
             )
         )
     signal = signal_templates(batch)
-    if signal and component and "component_errors" not in seen:
+    if signal and component and GENERIC_CAUSE not in seen:
         top = signal[0]
         where = top.components[0] if top.components else component
         out.append(
             NewHypothesis(
                 statement=f'{where} is failing: "{top.template[:80]}" repeats {top.count} times',
-                failure_mode="component_errors",
+                failure_mode=GENERIC_CAUSE,
                 component=where,
             )
         )
@@ -580,7 +581,13 @@ class Investigator:
                     )
                 )
         supported = [h for h in loop.hypotheses if h.status == "supported"]
-        leading = max(supported, key=lambda h: h.confidence).id if supported else None
+        # A supported named failure mode explains more than "the component is failing", which
+        # is true of any cause on that component; the generic one leads only on its own.
+        leading = (
+            max(supported, key=lambda h: (h.failure_mode != GENERIC_CAUSE, h.confidence)).id
+            if supported
+            else None
+        )
         return Investigation(
             hypotheses=loop.hypotheses,
             steps=steps,

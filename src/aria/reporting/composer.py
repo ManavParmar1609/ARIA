@@ -177,9 +177,12 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
             scale += f", warnings on {features.warn_nodes} of {features.distinct_nodes} nodes"
         summary.append(_claim(f"{scale}.", window, spread or warn_spread))
         if not signal:
-            summary.append(
-                _claim("No errors and no new warnings: this looks like routine traffic.", window)
+            quiet = (
+                "No errors, and every warning matches a template already in this system's history."
+                if warnings
+                else "No error or warning lines in this window."
             )
+            summary.append(_claim(quiet, window))
     if burst is not None and features.burst_score >= 2:
         summary.append(
             _claim(

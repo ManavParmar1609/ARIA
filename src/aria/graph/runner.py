@@ -37,6 +37,7 @@ from aria.graph.workflow import TriageContext, build_graph, rekey_for_fork
 from aria.mcp.client import Target
 from aria.observability.logging import get_logger
 from aria.retrieval import runlog
+from aria.retrieval.memory import run_incident_id
 from aria.services import Services
 
 log = get_logger(__name__)
@@ -500,7 +501,9 @@ class TriageRunner:
                 )
                 session.execute(delete(ToolCallRow).where(ToolCallRow.run_id == run_id))
                 session.execute(delete(FeedbackRow).where(FeedbackRow.run_id == run_id))
-                session.execute(delete(IncidentRow).where(IncidentRow.id == f"run-{run_id}"))
+                session.execute(
+                    delete(IncidentRow).where(IncidentRow.id == run_incident_id(run_id))
+                )
                 row = session.get(RunRow, run_id)
                 if row is not None:
                     session.delete(row)  # events, reports and actions cascade in the database

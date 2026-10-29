@@ -241,6 +241,13 @@ class Settings(BaseSettings):
     mcp_url: str | None = None
     mcp_token: SecretStr | None = None
 
+    @field_validator("api_keys", "pseudonym_key", "mcp_token", "mcp_url", mode="before")
+    @classmethod
+    def _blank_is_unset(cls, value: Any) -> Any:
+        # Compose and shell defaults pass "" for an unset variable; an empty secret must not
+        # count as configured (an empty pseudonym key would make pseudonyms linkable).
+        return None if isinstance(value, str) and not value.strip() else value
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, value: Any) -> Any:

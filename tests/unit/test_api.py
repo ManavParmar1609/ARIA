@@ -21,7 +21,7 @@ from mcp import Client
 
 from aria.api.app import create_app
 from aria.api.state import AppState
-from aria.api.worker import poll_forever
+from aria.api.worker import heartbeat_age, poll_forever
 from aria.config import Environment, get_settings, reset_caches
 from aria.contracts.inputs import TriageRequest
 from aria.data.scenarios import LinePools, ScenarioBuilder
@@ -539,3 +539,27 @@ async def test_unfinished_runs_continue_after_a_restart(monkeypatch: pytest.Monk
                     await asyncio.sleep(0.05)
     finally:
         await services.aclose()
+
+
+async def test_worker_heartbeat_follows_its_polls(tmp_path: Path) -> None:
+    reset_caches()
+    init_db(get_engine())
+    services = await Services.create()
+    beat = tmp_path / "worker.heartbeat"
+    assert heartbeat_age(beat) is None
+    stop = asyncio.Event()
+    task = asyncio.create_task(
+        poll_forever(TriageRunner(services), interval_s=0.01, stop=stop, heartbeat=beat)
+    )
+    try:
+        deadline = time.monotonic() + 10
+        while heartbeat_age(beat) is None:
+            assert time.monotonic() < deadline
+            await asyncio.sleep(0.01)
+    finally:
+        stop.set()
+        await task
+        await services.aclose()
+    age = heartbeat_age(beat)
+    assert age is not None
+    assert age < 5

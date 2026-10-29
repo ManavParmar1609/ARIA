@@ -1,0 +1,73 @@
+# syntax=docker/dockerfile:1
+#
+# ARIA images. Targets:
+#   api     FastAPI service (REST, SSE, MCP, A2A, AG-UI) on port 8000
+#   worker  background worker that runs queued triage runs (ARIA_WORKER_MODE=external)
+#
+#   docker build --target api -t aria-api .
+#
+# Behind a TLS-inspecting proxy, pass its CA as a build secret; it is used for downloads only
+# and never stored in an image layer:
+#   docker build --secret id=ca,src=/path/to/ca.pem --target api -t aria-api .
+
+ARG PYTHON_IMAGE=python:3.13-slim
+
+# --- build: locked dependencies and the project, installed into /app/.venv --------------------
+FROM ${PYTHON_IMAGE} AS build
+ARG UV_VERSION=0.11.32
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_PROJECT_ENVIRONMENT=/app/.venv \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+WORKDIR /app
+RUN --mount=type=secret,id=ca,required=false \
+    --mount=type=cache,target=/root/.cache/pip \
+    if [ -s /run/secrets/ca ]; then export PIP_CERT=/run/secrets/ca; fi; \
+    pip install "uv==${UV_VERSION}"
+# Dependencies first, so code changes reuse this layer.
+RUN --mount=type=secret,id=ca,required=false \
+    --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    if [ -s /run/secrets/ca ]; then export SSL_CERT_FILE=/run/secrets/ca UV_SYSTEM_CERTS=1; fi; \
+    uv sync --locked --no-install-project --no-dev
+COPY pyproject.toml uv.lock README.md LICENSE ./
+COPY src ./src
+RUN --mount=type=secret,id=ca,required=false \
+    --mount=type=cache,target=/root/.cache/uv \
+    if [ -s /run/secrets/ca ]; then export SSL_CERT_FILE=/run/secrets/ca UV_SYSTEM_CERTS=1; fi; \
+    uv sync --locked --no-dev --no-editable
+
+# --- runtime: the virtual environment, configuration, runbooks and the trained model ----------
+FROM ${PYTHON_IMAGE} AS runtime
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/app/.venv/bin:${PATH}" \
+    ARIA_ENV=prod \
+    ARIA_LOG_FORMAT=json \
+    ARIA_DATABASE_URL=sqlite:////var/lib/aria/aria.db \
+    ARIA_DATA_DIR=/var/lib/aria/data \
+    ARIA_MODELS_DIR=/var/lib/aria/models
+RUN groupadd --system --gid 10001 aria \
+    && useradd --system --uid 10001 --gid aria --home-dir /app --shell /usr/sbin/nologin aria \
+    && mkdir -p /var/lib/aria/data /var/lib/aria/models \
+    && chown -R aria:aria /var/lib/aria
+WORKDIR /app
+COPY --from=build --chown=aria:aria /app/.venv /app/.venv
+COPY --chown=aria:aria config ./config
+COPY --chown=aria:aria runbooks ./runbooks
+COPY --chown=aria:aria models/severity_log.json models/severity_log.report.json ./models/
+USER aria
+VOLUME ["/var/lib/aria"]
+
+FROM runtime AS worker
+HEALTHCHECK --interval=15s --timeout=10s --start-period=60s --retries=4 \
+    CMD ["aria", "worker-health", "--max-age", "60"]
+CMD ["aria", "worker"]
+
+FROM runtime AS api
+EXPOSE 8000
+HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=6 \
+    CMD ["python", "-c", "import sys, urllib.request; sys.exit(urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2).status != 200)"]
+CMD ["aria", "serve", "--host", "0.0.0.0", "--port", "8000"]

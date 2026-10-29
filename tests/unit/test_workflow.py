@@ -22,6 +22,7 @@ from sqlalchemy import select
 from aria.agents.investigator import INVESTIGATOR_TOOLS
 from aria.contracts.base import EvidenceKind
 from aria.contracts.inputs import AlertSignal, RunOptions, TriageRequest
+from aria.contracts.parsing import ParsedBatch
 from aria.contracts.report import IncidentReport
 from aria.contracts.run import RunStatus
 from aria.data.loghub import LogRecord, format_raw_line
@@ -35,7 +36,7 @@ from aria.graph.runner import RunNotFoundError, RunStateError, TriageRunner
 from aria.graph.workflow import run_salt
 from aria.notify import sign
 from aria.parsing.parser import parse_lines
-from aria.retrieval.memory import IncidentMemory
+from aria.retrieval.memory import IncidentMemory, run_incident_id
 from aria.retrieval.runbooks import load_runbooks
 from aria.retrieval.seed import incident_from_scenario
 from aria.services import Services
@@ -158,8 +159,13 @@ async def test_run_pauses_for_review_then_publishes_a_cited_report(env: Env) -> 
     statuses = repo.action_statuses(engine, run_id)
     assert statuses[responders] == "skipped"  # approved, but no Slack webhook is configured
     assert sorted(s for a, s in statuses.items() if a != responders) == ["rejected", "rejected"]
-    assert env.services.memory.get(f"run-{run_id}") is not None
-    assert await env.runner.store.asearch(("templates", "bgl"), limit=5)
+    assert env.services.memory.get(run_incident_id(run_id)) is not None
+    learned = await env.runner.store.asearch(("templates", "bgl"), limit=500)
+    assert learned  # routine templates teach the history what normal looks like
+    batch = ParsedBatch.model_validate((await env.runner.snapshot(run_id)).values["batch"])
+    signatures = {t.template for t in batch.templates if t.error_like}
+    assert signatures
+    assert not signatures & {item.value["template"] for item in learned}  # incidents stay new
     assert repo.list_events(engine, run_id)[-1].kind == "run_finished"
 
 
@@ -516,7 +522,7 @@ async def test_delete_removes_the_run_everywhere(env: Env) -> None:
     assert repo.get_run(engine, outcome.run_id) is None
     assert repo.get_report(engine, f"rpt-{outcome.run_id}") is None
     assert env.runner.checkpointer.get_tuple(env.runner.config(outcome.run_id)) is None
-    assert env.services.memory.get(f"run-{outcome.run_id}") is None
+    assert env.services.memory.get(run_incident_id(outcome.run_id)) is None
     assert not await env.runner.store.asearch(("feedback",), filter={"run_id": outcome.run_id})
     with session_scope(engine) as session:
         assert (

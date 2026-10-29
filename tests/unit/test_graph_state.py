@@ -97,7 +97,8 @@ def test_router_preference_puts_a_provider_first_but_never_adds_fake() -> None:
     assert "fake" not in faked.config.routing["adjudicator"]
     assert router.prefer(None) is router
     assert router.prefer("no-such-provider") is router
-    assert router.config.routing["reporter"][0] == "nim"  # the original is unchanged
+    # The original router keeps the configured chain.
+    assert router.config.routing["reporter"] == get_app_config().llm.routing["reporter"]
 
 
 def _report_and_assessment(store: EvidenceStore) -> tuple[IncidentReport, SeverityAssessment]:

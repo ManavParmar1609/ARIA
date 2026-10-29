@@ -111,6 +111,10 @@ up: ## Start the full stack with docker compose
 down: ## Stop the docker compose stack
 	docker compose down
 
+.PHONY: smoke
+smoke: ## Triage, review and publish one run through the running stack (make up first)
+	./scripts/compose-smoke.sh
+
 .PHONY: bicep
 bicep: ## Compile the Bicep templates to catch errors
 	bicep build infra/main.bicep --stdout > /dev/null

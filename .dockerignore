@@ -1,0 +1,41 @@
+# Only what the images need goes into the build context.
+.git
+.github
+.claude
+.azure
+.venv
+**/__pycache__
+**/*.py[cod]
+.mypy_cache
+.ruff_cache
+.pytest_cache
+.hypothesis
+.coverage*
+coverage.xml
+htmlcov
+
+# Secrets and local state never enter an image
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.db
+*.db-journal
+*.sqlite*
+
+# Data, reports and docs are mounted or published, not baked in
+data
+reports
+docs
+research_notes
+tests
+models/embed_local.npz
+
+# Front ends build in their own stages
+web/node_modules
+web/.next
+web/out
+web/test-results
+web/playwright-report
+video

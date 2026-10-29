@@ -14,6 +14,7 @@ from rich.table import Table
 
 app = typer.Typer(no_args_is_help=True, help="ARIA incident triage.")
 db_app = typer.Typer(no_args_is_help=True, help="Database migrations.")
+WORKER_HEARTBEAT = "worker.heartbeat"
 data_app = typer.Typer(no_args_is_help=True, help="Download and ingest the public datasets.")
 train_app = typer.Typer(
     help="Train and export the severity and ticket models.", invoke_without_command=True
@@ -277,11 +278,31 @@ def worker(
     async def main() -> None:
         services = await Services.create()
         try:
-            await poll_forever(TriageRunner(services), concurrency=concurrency, interval_s=interval)
+            await poll_forever(
+                TriageRunner(services),
+                concurrency=concurrency,
+                interval_s=interval,
+                heartbeat=settings.data_dir / WORKER_HEARTBEAT,
+            )
         finally:
             await services.aclose()
 
     asyncio.run(main())
+
+
+@app.command("worker-health")
+def worker_health(
+    max_age: Annotated[float, typer.Option(help="Seconds since the last poll.")] = 60.0,
+) -> None:
+    """Exit 0 when the worker polled recently (a container health check)."""
+    from aria.api.worker import heartbeat_age
+    from aria.config import get_settings
+
+    age = heartbeat_age(get_settings().data_dir / WORKER_HEARTBEAT)
+    if age is None or age > max_age:
+        console.print(f"worker heartbeat stale: {'never' if age is None else f'{age:.0f} s ago'}")
+        raise typer.Exit(1)
+    console.print(f"worker polled {age:.0f} s ago")
 
 
 @app.command()

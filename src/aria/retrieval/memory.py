@@ -34,6 +34,11 @@ log = get_logger(__name__)
 Source = Literal["memory", "curated", "run"]
 
 
+def run_incident_id(run_id: str) -> str:
+    """The memory id of the incident a published run becomes (``run-20261029-ab`` -> ``inc-...``)."""
+    return f"inc-{run_id.removeprefix('run-')}"
+
+
 @dataclass
 class MemoryIncident:
     id: str

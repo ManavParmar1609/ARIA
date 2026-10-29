@@ -1,0 +1,125 @@
+# ARIA local stack: `make up` (docker compose up -d --wait), `make down`.
+#
+# `init` migrates the database and seeds incident memory once, then exits; `api` and `worker`
+# share the aria-data volume. The API listens on 127.0.0.1:8000 only. With the default
+# ARIA_ENV=dev it needs no API key; set ARIA_ENV=prod and ARIA_API_KEYS before exposing it.
+# Provider keys (NVIDIA_API_KEY, AZURE_OPENAI_*, ...) are read from your environment or the
+# git-ignored .env file; without any, every LLM step falls back to the offline fake provider.
+#
+# Profiles:
+#   observability  Arize Phoenix for traces: http://127.0.0.1:6006
+#                  (also set ARIA_OTEL_EXPORTER=otlp)
+#   nim            a self-hosted NVIDIA NIM. Needs an NVIDIA GPU, NGC_API_KEY, NIM_IMAGE (a chat
+#                  NIM from the NGC catalog), and NIM_LOCAL_BASE_URL=http://nim:8000/v1 plus
+#                  NIM_LOCAL_CHAT_MODEL for ARIA to route to it.
+name: aria
+
+x-aria-env: &aria-env
+  ARIA_ENV: ${ARIA_ENV:-dev}
+  ARIA_LOG_FORMAT: json
+  ARIA_WORKER_MODE: external
+  ARIA_API_KEYS: ${ARIA_API_KEYS:-}
+  ARIA_PSEUDONYM_KEY: ${ARIA_PSEUDONYM_KEY:-}
+  ARIA_PUBLIC_BASE_URL: http://127.0.0.1:8000
+  ARIA_CORS_ORIGINS: ${ARIA_CORS_ORIGINS:-http://localhost:3000}
+  ARIA_OTEL_EXPORTER: ${ARIA_OTEL_EXPORTER:-none}
+  ARIA_OTLP_ENDPOINT: ${ARIA_OTLP_ENDPOINT:-http://phoenix:6006/v1/traces}
+  NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+  AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+  AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+  OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-}
+  NIM_LOCAL_BASE_URL: ${NIM_LOCAL_BASE_URL:-}
+  NIM_LOCAL_CHAT_MODEL: ${NIM_LOCAL_CHAT_MODEL:-}
+
+x-aria-build: &aria-build
+  context: .
+  # Behind a TLS-inspecting proxy, build with `docker build --secret id=ca,...` (see Dockerfile).
+
+services:
+  init:
+    image: aria-worker:${ARIA_TAG:-dev}
+    build:
+      <<: *aria-build
+      target: worker
+    environment: *aria-env
+    command:
+      - sh
+      - -c
+      - >-
+        aria db upgrade &&
+        if [ -f /var/lib/aria/.seeded ]; then echo "memory already seeded";
+        else aria seed --workers 2 && touch /var/lib/aria/.seeded; fi
+    volumes:
+      - aria-data:/var/lib/aria
+      # Seeding falls back to these small Loghub samples (run `make data` for the full ones).
+      - ./tests/fixtures/loghub:/app/tests/fixtures/loghub:ro
+    healthcheck:
+      disable: true  # a one-shot job; the image's check is for the long-running worker
+    restart: "no"
+
+  api:
+    image: aria-api:${ARIA_TAG:-dev}
+    build:
+      <<: *aria-build
+      target: api
+    environment: *aria-env
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - aria-data:/var/lib/aria
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker:
+    image: aria-worker:${ARIA_TAG:-dev}
+    environment: *aria-env
+    volumes:
+      - aria-data:/var/lib/aria
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  phoenix:
+    image: arizephoenix/phoenix:version-20.26.1
+    profiles: [observability]
+    ports:
+      - "127.0.0.1:6006:6006"
+    volumes:
+      - phoenix-data:/mnt/data
+    environment:
+      PHOENIX_WORKING_DIR: /mnt/data
+    restart: unless-stopped
+
+  nim:
+    image: ${NIM_IMAGE:-nvcr.io/nim/meta/llama-3.1-8b-instruct:latest}
+    profiles: [nim]
+    environment:
+      NGC_API_KEY: ${NGC_API_KEY:-}
+    volumes:
+      - nim-cache:/opt/nim/.cache
+    shm_size: 16gb
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/v1/health/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 40
+    restart: unless-stopped
+
+volumes:
+  aria-data:
+  phoenix-data:
+  nim-cache:

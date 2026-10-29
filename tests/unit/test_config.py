@@ -86,3 +86,28 @@ def test_settings_split_cors_origins(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ARIA_CORS_ORIGINS", "http://a.test, http://b.test")
     reset_caches()
     assert get_settings().cors_origins == ["http://a.test", "http://b.test"]
+
+
+def test_blank_secrets_count_as_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Compose passes "" for unset variables; an empty pseudonym key must not be used.
+    for name in ("ARIA_API_KEYS", "ARIA_PSEUDONYM_KEY", "ARIA_MCP_TOKEN", "ARIA_MCP_URL"):
+        monkeypatch.setenv(name, "  ")
+    reset_caches()
+    settings = get_settings()
+    assert settings.api_keys is None
+    assert settings.pseudonym_key is None
+    assert settings.mcp_token is None
+    assert settings.mcp_url is None
+
+
+def test_a_self_hosted_nim_leads_every_chain_once_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("NIM_LOCAL_BASE_URL", raising=False)
+    reset_caches()
+    llm = get_app_config().llm
+    assert all(chain[0] == "nim-local" for chain in llm.routing.values())
+    assert not llm.providers["nim-local"].is_enabled()
+    monkeypatch.setenv("NIM_LOCAL_BASE_URL", "http://nim:8000/v1")
+    reset_caches()
+    assert get_app_config().llm.providers["nim-local"].is_enabled()

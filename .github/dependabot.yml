@@ -1,7 +1,6 @@
 version: 2
 # Only ecosystems whose manifests exist are listed: Dependabot fails a run for a directory with
-# nothing to update. The npm (web/, video/), docker (docker/) and github-actions entries are
-# added in the commits that create those directories.
+# nothing to update. The npm entries (web/, video/) are added in the commits that create them.
 updates:
   - package-ecosystem: uv
     directory: /
@@ -10,3 +9,14 @@ updates:
     groups:
       python:
         patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly

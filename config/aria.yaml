@@ -11,14 +11,15 @@
 llm:
   # The adjudicator has no fake fallback: without a real model, the conservative severity policy
   # decides (most severe class in the prediction set, flagged for review).
+  # nim-local (a self-hosted NIM) leads every chain; it is skipped until NIM_LOCAL_BASE_URL is set.
   routing:
-    adjudicator: [nim, nim-fallback, azure, openai_compat]
-    investigator: [nim, nim-fallback, azure, openai_compat, fake]
-    reporter: [nim, nim-fallback, azure, openai_compat, fake]
-    critic: [nim, nim-fallback, azure, openai_compat, fake]
-    comms: [nim, nim-fallback, azure, openai_compat, fake]
-    ask: [nim, nim-fallback, azure, openai_compat, fake]
-    default: [nim, nim-fallback, azure, openai_compat, fake]
+    adjudicator: [nim-local, nim, nim-fallback, azure, openai_compat]
+    investigator: [nim-local, nim, nim-fallback, azure, openai_compat, fake]
+    reporter: [nim-local, nim, nim-fallback, azure, openai_compat, fake]
+    critic: [nim-local, nim, nim-fallback, azure, openai_compat, fake]
+    comms: [nim-local, nim, nim-fallback, azure, openai_compat, fake]
+    ask: [nim-local, nim, nim-fallback, azure, openai_compat, fake]
+    default: [nim-local, nim, nim-fallback, azure, openai_compat, fake]
   embeddings: [nim, azure, local]
   rerank: [nim]
   safety: [nim]

@@ -80,7 +80,12 @@ from aria.mcp.server import build_server
 from aria.notify import send_action
 from aria.parsing.parser import merge_shards, shard_from_payload, shard_to_payload, split_shards
 from aria.parsing.parser import parse_shard as parse_shard_lines
-from aria.parsing.signals import signal_components, signal_templates
+from aria.parsing.signals import (
+    error_count,
+    signal_components,
+    signal_templates,
+    warning_count,
+)
 from aria.reporting.comms import AUDIENCE, action_id, draft_comms
 from aria.reporting.composer import ReportContext
 from aria.reporting.grounding import validate_report
@@ -88,7 +93,7 @@ from aria.reporting.markdown import render_markdown
 from aria.reporting.review import apply_review
 from aria.reporting.writer import ReportWriter
 from aria.retrieval import runlog
-from aria.retrieval.memory import MemoryIncident
+from aria.retrieval.memory import MemoryIncident, run_incident_id
 from aria.retrieval.retriever import build_query
 from aria.security.injection import scan_line
 from aria.services import Services
@@ -769,7 +774,7 @@ def _memory_incident(
     runbook = next((a.runbook_slug for a in incident.actions if a.runbook_slug), None)
     resolution = "; ".join(a.text for a in incident.actions[:3]) or "See the published report."
     return MemoryIncident(
-        id=f"run-{state['run_id']}",
+        id=run_incident_id(state["run_id"]),
         title=incident.title,
         system=request.system,
         failure_mode=failure_mode,
@@ -789,16 +794,22 @@ def _memory_incident(
 
 
 async def _remember_templates(store: BaseStore | None, batch: ParsedBatch) -> None:
-    if store is None or not batch.templates:
+    """Teach the template history what normal traffic looks like: the run's routine templates.
+
+    Templates with error or warning lines stay out, so the same incident still stands out as
+    new when it recurs; incident memory is what recognises a recurrence.
+    """
+    routine = [t for t in batch.templates if not error_count(t) and not warning_count(t)]
+    if store is None or not routine:
         return
     await store.abatch(
         [
             PutOp(
                 ("templates", batch.system),
                 t.template_id,
-                {"template": t.template, "count": t.count, "error_like": t.error_like},
+                {"template": t.template, "count": t.count, "error_like": False},
             )
-            for t in batch.templates
+            for t in routine
         ]
     )
 
