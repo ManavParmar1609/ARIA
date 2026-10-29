@@ -200,10 +200,12 @@ function TryIt() {
           It runs offline with no API key, and switches to NVIDIA NIM, Azure OpenAI or any
           OpenAI-compatible model when you add one. The console walks you through a first triage.
         </p>
-        <pre className="w-full max-w-xl overflow-x-auto rounded-lg bg-sunken px-5 py-4 text-left text-sm leading-relaxed text-foreground">
+        {/* Long commands wrap (with a hanging indent) rather than scroll, so phones need no
+            sideways scrolling inside the block. */}
+        <pre className="w-full max-w-xl rounded-lg bg-sunken px-5 py-4 text-left text-sm leading-relaxed whitespace-pre-wrap text-foreground">
           <code>
             {QUICKSTART.map((command) => (
-              <span key={command} className="block">
+              <span key={command} className="block pl-[2ch] -indent-[2ch]">
                 <span aria-hidden className="text-faint select-none">
                   ${" "}
                 </span>

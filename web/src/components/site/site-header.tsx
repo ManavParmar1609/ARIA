@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { Wordmark } from "@/components/aria/wordmark";
+import { SiteMenu } from "@/components/site/site-menu";
 import { ThemeSwitch } from "@/components/theme-switch";
 import { Button } from "@/components/ui/button";
 import { REPO_URL } from "@/lib/site-data";
@@ -33,6 +34,7 @@ export function SiteHeader() {
         </a>
       </nav>
       <div className="flex items-center gap-2">
+        <SiteMenu links={[...SECTIONS, { href: REPO_URL, label: "GitHub" }]} />
         <ThemeSwitch />
         <Button asChild variant="secondary" size="sm" className="eyebrow">
           <Link href="/console" prefetch={false}>

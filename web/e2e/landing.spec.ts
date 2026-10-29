@@ -58,6 +58,22 @@ test.describe("landing page", () => {
     await expectNoSidewaysScroll(page, "landing");
   });
 
+  test("reaches every section from the menu on a phone", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.setViewportSize({ width: 375, height: 800 });
+    await page.goto("/");
+    await page.getByRole("button", { name: "Open the menu" }).click();
+    const menu = page.getByRole("navigation", { name: "Menu" });
+    await expect(menu).toBeVisible();
+    await expectAccessible(page, "landing, menu open");
+    await menu.getByRole("link", { name: "Results" }).click();
+    await expect(page).toHaveURL(/#results$/);
+    await expect(menu).toBeHidden();
+    await expect(
+      page.getByRole("heading", { name: "Measured, caveats included" }),
+    ).toBeInViewport();
+  });
+
   test("shows final states under reduced motion", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/");

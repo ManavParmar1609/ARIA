@@ -42,11 +42,11 @@ function Section({
 
 function Facts({ items }: { items: [string, string][] }) {
   return (
-    <dl className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 xl:grid-cols-6">
+    <dl className="grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-3 xl:grid-cols-6">
       {items.map(([label, value]) => (
-        <div key={label} className="grid content-start gap-1 border-t border-rule pt-2.5">
-          <dt className="text-xs text-muted-foreground">{label}</dt>
-          <dd className="tabular text-xl font-medium">{value}</dd>
+        <div key={label} className="grid content-start gap-2 border-t border-rule pt-3">
+          <dt className="order-2 text-sm text-muted-foreground">{label}</dt>
+          <dd className="stat order-1 text-[1.75rem]">{value}</dd>
         </div>
       ))}
     </dl>
@@ -75,7 +75,7 @@ function Bars({
           <span className="truncate text-muted-foreground">{name}</span>
           <span className="h-2.5 rounded-xs bg-sunken" aria-hidden>
             <span
-              className="block h-2.5 rounded-xs bg-control"
+              className="block h-2.5 rounded-xs bg-primary/80"
               style={{ width: `${Math.min(100, (value / max) * 100)}%` }}
             />
           </span>
