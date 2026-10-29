@@ -11,6 +11,8 @@ ARIA runs offline with no API keys. Set an NVIDIA NIM key and the agents write w
 on NVIDIA's hosted API. Azure OpenAI and any OpenAI-compatible server work the same way: switching
 is a config change.
 
+![ARIA's landing page: a particle-sphere orb rises behind the headline "Incident triage that shows its work."](docs/images/hero.webp)
+
 > [!IMPORTANT]
 > The measured results below come from **semi-synthetic** incidents: real log lines from the
 > public Loghub samples, composed into incidents by ARIA's scenario builder. They show how ARIA
@@ -38,6 +40,10 @@ is a config change.
    Teams, ticket drafts) happens before approval.
 7. **Learn.** Approved reports join incident memory. Reviewer corrections go to a feedback
    queue, and once enough gather, the severity model's prediction sets are recalibrated on them.
+
+![A recorded run on the landing page: the HDFS log on the left, with the two lines behind evidence E2 lit up, and the triage tag on the right, whose claims each cite evidence IDs.](docs/images/replay.webp)
+
+*One recorded run. Pointing at a citation on the tag lights up the log lines behind it.*
 
 ## Architecture
 
@@ -152,6 +158,8 @@ review. To have ARIA read log files as well, set `ARIA_SCAN_SOURCES` (for exampl
 lines. With `ARIA_ENV=prod`, every call needs an API key from `ARIA_API_KEYS`.
 
 ## Ways in and out
+
+![The console's run view: a SEV1 ZooKeeper incident waiting for review, with its steps, the severity panel's probabilities and prediction set, and the messages that will be sent only on approval.](docs/images/run.webp)
 
 | Surface | Where | What it is for |
 |---|---|---|
