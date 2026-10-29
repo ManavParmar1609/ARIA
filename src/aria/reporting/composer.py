@@ -171,6 +171,20 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
     severity_text = f"{sev.severity}: {SEVERITY_DESCRIPTIONS[sev.severity]} {how}"
     if sev.decided_by in ("model", "llm", "fallback") and model_ev is not None:
         severity_text += f" (model probability {p:.2f})"
+    model_top = max(sev.probabilities, key=sev.probabilities.__getitem__, default=sev.severity)
+    if sev.decided_by == "rules" and floor_ev is not None and model_top != sev.severity:
+        # A floor lifted the severity above the model's own view: say which, and what the model
+        # thought, so a reviewer sees why the two disagree.
+        rule = floor_ev.title.split(": ", 1)[-1].rstrip(".")
+        severity_text = (
+            f"{sev.severity}: {SEVERITY_DESCRIPTIONS[sev.severity]} Held there by a safety floor: "
+            f"{rule}"
+        )
+        if model_ev is not None:
+            severity_text += (
+                f" (on its own, the model gave {model_top} a probability of "
+                f"{sev.probabilities[model_top]:.2f})"
+            )
     summary.append(
         _claim(f"{severity_text}.", model_ev, floor_ev or (rule_evs[0] if rule_evs else None))
     )

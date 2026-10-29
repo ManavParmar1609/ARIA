@@ -133,6 +133,9 @@ export interface WindowFeatures {
   critical_components: string[];
   max_component_criticality: number;
   persistence_s: number;
+  flows_checked?: number;
+  broken_flows?: number;
+  broken_flow_ratio?: number;
 }
 
 export interface InjectionFinding {
@@ -150,6 +153,31 @@ export interface GuardReport {
   dropped_lines: number;
 }
 
+/** A unit of work (an HDFS block, a task attempt) that broke off partway or took a rare step. */
+export interface BrokenUnit {
+  kind: string;
+  key: string;
+  problem: "mismatch" | "unusual_step";
+  reason: string;
+  steps: string[];
+  first_ts: string | null;
+  last_ts: string | null;
+  lines: number[];
+  evidence_id: string | null;
+}
+
+/** Units of work the parser followed from start to finish. */
+export interface FlowCheck {
+  units: Record<string, number>;
+  checked: Record<string, number>;
+  broken: number;
+  settle_s: Record<string, number>;
+  pairs: { kind: string; steps: string[]; units: number; support: number }[];
+  examples: BrokenUnit[];
+  broken_keys: string[];
+  evidence_id: string | null;
+}
+
 export interface ParsedBatch {
   system: string;
   n_raw_lines: number;
@@ -159,6 +187,7 @@ export interface ParsedBatch {
   guard: GuardReport;
   shards: number;
   template_history: number;
+  flows?: FlowCheck;
 }
 
 export interface ToolCallRecord {

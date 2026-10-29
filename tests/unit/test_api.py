@@ -358,7 +358,12 @@ async def test_a_real_incident_replays_as_an_ordinary_run(api: Api) -> None:
     )
     assert lead["failure_mode"] == "unfinished_work"
     assert lead["status"] == "supported"
+    # The cause memory suggests is tested too, on its own component, and ruled out.
+    rivals = [h for h in investigation["hypotheses"] if h["id"] != lead["id"]]
+    assert rivals
+    assert all(h["status"] == "refuted" for h in rivals)
     report = (await api.client.get(f"/api/v1/runs/{run_id}/report")).json()["report"]
+    assert "Held there by a safety floor" in report["summary"][0]["text"]
     assert any(a.get("runbook_slug") == "hdfs-unfinished-writes" for a in report["actions"])
 
     check = (await api.client.get(f"/api/v1/runs/{run_id}/expert-check")).json()

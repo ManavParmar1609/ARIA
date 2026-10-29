@@ -27,8 +27,21 @@ export function SeverityPanel({ assessment }: { assessment: SeverityAssessment }
   const [traceOpen, setTraceOpen] = useState(false);
   const reduceMotion = useReducedMotion();
   const coverage = Math.round((1 - assessment.alpha) * 100);
-  const how =
-    assessment.decided_by === "fallback" && assessment.set_empty
+  // A floor that lifts the severity above what the model believed: say so plainly, with the
+  // model's own view, instead of quoting a near-zero confidence for the class the floor chose.
+  const floorHit = assessment.rule_hits.find(
+    (h) => h.effect === "floor" && h.severity === assessment.floor,
+  );
+  const modelTop = SEVERITIES.reduce((best, s) =>
+    (assessment.probabilities[s] ?? 0) > (assessment.probabilities[best] ?? 0) ? s : best,
+  );
+  const lifted =
+    assessment.decided_by === "rules" && floorHit && modelTop !== assessment.severity
+      ? floorHit
+      : null;
+  const how = lifted
+    ? `A safety floor decided it: “${lifted.title}” holds it at ${assessment.floor} or above.`
+    : assessment.decided_by === "fallback" && assessment.set_empty
       ? "ARIA was not sure enough to decide alone, so it took the most likely class and asked for review."
       : (HOW[assessment.decided_by] ?? assessment.decided_by);
   const maxScore = Math.max(1, ...SEVERITIES.map((s) => assessment.rule_scores[s] ?? 0));
@@ -57,9 +70,11 @@ export function SeverityPanel({ assessment }: { assessment: SeverityAssessment }
       <p className="text-sm leading-relaxed">
         {how}{" "}
         <span className="text-muted-foreground">
-          {assessment.set_empty
-            ? `No severity is likely enough for the ${coverage}% prediction set on its own; ${assessment.severity} is the most likely, at ${percent(assessment.confidence)}.`
-            : `Confidence ${percent(assessment.confidence)}; the ${coverage}% set is {${assessment.prediction_set.join(", ")}}.`}
+          {lifted
+            ? `On its own, the model put ${percent(assessment.probabilities[modelTop] ?? 0)} on ${modelTop}; the floor is there for cases the model has not learned.`
+            : assessment.set_empty
+              ? `No severity is likely enough for the ${coverage}% prediction set on its own; ${assessment.severity} is the most likely, at ${percent(assessment.confidence)}.`
+              : `Confidence ${percent(assessment.confidence)}; the ${coverage}% set is {${assessment.prediction_set.join(", ")}}.`}
           {assessment.auditable
             ? " No LLM was involved, so the decision can be audited from rules and model alone."
             : ""}

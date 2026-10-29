@@ -49,7 +49,7 @@ const READING = [
   },
   {
     title: "The tabs below",
-    body: "Agent activity lists every step and tool call. Evidence lists everything the report may cite. Logs shows the templates ARIA mined. History lets you rewind to any checkpoint, or fork a new run with different options.",
+    body: "How the agents worked tells the run as each agent's turn: what it found and why it concluded what it did. The event log lists every step and tool call. Evidence lists everything the report may cite. Logs shows the templates ARIA mined. History lets you rewind to any checkpoint, or fork a new run with different options.",
   },
 ];
 

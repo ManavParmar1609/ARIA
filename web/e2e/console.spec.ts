@@ -31,7 +31,7 @@ test.describe("console", () => {
     await page.getByRole("checkbox").first().check();
     await page.getByRole("button", { name: "Approve and send 1" }).click();
     await expect(page.getByText("Published", { exact: true }).first()).toBeVisible();
-    await page.getByRole("tab", { name: "Agent activity" }).click();
+    await page.getByRole("tab", { name: "Event log" }).click();
     await expect(page.getByText(/Review: approve by/)).toBeVisible();
     await expect(page.getByText(/Run finished: published/)).toBeVisible();
 

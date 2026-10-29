@@ -38,6 +38,7 @@ import { LiveDraft, ReportView } from "./report-view";
 import { ReviewPanel } from "./review-panel";
 import { EvidenceTable, Similar, Templates } from "./run-tabs";
 import { SeverityPanel } from "./severity-panel";
+import { AgentTeam } from "./team";
 
 const ACTIVE = new Set(["queued", "running", "awaiting_review"]);
 
@@ -163,7 +164,7 @@ function RunSkeleton() {
 export function RunView({ runId }: { runId: string }) {
   const run = useRun(runId);
   const [checkpoint, setCheckpoint] = useState<string | null>(null);
-  const [tab, setTab] = useState("activity");
+  const [tab, setTab] = useState("team");
   const status = run.data?.status;
   const mode = !run.data ? "off" : ACTIVE.has(run.data.status) ? "live" : "stored";
   const timeline = useRunTimeline(runId, mode);
@@ -322,7 +323,8 @@ export function RunView({ runId }: { runId: string }) {
 
         <Tabs value={tab} onValueChange={setTab} className="mt-2">
           <TabsList aria-label="Run details">
-            <TabsTrigger value="activity">Agent activity</TabsTrigger>
+            <TabsTrigger value="team">How the agents worked</TabsTrigger>
+            <TabsTrigger value="activity">Event log</TabsTrigger>
             <TabsTrigger value="evidence">Evidence ({evidence.length})</TabsTrigger>
             <TabsTrigger value="logs">Logs and templates</TabsTrigger>
             <TabsTrigger value="similar">
@@ -330,6 +332,13 @@ export function RunView({ runId }: { runId: string }) {
             </TabsTrigger>
             <TabsTrigger value="history">History and forks</TabsTrigger>
           </TabsList>
+          <TabsContent value="team">
+            {values ? (
+              <AgentTeam values={values} events={timeline.events} />
+            ) : (
+              <LoadingRows rows={3} label="Loading what the agents did" />
+            )}
+          </TabsContent>
           <TabsContent value="activity">
             {mode === "live" ? (
               <p className="mb-2 text-xs text-muted-foreground" role="status">

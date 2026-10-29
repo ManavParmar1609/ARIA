@@ -234,7 +234,8 @@ def suggested_plan(inputs: InvestigationInputs) -> list[dict[str, Any]]:
         (
             h.component
             for h in candidate_hypotheses(inputs)
-            if h.component and h.component != component
+            # Work that stops partway logs nothing, so a timeline cannot test it.
+            if h.component and h.component != component and h.failure_mode != LIFECYCLE_CAUSE
         ),
         None,
     )
@@ -272,6 +273,10 @@ def supports(hypothesis: Hypothesis, observation: Observation) -> bool:
             observation.tool == "get_runbook"
             and hypothesis.failure_mode in data.get("failure_modes", [])
         )
+    if observation.tool == "search_logs" and _is_unit_key(
+        str(observation.arguments.get("query", ""))
+    ):
+        return False  # one unit's own lines speak to its lifecycle, not to other causes
     if observation.tool in ("get_template_examples", "search_logs"):
         lines = data.get("lines", [])
         return bool(lines) and (

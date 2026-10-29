@@ -368,4 +368,12 @@ def test_a_units_own_lines_support_it_and_a_quiet_timeline_does_not_refute_it() 
     )
     assert supports(hypothesis, lines)
     assert not supports(hypothesis, other)
+    rival = Hypothesis(
+        id="H2",
+        statement="Block serve exceptions",
+        failure_mode="block_serve_exceptions",
+        component=None,
+        confidence=0.4,
+    )
+    assert not supports(rival, lines)  # a block's own lines are no evidence for another cause
     assert not refutes(hypothesis.model_copy(update={"component": "dfs.DataNode"}), quiet)
