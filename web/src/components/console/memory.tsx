@@ -110,7 +110,7 @@ export function Memory() {
             <ul className="grid gap-2">
               {shown.map((incident) => (
                 <li key={incident.incident_id}>
-                  <details className="group rounded-md border border-rule bg-raised open:border-control">
+                  <details className="group rounded-lg bg-raised">
                     <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 [&::-webkit-details-marker]:hidden">
                       <SeverityBadge
                         severity={isSeverity(incident.severity) ? incident.severity : null}

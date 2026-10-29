@@ -25,7 +25,7 @@ export function SignIn() {
     <section aria-labelledby={`${id}-title`} className="mx-auto grid max-w-md gap-6 py-10">
       <div className="grid gap-2">
         <KeyRoundIcon aria-hidden className="size-6 text-primary" />
-        <h1 id={`${id}-title`} className="text-2xl font-extrabold tracking-tight">
+        <h1 id={`${id}-title`} className="text-2xl font-medium tracking-heading">
           Sign in to the console
         </h1>
         <p className="text-muted-foreground">

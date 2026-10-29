@@ -6,7 +6,7 @@ import { type ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 
 const panel =
-  "z-50 w-80 max-w-[calc(100vw-2rem)] rounded-md border border-rule bg-raised p-4 text-sm text-foreground shadow-xl shadow-black/25 outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0";
+  "z-50 w-80 max-w-[calc(100vw-2rem)] rounded-md border border-rule bg-raised p-4 text-sm text-foreground outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0";
 
 export const Popover = PopoverPrimitive.Root;
 export const PopoverTrigger = PopoverPrimitive.Trigger;

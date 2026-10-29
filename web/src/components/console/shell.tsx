@@ -35,15 +35,28 @@ interface NavItem {
   exact?: boolean;
 }
 
-const NAV: NavItem[] = [
-  { href: "/console", label: "Overview", icon: GaugeIcon, exact: true },
-  { href: "/console/runs", label: "Incidents", icon: InboxIcon },
-  { href: "/console/runs/new", label: "New triage", icon: PlusIcon, exact: true },
-  { href: "/console/ask", label: "Ask ARIA", icon: MessageSquareTextIcon },
-  { href: "/console/evals", label: "Evaluation", icon: FlaskConicalIcon },
-  { href: "/console/memory", label: "Incident memory", icon: LibraryIcon },
-  { href: "/console/runbooks", label: "Runbooks", icon: BookOpenIcon },
-  { href: "/console/settings", label: "Settings", icon: SettingsIcon },
+const NAV: { label: string; items: NavItem[] }[] = [
+  {
+    label: "Triage",
+    items: [
+      { href: "/console", label: "Overview", icon: GaugeIcon, exact: true },
+      { href: "/console/runs", label: "Incidents", icon: InboxIcon },
+      { href: "/console/runs/new", label: "New triage", icon: PlusIcon, exact: true },
+      { href: "/console/ask", label: "Ask ARIA", icon: MessageSquareTextIcon },
+    ],
+  },
+  {
+    label: "Knowledge",
+    items: [
+      { href: "/console/memory", label: "Incident memory", icon: LibraryIcon },
+      { href: "/console/runbooks", label: "Runbooks", icon: BookOpenIcon },
+      { href: "/console/evals", label: "Evaluation", icon: FlaskConicalIcon },
+    ],
+  },
+  {
+    label: "System",
+    items: [{ href: "/console/settings", label: "Settings", icon: SettingsIcon }],
+  },
 ];
 
 function isActive(pathname: string, item: NavItem): boolean {
@@ -59,7 +72,7 @@ function ReviewCount() {
   const n = data?.runs.length ?? 0;
   if (n === 0) return null;
   return (
-    <span className="tabular ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[0.6875rem] font-bold text-primary-foreground">
+    <span className="tabular ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[0.6875rem] font-medium text-primary-foreground">
       <span className="sr-only">, </span>
       {n >= 50 ? "50+" : n}
       <span className="sr-only"> waiting for review</span>
@@ -70,29 +83,42 @@ function ReviewCount() {
 function Nav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   return (
-    <nav aria-label="Console" className="grid gap-0.5">
-      {NAV.map((item) => {
-        const active = isActive(pathname, item);
-        const Icon = item.icon;
-        return (
-          <Link
-            key={item.href}
-            href={item.href as never}
-            onClick={onNavigate}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "flex h-9 items-center gap-3 rounded-md px-2.5 text-sm transition-colors duration-(--duration-quick)",
-              active
-                ? "bg-raised font-semibold text-foreground"
-                : "text-muted-foreground hover:bg-raised/60 hover:text-foreground",
-            )}
-          >
-            <Icon aria-hidden className={cn("size-4", active ? "text-primary" : "text-faint")} />
-            {item.label}
-            {item.href === "/console/runs" ? <ReviewCount /> : null}
-          </Link>
-        );
-      })}
+    <nav aria-label="Console" className="grid gap-6">
+      {NAV.map((group) => (
+        <div key={group.label} role="group" aria-labelledby={`nav-${group.label}`}>
+          <p id={`nav-${group.label}`} className="eyebrow mb-2 px-3 text-faint">
+            {group.label}
+          </p>
+          <div className="grid gap-0.5">
+            {group.items.map((item) => {
+              const active = isActive(pathname, item);
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href as never}
+                  onClick={onNavigate}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "flex h-10 items-center gap-3 rounded-md px-3 text-sm transition-colors duration-(--duration-quick)",
+                    active
+                      ? "bg-raised font-medium text-heading"
+                      : "text-muted-foreground hover:bg-raised/60 hover:text-heading",
+                  )}
+                >
+                  <Icon
+                    aria-hidden
+                    strokeWidth={1.75}
+                    className={cn("size-4", active ? "text-primary" : "text-faint")}
+                  />
+                  {item.label}
+                  {item.href === "/console/runs" ? <ReviewCount /> : null}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </nav>
   );
 }
@@ -198,10 +224,10 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
       >
         Skip to content
       </a>
-      <div className="min-h-dvh lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]">
-        <aside className="hidden border-r border-rule bg-sunken/40 lg:block">
-          <div className="sticky top-0 flex h-dvh flex-col gap-6 p-4">
-            <Link href="/" className="rounded-sm px-1.5 pt-1" aria-label="ARIA home">
+      <div className="min-h-dvh lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]">
+        <aside className="hidden bg-sunken lg:block">
+          <div className="sticky top-0 flex h-dvh flex-col gap-8 px-4 py-6">
+            <Link href="/" className="rounded-sm px-3 text-heading" aria-label="ARIA home">
               <Wordmark />
             </Link>
             <div className="flex-1 overflow-y-auto">
@@ -211,7 +237,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
           </div>
         </aside>
         <div className="flex min-w-0 flex-col">
-          <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-rule bg-background/95 px-4 py-2.5 backdrop-blur lg:hidden">
+          <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-rule bg-background/95 px-4 py-3 backdrop-blur lg:hidden">
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild>
                 <Button variant="ghost" size="icon-sm" aria-label="Open navigation">
@@ -229,7 +255,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
                 <SessionFooter />
               </SheetContent>
             </Dialog>
-            <Link href="/console" className="rounded-sm" aria-label="Console overview">
+            <Link href="/console" className="rounded-sm text-heading" aria-label="Console overview">
               <Wordmark />
             </Link>
             <ThemeToggle />

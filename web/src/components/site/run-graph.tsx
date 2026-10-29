@@ -117,10 +117,10 @@ export function RunGraph({ steps }: { steps: GraphStep[] }) {
           >
             <span
               className={cx(
-                "tabular flex size-10 items-center justify-center rounded-full border text-sm font-bold transition-colors duration-(--duration-moderate)",
+                "tabular flex size-10 items-center justify-center rounded-full border text-sm font-medium transition-colors duration-(--duration-moderate)",
                 i <= active
                   ? "border-primary bg-primary text-primary-foreground"
-                  : "border-control text-muted-foreground",
+                  : "border-rule text-muted-foreground",
               )}
               aria-hidden
             >
@@ -133,7 +133,7 @@ export function RunGraph({ steps }: { steps: GraphStep[] }) {
                 scrolling && i > active && "text-faint",
               )}
             >
-              <h3 className="text-xl leading-tight font-bold">{step.title}</h3>
+              <h3 className="text-xl leading-tight tracking-heading">{step.title}</h3>
               <p
                 className={cx(
                   "mt-2 max-w-prose text-base",
@@ -142,23 +142,23 @@ export function RunGraph({ steps }: { steps: GraphStep[] }) {
               >
                 {step.body}
               </p>
-              <p
-                className={cx(
-                  "mt-3 inline-block rounded-xs border-l-2 bg-sunken px-3 py-1.5 text-sm",
-                  scrolling && i > active ? "border-rule" : "border-primary",
-                )}
-              >
-                {step.fact}
+              <p className="mt-4 inline-flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-sm bg-sunken px-3.5 py-2 text-sm">
+                <span
+                  className={cx("eyebrow", scrolling && i > active ? "text-faint" : "text-primary")}
+                >
+                  In the run
+                </span>
+                <span>{step.fact}</span>
               </p>
             </div>
           </li>
         ))}
       </ol>
       <div className="order-first lg:order-none">
-        <div className="lg:sticky lg:top-[10vh]">
+        <div className="rounded-lg bg-sunken px-4 py-6 sm:px-8 lg:sticky lg:top-[8vh]">
           <svg
             viewBox="0 0 360 790"
-            className="mx-auto h-auto w-full max-w-sm lg:max-h-[80vh]"
+            className="mx-auto h-auto w-full max-w-sm lg:max-h-[78vh]"
             role="img"
             aria-labelledby="graph-title"
           >
@@ -205,14 +205,14 @@ export function RunGraph({ steps }: { steps: GraphStep[] }) {
                   <rect
                     width={w}
                     height={H}
-                    rx={node.kind === "person" ? H / 2 : 4}
+                    rx={node.kind === "person" ? H / 2 : 6}
                     className={cx(
                       "transition-[fill,stroke] duration-(--duration-moderate)",
                       isCurrent
                         ? "fill-highlight stroke-primary"
                         : isLit
-                          ? "fill-raised stroke-foreground/60"
-                          : "fill-sunken stroke-control/70",
+                          ? "fill-raised stroke-foreground/40"
+                          : "fill-background stroke-control/50",
                     )}
                     strokeWidth={isCurrent ? 2 : 1}
                   />

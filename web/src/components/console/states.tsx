@@ -42,12 +42,12 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "grid justify-items-start gap-3 rounded-md border border-dashed border-rule px-6 py-10",
+        "grid justify-items-start gap-3 rounded-lg bg-sunken px-6 py-10 sm:px-8",
         className,
       )}
     >
-      {Icon ? <Icon aria-hidden className="size-5 text-faint" /> : null}
-      <p className="text-base font-semibold">{title}</p>
+      {Icon ? <Icon aria-hidden className="size-5 text-primary" strokeWidth={1.5} /> : null}
+      <p className="text-lg font-medium text-heading">{title}</p>
       {children ? (
         <div className="max-w-prose text-sm text-muted-foreground">{children}</div>
       ) : null}
@@ -77,12 +77,9 @@ export function ErrorState({
   return (
     <div
       role="alert"
-      className={cn(
-        "grid justify-items-start gap-3 rounded-md border border-danger/50 px-6 py-6",
-        className,
-      )}
+      className={cn("grid justify-items-start gap-3 rounded-lg bg-danger/10 px-6 py-6", className)}
     >
-      <p className="flex items-center gap-2 font-semibold text-danger">
+      <p className="flex items-center gap-2 font-medium text-danger">
         <CircleAlertIcon aria-hidden className="size-4" />
         {title}
       </p>
@@ -97,21 +94,27 @@ export function ErrorState({
 }
 
 export function PageHeader({
+  eyebrow,
   title,
   description,
   actions,
   children,
 }: {
+  /** The section of the console the page belongs to, as the navigation names it. */
+  eyebrow?: string;
   title: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
   children?: ReactNode;
 }) {
   return (
-    <header className="grid gap-3 border-b border-rule pb-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="grid min-w-0 gap-1.5">
-          <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">{title}</h1>
+    <header className="grid gap-4 pb-2">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="grid min-w-0 gap-3">
+          {eyebrow ? <p className="eyebrow text-muted-foreground">{eyebrow}</p> : null}
+          <h1 className="text-3xl leading-none tracking-heading sm:text-4xl sm:tracking-display">
+            {title}
+          </h1>
           {description ? <p className="max-w-3xl text-muted-foreground">{description}</p> : null}
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}

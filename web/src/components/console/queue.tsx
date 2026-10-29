@@ -218,7 +218,7 @@ export function Queue() {
           </div>
           <ul className="grid gap-2 md:hidden">
             {list.map((run) => (
-              <li key={run.id} className="relative rounded-md border border-rule bg-raised p-3">
+              <li key={run.id} className="relative rounded-lg bg-raised p-4">
                 <div className="flex items-center justify-between gap-2">
                   <SeverityBadge
                     severity={isSeverity(run.severity) ? run.severity : null}

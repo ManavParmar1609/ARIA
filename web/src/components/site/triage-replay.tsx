@@ -27,8 +27,8 @@ const DECIDED: Record<string, string> = {
 };
 
 /**
- * The landing page's hero: one recorded run as a triage tag next to its log. Hovering or
- * focusing a citation lights up the lines it points to and shows the evidence.
+ * One recorded run as a triage tag beside the log it was written from. Hovering or focusing a
+ * citation lights up the lines it points to and shows the evidence.
  */
 export function TriageReplay({ data }: { data: Replay }) {
   const root = useRef<HTMLDivElement>(null);
@@ -43,11 +43,15 @@ export function TriageReplay({ data }: { data: Replay }) {
   const p = Math.round((data.probabilities[data.severity] ?? 0) * 100);
   const firstShown = data.lines[0]?.lineNo ?? 1;
 
-  // Wide screens play the run in: lines, the flagged line, the tag's bars, then the claims.
+  // Wide screens play the run in as it scrolls into view: lines, the flagged line, the tag's
+  // bars, then the claims.
   useWideMotion(root, ({ gsap }) => {
     const show = { autoAlpha: 1, x: 0, y: 0 };
     gsap
-      .timeline({ defaults: { ease: "power3.out" } })
+      .timeline({
+        defaults: { ease: "power3.out" },
+        scrollTrigger: { trigger: root.current, start: "top 75%", once: true },
+      })
       .fromTo("[data-anim=line]", { autoAlpha: 0, y: 6 }, { ...show, duration: 0.3, stagger: 0.05 })
       .fromTo("[data-anim=flag]", { autoAlpha: 0, x: -8 }, { ...show, duration: 0.35 }, "-=0.05")
       .fromTo(
@@ -92,17 +96,20 @@ export function TriageReplay({ data }: { data: Replay }) {
   };
 
   return (
-    <div ref={root} className="relative">
+    <div
+      ref={root}
+      className="grid items-start gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-8"
+    >
       {/* the log the tag was written from */}
-      <div className="rounded-md border border-rule bg-sunken">
-        <div className="flex items-baseline justify-between gap-4 border-b border-rule px-4 py-2.5 text-xs text-muted-foreground">
+      <div className="overflow-hidden rounded-lg bg-sunken">
+        <div className="flex items-baseline justify-between gap-4 border-b border-rule px-5 py-3 text-xs text-muted-foreground">
           <span className="font-mono">hdfs.log</span>
           <span className="tabular">
             lines {firstShown} to {firstShown + 8} and {data.lines.at(-1)?.lineNo} of {data.nLines}
           </span>
         </div>
         <ol
-          className="py-2 font-mono text-[0.75rem] leading-6"
+          className="py-3 font-mono text-[0.75rem] leading-6"
           aria-label="Log lines from the recorded run"
         >
           {data.lines.map((line, i) => {
@@ -150,7 +157,7 @@ export function TriageReplay({ data }: { data: Replay }) {
         <p
           id="replay-evidence"
           aria-live="polite"
-          className="min-h-16 border-t border-rule px-4 pt-3 pb-9 text-xs leading-relaxed text-muted-foreground"
+          className="min-h-20 border-t border-rule px-5 py-4 text-sm leading-relaxed text-muted-foreground"
         >
           {evidence ? (
             <>
@@ -162,7 +169,7 @@ export function TriageReplay({ data }: { data: Replay }) {
               ) : null}
             </>
           ) : (
-            "Point at a citation on the tag to see the evidence behind the claim."
+            "Point at a citation on the tag to see the evidence behind its claim."
           )}
         </p>
       </div>
@@ -171,11 +178,11 @@ export function TriageReplay({ data }: { data: Replay }) {
       <article
         data-tag
         aria-label={`Triage tag: ${data.severity}, ${data.title}`}
-        className="relative z-10 -mt-6 ml-0 flex overflow-hidden rounded-md border border-rule bg-raised shadow-2xl shadow-black/25 sm:ml-10 lg:-ml-8 xl:ml-10"
+        className="flex overflow-hidden rounded-lg bg-raised"
       >
-        <TagStrip severity={data.severity} className="w-14 sm:w-16" />
-        <div className="min-w-0 flex-1 p-4 sm:p-5">
-          <h2 className="text-lg leading-snug font-bold">{data.title}</h2>
+        <TagStrip severity={data.severity} className="w-12 sm:w-14" />
+        <div className="min-w-0 flex-1 p-5 sm:p-6">
+          <h3 className="text-xl leading-snug tracking-heading">{data.title}</h3>
           <p className="mt-0.5 text-sm text-muted-foreground">
             {data.system}, a {data.windowMinutes}-minute window of {data.nLines} lines
           </p>
@@ -193,10 +200,13 @@ export function TriageReplay({ data }: { data: Replay }) {
               <span className="text-muted-foreground">{DECIDED[data.decidedBy] ?? ""}</span>
             </p>
           </div>
-          <ul className="mt-4 grid gap-2.5 border-t border-rule pt-4 text-sm leading-relaxed">
+          <h4 className="eyebrow mt-5 border-t border-rule pt-5 text-muted-foreground">
+            Claims and the evidence they cite
+          </h4>
+          <ul className="mt-3 grid gap-2.5 text-sm leading-relaxed">
             {data.claims.map((claim) => (
               <li key={claim.text} data-anim="claim" className="grid grid-cols-[0.75rem_1fr] gap-2">
-                <span aria-hidden className="mt-2.5 block size-1.5 rounded-full bg-control" />
+                <span aria-hidden className="mt-2.5 block size-1.5 rounded-full bg-primary/70" />
                 <span>
                   {claim.text}{" "}
                   <span className="inline-flex flex-wrap gap-1 align-baseline">
@@ -208,7 +218,7 @@ export function TriageReplay({ data }: { data: Replay }) {
           </ul>
           <div
             data-anim="status"
-            className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-rule pt-4"
+            className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-rule pt-5"
           >
             <span className="inline-flex items-center gap-2 text-sm font-medium">
               <span

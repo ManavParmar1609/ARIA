@@ -54,7 +54,7 @@ function ActionChoice({
   const [open, setOpen] = useState(false);
   const id = useId();
   return (
-    <li className="grid gap-2 rounded-md border border-rule p-3">
+    <li className="grid gap-2 rounded-md bg-sunken p-3">
       <div className="flex items-start gap-3">
         <input
           id={id}
@@ -175,10 +175,10 @@ export function ReviewPanel({
   return (
     <section
       aria-labelledby={`${id}-title`}
-      className="grid gap-4 rounded-md border-2 border-primary/70 bg-raised p-4"
+      className="grid gap-4 rounded-lg bg-raised p-5 ring-1 ring-primary/50"
     >
       <div className="grid gap-1">
-        <h2 id={`${id}-title`} className="flex items-center gap-2 text-base font-bold">
+        <h2 id={`${id}-title`} className="flex items-center gap-2 text-base font-medium">
           <span aria-hidden className="block size-2 animate-pulse-dot rounded-full bg-primary" />
           Waiting for your review
         </h2>
@@ -188,7 +188,7 @@ export function ReviewPanel({
         </p>
       </div>
       {prompt.needs_review ? (
-        <p className="flex gap-2 rounded-md border border-sev3-fg/50 p-2.5 text-sm">
+        <p className="flex gap-2 rounded-md bg-sev3/12 p-2.5 text-sm">
           <TriangleAlertIcon aria-hidden className="mt-0.5 size-4 shrink-0 text-sev3-fg" />
           <span>
             ARIA was unsure about the severity ({prompt.prediction_set.join(" or ")}). Check it
@@ -197,7 +197,7 @@ export function ReviewPanel({
         </p>
       ) : null}
       {!prompt.valid ? (
-        <p className="flex gap-2 rounded-md border border-danger/60 p-2.5 text-sm text-danger">
+        <p className="flex gap-2 rounded-md bg-danger/10 p-2.5 text-sm text-danger">
           <TriangleAlertIcon aria-hidden className="mt-0.5 size-4 shrink-0" />
           The report failed validation. Edit or reject it.
         </p>

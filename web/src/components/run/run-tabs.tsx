@@ -67,7 +67,7 @@ export function EvidenceTable({ evidence, cited }: { evidence: Evidence[]; cited
 function Guard({ guard, raw }: { guard: GuardReport; raw: number }) {
   const redactions = Object.entries(guard.redactions?.counts ?? {});
   return (
-    <div className="grid gap-3 rounded-md border border-rule p-4 text-sm">
+    <div className="grid gap-3 rounded-lg bg-raised p-5 text-sm">
       <h3 className="font-semibold">Guardrails on the way in</h3>
       <p className="text-muted-foreground">
         {raw.toLocaleString("en")} lines read.{" "}
@@ -127,7 +127,7 @@ export function Templates({ batch }: { batch: ParsedBatch }) {
       </p>
       <ul className="grid gap-2">
         {batch.templates.map((t) => (
-          <li key={t.template_id} className="grid gap-1.5 rounded-md border border-rule p-3">
+          <li key={t.template_id} className="grid gap-1.5 rounded-lg bg-raised p-4">
             <p className="font-mono text-xs leading-5 break-all">{t.template}</p>
             <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span className="tabular font-semibold text-foreground">
@@ -176,10 +176,7 @@ export function Similar({ retrieval }: { retrieval: RetrievalResult }) {
       ) : (
         <ol className="grid gap-2">
           {retrieval.incidents.map((incident, i) => (
-            <li
-              key={incident.incident_id}
-              className="grid gap-1.5 rounded-md border border-rule p-3"
-            >
+            <li key={incident.incident_id} className="grid gap-1.5 rounded-lg bg-raised p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="tabular text-xs text-faint">#{i + 1}</span>
                 <SeverityBadge

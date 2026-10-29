@@ -58,7 +58,7 @@ function Answer({ turn }: { turn: Turn }) {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="grid content-start gap-3">
           {answer.insufficient_evidence ? (
-            <p className="rounded-md border border-sev3-fg/50 p-3 text-sm">
+            <p className="rounded-md bg-sev3/12 p-3 text-sm">
               ARIA did not find enough evidence to answer that confidently. What it found is below.
             </p>
           ) : null}
@@ -183,7 +183,7 @@ function Questions() {
       </form>
 
       {turns.length === 0 ? (
-        <div className="flex items-center gap-3 rounded-md border border-dashed border-rule p-6 text-sm text-muted-foreground">
+        <div className="flex items-center gap-3 rounded-lg bg-sunken p-6 text-sm text-muted-foreground">
           <MessageSquareTextIcon aria-hidden className="size-5 text-faint" />
           Ask about past incidents, fixes or runbooks. Try one of the questions above.
         </div>
@@ -191,7 +191,7 @@ function Questions() {
         <ol className="grid gap-8">
           {turns.map((turn) => (
             <li key={turn.id} className="grid gap-3 border-t border-rule pt-6">
-              <h2 className="text-lg font-bold">{turn.question}</h2>
+              <h2 className="text-xl tracking-heading">{turn.question}</h2>
               <Answer turn={turn} />
             </li>
           ))}

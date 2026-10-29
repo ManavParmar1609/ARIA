@@ -79,11 +79,11 @@ export function ReportView({ report }: { report: IncidentReport }) {
               : "Failed validation"}
           </span>
         </div>
-        <h2 id="report-title" className="text-xl leading-snug font-bold">
+        <h2 id="report-title" className="text-2xl leading-tight tracking-heading">
           {stripSeverity(report.title)}
         </h2>
         {!ok && validation?.issues?.length ? (
-          <ul className="grid gap-1 rounded-md border border-danger/50 p-3 text-sm">
+          <ul className="grid gap-1 rounded-lg bg-danger/10 p-4 text-sm">
             {validation.issues.map((issue, i) => (
               <li key={i} className={issue.level === "error" ? "text-danger" : "text-sev3-fg"}>
                 {issue.path ? <code className="mr-1">{issue.path}</code> : null}
@@ -170,10 +170,7 @@ export function ReportView({ report }: { report: IncidentReport }) {
         <Section title="Similar past incidents">
           <ul className="grid gap-2">
             {report.similar_incidents.map((incident) => (
-              <li
-                key={incident.incident_id}
-                className="grid gap-1 rounded-md border border-rule p-3"
-              >
+              <li key={incident.incident_id} className="grid gap-1 rounded-lg bg-raised p-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <SeverityBadge
                     severity={isSeverity(incident.severity) ? incident.severity : null}
@@ -217,10 +214,7 @@ export function ReportView({ report }: { report: IncidentReport }) {
 /** Model output while the report is being written (live only; tokens are never stored). */
 export function LiveDraft({ text }: { text: string }) {
   return (
-    <section
-      aria-label="Report being written"
-      className="grid gap-2 rounded-md border border-rule bg-sunken p-4"
-    >
+    <section aria-label="Report being written" className="grid gap-2 rounded-lg bg-sunken p-5">
       <p className="flex items-center gap-2 text-sm font-medium">
         <span aria-hidden className="block size-2 animate-pulse-dot rounded-full bg-primary" />
         Writing the report

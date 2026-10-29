@@ -270,7 +270,7 @@ export function NewRun() {
         </form>
 
         <aside aria-labelledby={`${id}-other`} className="grid content-start gap-4">
-          <h2 id={`${id}-other`} className="text-base font-bold">
+          <h2 id={`${id}-other`} className="text-base font-medium">
             Other ways to start a run
           </h2>
           {SNIPPETS.map((s) => (
@@ -281,7 +281,7 @@ export function NewRun() {
                 tabIndex={0}
                 role="region"
                 aria-label={s.title}
-                className="overflow-x-auto rounded-md border border-rule bg-sunken p-3 text-xs leading-5"
+                className="overflow-x-auto rounded-lg bg-sunken p-4 text-xs leading-5"
               >
                 <code>{s.code}</code>
               </pre>

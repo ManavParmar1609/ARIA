@@ -30,7 +30,7 @@ function Section({
   return (
     <section aria-labelledby={id} className="grid gap-5 border-t border-rule pt-8">
       <div className="grid max-w-3xl gap-2">
-        <h2 id={id} className="text-xl font-bold">
+        <h2 id={id} className="text-xl tracking-heading">
           {title}
         </h2>
         {intro ? <p className="text-muted-foreground">{intro}</p> : null}
@@ -46,7 +46,7 @@ function Facts({ items }: { items: [string, string][] }) {
       {items.map(([label, value]) => (
         <div key={label} className="grid content-start gap-1 border-t border-rule pt-2.5">
           <dt className="text-xs text-muted-foreground">{label}</dt>
-          <dd className="tabular text-xl font-bold">{value}</dd>
+          <dd className="tabular text-xl font-medium">{value}</dd>
         </div>
       ))}
     </dl>
@@ -115,7 +115,7 @@ function Confusion({ matrix }: { matrix: number[][] }) {
                       key={j}
                       className={cn(
                         "tabular text-center",
-                        i === j && "font-bold",
+                        i === j && "font-medium",
                         under && n > 0 && "text-danger",
                       )}
                       style={{

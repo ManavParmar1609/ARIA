@@ -44,11 +44,11 @@ function Header({ run, severity }: { run: RunDetail; severity: string | null | u
   const budget = (run.budget ?? {}) as Record<string, unknown>;
   const llmCalls = Number(budget.llm_calls ?? 0);
   return (
-    <header className="flex overflow-hidden rounded-md border border-rule bg-raised">
+    <header className="flex overflow-hidden rounded-lg bg-raised">
       <TagStrip severity={sev} className="w-16 sm:w-20" />
       <div className="grid min-w-0 flex-1 gap-2 p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <h1 className="min-w-0 text-xl leading-snug font-extrabold tracking-tight sm:text-2xl">
+          <h1 className="min-w-0 text-xl leading-snug font-medium tracking-heading sm:text-2xl">
             {runTitle(run)}
           </h1>
           <RunStatus status={run.status} />
@@ -254,7 +254,7 @@ export function RunView({ runId }: { runId: string }) {
         {viewing ? (
           <div
             role="status"
-            className="sticky top-14 z-20 flex flex-wrap items-center justify-between gap-3 rounded-md border border-primary bg-background px-4 py-3 text-sm shadow-lg shadow-black/20 lg:top-3"
+            className="sticky top-14 z-20 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-raised px-4 py-3 text-sm ring-1 ring-primary lg:top-3"
           >
             <span className="flex items-center gap-2">
               <HistoryIcon aria-hidden className="size-4" />

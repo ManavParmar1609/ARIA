@@ -4,41 +4,55 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * ARIA design tokens. Colour is OKLCH; every text pair below was checked for WCAG 2.2 AA
- * (4.5:1 for text, 3:1 for control boundaries) in both themes. See web/DESIGN.md.
+ * ARIA design tokens, after the Auros style reference: an abyssal terminal with bioluminescent
+ * data orbs (web/DESIGN.md). Colour is OKLCH, converted from the reference's hex values; every
+ * text pair below was checked for WCAG 2.2 AA (4.5:1 for text, 3:1 for control edges).
  *
- * Colour carries meaning only: severity (sev1-4), run state, and the one accent (manila in the
- * dark theme, ink in the light one) for the thing you can act on.
+ * Depth comes from the teal surface stack (abyss, deep, kelp), never from shadows. Colour is
+ * rationed: whites and silvers carry content, lavender marks large statistics, the aurora
+ * gradient marks the one primary action, and the four severity strips are the only other hues.
  */
 :root {
-  /* day shift (light) */
-  --background: oklch(0.975 0.005 258);
-  --foreground: oklch(0.25 0.03 258);
+  /* day (light): the same hue, inverted */
+  --background: oklch(0.971 0.011 189.8); /* #eef8f7 */
+  --foreground: oklch(0.209 0.035 191.6); /* liquid deep */
+  --heading: oklch(0.209 0.035 191.6);
   --raised: oklch(1 0 0);
-  --sunken: oklch(0.95 0.008 258);
-  --rule: oklch(0.89 0.01 258);
-  --control: oklch(0.62 0.02 258);
-  --muted-foreground: oklch(0.44 0.03 258);
-  --faint: oklch(0.5 0.025 258);
+  --sunken: oklch(0.942 0.014 185.9); /* #e2efed */
+  --rule: oklch(0.209 0.035 191.6 / 0.12);
+  --control: oklch(0.596 0.025 189.5); /* 3.7:1 on the canvas */
+  --muted-foreground: oklch(0.429 0.029 189.7); /* 7.4:1 */
+  --faint: oklch(0.51 0.025 189.3); /* 5.2:1 */
+  --stat: oklch(0.45 0.159 320.2); /* deep plum: lavender would fail on light */
 
-  --primary: oklch(0.3 0.06 258);
-  --primary-foreground: oklch(0.975 0.008 85);
-  --highlight: oklch(0.93 0.055 88);
-  --highlight-foreground: oklch(0.25 0.03 258);
+  --primary: oklch(0.304 0.053 188.9); /* liquid kelp */
+  --primary-foreground: oklch(1 0 0);
+  --highlight: oklch(0.304 0.053 188.9 / 0.12);
+  --highlight-foreground: oklch(0.209 0.035 191.6);
 
-  --sev1: oklch(0.68 0.2 27);
-  --sev2: oklch(0.77 0.16 58);
-  --sev3: oklch(0.87 0.15 98);
-  --sev4: oklch(0.76 0.06 236);
-  --sev-ink: oklch(0.25 0.03 258);
-  --sev1-fg: oklch(0.5 0.19 27);
-  --sev2-fg: oklch(0.52 0.13 55);
-  --sev3-fg: oklch(0.5 0.11 95);
-  --sev4-fg: oklch(0.48 0.06 240);
-  --sev-edge: oklch(0.25 0.03 258 / 0.28);
+  --sev1: oklch(0.74 0.15 18);
+  --sev2: oklch(0.83 0.12 68);
+  --sev3: oklch(0.91 0.1 100);
+  --sev4: oklch(0.85 0.05 195);
+  --sev-ink: oklch(0.209 0.035 191.6);
+  --sev1-fg: oklch(0.5 0.17 20);
+  --sev2-fg: oklch(0.52 0.12 60);
+  --sev3-fg: oklch(0.5 0.1 95);
+  --sev4-fg: oklch(0.47 0.06 200);
+  --sev-edge: oklch(0.209 0.035 191.6 / 0.2);
 
-  --danger: oklch(0.5 0.19 27);
-  --ok: oklch(0.48 0.1 160);
+  --danger: oklch(0.5 0.17 20);
+  --ok: oklch(0.45 0.08 175);
+
+  --gradient-aurora: linear-gradient(
+    90deg,
+    #cbfffc 0%,
+    #edfffe 26.25%,
+    #fffdfa 47.57%,
+    #fad1ff 88.96%
+  );
+  --gradient-bio: linear-gradient(90deg, #00827c 0%, #cbfffc 100%);
+  --orb-glow: oklch(0.55 0.1 186 / 0.16);
 
   /* shadcn/ui aliases */
   --card: var(--raised);
@@ -57,30 +71,34 @@
 }
 
 .dark {
-  /* night shift (dark, the default) */
-  --background: oklch(0.235 0.03 258);
-  --foreground: oklch(0.955 0.012 85);
-  --raised: oklch(0.27 0.032 258);
-  --sunken: oklch(0.205 0.028 258);
-  --rule: oklch(0.37 0.03 258);
-  --control: oklch(0.56 0.03 258);
-  --muted-foreground: oklch(0.8 0.02 258);
-  --faint: oklch(0.7 0.02 258);
+  /* night (dark, the default): the Auros palette */
+  --background: oklch(0.243 0.041 189.5); /* liquid abyss #012624 */
+  --foreground: oklch(0.987 0.019 192.8); /* liquid mist #edfffe */
+  --heading: oklch(1 0 0); /* platinum */
+  --raised: oklch(0.304 0.053 188.9); /* liquid kelp #003734 */
+  --sunken: oklch(0.209 0.035 191.6); /* liquid deep #011d1c */
+  --rule: oklch(1 0 0 / 0.1);
+  --control: oklch(0.703 0.018 192.2); /* 5.0:1 on kelp, so inputs read on cards too */
+  --muted-foreground: oklch(0.82 0.013 190.9); /* silver mist #bbc7c6 */
+  --faint: oklch(0.703 0.018 192.2); /* #93a3a2: 5.0:1 on kelp, 6.1:1 on abyss */
+  --stat: oklch(0.956 0.036 323.1); /* lavender phosphor #fde9ff */
 
-  --primary: oklch(0.86 0.07 84);
-  --primary-foreground: oklch(0.205 0.028 258);
-  --highlight: oklch(0.86 0.07 84 / 0.2);
-  --highlight-foreground: oklch(0.97 0.01 85);
+  --primary: oklch(0.964 0.053 191.9); /* aqua #cbfffc, the aurora's first stop */
+  --primary-foreground: oklch(0.209 0.035 191.6);
+  --highlight: oklch(0.964 0.053 191.9 / 0.16);
+  --highlight-foreground: oklch(1 0 0);
 
-  --sev-ink: oklch(0.205 0.028 258);
-  --sev1-fg: oklch(0.7 0.19 27);
-  --sev2-fg: oklch(0.78 0.15 58);
-  --sev3-fg: oklch(0.87 0.15 98);
-  --sev4-fg: oklch(0.78 0.06 236);
+  --sev-ink: oklch(0.209 0.035 191.6);
+  --sev1-fg: oklch(0.8 0.13 18);
+  --sev2-fg: oklch(0.86 0.11 68);
+  --sev3-fg: oklch(0.92 0.09 100);
+  --sev4-fg: oklch(0.87 0.05 195);
   --sev-edge: oklch(0 0 0 / 0);
 
-  --danger: oklch(0.7 0.19 27);
-  --ok: oklch(0.78 0.1 160);
+  --danger: oklch(0.8 0.13 18);
+  --ok: oklch(0.86 0.1 175);
+
+  --orb-glow: oklch(0.55 0.1 186 / 0.3);
 }
 
 @theme inline {
@@ -105,6 +123,8 @@
   --color-sev-edge: var(--sev-edge);
   --color-danger: var(--danger);
   --color-ok: var(--ok);
+  --color-heading: var(--heading);
+  --color-stat: var(--stat);
 
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
@@ -123,35 +143,41 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  --font-sans: var(--font-atkinson), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-atkinson-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
 
-  /* type scale: a major-third ladder from 12 px, display sizes for the landing page */
+  /* type scale: body 16 px at 1.5, display sizes at line-height 1 (DESIGN.md) */
   --text-xs: 0.75rem;
-  --text-xs--line-height: 1.1rem;
+  --text-xs--line-height: 1.05rem;
   --text-sm: 0.875rem;
   --text-sm--line-height: 1.3rem;
   --text-base: 1rem;
-  --text-base--line-height: 1.55rem;
+  --text-base--line-height: 1.5rem;
   --text-lg: 1.125rem;
-  --text-lg--line-height: 1.7rem;
-  --text-xl: 1.375rem;
-  --text-xl--line-height: 1.85rem;
-  --text-2xl: 1.75rem;
-  --text-2xl--line-height: 2.2rem;
+  --text-lg--line-height: 1.6rem;
+  --text-xl: 1.5rem;
+  --text-xl--line-height: 1.95rem;
+  --text-2xl: 1.875rem;
+  --text-2xl--line-height: 2.15rem;
   --text-3xl: 2.25rem;
-  --text-3xl--line-height: 2.6rem;
+  --text-3xl--line-height: 2.4rem;
   --text-4xl: 3rem;
-  --text-4xl--line-height: 3.25rem;
-  --text-5xl: 4rem;
-  --text-5xl--line-height: 4.15rem;
-  --text-6xl: 5.5rem;
-  --text-6xl--line-height: 5.6rem;
+  --text-4xl--line-height: 3.05rem;
+  --text-5xl: 3.8125rem;
+  --text-5xl--line-height: 3.8125rem;
+  --text-6xl: 6rem;
+  --text-6xl--line-height: 6rem;
 
-  --radius-xs: 2px;
-  --radius-sm: 4px;
+  --tracking-display: -0.04em;
+  --tracking-heading: -0.02em;
+  --tracking-label: 0.12em;
+
+  /* two radii: 6 px for everything small, 16 px for cards and panels */
+  --radius-xs: 6px;
+  --radius-sm: 6px;
   --radius-md: 6px;
-  --radius-lg: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 16px;
 
   /* motion: durations and easings used everywhere (GSAP reads the same values) */
   --duration-instant: 80ms;
@@ -212,6 +238,8 @@
   h3,
   h4 {
     text-wrap: balance;
+    font-weight: 500;
+    color: var(--heading);
   }
   p {
     text-wrap: pretty;
@@ -222,11 +250,27 @@
   .tabular {
     font-variant-numeric: tabular-nums;
   }
-  /* the perforated edge between a triage tag's severity strip and its body */
-  .perforation {
-    background-image: repeating-linear-gradient(to bottom, var(--rule) 0 4px, transparent 4px 8px);
-    background-size: 1px 100%;
-    background-repeat: no-repeat;
+  /* instrument labels: section kickers, table headers, nav links */
+  .eyebrow {
+    font-size: var(--text-xs);
+    line-height: 1.4;
+    font-weight: 500;
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+  }
+  /* large statistics glow in lavender against the abyss */
+  .stat {
+    color: var(--stat);
+    font-weight: 500;
+    line-height: 1;
+    letter-spacing: -0.046em;
+    font-variant-numeric: tabular-nums;
+  }
+  .bg-aurora {
+    background-image: var(--gradient-aurora);
+  }
+  .bg-bio {
+    background-image: var(--gradient-bio);
   }
 }
 

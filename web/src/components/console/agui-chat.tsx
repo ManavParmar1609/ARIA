@@ -72,6 +72,8 @@ const STEP: Record<string, string> = {
 export function AguiChat() {
   const id = useId();
   const [items, setItems] = useState<Item[]>([]);
+  // While a review waits for an answer, its approve button is the one primary action.
+  const awaiting = items.some((i) => i.kind === "review" && !i.answered);
   const [system, setSystem] = useState("hdfs");
   const [text, setText] = useState("");
   const [running, setRunning] = useState(false);
@@ -256,10 +258,7 @@ export function AguiChat() {
                 );
               case "tool":
                 return (
-                  <li
-                    key={item.id}
-                    className="grid gap-1 rounded-md border border-rule p-3 text-xs"
-                  >
+                  <li key={item.id} className="grid gap-1 rounded-lg bg-sunken p-3 text-xs">
                     <p className="flex items-center gap-2 font-mono">
                       <WrenchIcon aria-hidden className="size-3.5 text-faint" />
                       {item.name}({item.args.replace(/^\{|\}$/g, "")})
@@ -291,10 +290,7 @@ export function AguiChat() {
                 );
               case "text":
                 return (
-                  <li
-                    key={item.id}
-                    className="grid gap-2 rounded-md border border-rule bg-raised p-4"
-                  >
+                  <li key={item.id} className="grid gap-2 rounded-lg bg-raised p-5">
                     <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
                       <BotIcon aria-hidden className="size-4" />
                       ARIA&apos;s report{item.done ? "" : " (streaming)"}
@@ -314,7 +310,7 @@ export function AguiChat() {
                 return (
                   <li
                     key={item.id}
-                    className="grid gap-3 rounded-md border-2 border-primary/70 bg-raised p-4"
+                    className="grid gap-3 rounded-lg bg-raised p-5 ring-1 ring-primary/50"
                   >
                     <p className="flex items-center gap-2 font-semibold">
                       <UserRoundCheckIcon aria-hidden className="size-4 text-primary" />
@@ -376,10 +372,7 @@ export function AguiChat() {
         </ol>
       ) : null}
 
-      <form
-        onSubmit={(e) => void start(e)}
-        className="grid gap-3 rounded-md border border-rule p-4"
-      >
+      <form onSubmit={(e) => void start(e)} className="grid gap-3 rounded-lg bg-raised p-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="grid gap-1.5">
             <Label htmlFor={`${id}-system`}>Log format</Label>
@@ -428,7 +421,7 @@ export function AguiChat() {
         />
         <Button
           type="submit"
-          variant="primary"
+          variant={awaiting ? "secondary" : "primary"}
           className="justify-self-start"
           disabled={running || !text.trim()}
         >

@@ -44,7 +44,7 @@ export function SelectContent({
         data-slot="select-content"
         position={position}
         className={cn(
-          "relative z-50 max-h-(--radix-select-content-available-height) min-w-(--radix-select-trigger-width) overflow-hidden rounded-md border border-rule bg-raised text-foreground shadow-xl shadow-black/25 data-[state=open]:animate-in data-[state=open]:fade-in-0",
+          "relative z-50 max-h-(--radix-select-content-available-height) min-w-(--radix-select-trigger-width) overflow-hidden rounded-md border border-rule bg-raised text-foreground data-[state=open]:animate-in data-[state=open]:fade-in-0",
           position === "popper" && "translate-y-1",
           className,
         )}

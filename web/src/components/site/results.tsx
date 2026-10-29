@@ -5,12 +5,27 @@ const pct = (x: number, digits = 1) => `${(x * 100).toFixed(digits)}%`;
 
 function Stat({ value, children }: { value: string; children: React.ReactNode }) {
   return (
-    <div className="grid content-start gap-1 border-t border-rule pt-3">
+    <div className="grid content-start gap-2 border-t border-rule pt-4">
       <dt className="order-2 text-sm text-muted-foreground">{children}</dt>
-      <dd className="tabular order-1 text-2xl font-bold">{value}</dd>
+      <dd className="stat order-1 text-4xl">{value}</dd>
     </div>
   );
 }
+
+/** A headline number: lavender, large, with its name and what it was measured on. */
+function Headline({ value, label, note }: { value: string; label: string; note: string }) {
+  return (
+    <div className="grid content-start gap-4">
+      <dt className="order-2 grid gap-1.5">
+        <span className="eyebrow text-foreground">{label}</span>
+        <span className="text-sm text-muted-foreground">{note}</span>
+      </dt>
+      <dd className="stat order-1 text-[2.75rem] sm:text-5xl xl:text-[5.375rem]">{value}</dd>
+    </div>
+  );
+}
+
+const CARD = "rounded-lg bg-raised p-5 sm:p-8";
 
 export function Results({ data }: { data: Evaluation }) {
   const s = data.severity;
@@ -21,10 +36,29 @@ export function Results({ data }: { data: Evaluation }) {
     .sort(([, a], [, b]) => a.grouping_accuracy - b.grouping_accuracy)
     .slice(0, 2);
   return (
-    <div className="grid gap-20">
+    <div className="grid gap-20 lg:gap-24">
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-12 lg:grid-cols-4">
+        <Headline
+          value={pct(s.accuracy)}
+          label="Severity accuracy"
+          note={`on ${s.n} held-out incident windows`}
+        />
+        <Headline value={pct(p.cited, 0)} label="Claims cited" note={`across ${p.n} full runs`} />
+        <Headline
+          value={`${p.p50s.toFixed(2)} s`}
+          label="Median time to review"
+          note="from logs to a report a person can approve, offline"
+        />
+        <Headline
+          value={pct(r.attackRecall)}
+          label="Injections quarantined"
+          note={`of ${r.attacks.toLocaleString("en")} attacks; an upper bound`}
+        />
+      </dl>
+
       <div className="grid gap-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16">
         <div className="grid content-start gap-4">
-          <h3 className="text-2xl font-bold">Severity, against simpler ways to do it</h3>
+          <h3 className="text-2xl tracking-heading">Severity, against simpler ways to do it</h3>
           <p className="text-muted-foreground">
             On {s.n} labelled windows, ARIA rated severity correctly {pct(s.accuracy)} of the time
             (95% interval {pct(s.ci[0] ?? 0)} to {pct(s.ci[1] ?? 0)}), with macro-F1{" "}
@@ -38,12 +72,12 @@ export function Results({ data }: { data: Evaluation }) {
             {s.ece.toFixed(3)}.
           </p>
         </div>
-        <BaselineChart methods={s.methods} />
+        <BaselineChart methods={s.methods} className={CARD} />
       </div>
 
       <div className="grid gap-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16">
         <div className="grid content-start gap-4">
-          <h3 className="text-2xl font-bold">Deciding alone, and knowing when not to</h3>
+          <h3 className="text-2xl tracking-heading">Deciding alone, and knowing when not to</h3>
           <p className="text-muted-foreground">
             ARIA decided {pct(s.autoDecided)} of windows without a person, and was right on{" "}
             {pct(s.accuracyWhenAuto)} of those. It sent the rest to review, where its own guess was
@@ -53,11 +87,12 @@ export function Results({ data }: { data: Evaluation }) {
         <RiskCoverageChart
           points={s.riskCoverage}
           operating={{ coverage: s.autoDecided, accuracy: s.accuracyWhenAuto }}
+          className={CARD}
         />
       </div>
 
       <div className="grid gap-8">
-        <h3 className="text-2xl font-bold">End to end, through the whole graph</h3>
+        <h3 className="text-2xl tracking-heading">End to end, through the whole graph</h3>
         <dl className="grid grid-cols-2 gap-x-6 gap-y-6 md:grid-cols-3 lg:grid-cols-6">
           <Stat value={pct(p.valid, 0)}>of {p.n} reports passed validation</Stat>
           <Stat value={pct(p.cited, 0)}>had every claim cite existing evidence</Stat>
@@ -78,7 +113,7 @@ export function Results({ data }: { data: Evaluation }) {
 
       <div className="grid gap-10 lg:grid-cols-2 lg:gap-16">
         <div className="grid content-start gap-4">
-          <h3 className="text-2xl font-bold">Hostile and broken input</h3>
+          <h3 className="text-2xl tracking-heading">Hostile and broken input</h3>
           <p className="text-muted-foreground">
             Across {r.edgeN.toLocaleString("en")} edge-case and injection inputs the parser never
             failed, and the guard quarantined {pct(r.attackRecall)} of{" "}
@@ -95,7 +130,7 @@ export function Results({ data }: { data: Evaluation }) {
           </p>
         </div>
         <div className="grid content-start gap-4">
-          <h3 className="text-2xl font-bold">With a live model</h3>
+          <h3 className="text-2xl tracking-heading">With a live model</h3>
           <p className="text-muted-foreground">
             In {live.n} runs through hosted NVIDIA NIM models every report still validated and cited
             its evidence, but a run took about {Math.round(live.p50s)} s, and {live.exhausted} of{" "}
@@ -122,7 +157,7 @@ export function Results({ data }: { data: Evaluation }) {
         </p>
         <a
           href={EVAL_DOC_URL}
-          className="justify-self-start rounded-sm font-medium text-foreground underline decoration-control underline-offset-4 hover:decoration-foreground"
+          className="justify-self-start rounded-sm font-medium text-heading underline decoration-control underline-offset-4 hover:decoration-foreground"
         >
           Read the full evaluation
         </a>

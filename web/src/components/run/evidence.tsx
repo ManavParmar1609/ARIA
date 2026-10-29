@@ -267,10 +267,7 @@ export function EvidencePanel({ className }: { className?: string }) {
       id="evidence-panel"
       aria-label="Evidence"
       aria-live="polite"
-      className={cn(
-        "grid content-start gap-3 rounded-md border border-rule bg-raised p-4",
-        className,
-      )}
+      className={cn("grid min-w-0 content-start gap-3 rounded-lg bg-raised p-4 sm:p-5", className)}
     >
       {evidence ? (
         <>

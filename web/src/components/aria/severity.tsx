@@ -59,7 +59,7 @@ export function SeverityBadge({
     >
       <span
         className={cx(
-          "tabular inline-flex items-center rounded-xs border border-sev-edge px-1.5 font-bold text-sev-ink",
+          "tabular inline-flex items-center rounded-xs border border-sev-edge px-1.5 font-semibold text-sev-ink",
           SEVERITY_BG[severity],
           size === "sm" ? "h-5 text-[0.6875rem]" : "h-6 text-xs",
         )}
@@ -73,7 +73,7 @@ export function SeverityBadge({
   );
 }
 
-/** The tag strip: severity colour, a punched hole and the level, with a perforated edge. */
+/** The severity strip down a card's edge: its colour and its label, in dark ink. */
 export function TagStrip({
   severity,
   className,
@@ -86,25 +86,20 @@ export function TagStrip({
   return (
     <div
       className={cx(
-        "relative flex shrink-0 flex-col items-center gap-3 pt-4",
+        "relative flex shrink-0 flex-col items-center pt-5",
         severity ? SEVERITY_BG[severity] : "bg-sunken",
         className,
       )}
       style={style}
     >
       <span
-        aria-hidden
-        className="block size-3.5 rounded-full border-2 border-sev-ink/35 bg-background shadow-inner"
-      />
-      <span
         className={cx(
-          "tabular text-sm font-extrabold tracking-wide",
+          "tabular text-sm font-semibold tracking-[0.04em]",
           severity ? "text-sev-ink" : "text-faint",
         )}
       >
         {severity ?? "—"}
       </span>
-      <span aria-hidden className="perforation absolute inset-y-0 -right-px w-px" />
     </div>
   );
 }
@@ -168,7 +163,7 @@ export function SeverityScale({
               <span
                 className={cx(
                   "tabular text-xs",
-                  isDecided ? "font-bold text-foreground" : "text-muted-foreground",
+                  isDecided ? "font-medium text-foreground" : "text-muted-foreground",
                 )}
               >
                 {Math.round(p * 100)}%

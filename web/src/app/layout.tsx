@@ -3,7 +3,7 @@ import { type ReactNode } from "react";
 
 import { THEME_SCRIPT } from "@/lib/theme-script";
 
-import { atkinson, atkinsonMono } from "./fonts";
+import { geist, geistMono } from "./fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -19,8 +19,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#151e2c" },
-    { media: "(prefers-color-scheme: light)", color: "#f5f7fa" },
+    { media: "(prefers-color-scheme: dark)", color: "#012624" },
+    { media: "(prefers-color-scheme: light)", color: "#edfffe" },
   ],
   colorScheme: "dark light",
 };
@@ -29,7 +29,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
       lang="en"
-      className={`dark ${atkinson.variable} ${atkinsonMono.variable}`}
+      className={`dark ${geist.variable} ${geistMono.variable}`}
       suppressHydrationWarning
     >
       <head>

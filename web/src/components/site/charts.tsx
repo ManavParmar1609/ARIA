@@ -57,7 +57,7 @@ export function BaselineChart({
                 role="cell"
                 className={cn(
                   "text-sm leading-tight",
-                  isAria ? "font-bold text-foreground" : "text-muted-foreground",
+                  isAria ? "font-medium text-foreground" : "text-muted-foreground",
                 )}
               >
                 {m.label}
@@ -96,7 +96,7 @@ export function BaselineChart({
                 role="cell"
                 className={cn(
                   "tabular col-start-2 row-start-1 text-right text-sm sm:col-start-3",
-                  isAria ? "font-bold" : "text-muted-foreground",
+                  isAria ? "font-medium" : "text-muted-foreground",
                 )}
               >
                 {pct(m.accuracy)}

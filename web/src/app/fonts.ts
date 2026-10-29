@@ -1,28 +1,25 @@
 import localFont from "next/font/local";
 
-// Atkinson Hyperlegible Next and Mono (SIL OFL 1.1), designed by the Braille Institute so that
-// easily confused characters (1 l I, 0 O, rn m) stay distinct: the right faces for reading IDs
-// and log lines at three in the morning. Self-hosted from Fontsource, latin subset.
+// Geist and Geist Mono (SIL OFL 1.1), self-hosted from Fontsource, latin subset. The Auros style
+// reference specifies Matter, a commercial face; Geist is the closest open match, a geometric
+// grotesque with the same engineered confidence at weight 500 with tight tracking (DESIGN.md).
 
-// Upright only: italic is rare here (emphasis in reports), so the browser slants the upright face
-// rather than every page preloading a second file.
-export const atkinson = localFont({
-  src: "../../node_modules/@fontsource-variable/atkinson-hyperlegible-next/files/atkinson-hyperlegible-next-latin-wght-normal.woff2",
+export const geist = localFont({
+  src: "../../node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2",
   style: "normal",
-  weight: "200 800",
-  variable: "--font-atkinson",
+  weight: "100 900",
+  variable: "--font-geist",
   display: "swap",
   fallback: ["ui-sans-serif", "system-ui", "sans-serif"],
 });
 
-export const atkinsonMono = localFont({
-  src: "../../node_modules/@fontsource-variable/atkinson-hyperlegible-mono/files/atkinson-hyperlegible-mono-latin-wght-normal.woff2",
-  weight: "200 800",
-  variable: "--font-atkinson-mono",
+export const geistMono = localFont({
+  src: "../../node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2",
+  weight: "100 900",
+  variable: "--font-geist-mono",
   display: "swap",
-  // Preloaded too: log lines sit above the fold on the landing page and the run view, and first
-  // paint waits less with the face already on its way. The fallback stays a real monospace face
-  // (not metric-adjusted Arial), so a late swap barely moves text.
+  // Preloaded too: log lines sit above the fold on the landing page and the run view. The fallback
+  // stays a real monospace face, so a late swap barely moves text.
   fallback: ["ui-monospace", "Menlo", "monospace"],
   adjustFontFallback: false,
 });

@@ -42,12 +42,13 @@ function summarize(runs: RunSummary[]) {
   };
 }
 
+/** A statistic: the lavender number first, then its name and what it counts. */
 function Fact({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
-    <div className="grid content-start gap-1 border-t border-rule pt-3">
-      <dt className="text-sm text-muted-foreground">{label}</dt>
-      <dd className="tabular text-2xl font-bold">{value}</dd>
-      {note ? <dd className="text-xs text-faint">{note}</dd> : null}
+    <div className="grid content-start gap-3 rounded-lg bg-raised p-5 sm:p-6">
+      <dt className="eyebrow order-2 text-foreground">{label}</dt>
+      <dd className="stat order-1 text-4xl">{value}</dd>
+      {note ? <dd className="order-3 -mt-1.5 text-sm text-muted-foreground">{note}</dd> : null}
     </div>
   );
 }
@@ -119,7 +120,7 @@ export function Overview() {
         <>
           <section aria-labelledby="waiting-title" className="grid gap-4">
             <div className="flex items-baseline justify-between gap-4">
-              <h2 id="waiting-title" className="text-lg font-bold">
+              <h2 id="waiting-title" className="text-xl tracking-heading">
                 Waiting for review
               </h2>
               {waiting.length > 0 ? (
@@ -157,10 +158,10 @@ export function Overview() {
           </section>
 
           <section aria-labelledby="facts-title" className="grid gap-6">
-            <h2 id="facts-title" className="text-lg font-bold">
+            <h2 id="facts-title" className="text-xl tracking-heading">
               How ARIA is doing
             </h2>
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-6 md:grid-cols-4">
+            <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <Fact label="Runs in the last 24 hours" value={stats.today.toLocaleString("en")} />
               <Fact
                 label="Median time to review"
@@ -181,14 +182,14 @@ export function Overview() {
               />
             </dl>
             <div className="grid gap-3">
-              <h3 className="text-sm font-semibold">Severity of rated runs</h3>
+              <h3 className="eyebrow text-muted-foreground">Severity of rated runs</h3>
               <SeverityMix mix={stats.mix} rated={stats.rated} />
             </div>
           </section>
 
           <section aria-labelledby="recent-title" className="grid gap-4">
             <div className="flex items-baseline justify-between gap-4">
-              <h2 id="recent-title" className="text-lg font-bold">
+              <h2 id="recent-title" className="text-xl tracking-heading">
                 Latest runs
               </h2>
               <Link
@@ -210,7 +211,7 @@ export function Overview() {
           </section>
 
           <section aria-labelledby="providers-title" className="grid gap-3">
-            <h2 id="providers-title" className="text-lg font-bold">
+            <h2 id="providers-title" className="text-xl tracking-heading">
               Model providers
             </h2>
             {providers.isPending ? (
@@ -228,7 +229,7 @@ export function Overview() {
                 {live.map((p) => (
                   <li
                     key={p.name}
-                    className="inline-flex items-center gap-2 rounded-md border border-rule px-3 py-1.5 text-sm"
+                    className="inline-flex items-center gap-2 rounded-md bg-raised px-3 py-1.5 text-sm"
                   >
                     <span
                       aria-hidden

@@ -46,7 +46,7 @@ function Section({
   return (
     <section aria-labelledby={id} className="grid gap-4 border-t border-rule pt-6">
       <div className="grid gap-1">
-        <h2 id={id} className="text-lg font-bold">
+        <h2 id={id} className="text-xl tracking-heading">
           {title}
         </h2>
         {intro ? <p className="max-w-3xl text-sm text-muted-foreground">{intro}</p> : null}

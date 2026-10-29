@@ -51,7 +51,7 @@ export function Runbooks() {
           {runbooks.data.map((rb) => (
             <li
               key={rb.slug}
-              className="relative grid gap-2 rounded-md border border-rule bg-raised p-4 hover:border-control"
+              className="relative grid gap-2 rounded-lg bg-raised p-5 transition-colors duration-(--duration-quick) focus-within:ring-2 focus-within:ring-ring hover:bg-raised/80"
             >
               <div className="flex items-start justify-between gap-3">
                 <Link
@@ -100,7 +100,7 @@ function Steps({ title, steps }: { title: string; steps: RunbookStep[] }) {
   if (steps.length === 0) return null;
   return (
     <section className="grid gap-3">
-      <h2 className="text-lg font-bold">{title}</h2>
+      <h2 className="text-xl tracking-heading">{title}</h2>
       <ol className="grid gap-2.5">
         {steps.map((step, i) => (
           <li key={i} className="grid grid-cols-[1.75rem_1fr] gap-2">
@@ -166,7 +166,7 @@ export function RunbookDetail({ slug }: { slug: string }) {
       <Steps title="Verify" steps={rb.verify} />
       {rb.escalate ? (
         <section className="grid gap-2">
-          <h2 className="text-lg font-bold">Escalate</h2>
+          <h2 className="text-xl tracking-heading">Escalate</h2>
           <p className="leading-relaxed text-muted-foreground">
             <Text>{rb.escalate}</Text>
           </p>

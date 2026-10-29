@@ -12,26 +12,25 @@ export function runTitle(run: Pick<RunSummary, "title" | "system" | "id">): stri
   return stripSeverity(run.title) || `${systemName(run.system)} logs`;
 }
 
-/** A run as a triage tag: severity strip, what happened, and what it needs from you. */
+/** A run as a card: severity strip, what happened, and what it needs from you. */
 export function RunRow({ run, action }: { run: RunSummary; action?: "review" | "open" }) {
   const sev = isSeverity(run.severity) ? run.severity : null;
   const href = `/console/runs/${encodeURIComponent(run.id)}`;
   return (
-    <li className="group relative flex overflow-hidden rounded-md border border-rule bg-raised transition-colors duration-(--duration-quick) hover:border-control">
+    <li className="group relative flex overflow-hidden rounded-lg bg-raised transition-colors duration-(--duration-quick) focus-within:ring-2 focus-within:ring-ring hover:bg-raised/80">
       <div
         className={cn(
-          "tabular flex w-14 shrink-0 items-start justify-center pt-3 text-xs font-extrabold",
+          "tabular flex w-14 shrink-0 items-start justify-center pt-4 text-xs font-semibold tracking-[0.04em]",
           sev ? cn(SEVERITY_BG[sev], "text-sev-ink") : "bg-sunken text-faint",
         )}
       >
         {sev ?? "—"}
       </div>
-      <span aria-hidden className="perforation w-px shrink-0" />
       <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3">
         <div className="grid min-w-0 gap-0.5">
           <Link
             href={href as never}
-            className="truncate font-semibold after:absolute after:inset-0 after:content-['']"
+            className="truncate font-medium text-heading outline-none after:absolute after:inset-0 after:content-['']"
           >
             {runTitle(run)}
           </Link>
@@ -45,7 +44,7 @@ export function RunRow({ run, action }: { run: RunSummary; action?: "review" | "
         <div className="relative z-10 flex items-center gap-3">
           {action === "review" ? null : <RunStatus status={run.status} />}
           {action === "review" ? (
-            <Button asChild size="sm" variant="primary">
+            <Button asChild size="sm" variant="secondary">
               <Link href={href as never}>Review</Link>
             </Button>
           ) : null}

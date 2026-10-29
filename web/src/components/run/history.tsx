@@ -94,8 +94,8 @@ export function History({
             <li
               key={cp.checkpoint_id}
               className={cn(
-                "flex flex-wrap items-center justify-between gap-3 rounded-md border px-3 py-2",
-                isViewing ? "border-primary bg-highlight" : "border-rule",
+                "flex flex-wrap items-center justify-between gap-3 rounded-md px-3 py-2",
+                isViewing ? "bg-highlight ring-1 ring-primary" : "bg-raised",
               )}
             >
               <div className="grid min-w-0 gap-0.5">
