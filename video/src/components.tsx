@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { AbsoluteFill, useCurrentFrame } from "remotion";
 
-import { enter } from "./motion";
+import { enter, FADE } from "./motion";
 import {
   mono,
   SAFE,
@@ -44,7 +44,9 @@ export const Heading = ({ children }: { children: ReactNode }) => {
         lineHeight: 1.02,
         color: color.heading,
         maxWidth: 1640,
-        ...enter(frame, 0),
+        // A scene starts while the last one is still fading out; its title waits for most of
+        // the fade, so two titles never sit on top of each other.
+        ...enter(frame, FADE - 3),
       }}
     >
       {children}

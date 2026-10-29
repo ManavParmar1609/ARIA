@@ -2,6 +2,9 @@ import { Easing, interpolate } from "remotion";
 
 const OUT = Easing.bezier(0.16, 1, 0.3, 1);
 
+/** Frames each crossfade overlaps two scenes (AriaDemo.tsx). */
+export const FADE = 15;
+
 /** 0 to 1 over [start, start + duration] frames, eased out and clamped. */
 export const progress = (frame: number, start: number, duration: number): number =>
   interpolate(frame, [start, start + duration], [0, 1], {

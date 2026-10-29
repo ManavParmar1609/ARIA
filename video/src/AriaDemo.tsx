@@ -2,6 +2,7 @@ import { linearTiming, TransitionSeries } from "@remotion/transitions";
 import { fade } from "@remotion/transitions/fade";
 import { useVideoConfig } from "remotion";
 
+import { FADE } from "./motion";
 import { Close } from "./scenes/Close";
 import { Intake } from "./scenes/Intake";
 import { Investigate } from "./scenes/Investigate";
@@ -15,7 +16,6 @@ import { Severity } from "./scenes/Severity";
 export const FPS = 30;
 // Scene lengths in seconds; each fade overlaps two scenes by FADE frames.
 const SCENES = [5, 9, 9, 14, 11, 13, 8, 13, 6];
-const FADE = 15;
 export const DURATION = SCENES.reduce((sum, s) => sum + s * FPS, 0) - (SCENES.length - 1) * FADE;
 
 export const AriaDemo = () => {
