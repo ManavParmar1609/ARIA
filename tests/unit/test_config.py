@@ -16,11 +16,13 @@ from aria.config import (
 )
 
 
-def test_repo_config_loads_and_every_chain_ends_offline() -> None:
+def test_repo_config_loads_and_chains_end_offline_except_the_adjudicator() -> None:
     config = get_app_config()
-    for role in ("adjudicator", "investigator", "reporter", "critic", "comms", "ask"):
+    for role in ("investigator", "reporter", "critic", "comms", "ask"):
         chain = config.llm.chain(role)
         assert chain[-1] == "fake", role
+    # Without a real model, the conservative severity policy decides instead of a fake model.
+    assert "fake" not in config.llm.chain("adjudicator")
     assert config.llm.embeddings[-1] == "local"
 
 

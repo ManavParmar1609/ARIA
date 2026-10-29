@@ -9,8 +9,10 @@
 # provider's /v1/models catalog and confirm before relying on them.
 
 llm:
+  # The adjudicator has no fake fallback: without a real model, the conservative severity policy
+  # decides (most severe class in the prediction set, flagged for review).
   routing:
-    adjudicator: [nim, azure, openai_compat, fake]
+    adjudicator: [nim, azure, openai_compat]
     investigator: [nim, azure, openai_compat, fake]
     reporter: [nim, azure, openai_compat, fake]
     critic: [nim, azure, openai_compat, fake]

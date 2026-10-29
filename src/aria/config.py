@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Callable
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
@@ -26,6 +27,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, m
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 _ENV_REF = re.compile(r"\$\{(?P<name>[A-Z0-9_]+)(?::-(?P<default>[^}]*))?\}")
+_RESET_HOOKS: list[Callable[[], None]] = []
 
 
 class Environment(StrEnum):
@@ -69,6 +71,7 @@ class ProviderConfig(_Strict):
     safety_model: str | None = None
     structured_output: StructuredOutputMode = StructuredOutputMode.JSON_SCHEMA
     supports_streaming: bool = True
+    extra_body: dict[str, Any] = Field(default_factory=dict)
     timeout_s: float = Field(default=60.0, gt=0)
     max_retries: int = Field(default=2, ge=0, le=6)
     price_input_per_mtok: float | None = Field(default=None, ge=0)
@@ -247,7 +250,15 @@ def get_app_config() -> AppConfig:
     return load_app_config(get_settings().config_file)
 
 
+def register_reset_hook(hook: Callable[[], None]) -> None:
+    """Register a cache that depends on settings, so ``reset_caches`` clears it too."""
+    if hook not in _RESET_HOOKS:
+        _RESET_HOOKS.append(hook)
+
+
 def reset_caches() -> None:
-    """Clear cached settings; tests call this after changing the environment."""
+    """Clear cached settings and everything built from them; tests call this between cases."""
     get_settings.cache_clear()
     get_app_config.cache_clear()
+    for hook in _RESET_HOOKS:
+        hook()
