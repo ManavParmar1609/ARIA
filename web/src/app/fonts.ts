@@ -1,27 +1,16 @@
 import localFont from "next/font/local";
 
-// Geist and Geist Mono (SIL OFL 1.1), self-hosted from Fontsource, latin subset. The Auros style
-// reference specifies Matter, a commercial face; Geist is the closest open match, a geometric
-// grotesque with the same engineered confidence at weight 500 with tight tracking (DESIGN.md).
+// Inter (SIL OFL 1.1), self-hosted from Fontsource, latin subset. The style reference uses Inter
+// alone, at weights 400 and 500 (DESIGN.md). This file carries the optical-size axis as well as
+// weight, so the 144 px display headline gets Inter's display cut and body text its text cut.
+// Code and log lines use the same face with its disambiguation set (see globals.css), so there
+// is no second typeface to download.
 
-export const geist = localFont({
-  src: "../../node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2",
+export const inter = localFont({
+  src: "../../node_modules/@fontsource-variable/inter/files/inter-latin-opsz-normal.woff2",
   style: "normal",
   weight: "100 900",
-  variable: "--font-geist",
+  variable: "--font-inter",
   display: "swap",
   fallback: ["ui-sans-serif", "system-ui", "sans-serif"],
-});
-
-export const geistMono = localFont({
-  src: "../../node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2",
-  weight: "100 900",
-  variable: "--font-geist-mono",
-  display: "swap",
-  // Not preloaded: on the landing page monospace text starts below the fold, and on a slow
-  // connection the preload would compete with what the first screen needs. The fallback is a real
-  // monospace face, so the late swap barely moves text.
-  preload: false,
-  fallback: ["ui-monospace", "Menlo", "monospace"],
-  adjustFontFallback: false,
 });

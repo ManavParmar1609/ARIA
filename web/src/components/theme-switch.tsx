@@ -8,7 +8,7 @@ import { useTheme } from "@/lib/theme";
 /** One button between the dark and light themes, for pages that carry no menus. */
 export function ThemeSwitch({ className }: { className?: string }) {
   const { resolvedTheme, setTheme } = useTheme();
-  // The stored theme is only known in the browser; until hydrated this assumes the default, dark.
+  // The stored theme is only known in the browser; until hydrated this assumes the default, light.
   const light = resolvedTheme === "light";
   return (
     <button

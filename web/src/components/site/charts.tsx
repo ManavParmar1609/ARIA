@@ -87,7 +87,7 @@ export function BaselineChart({
                   aria-hidden
                   className={cn(
                     "absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2",
-                    isAria ? "border-primary bg-primary" : "border-foreground/70 bg-background",
+                    isAria ? "border-pop-ink bg-grass" : "border-foreground/70 bg-background",
                   )}
                   style={{ left: `${m.accuracy * 100}%` }}
                 />
@@ -199,7 +199,7 @@ export function RiskCoverageChart({
           x={x(operating.coverage) - 8}
           y={y(opRisk) - 10}
           textAnchor="end"
-          className="fill-foreground text-[11px] font-semibold"
+          className="fill-foreground text-[11px] font-medium"
         >
           ARIA today
         </text>

@@ -101,7 +101,7 @@ export function TriageReplay({ data }: { data: Replay }) {
       className="grid items-start gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-8"
     >
       {/* the log the tag was written from */}
-      <div className="overflow-hidden rounded-lg bg-sunken">
+      <div className="overflow-hidden rounded-lg bg-raised">
         <div className="flex items-baseline justify-between gap-4 border-b border-rule px-5 py-3 text-xs text-muted-foreground">
           <span className="font-mono">hdfs.log</span>
           <span className="tabular">
@@ -125,8 +125,10 @@ export function TriageReplay({ data }: { data: Replay }) {
                 <span
                   className={cx(
                     "grid grid-cols-[2.25rem_3rem_1fr] items-baseline gap-2 border-l-2 px-4 transition-colors duration-(--duration-quick)",
-                    isLit ? "border-primary bg-highlight" : "border-transparent",
-                    line.quarantined && "text-muted-foreground",
+                    isLit
+                      ? "border-primary bg-highlight text-highlight-foreground [&>span]:text-highlight-foreground"
+                      : "border-transparent",
+                    line.quarantined && !isLit && "text-muted-foreground",
                   )}
                 >
                   <span className="tabular text-right text-faint">{line.lineNo}</span>
@@ -194,7 +196,7 @@ export function TriageReplay({ data }: { data: Replay }) {
               compact
             />
             <p className="text-sm leading-relaxed">
-              <span className="font-semibold">
+              <span className="font-medium">
                 {data.severity}, {p}% likely.
               </span>{" "}
               <span className="text-muted-foreground">{DECIDED[data.decidedBy] ?? ""}</span>
@@ -206,7 +208,7 @@ export function TriageReplay({ data }: { data: Replay }) {
           <ul className="mt-3 grid gap-2.5 text-sm leading-relaxed">
             {data.claims.map((claim) => (
               <li key={claim.text} data-anim="claim" className="grid grid-cols-[0.75rem_1fr] gap-2">
-                <span aria-hidden className="mt-2.5 block size-1.5 rounded-full bg-primary/70" />
+                <span aria-hidden className="mt-2.5 block size-1.5 rounded-full bg-foreground/70" />
                 <span>
                   {claim.text}{" "}
                   <span className="inline-flex flex-wrap gap-1 align-baseline">
@@ -223,7 +225,7 @@ export function TriageReplay({ data }: { data: Replay }) {
             <span className="inline-flex items-center gap-2 text-sm font-medium">
               <span
                 aria-hidden
-                className="block size-2 animate-pulse-dot rounded-full bg-primary"
+                className="block size-2.5 animate-pulse-dot rounded-full bg-grass ring-1 ring-pop-ink/40"
               />
               Waiting for a person to approve
             </span>

@@ -71,7 +71,8 @@ export function SeverityPanel({ assessment }: { assessment: SeverityAssessment }
           <Button
             size="sm"
             variant="ghost"
-            className="-mx-2 justify-between"
+            // The label wraps on a narrow phone rather than push the panel wider.
+            className="-mx-2 h-auto min-h-9 justify-between py-1.5 text-left whitespace-normal"
             aria-expanded={traceOpen}
             aria-controls="rule-trace"
             onClick={() => setTraceOpen(!traceOpen)}

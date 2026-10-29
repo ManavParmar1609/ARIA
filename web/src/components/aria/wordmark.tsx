@@ -1,8 +1,20 @@
-import { useId } from "react";
-
 import { cn } from "@/lib/utils";
 
-/** ARIA's mark: a small bioluminescent data orb beside the name (DESIGN.md). */
+/**
+ * ARIA's mark: a grass-green disc holding a single-storey "a" drawn as a lens and its handle, the
+ * look-closer step of triage (DESIGN.md). Flat fills only, so it needs no ids and copies of it can
+ * sit anywhere on a page.
+ */
+export function Mark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={cn("size-7", className)} aria-hidden>
+      <circle cx="12" cy="12" r="12" fill="#8ed462" />
+      <circle cx="10.4" cy="12.6" r="4.3" fill="none" stroke="#2c2e2a" strokeWidth="2.6" />
+      <path d="M15.2 8.2v9" stroke="#2c2e2a" strokeWidth="2.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function Wordmark({
   className,
   withName = true,
@@ -10,24 +22,12 @@ export function Wordmark({
   className?: string;
   withName?: boolean;
 }) {
-  // Each mark needs its own gradient id: a copy inside a hidden element (the console sidebar on
-  // small screens) would otherwise leave every later mark without its fill.
-  const gradient = `aria-orb-${useId()}`;
   return (
     <span className={cn("inline-flex items-center gap-2.5 font-medium", className)}>
-      <svg viewBox="0 0 24 24" className="size-6" aria-hidden>
-        <defs>
-          <radialGradient id={gradient} cx="38%" cy="34%" r="70%">
-            <stop offset="0%" stopColor="#edfffe" />
-            <stop offset="45%" stopColor="#cbfffc" />
-            <stop offset="80%" stopColor="#00827c" />
-            <stop offset="100%" stopColor="#fad1ff" />
-          </radialGradient>
-        </defs>
-        <circle cx="12" cy="12" r="9" fill={`url(#${gradient})`} />
-        <circle cx="12" cy="12" r="11" fill="none" stroke="#cbfffc" strokeOpacity="0.35" />
-      </svg>
-      {withName ? <span className="text-base leading-none tracking-[0.12em]">ARIA</span> : null}
+      <Mark />
+      {withName ? (
+        <span className="text-xl leading-none tracking-[-0.01em] text-heading">ARIA</span>
+      ) : null}
     </span>
   );
 }

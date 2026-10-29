@@ -12,7 +12,7 @@ function Stat({ value, children }: { value: string; children: React.ReactNode })
   );
 }
 
-/** A headline number: lavender, large, with its name and what it was measured on. */
+/** A headline number: large, in ink, with its name and what it was measured on. */
 function Headline({ value, label, note }: { value: string; label: string; note: string }) {
   return (
     <div className="grid content-start gap-4">

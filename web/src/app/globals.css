@@ -4,55 +4,57 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * ARIA design tokens, after the Auros style reference: an abyssal terminal with bioluminescent
- * data orbs (web/DESIGN.md). Colour is OKLCH, converted from the reference's hex values; every
- * text pair below was checked for WCAG 2.2 AA (4.5:1 for text, 3:1 for control edges).
+ * ARIA design tokens: a storybook on cream paper (web/DESIGN.md). Cream is the page, white is a
+ * card lifted off it, sandstone is a well pressed into it; that stack is the only depth, so there
+ * are no shadows and no gradients. Ink carries text, edges and icons. Fresh grass is the one
+ * structural colour (whole panels, the active item, the round arrow on buttons); the four pops
+ * (sky, coral, sunshine, lilac) are decoration, one per component, and never mean a state.
  *
- * Depth comes from the teal surface stack (abyss, deep, kelp), never from shadows. Colour is
- * rationed: whites and silvers carry content, lavender marks large statistics, the aurora
- * gradient marks the one primary action, and the four severity strips are the only other hues.
+ * Every text pair below was measured for WCAG 2.2 AA (4.5:1 for text, 3:1 for control edges).
+ * Stone grey (#80827f) is only 3.4:1 on cream, so it draws control edges and rules, and small
+ * muted text uses a deeper grey. Grass is 1.6:1 on cream, so it is a fill under ink, never a
+ * focus ring or text colour.
  */
 :root {
-  /* day (light): the same hue, inverted */
-  --background: oklch(0.971 0.011 189.8); /* #eef8f7 */
-  --foreground: oklch(0.209 0.035 191.6); /* liquid deep */
-  --heading: oklch(0.209 0.035 191.6);
-  --raised: oklch(1 0 0);
-  --sunken: oklch(0.942 0.014 185.9); /* #e2efed */
-  --rule: oklch(0.209 0.035 191.6 / 0.12);
-  --control: oklch(0.596 0.025 189.5); /* 3.7:1 on the canvas */
-  --muted-foreground: oklch(0.429 0.029 189.7); /* 7.4:1 */
-  --faint: oklch(0.51 0.025 189.3); /* 5.2:1 */
-  --stat: oklch(0.45 0.159 320.2); /* deep plum: lavender would fail on light */
+  /* day (light, the default) */
+  --background: #f5f1e4; /* cream paper */
+  --foreground: #2c2e2a; /* ink black */
+  --heading: #2c2e2a;
+  --raised: #ffffff; /* cards */
+  --sunken: #e0dbce; /* sandstone wells */
+  --rule: #d5d5d4; /* hairline mist */
+  --control: #80827f; /* stone grey: 3.4:1 on cream, 3.9:1 on white */
+  --muted-foreground: #50524e; /* 6.9:1 on cream, 5.7:1 on sandstone */
+  --faint: #5d5f5a; /* 5.7:1 on cream, 4.7:1 on sandstone, 6.5:1 on white */
+  --stat: #2c2e2a;
 
-  --primary: oklch(0.304 0.053 188.9); /* liquid kelp */
-  --primary-foreground: oklch(1 0 0);
-  --highlight: oklch(0.304 0.053 188.9 / 0.12);
-  --highlight-foreground: oklch(0.209 0.035 191.6);
+  --primary: #2c2e2a; /* ink: focus rings, selected edges, emphasis */
+  --primary-foreground: #ffffff;
+  --highlight: #8ed462; /* selection and toggled-on fills, always under ink */
+  --highlight-foreground: #2c2e2a;
 
-  --sev1: oklch(0.74 0.15 18);
-  --sev2: oklch(0.83 0.12 68);
-  --sev3: oklch(0.91 0.1 100);
-  --sev4: oklch(0.85 0.05 195);
-  --sev-ink: oklch(0.209 0.035 191.6);
+  --grass: #8ed462; /* fresh grass */
+  --grass-deep: #6fbf3f; /* hills and pressed states; ink on it is 6.0:1 */
+  --sky: #2ba0ff;
+  --coral: #ff705d;
+  --sunshine: #f5e211;
+  --lilac: #ebc0ff;
+  --pop-ink: #2c2e2a; /* text on any pop or on grass */
+
+  /* severity has its own hues, kept apart from the decorative pops; labels are ink */
+  --sev1: oklch(0.72 0.15 15); /* #f37986 */
+  --sev2: oklch(0.8 0.14 60); /* #ffa659 */
+  --sev3: oklch(0.87 0.13 95); /* #efd369 */
+  --sev4: oklch(0.83 0.04 235); /* #afccde */
+  --sev-ink: #2c2e2a;
   --sev1-fg: oklch(0.5 0.17 20);
-  --sev2-fg: oklch(0.52 0.12 60);
-  --sev3-fg: oklch(0.5 0.1 95);
-  --sev4-fg: oklch(0.47 0.06 200);
-  --sev-edge: oklch(0.209 0.035 191.6 / 0.2);
+  --sev2-fg: oklch(0.5 0.12 55);
+  --sev3-fg: oklch(0.48 0.1 90);
+  --sev4-fg: oklch(0.46 0.05 240);
+  --sev-edge: oklch(0.29 0.008 130 / 0.18);
 
-  --danger: oklch(0.5 0.17 20);
-  --ok: oklch(0.45 0.08 175);
-
-  --gradient-aurora: linear-gradient(
-    90deg,
-    #cbfffc 0%,
-    #edfffe 26.25%,
-    #fffdfa 47.57%,
-    #fad1ff 88.96%
-  );
-  --gradient-bio: linear-gradient(90deg, #00827c 0%, #cbfffc 100%);
-  --orb-glow: oklch(0.55 0.1 186 / 0.16);
+  --danger: oklch(0.5 0.18 25);
+  --ok: oklch(0.47 0.11 145);
 
   /* shadcn/ui aliases */
   --card: var(--raised);
@@ -71,34 +73,29 @@
 }
 
 .dark {
-  /* night (dark, the default): the Auros palette */
-  --background: oklch(0.243 0.041 189.5); /* liquid abyss #012624 */
-  --foreground: oklch(0.987 0.019 192.8); /* liquid mist #edfffe */
-  --heading: oklch(1 0 0); /* platinum */
-  --raised: oklch(0.304 0.053 188.9); /* liquid kelp #003734 */
-  --sunken: oklch(0.209 0.035 191.6); /* liquid deep #011d1c */
-  --rule: oklch(1 0 0 / 0.1);
-  --control: oklch(0.703 0.018 192.2); /* 5.0:1 on kelp, so inputs read on cards too */
-  --muted-foreground: oklch(0.82 0.013 190.9); /* silver mist #bbc7c6 */
-  --faint: oklch(0.703 0.018 192.2); /* #93a3a2: 5.0:1 on kelp, 6.1:1 on abyss */
-  --stat: oklch(0.956 0.036 323.1); /* lavender phosphor #fde9ff */
+  /* night: the same paper after dark, warm ink instead of cream */
+  --background: #1f211c;
+  --foreground: #f5f1e4;
+  --heading: #ffffff;
+  --raised: #2b2e28;
+  --sunken: #171915;
+  --rule: oklch(0.95 0.02 95 / 0.12);
+  --control: #8f918a; /* 4.3:1 on cards */
+  --muted-foreground: #c9c6b9;
+  --faint: #aeab9f;
+  --stat: #f5f1e4;
 
-  --primary: oklch(0.964 0.053 191.9); /* aqua #cbfffc, the aurora's first stop */
-  --primary-foreground: oklch(0.209 0.035 191.6);
-  --highlight: oklch(0.964 0.053 191.9 / 0.16);
-  --highlight-foreground: oklch(1 0 0);
+  --primary: #f5f1e4;
+  --primary-foreground: #2c2e2a;
 
-  --sev-ink: oklch(0.209 0.035 191.6);
-  --sev1-fg: oklch(0.8 0.13 18);
-  --sev2-fg: oklch(0.86 0.11 68);
-  --sev3-fg: oklch(0.92 0.09 100);
-  --sev4-fg: oklch(0.87 0.05 195);
+  --sev1-fg: oklch(0.78 0.13 18);
+  --sev2-fg: oklch(0.83 0.12 62);
+  --sev3-fg: oklch(0.88 0.11 95);
+  --sev4-fg: oklch(0.82 0.05 235);
   --sev-edge: oklch(0 0 0 / 0);
 
-  --danger: oklch(0.8 0.13 18);
-  --ok: oklch(0.86 0.1 175);
-
-  --orb-glow: oklch(0.55 0.1 186 / 0.3);
+  --danger: oklch(0.78 0.13 22);
+  --ok: oklch(0.82 0.13 140);
 }
 
 @theme inline {
@@ -111,6 +108,13 @@
   --color-faint: var(--faint);
   --color-highlight: var(--highlight);
   --color-highlight-foreground: var(--highlight-foreground);
+  --color-grass: var(--grass);
+  --color-grass-deep: var(--grass-deep);
+  --color-sky: var(--sky);
+  --color-coral: var(--coral);
+  --color-sunshine: var(--sunshine);
+  --color-lilac: var(--lilac);
+  --color-pop-ink: var(--pop-ink);
   --color-sev1: var(--sev1);
   --color-sev2: var(--sev2);
   --color-sev3: var(--sev3);
@@ -143,41 +147,49 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+  /* Inter only. "Mono" is Inter too, with its disambiguation set (slashed zero, serifed I, l with
+     a tail) and tabular figures, so log lines and IDs stay unambiguous without a second face. */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono--font-feature-settings: "ss02", "tnum";
+  --default-mono-font-feature-settings: "ss02", "tnum";
 
-  /* type scale: body 16 px at 1.5, display sizes at line-height 1 (DESIGN.md) */
-  --text-xs: 0.75rem;
-  --text-xs--line-height: 1.05rem;
-  --text-sm: 0.875rem;
-  --text-sm--line-height: 1.3rem;
+  /* The reference's sizes: 13, 15, 16, 18, 20, 30, 36, 53, 64, 81 px, and a display that runs
+     from 53 px on a phone to 144 px on a wide screen (.text-display). */
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.15rem;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.35rem;
   --text-base: 1rem;
   --text-base--line-height: 1.5rem;
   --text-lg: 1.125rem;
   --text-lg--line-height: 1.6rem;
-  --text-xl: 1.5rem;
-  --text-xl--line-height: 1.95rem;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.6rem;
   --text-2xl: 1.875rem;
-  --text-2xl--line-height: 2.15rem;
+  --text-2xl--line-height: 2.25rem;
   --text-3xl: 2.25rem;
-  --text-3xl--line-height: 2.4rem;
-  --text-4xl: 3rem;
-  --text-4xl--line-height: 3.05rem;
-  --text-5xl: 3.8125rem;
-  --text-5xl--line-height: 3.8125rem;
-  --text-6xl: 6rem;
-  --text-6xl--line-height: 6rem;
+  --text-3xl--line-height: 2.5rem;
+  --text-4xl: 3.3125rem;
+  --text-4xl--line-height: 3.4rem;
+  --text-5xl: 4rem;
+  --text-5xl--line-height: 4rem;
+  --text-6xl: 5.0625rem;
+  --text-6xl--line-height: 5rem;
 
-  --tracking-display: -0.04em;
-  --tracking-heading: -0.02em;
-  --tracking-label: 0.12em;
+  --tracking-display: -0.06em;
+  --tracking-heading: -0.04em;
+  --tracking-lead: -0.03em;
+  --tracking-label: -0.005em;
 
-  /* two radii: 6 px for everything small, 16 px for cards and panels */
-  --radius-xs: 6px;
+  /* Small, crisp corners on bars, buttons, inputs and cards; 50 px only on whole page panels
+     and big frames (rounded-sheet). Circles for icon buttons. */
+  --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 6px;
-  --radius-lg: 16px;
-  --radius-xl: 16px;
+  --radius-lg: 8px;
+  --radius-xl: 8px;
+  --radius-sheet: 50px;
 
   /* motion: durations and easings used everywhere (GSAP reads the same values) */
   --duration-instant: 80ms;
@@ -250,27 +262,46 @@
   .tabular {
     font-variant-numeric: tabular-nums;
   }
-  /* instrument labels: section kickers, table headers, nav links */
+  /* The headline face: 53 px on a phone, 144 px on a wide screen, at line-height 0.95. */
+  .text-display {
+    font-size: clamp(3.3125rem, 9.2vw + 0.6rem, 9rem);
+    line-height: 0.95;
+    letter-spacing: var(--tracking-display);
+    font-weight: 500;
+  }
+  /* Lead paragraphs: the reference's 30 px medium with tight tracking. */
+  .text-lead {
+    font-size: clamp(1.25rem, 1.6vw + 0.8rem, 1.875rem);
+    line-height: 1.2;
+    letter-spacing: var(--tracking-lead);
+    font-weight: 500;
+  }
+  /* Small labels: sentence case, medium weight, never uppercase. */
   .eyebrow {
-    font-size: var(--text-xs);
-    line-height: 1.4;
+    font-size: var(--text-sm);
+    line-height: 1.35;
     font-weight: 500;
     letter-spacing: var(--tracking-label);
-    text-transform: uppercase;
   }
-  /* large statistics glow in lavender against the abyss */
+  /* Large statistics: ink, medium, tight, figures that line up. */
   .stat {
     color: var(--stat);
     font-weight: 500;
     line-height: 1;
-    letter-spacing: -0.046em;
+    letter-spacing: -0.04em;
     font-variant-numeric: tabular-nums;
   }
-  .bg-aurora {
-    background-image: var(--gradient-aurora);
+  /* Links in running text: ink, underlined with a stone-grey rule that darkens on hover. */
+  .link {
+    color: var(--foreground);
+    text-decoration-line: underline;
+    text-decoration-color: var(--control);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+    transition: text-decoration-color var(--duration-quick) var(--ease-out);
   }
-  .bg-bio {
-    background-image: var(--gradient-bio);
+  .link:hover {
+    text-decoration-color: var(--foreground);
   }
 }
 

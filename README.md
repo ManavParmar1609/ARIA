@@ -11,7 +11,7 @@ ARIA runs offline with no API keys. Set an NVIDIA NIM key and the agents write w
 on NVIDIA's hosted API. Azure OpenAI and any OpenAI-compatible server work the same way: switching
 is a config change.
 
-![ARIA's landing page: a particle-sphere orb rises behind the headline "Incident triage that shows its work."](docs/images/hero.webp)
+![ARIA's landing page: the headline "Incident triage that shows its work." on a green panel, above an illustration of three people riding a long sheet of log lines.](docs/images/hero.webp)
 
 > [!IMPORTANT]
 > The measured results below come from **semi-synthetic** incidents: real log lines from the
@@ -102,7 +102,8 @@ make dev
 
 Open http://localhost:3000 for the landing page, then **Open the console**. New to ARIA? The
 console's **How to use ARIA** page starts a sample triage in one click and explains how to read
-a run. The API listens on
+a run. In the console, Ctrl or ⌘ + K opens a command palette that jumps to any page, recent
+incident, sample or definition, and `?` lists the keyboard shortcuts. The API listens on
 http://127.0.0.1:8000 (OpenAPI docs at `/docs`). Without `make data`, ARIA seeds incident memory
 from the small test fixtures; `make data` downloads the Loghub samples (pinned commit, checked
 hashes) for realistic memory and for `make eval`.
@@ -163,7 +164,7 @@ lines. With `ARIA_ENV=prod`, every call needs an API key from `ARIA_API_KEYS`.
 
 | Surface | Where | What it is for |
 |---|---|---|
-| Console | `web/`, http://localhost:3000/console | Queue, live run view with rule trace, prediction set, evidence and cited report; review, time travel, Ask ARIA, evals, memory, settings, and a guide with one-click samples |
+| Console | `web/`, http://localhost:3000/console | Queue, live run view with rule trace, prediction set, evidence and cited report; review, time travel, Ask ARIA, evals, memory, settings, a guide with one-click samples, and a command palette with keyboard shortcuts |
 | REST and SSE | `/api/v1/*`, [docs/openapi.json](docs/openapi.json) | Runs, live event stream, report (JSON and Markdown), postmortem draft, review, history, fork |
 | Alert webhooks | `/api/v1/alerts/alertmanager`, `/grafana`, `/alerts` | Turn alert storms into one grouped run |
 | Log scan | `ARIA_SCAN_SOURCES`, `ARIA_SCAN_INTERVAL_S` | Open a run on an error burst no alert caught |

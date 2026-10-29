@@ -25,13 +25,13 @@ export function ThemeToggle({ className }: { className?: string }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent>
         <DropdownMenuRadioGroup
-          value={theme ?? "dark"}
+          value={theme ?? "light"}
           onValueChange={(value) => {
             if (isThemeChoice(value)) setTheme(value);
           }}
         >
-          <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="system">Match my system</DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>

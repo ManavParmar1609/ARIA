@@ -28,12 +28,15 @@ export function LoadingRows({
 
 export function EmptyState({
   icon: Icon,
+  art,
   title,
   children,
   action,
   className,
 }: {
   icon?: LucideIcon;
+  /** A small illustration, shown beside the words on wider screens (it replaces the icon). */
+  art?: ReactNode;
   title: string;
   children?: ReactNode;
   action?: ReactNode;
@@ -42,16 +45,20 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "grid justify-items-start gap-3 rounded-lg bg-sunken px-6 py-10 sm:px-8",
+        "grid items-center gap-6 rounded-lg bg-raised px-6 py-8 sm:px-8",
+        art && "sm:grid-cols-[minmax(0,1fr)_11rem] md:grid-cols-[minmax(0,1fr)_13rem]",
         className,
       )}
     >
-      {Icon ? <Icon aria-hidden className="size-5 text-primary" strokeWidth={1.5} /> : null}
-      <p className="text-lg font-medium text-heading">{title}</p>
-      {children ? (
-        <div className="max-w-prose text-sm text-muted-foreground">{children}</div>
-      ) : null}
-      {action}
+      <div className="grid justify-items-start gap-3">
+        {Icon && !art ? (
+          <Icon aria-hidden className="size-5 text-foreground" strokeWidth={1.5} />
+        ) : null}
+        <p className="text-xl font-medium text-heading">{title}</p>
+        {children ? <div className="max-w-prose text-muted-foreground">{children}</div> : null}
+        {action}
+      </div>
+      {art ? <div className="hidden w-full sm:block">{art}</div> : null}
     </div>
   );
 }
@@ -111,11 +118,19 @@ export function PageHeader({
     <header className="grid gap-4 pb-2">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="grid min-w-0 gap-3">
-          {eyebrow ? <p className="eyebrow text-muted-foreground">{eyebrow}</p> : null}
-          <h1 className="text-3xl leading-none tracking-heading sm:text-4xl sm:tracking-display">
-            {title}
-          </h1>
-          {description ? <p className="max-w-3xl text-muted-foreground">{description}</p> : null}
+          {eyebrow ? (
+            <p className="eyebrow inline-flex items-center gap-2 text-muted-foreground">
+              <span
+                aria-hidden
+                className="block size-2 rounded-full bg-grass ring-1 ring-pop-ink/30"
+              />
+              {eyebrow}
+            </p>
+          ) : null}
+          <h1 className="text-[2.25rem] leading-none tracking-heading sm:text-4xl">{title}</h1>
+          {description ? (
+            <p className="max-w-3xl text-lg text-muted-foreground">{description}</p>
+          ) : null}
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>

@@ -32,7 +32,7 @@ function ClaimList({ claims }: { claims: Claim[] }) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="grid gap-3">
-      <h3 className="text-sm font-semibold text-muted-foreground">{title}</h3>
+      <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
       {children}
     </section>
   );
@@ -137,7 +137,7 @@ export function ReportView({ report }: { report: IncidentReport }) {
           <ol className="grid gap-3">
             {report.actions.map((action, i) => (
               <li key={i} className="grid grid-cols-[1.75rem_1fr] gap-2 leading-relaxed">
-                <span className="tabular flex size-6 items-center justify-center rounded-full border border-control text-xs font-semibold">
+                <span className="tabular flex size-6 items-center justify-center rounded-full border border-control text-xs font-medium">
                   {i + 1}
                 </span>
                 <div>

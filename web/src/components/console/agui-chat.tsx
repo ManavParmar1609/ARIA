@@ -312,7 +312,7 @@ export function AguiChat() {
                     key={item.id}
                     className="grid gap-3 rounded-lg bg-raised p-5 ring-1 ring-primary/50"
                   >
-                    <p className="flex items-center gap-2 font-semibold">
+                    <p className="flex items-center gap-2 font-medium">
                       <UserRoundCheckIcon aria-hidden className="size-4 text-primary" />
                       {item.message}
                     </p>

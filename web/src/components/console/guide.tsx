@@ -1,13 +1,13 @@
 "use client";
 
-import { ArrowRightIcon, LoaderCircleIcon, PlayIcon } from "lucide-react";
+import { ArrowRightIcon, LoaderCircleIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { ErrorState, PageHeader } from "@/components/console/states";
-import { Button } from "@/components/ui/button";
+import { ArrowCircle, Button } from "@/components/ui/button";
 import samples from "@/data/samples.json";
 import { useCreateRun } from "@/lib/api/hooks";
 import { GLOSSARY } from "@/lib/glossary";
@@ -71,7 +71,10 @@ const SOURCES = [
   },
 ];
 
-function SampleCard({ sample }: { sample: (typeof samples)[number] }) {
+// Each sample card's button takes one of the pops, as the site's story cards do.
+const TONES = ["coral", "sunshine", "sky", "lilac"] as const;
+
+function SampleCard({ sample, index }: { sample: (typeof samples)[number]; index: number }) {
   const router = useRouter();
   const create = useCreateRun();
   const [started, setStarted] = useState(false);
@@ -101,20 +104,22 @@ function SampleCard({ sample }: { sample: (typeof samples)[number] }) {
       <h3 className="text-lg leading-snug tracking-heading">{sample.label}</h3>
       <p className="text-sm text-muted-foreground">{SAMPLE_NOTES[sample.id]}</p>
       <Button
-        variant="secondary"
-        size="sm"
-        className="mt-auto self-start"
+        variant={TONES[index % TONES.length]}
+        size="md"
+        className="mt-auto self-start pr-1.5"
         onClick={start}
         disabled={busy}
         // The visible words lead the name (WCAG 2.5.3), and the sample tells the four apart.
         aria-label={`${busy ? "Starting" : "Triage it"}: ${sample.label}`}
       >
-        {busy ? (
-          <LoaderCircleIcon aria-hidden className="animate-spin" />
-        ) : (
-          <PlayIcon aria-hidden />
-        )}
         {busy ? "Starting" : "Triage it"}
+        {busy ? (
+          <span aria-hidden className="grid size-8 place-items-center rounded-full bg-white">
+            <LoaderCircleIcon className="size-4 animate-spin" />
+          </span>
+        ) : (
+          <ArrowCircle tone="white" size="md" />
+        )}
       </Button>
       {create.isError ? (
         <ErrorState error={create.error} title="The sample could not be started" />
@@ -144,8 +149,8 @@ export function Guide() {
           </p>
         </div>
         <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {samples.map((sample) => (
-            <SampleCard key={sample.id} sample={sample} />
+          {samples.map((sample, i) => (
+            <SampleCard key={sample.id} sample={sample} index={i} />
           ))}
         </ul>
       </section>

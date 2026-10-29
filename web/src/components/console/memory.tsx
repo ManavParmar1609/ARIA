@@ -6,6 +6,7 @@ import { useDeferredValue, useId, useMemo, useState } from "react";
 
 import { SeverityBadge } from "@/components/aria/severity";
 import { EmptyState, ErrorState, LoadingRows, PageHeader } from "@/components/console/states";
+import { SearchSpot } from "@/components/illustrations/spots";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -103,7 +104,10 @@ export function Memory() {
             {synthetic > 0 ? `; ${synthetic} are synthetic seed incidents, labelled so` : ""}.
           </p>
           {shown.length === 0 ? (
-            <EmptyState title="Nothing matches that filter">
+            <EmptyState
+              title="Nothing matches that filter"
+              art={<SearchSpot className="h-auto w-full" />}
+            >
               Try fewer words, or another system.
             </EmptyState>
           ) : (
@@ -131,7 +135,7 @@ export function Memory() {
                     <div className="grid gap-3 border-t border-rule px-4 py-3 text-sm">
                       <p>{incident.summary}</p>
                       <p>
-                        <span className="font-semibold">Resolution: </span>
+                        <span className="font-medium">Resolution: </span>
                         <span className="text-muted-foreground">{incident.resolution}</span>
                       </p>
                       <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-faint">

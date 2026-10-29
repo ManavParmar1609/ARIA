@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { TagStrip } from "@/components/aria/severity";
 import { runTitle } from "@/components/console/run-row";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/console/states";
+import { LostSpot } from "@/components/illustrations/spots";
 import { RunStatus } from "@/components/console/status";
 import { Button } from "@/components/ui/button";
 import {
@@ -181,6 +182,7 @@ export function RunView({ runId }: { runId: string }) {
       return (
         <EmptyState
           title="This run does not exist"
+          art={<LostSpot className="h-auto w-full" />}
           action={
             <Button asChild size="sm">
               <Link href="/console/runs">Back to incidents</Link>

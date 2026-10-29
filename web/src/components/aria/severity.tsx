@@ -59,7 +59,7 @@ export function SeverityBadge({
     >
       <span
         className={cx(
-          "tabular inline-flex items-center rounded-xs border border-sev-edge px-1.5 font-semibold text-sev-ink",
+          "tabular inline-flex items-center rounded-xs border border-sev-edge px-1.5 font-medium text-sev-ink",
           SEVERITY_BG[severity],
           size === "sm" ? "h-5 text-[0.6875rem]" : "h-6 text-xs",
         )}
@@ -94,7 +94,7 @@ export function TagStrip({
     >
       <span
         className={cx(
-          "tabular text-sm font-semibold tracking-[0.04em]",
+          "tabular text-sm font-medium tracking-[0.04em]",
           severity ? "text-sev-ink" : "text-faint",
         )}
       >

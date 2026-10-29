@@ -65,7 +65,9 @@ test.describe("console", () => {
 
   test("searches incident memory by meaning", async ({ page }) => {
     await page.goto("/console/memory");
-    await page.getByLabel("Search").fill("quorum lost between peers");
+    await page
+      .getByRole("searchbox", { name: "Search", exact: true })
+      .fill("quorum lost between peers");
     await expect(page.getByText(/closest incidents to "quorum lost between peers"/)).toBeVisible();
     await expect(page.locator("details").first()).toContainText(/ZooKeeper/i);
     await expectAccessible(page, "memory");
@@ -120,6 +122,30 @@ test.describe("console", () => {
     await themeOption("Dark").click();
     await expect(page.getByRole("radio", { name: "Dark" })).toBeChecked();
     await expect(page.locator("html")).toHaveClass(/\bdark\b/);
+  });
+
+  test("jumps anywhere from the command palette and the keyboard", async ({ page }) => {
+    await page.goto("/console");
+    await page.keyboard.press("Control+k");
+    const search = page.getByRole("combobox", { name: /Search pages, incidents/ });
+    await expect(search).toBeFocused();
+    await search.fill("runbooks");
+    await expect(page.getByRole("option", { name: /Runbooks/ }).first()).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expectAccessible(page, "command palette");
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/console\/runbooks$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Runbooks" })).toBeVisible();
+
+    await page.keyboard.press("?");
+    await expect(page.getByRole("heading", { name: "Keyboard shortcuts" })).toBeVisible();
+    await expectAccessible(page, "keyboard shortcuts");
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("g");
+    await page.keyboard.press("o");
+    await expect(page).toHaveURL(/\/console$/);
   });
 
   test("guides a first visit and triages a sample in one click", async ({ page }) => {
@@ -178,19 +204,19 @@ test.describe("console at 320 px", () => {
   });
 });
 
-test.describe("console in the light theme", () => {
+test.describe("console in the dark theme", () => {
   test("meets WCAG 2.2 AA", async ({ page }) => {
-    await page.addInitScript(() => localStorage.setItem("theme", "light"));
+    await page.addInitScript(() => localStorage.setItem("theme", "dark"));
     await page.goto("/console/runs?status=published");
-    await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
-    await expectAccessible(page, "incidents, light");
+    await expect(page.locator("html")).toHaveClass(/\bdark\b/);
+    await expectAccessible(page, "incidents, dark");
     await page
       .getByRole("row", { name: /ZooKeeper/ })
       .getByRole("link")
       .click();
     await expect(page.getByRole("heading", { name: "Severity", exact: true })).toBeVisible();
-    await expectAccessible(page, "run view, light");
+    await expectAccessible(page, "run view, dark");
     await page.goto("/console/evals");
-    await expectAccessible(page, "evaluation, light");
+    await expectAccessible(page, "evaluation, dark");
   });
 });

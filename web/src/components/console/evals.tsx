@@ -306,7 +306,7 @@ export function Evals({ data }: { data: Evaluation }) {
           ]}
         />
         <div className="grid gap-3">
-          <h3 className="text-sm font-semibold">Median time per step</h3>
+          <h3 className="text-sm font-medium">Median time per step</h3>
           <Bars
             label="Median milliseconds per graph step"
             rows={stages}
@@ -323,7 +323,7 @@ export function Evals({ data }: { data: Evaluation }) {
       >
         <div className="grid gap-8 xl:grid-cols-2">
           <div className="grid content-start gap-3">
-            <h3 className="text-sm font-semibold">
+            <h3 className="text-sm font-medium">
               Grouping accuracy by system (mean {data.parsing.meanAccuracy.toFixed(3)})
             </h3>
             <Bars
@@ -335,7 +335,7 @@ export function Evals({ data }: { data: Evaluation }) {
             />
           </div>
           <div className="grid content-start gap-3">
-            <h3 className="text-sm font-semibold">
+            <h3 className="text-sm font-medium">
               Attacks quarantined, by family (overall {pct(r.attackRecall)})
             </h3>
             <Bars

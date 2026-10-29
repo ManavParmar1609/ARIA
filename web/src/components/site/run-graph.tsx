@@ -119,8 +119,8 @@ export function RunGraph({ steps }: { steps: GraphStep[] }) {
               className={cx(
                 "tabular flex size-10 items-center justify-center rounded-full border text-sm font-medium transition-colors duration-(--duration-moderate)",
                 i <= active
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-rule text-muted-foreground",
+                  ? "border-transparent bg-grass text-pop-ink"
+                  : "border-control/60 text-muted-foreground",
               )}
               aria-hidden
             >
@@ -142,9 +142,12 @@ export function RunGraph({ steps }: { steps: GraphStep[] }) {
               >
                 {step.body}
               </p>
-              <p className="mt-4 inline-flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-sm bg-sunken px-3.5 py-2 text-sm">
+              <p className="mt-4 inline-flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md bg-raised px-3.5 py-2 text-sm">
                 <span
-                  className={cx("eyebrow", scrolling && i > active ? "text-faint" : "text-primary")}
+                  className={cx(
+                    "eyebrow inline-flex items-center gap-1.5",
+                    scrolling && i > active ? "text-faint" : "text-foreground",
+                  )}
                 >
                   In the run
                 </span>
@@ -155,7 +158,7 @@ export function RunGraph({ steps }: { steps: GraphStep[] }) {
         ))}
       </ol>
       <div className="order-first lg:order-none">
-        <div className="rounded-lg bg-sunken px-4 py-6 sm:px-8 lg:sticky lg:top-[8vh]">
+        <div className="rounded-lg bg-raised px-4 py-6 sm:px-8 lg:sticky lg:top-[14vh]">
           <svg
             viewBox="0 0 360 790"
             className="mx-auto h-auto w-full max-w-sm lg:max-h-[78vh]"
@@ -212,7 +215,7 @@ export function RunGraph({ steps }: { steps: GraphStep[] }) {
                         ? "fill-highlight stroke-primary"
                         : isLit
                           ? "fill-raised stroke-foreground/40"
-                          : "fill-background stroke-control/50",
+                          : "fill-background stroke-control/60",
                     )}
                     strokeWidth={isCurrent ? 2 : 1}
                   />

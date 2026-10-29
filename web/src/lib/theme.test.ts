@@ -12,34 +12,33 @@ afterEach(() => {
 });
 
 describe("theme", () => {
-  it("applies a stored light theme before first paint", () => {
-    root.classList.add("dark");
-    localStorage.setItem("theme", "light");
-    new Function(THEME_SCRIPT)();
-    expect(root.classList.contains("dark")).toBe(false);
-  });
-
-  it("defaults to dark when nothing is stored", () => {
+  it("applies a stored dark theme before first paint", () => {
+    localStorage.setItem("theme", "dark");
     new Function(THEME_SCRIPT)();
     expect(root.classList.contains("dark")).toBe(true);
   });
 
-  it("stores a choice, applies it, and tells subscribers", () => {
+  it("defaults to light when nothing is stored", () => {
     root.classList.add("dark");
-    const { result } = renderHook(() => useTheme());
-    expect(result.current.theme).toBe("dark");
-    act(() => setTheme("light"));
-    expect(localStorage.getItem("theme")).toBe("light");
+    new Function(THEME_SCRIPT)();
     expect(root.classList.contains("dark")).toBe(false);
-    expect(result.current).toMatchObject({ theme: "light", resolvedTheme: "light" });
+  });
+
+  it("stores a choice, applies it, and tells subscribers", () => {
+    const { result } = renderHook(() => useTheme());
+    expect(result.current.theme).toBe("light");
+    act(() => setTheme("dark"));
+    expect(localStorage.getItem("theme")).toBe("dark");
+    expect(root.classList.contains("dark")).toBe(true);
+    expect(result.current).toMatchObject({ theme: "dark", resolvedTheme: "dark" });
   });
 
   it("follows the system preference for the system choice", () => {
     const { result } = renderHook(() => useTheme());
     act(() => setTheme("system"));
-    const light = window.matchMedia("(prefers-color-scheme: light)").matches;
+    const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     expect(result.current.theme).toBe("system");
-    expect(result.current.resolvedTheme).toBe(light ? "light" : "dark");
-    expect(root.classList.contains("dark")).toBe(!light);
+    expect(result.current.resolvedTheme).toBe(dark ? "dark" : "light");
+    expect(root.classList.contains("dark")).toBe(dark);
   });
 });

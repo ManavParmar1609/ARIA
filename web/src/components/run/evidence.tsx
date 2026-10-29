@@ -99,7 +99,7 @@ function EvidencePreview({ evidence, lines }: { evidence: Evidence; lines: LogEv
         <span className="font-mono text-foreground">{evidence.id}</span>{" "}
         {KIND_LABEL[evidence.kind] ?? evidence.kind}, from {evidence.source}
       </p>
-      <p className="text-sm leading-snug font-semibold">{evidence.title}</p>
+      <p className="text-sm leading-snug font-medium">{evidence.title}</p>
       {evidence.detail ? (
         <p className="line-clamp-4 text-xs leading-5 whitespace-pre-wrap text-muted-foreground">
           {evidence.detail}
@@ -277,7 +277,7 @@ export function EvidencePanel({ className }: { className?: string }) {
                 <span className="font-mono text-foreground">{evidence.id}</span>{" "}
                 {KIND_LABEL[evidence.kind] ?? evidence.kind}, from {evidence.source}
               </p>
-              <h3 className="text-sm leading-snug font-semibold">{evidence.title}</h3>
+              <h3 className="text-sm leading-snug font-medium">{evidence.title}</h3>
             </div>
             {pinned === evidence.id ? (
               <Button
@@ -314,7 +314,7 @@ export function EvidencePanel({ className }: { className?: string }) {
         </>
       ) : (
         <div className="grid gap-1.5">
-          <h3 className="text-sm font-semibold">Evidence</h3>
+          <h3 className="text-sm font-medium">Evidence</h3>
           <p className="text-sm text-muted-foreground">
             Every claim in the report cites evidence like{" "}
             <span className="rounded-xs border border-control px-1 font-mono text-xs">E3</span>.

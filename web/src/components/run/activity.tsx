@@ -108,8 +108,7 @@ export function GraphProgress({
               "flex h-8 min-w-0 items-center gap-1.5 rounded-xs border px-2 text-xs",
               s === "done" && "border-rule text-foreground",
               s === "running" && "border-primary bg-highlight text-highlight-foreground",
-              s === "paused" &&
-                "border-primary bg-highlight font-semibold text-highlight-foreground",
+              s === "paused" && "border-primary bg-highlight font-medium text-highlight-foreground",
               s === "failed" && "border-danger text-danger",
               s === "pending" && "border-dashed border-rule text-faint",
             )}

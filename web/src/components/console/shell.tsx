@@ -11,14 +11,16 @@ import {
   MenuIcon,
   MessageSquareTextIcon,
   PlusIcon,
+  SearchIcon,
   SettingsIcon,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { Wordmark } from "@/components/aria/wordmark";
+import { ConsoleCommands, useCommands } from "@/components/console/command-palette";
 import { SignIn } from "@/components/console/sign-in";
 import { ErrorState } from "@/components/console/states";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -69,12 +71,52 @@ function isActive(pathname: string, item: NavItem): boolean {
   return pathname.startsWith(item.href);
 }
 
+const noop = () => () => {};
+
+/** Whether to show the Mac key (⌘) or Ctrl in hints; Ctrl until the browser says otherwise. */
+function useIsMac(): boolean {
+  return useSyncExternalStore(
+    noop,
+    () => /Mac|iPhone|iPad/.test(navigator.platform),
+    () => false,
+  );
+}
+
+/** Opens the command palette; the hint shows the shortcut for this computer. */
+function PaletteButton() {
+  const { openPalette } = useCommands();
+  const mac = useIsMac();
+  return (
+    <button
+      type="button"
+      onClick={openPalette}
+      aria-keyshortcuts="Control+K Meta+K"
+      className="flex h-10 w-full items-center gap-2.5 rounded-md bg-foreground/6 px-3 text-[0.9375rem] text-muted-foreground transition-colors duration-(--duration-quick) hover:bg-foreground/10 hover:text-foreground"
+    >
+      <SearchIcon aria-hidden className="size-4" />
+      <span className="flex-1 text-left">Search</span>
+      <kbd className="rounded-xs border border-control/60 px-1.5 text-xs">
+        {mac ? "⌘ K" : "Ctrl K"}
+      </kbd>
+    </button>
+  );
+}
+
+function PaletteIconButton() {
+  const { openPalette } = useCommands();
+  return (
+    <Button variant="ghost" size="icon-sm" aria-label="Search or jump to" onClick={openPalette}>
+      <SearchIcon aria-hidden />
+    </Button>
+  );
+}
+
 function ReviewCount() {
   const { data } = useRuns("awaiting_review", 50);
   const n = data?.runs.length ?? 0;
   if (n === 0) return null;
   return (
-    <span className="tabular ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[0.6875rem] font-medium text-primary-foreground">
+    <span className="tabular ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-foreground px-1.5 text-xs font-medium text-background">
       <span className="sr-only">, </span>
       {n >= 50 ? "50+" : n}
       <span className="sr-only"> waiting for review</span>
@@ -88,7 +130,7 @@ function Nav({ onNavigate }: { onNavigate?: () => void }) {
     <nav aria-label="Console" className="grid gap-6">
       {NAV.map((group) => (
         <div key={group.label} role="group" aria-labelledby={`nav-${group.label}`}>
-          <p id={`nav-${group.label}`} className="eyebrow mb-2 px-3 text-faint">
+          <p id={`nav-${group.label}`} className="eyebrow mb-1.5 px-3 text-muted-foreground">
             {group.label}
           </p>
           <div className="grid gap-0.5">
@@ -102,16 +144,16 @@ function Nav({ onNavigate }: { onNavigate?: () => void }) {
                   onClick={onNavigate}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "flex h-10 items-center gap-3 rounded-md px-3 text-sm transition-colors duration-(--duration-quick)",
+                    "flex h-10 items-center gap-3 rounded-md px-3 text-[0.9375rem] transition-colors duration-(--duration-quick)",
                     active
-                      ? "bg-raised font-medium text-heading"
-                      : "text-muted-foreground hover:bg-raised/60 hover:text-heading",
+                      ? "bg-grass font-medium text-pop-ink"
+                      : "text-foreground hover:bg-foreground/6",
                   )}
                 >
                   <Icon
                     aria-hidden
                     strokeWidth={1.75}
-                    className={cn("size-4", active ? "text-primary" : "text-faint")}
+                    className={cn("size-4", active ? "text-pop-ink" : "text-muted-foreground")}
                   />
                   {item.label}
                   {item.href === "/console/runs" ? <ReviewCount /> : null}
@@ -220,56 +262,65 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
     <TooltipProvider delayDuration={300}>
-      <a
-        href="#console-main"
-        className="sr-only z-50 rounded-sm bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
-      >
-        Skip to content
-      </a>
-      <div className="min-h-dvh lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]">
-        <aside className="hidden bg-sunken lg:block">
-          <div className="sticky top-0 flex h-dvh flex-col gap-8 px-4 py-6">
-            <Link href="/" className="rounded-sm px-3 text-heading" aria-label="ARIA home">
-              <Wordmark />
-            </Link>
-            <div className="flex-1 overflow-y-auto">
-              <Nav />
+      <ConsoleCommands>
+        <a
+          href="#console-main"
+          className="sr-only z-50 rounded-sm bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
+        >
+          Skip to content
+        </a>
+        <div className="min-h-dvh lg:grid lg:grid-cols-[17.5rem_minmax(0,1fr)]">
+          {/* A floating white panel on the cream page, like the site's navigation bars. */}
+          <aside className="hidden p-3 lg:block">
+            <div className="sticky top-3 flex h-[calc(100dvh-1.5rem)] flex-col gap-7 rounded-lg bg-raised px-3 py-5">
+              <Link href="/" className="rounded-sm px-3" aria-label="ARIA home">
+                <Wordmark />
+              </Link>
+              <PaletteButton />
+              <div className="-mt-2 flex-1 overflow-y-auto">
+                <Nav />
+              </div>
+              <SessionFooter />
             </div>
-            <SessionFooter />
-          </div>
-        </aside>
-        <div className="flex min-w-0 flex-col">
-          <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-rule bg-background/95 px-4 py-3 backdrop-blur lg:hidden">
-            <Dialog open={open} onOpenChange={setOpen}>
-              <DialogTrigger asChild>
-                <Button variant="ghost" size="icon-sm" aria-label="Open navigation">
-                  <MenuIcon aria-hidden />
-                </Button>
-              </DialogTrigger>
-              <SheetContent side="left" closeLabel="Close navigation">
-                <DialogTitle className="sr-only">Navigation</DialogTitle>
-                <Link href="/" className="rounded-sm px-1.5" onClick={() => setOpen(false)}>
+          </aside>
+          <div className="flex min-w-0 flex-col">
+            <header className="sticky top-0 z-30 bg-background px-3 pt-3 lg:hidden">
+              <div className="flex h-14 items-center justify-between gap-3 rounded-md bg-raised px-2">
+                <Dialog open={open} onOpenChange={setOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="ghost" size="icon-sm" aria-label="Open navigation">
+                      <MenuIcon aria-hidden />
+                    </Button>
+                  </DialogTrigger>
+                  <SheetContent side="left" closeLabel="Close navigation">
+                    <DialogTitle className="sr-only">Navigation</DialogTitle>
+                    <Link href="/" className="rounded-sm px-1.5" onClick={() => setOpen(false)}>
+                      <Wordmark />
+                    </Link>
+                    <div className="flex-1 overflow-y-auto">
+                      <Nav onNavigate={() => setOpen(false)} />
+                    </div>
+                    <SessionFooter />
+                  </SheetContent>
+                </Dialog>
+                <Link href="/console" className="rounded-sm" aria-label="Console overview">
                   <Wordmark />
                 </Link>
-                <div className="flex-1 overflow-y-auto">
-                  <Nav onNavigate={() => setOpen(false)} />
+                <div className="flex items-center">
+                  <PaletteIconButton />
+                  <ThemeToggle />
                 </div>
-                <SessionFooter />
-              </SheetContent>
-            </Dialog>
-            <Link href="/console" className="rounded-sm text-heading" aria-label="Console overview">
-              <Wordmark />
-            </Link>
-            <ThemeToggle />
-          </header>
-          <main
-            id="console-main"
-            className="mx-auto w-full max-w-[90rem] flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-10"
-          >
-            <Gate>{children}</Gate>
-          </main>
+              </div>
+            </header>
+            <main
+              id="console-main"
+              className="mx-auto w-full max-w-[90rem] flex-1 px-4 py-8 sm:px-6 lg:px-8 lg:py-12"
+            >
+              <Gate>{children}</Gate>
+            </main>
+          </div>
         </div>
-      </div>
+      </ConsoleCommands>
     </TooltipProvider>
   );
 }

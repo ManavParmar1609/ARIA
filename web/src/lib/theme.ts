@@ -2,10 +2,10 @@
 
 import { useSyncExternalStore } from "react";
 
-import { PREFERS_LIGHT as LIGHT, THEME_KEY as KEY } from "./theme-script";
+import { PREFERS_DARK as DARK, THEME_KEY as KEY } from "./theme-script";
 
 /**
- * The colour theme: dark by default, light, or whatever the system asks for. The choice lives in
+ * The colour theme: light (cream paper) by default, dark, or whatever the system asks for. The choice lives in
  * localStorage; the page is themed by the `dark` class on <html>, which THEME_SCRIPT (in
  * ./theme-script) sets before first paint. Nothing here touches the page on load, only when the
  * theme changes, so hydration never triggers a full-page style recalculation.
@@ -20,15 +20,15 @@ export function isThemeChoice(value: unknown): value is ThemeChoice {
 function stored(): ThemeChoice {
   try {
     const value = localStorage.getItem(KEY);
-    return value === "light" || value === "system" ? value : "dark";
+    return value === "dark" || value === "system" ? value : "light";
   } catch {
-    return "dark";
+    return "light";
   }
 }
 
 function resolve(choice: ThemeChoice): Theme {
   if (choice !== "system") return choice;
-  return window.matchMedia(LIGHT).matches ? "light" : "dark";
+  return window.matchMedia(DARK).matches ? "dark" : "light";
 }
 
 function apply(theme: Theme): void {
@@ -54,7 +54,7 @@ function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   if (!detach) {
     // Follow changes made in other tabs, and the system's preference when the choice is "system".
-    const media = window.matchMedia(LIGHT);
+    const media = window.matchMedia(DARK);
     const sync = () => {
       apply(resolve(stored()));
       emit();

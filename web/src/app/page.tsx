@@ -1,16 +1,17 @@
 import { ArrowDownIcon } from "lucide-react";
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 
-import { Orb } from "@/components/aria/orb";
 import { Term } from "@/components/aria/term";
+import { HeroScene, HillsBand } from "@/components/illustrations/scenes";
 import { Results } from "@/components/site/results";
 import { RunGraph, type GraphStep } from "@/components/site/run-graph";
 import { SiteFooter } from "@/components/site/site-footer";
 import { SiteHeader } from "@/components/site/site-header";
 import { Limitations, Standards } from "@/components/site/standards";
+import { Story } from "@/components/site/story";
 import { TriageReplay } from "@/components/site/triage-replay";
-import { Button } from "@/components/ui/button";
+import { ArrowCircle, Button } from "@/components/ui/button";
 import { evaluation, REPO_URL, replay, runFacts, type RunFacts } from "@/lib/site-data";
 import { cn } from "@/lib/utils";
 
@@ -107,9 +108,19 @@ function steps(f: RunFacts): GraphStep[] {
   ];
 }
 
+type Dot = "coral" | "sunshine" | "sky" | "lilac";
+
+const DOT: Record<Dot, string> = {
+  coral: "bg-coral",
+  sunshine: "bg-sunshine",
+  sky: "bg-sky",
+  lilac: "bg-lilac",
+};
+
 function Section({
   id,
   label,
+  dot,
   title,
   intro,
   deferred = false,
@@ -118,32 +129,39 @@ function Section({
   id: string;
   /** The section's name, as the navigation calls it. */
   label: string;
-  title: string;
-  intro?: React.ReactNode;
+  /** The small chromatic dot beside the name: one pop colour per section. */
+  dot: Dot;
+  title: ReactNode;
+  intro?: ReactNode;
   /** Skip layout and paint until the section nears the viewport (for sections far below the
    * fold that nothing measures on load). */
   deferred?: boolean;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <section
       id={id}
       aria-labelledby={`${id}-title`}
       className={cn(
-        "scroll-mt-4",
+        "scroll-mt-20",
         deferred && "[contain-intrinsic-size:auto_1400px] [content-visibility:auto]",
       )}
     >
-      <div className="mx-auto grid max-w-[90rem] gap-12 px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
-        <div className="grid max-w-5xl gap-5">
-          <p className="eyebrow text-muted-foreground">{label}</p>
+      <div className="mx-auto grid max-w-[75rem] gap-12 px-4 py-20 sm:px-6 lg:gap-16 lg:py-28">
+        <div className="grid max-w-4xl gap-5">
+          <p className="eyebrow inline-flex items-center gap-2.5 text-muted-foreground">
+            <span aria-hidden className={cn("block size-2.5 rounded-full", DOT[dot])} />
+            {label}
+          </p>
           <h2
             id={`${id}-title`}
-            className="text-4xl leading-none tracking-heading sm:text-5xl sm:tracking-display"
+            className="text-[2.5rem] leading-none tracking-heading sm:text-4xl lg:text-6xl lg:leading-[0.98]"
           >
             {title}
           </h2>
-          {intro ? <p className="max-w-3xl text-lg text-muted-foreground">{intro}</p> : null}
+          {intro ? (
+            <p className="max-w-3xl text-lg text-muted-foreground sm:text-xl">{intro}</p>
+          ) : null}
         </div>
         {children}
       </div>
@@ -151,36 +169,92 @@ function Section({
   );
 }
 
+/** A hand-drawn lilac underline under one word of a heading, as in the reference. */
+function Scribble({ children }: { children: ReactNode }) {
+  return (
+    <span className="relative whitespace-nowrap">
+      {children}
+      <svg
+        aria-hidden
+        focusable="false"
+        viewBox="0 0 200 16"
+        preserveAspectRatio="none"
+        className="absolute -bottom-[0.12em] left-0 h-[0.16em] w-full"
+      >
+        <path
+          d="M3 9C22 2 30 15 50 8S80 2 100 9S132 15 150 8S182 2 197 8"
+          fill="none"
+          stroke="var(--lilac)"
+          strokeWidth="5"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+    </span>
+  );
+}
+
 function Hero() {
   return (
-    <section aria-labelledby="hero-title" className="relative isolate -mt-20 overflow-hidden">
-      <Orb className="absolute top-0 left-1/2 -z-10 aspect-square w-[min(46rem,140vw)] -translate-x-1/2 [mask-image:linear-gradient(to_bottom,#000_36%,transparent_64%)]" />
-      <div className="mx-auto grid max-w-[90rem] justify-items-center gap-7 px-4 pt-[min(68vw,24rem)] pb-20 text-center sm:px-6 sm:pt-[min(52vw,28rem)] lg:px-8 lg:pb-28">
-        <p className="eyebrow text-muted-foreground">Open-source incident triage</p>
-        <h1
-          id="hero-title"
-          className="max-w-[11ch] text-[2.75rem] leading-none tracking-display sm:text-6xl lg:max-w-[12ch] lg:text-[5.375rem] lg:tracking-[-0.046em]"
-        >
+    <section
+      aria-labelledby="hero-title"
+      className="relative overflow-hidden bg-grass pt-28 text-pop-ink sm:pt-36 lg:pt-40"
+    >
+      <div className="mx-auto grid max-w-[75rem] justify-items-center gap-6 px-4 text-center sm:px-6">
+        <h1 id="hero-title" className="text-display max-w-[13ch] text-pop-ink">
           Incident triage that shows its work.
         </h1>
-        <p className="max-w-2xl text-lg text-muted-foreground">
-          ARIA reads an alert and its logs, rates severity with calibrated confidence, checks what
-          happened last time and drafts the incident report. Every claim cites its evidence, and
-          nothing is sent until a person approves.
+        <p className="text-lead max-w-[30ch]">
+          Calibrated severity, a report that cites every claim, and nothing sent until a person
+          approves.
         </p>
-        <div className="flex flex-wrap justify-center gap-3">
-          <Button asChild variant="primary" size="lg">
+        <div className="mt-2 flex flex-wrap justify-center gap-3">
+          <Button asChild variant="raised" size="lg" className="pr-2">
             <Link href="/console" prefetch={false}>
               Open the console
+              <ArrowCircle />
             </Link>
           </Button>
-          <Button asChild variant="ghost" size="lg">
+          <Button
+            asChild
+            variant="ghost"
+            size="lg"
+            className="text-pop-ink hover:bg-pop-ink/8 hover:text-pop-ink"
+          >
             <a href="#run">
               Watch a real run
               <ArrowDownIcon aria-hidden />
             </a>
           </Button>
         </div>
+      </div>
+      <HeroScene className="mx-auto mt-6 block h-[19rem] w-full max-w-[72rem] sm:h-auto sm:px-2" />
+    </section>
+  );
+}
+
+function Intro() {
+  return (
+    <section
+      aria-labelledby="story-title"
+      className="mx-auto max-w-[75rem] px-4 pt-20 pb-6 sm:px-6 lg:pt-28"
+    >
+      <h2 id="story-title" className="sr-only">
+        What ARIA does
+      </h2>
+      <p className="text-lead max-w-[38ch]">
+        ARIA reads an alert and its logs, rates severity with calibrated confidence, checks what
+        happened last time and drafts the incident report, so the person on call starts from
+        evidence instead of a wall of logs.
+      </p>
+      <Button asChild variant="raised" size="lg" className="mt-8 pr-2">
+        <a href="#how">
+          How a run works
+          <ArrowCircle />
+        </a>
+      </Button>
+      <div className="mt-16 lg:mt-20">
+        <Story />
       </div>
     </section>
   );
@@ -189,41 +263,60 @@ function Hero() {
 // The README's offline quick start, without keys.
 const QUICKSTART = ["make install", "uv run aria db upgrade && uv run aria seed", "make dev"];
 
+const PROMISES = [
+  "Runs offline, with no API key",
+  "Every claim cites its evidence",
+  "Nothing is sent without approval",
+];
+
 function TryIt() {
   return (
-    <section aria-labelledby="try-title" className="px-4 pb-20 sm:px-6 lg:px-8 lg:pb-28">
-      <div className="mx-auto grid max-w-[90rem] justify-items-center gap-6 rounded-lg bg-raised px-6 py-16 text-center sm:px-12 lg:py-20">
-        <p className="eyebrow text-muted-foreground">Try it</p>
-        <h2 id="try-title" className="max-w-2xl text-4xl leading-none tracking-display sm:text-5xl">
-          Run ARIA on your own logs
-        </h2>
-        <p className="max-w-2xl text-lg text-muted-foreground">
-          It runs offline with no API key, and switches to NVIDIA NIM, Azure OpenAI or any
-          OpenAI-compatible model when you add one. The console walks you through a first triage.
-        </p>
-        {/* Long commands wrap (with a hanging indent) rather than scroll, so phones need no
-            sideways scrolling inside the block. */}
-        <pre className="w-full max-w-xl rounded-lg bg-sunken px-5 py-4 text-left text-sm leading-relaxed whitespace-pre-wrap text-foreground">
-          <code>
-            {QUICKSTART.map((command) => (
-              <span key={command} className="block pl-[2ch] -indent-[2ch]">
-                <span aria-hidden className="text-faint select-none">
-                  ${" "}
+    <section aria-labelledby="try-title" className="relative z-10">
+      <HillsBand className="block h-32 w-full sm:h-44 lg:h-52" />
+      <div className="-mt-px rounded-b-sheet bg-grass text-pop-ink">
+        <div className="mx-auto grid max-w-[75rem] justify-items-center gap-8 px-4 pt-6 pb-24 text-center sm:px-6 lg:pb-28">
+          <h2 id="try-title" className="text-display max-w-[11ch] text-pop-ink">
+            Run it on your own logs.
+          </h2>
+          <p className="text-lead max-w-[36ch]">
+            ARIA runs offline with no API key, and switches to NVIDIA NIM, Azure OpenAI or any
+            OpenAI-compatible model when you add one.
+          </p>
+          {/* Long commands wrap (with a hanging indent) rather than scroll, so phones need no
+              sideways scrolling inside the block. */}
+          <pre className="w-full max-w-xl rounded-lg bg-raised px-5 py-4 text-left text-sm leading-relaxed whitespace-pre-wrap text-foreground">
+            <code>
+              {QUICKSTART.map((command) => (
+                <span key={command} className="block pl-[2ch] -indent-[2ch]">
+                  <span aria-hidden className="text-faint select-none">
+                    ${" "}
+                  </span>
+                  {command}
                 </span>
-                {command}
-              </span>
+              ))}
+            </code>
+          </pre>
+          <div className="flex flex-wrap justify-center gap-3">
+            <Button asChild variant="raised" size="lg" className="pr-2">
+              <Link href="/console" prefetch={false}>
+                Open the console
+                <ArrowCircle />
+              </Link>
+            </Button>
+            <Button
+              asChild
+              variant="ghost"
+              size="lg"
+              className="text-pop-ink hover:bg-pop-ink/8 hover:text-pop-ink"
+            >
+              <a href={`${REPO_URL}#quickstart`}>Read the quick start</a>
+            </Button>
+          </div>
+          <ul className="mt-10 grid w-full gap-4 text-lg sm:grid-cols-3">
+            {PROMISES.map((promise) => (
+              <li key={promise}>{promise}</li>
             ))}
-          </code>
-        </pre>
-        <div className="flex flex-wrap justify-center gap-3">
-          <Button asChild variant="secondary" size="lg">
-            <Link href="/console" prefetch={false}>
-              Open the console
-            </Link>
-          </Button>
-          <Button asChild variant="ghost" size="lg">
-            <a href={`${REPO_URL}#quickstart`}>Read the quick start</a>
-          </Button>
+          </ul>
         </div>
       </div>
     </section>
@@ -246,67 +339,80 @@ export default function Landing() {
       <main id="main">
         <Hero />
 
-        <Section
-          id="run"
-          label="Example run"
-          title="One recorded run, start to finish"
-          intro={
-            <>
-              {data.nLines} HDFS log lines (real Loghub lines, arranged into a synthetic incident),
-              triaged offline. One line was planted to test the injection guard. Point at a citation
-              such as <span className="font-mono text-foreground">E2</span> to see the evidence
-              behind a claim.
-            </>
-          }
-        >
-          {/* Suspense boundaries let React hydrate each interactive section as its own, shorter
-              task, so no single task blocks the main thread for long on a slow phone. */}
-          <Suspense>
-            <TriageReplay data={data} />
-          </Suspense>
-        </Section>
+        {/* The cream page laid over the green hero, its top corners rounded like a sheet. */}
+        <div className="relative z-10 -mt-[50px] rounded-t-sheet bg-background">
+          <Intro />
 
-        <Section
-          id="how"
-          label="How it works"
-          title="What happens in a run"
-          intro={
-            <>
-              A run is a LangGraph state machine with a checkpoint after every step, so it can stop
-              for a person, carry on after a restart, or be rewound and{" "}
-              <Term name="fork">forked</Term>. The numbers come from the recorded run above. Words
-              with a dotted underline open a short definition.
-            </>
-          }
-        >
-          <Suspense>
-            <RunGraph steps={steps(facts)} />
-          </Suspense>
-        </Section>
+          <Section
+            id="run"
+            label="Example run"
+            dot="coral"
+            title="One recorded run, start to finish"
+            intro={
+              <>
+                {data.nLines} HDFS log lines (real Loghub lines, arranged into a synthetic
+                incident), triaged offline. One line was planted to test the injection guard. Point
+                at a citation such as <span className="font-mono text-foreground">E2</span> to see
+                the evidence behind a claim.
+              </>
+            }
+          >
+            {/* Suspense boundaries let React hydrate each interactive section as its own, shorter
+                task, so no single task blocks the main thread for long on a slow phone. */}
+            <Suspense>
+              <TriageReplay data={data} />
+            </Suspense>
+          </Section>
 
-        <Section
-          id="results"
-          deferred
-          label="Results"
-          title="Measured, caveats included"
-          intro="ARIA is tested on incident windows built from real Loghub logs, against simpler baselines. Every number on this page comes from the committed evaluation results."
-        >
-          <Results data={evals} />
-        </Section>
+          <Section
+            id="how"
+            label="How it works"
+            dot="sky"
+            title="What happens in a run"
+            intro={
+              <>
+                A run is a LangGraph state machine with a checkpoint after every step, so it can
+                stop for a person, carry on after a restart, or be rewound and{" "}
+                <Term name="fork">forked</Term>. The numbers come from the recorded run above. Words
+                with a dotted underline open a short definition.
+              </>
+            }
+          >
+            <Suspense>
+              <RunGraph steps={steps(facts)} />
+            </Suspense>
+          </Section>
 
-        <Section
-          id="standards"
-          deferred
-          label="Standards"
-          title="Built on open agent standards"
-          intro="ARIA works with the tools you already have, through protocols other agents and frontends speak."
-        >
-          <Standards />
-        </Section>
+          <Section
+            id="results"
+            deferred
+            label="Results"
+            dot="lilac"
+            title={
+              <>
+                <Scribble>Measured,</Scribble> caveats included
+              </>
+            }
+            intro="ARIA is tested on incident windows built from real Loghub logs, against simpler baselines. Every number on this page comes from the committed evaluation results."
+          >
+            <Results data={evals} />
+          </Section>
 
-        <Section id="limits" label="Limits" title="Where it falls short" deferred>
-          <Limitations />
-        </Section>
+          <Section
+            id="standards"
+            deferred
+            label="Standards"
+            dot="sunshine"
+            title="Built on open agent standards"
+            intro="ARIA works with the tools you already have, through protocols other agents and frontends speak."
+          >
+            <Standards />
+          </Section>
+
+          <Section id="limits" label="Limits" dot="coral" title="Where it falls short" deferred>
+            <Limitations />
+          </Section>
+        </div>
 
         <TryIt />
       </main>

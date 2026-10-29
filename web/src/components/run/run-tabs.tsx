@@ -68,7 +68,7 @@ function Guard({ guard, raw }: { guard: GuardReport; raw: number }) {
   const redactions = Object.entries(guard.redactions?.counts ?? {});
   return (
     <div className="grid gap-3 rounded-lg bg-raised p-5 text-sm">
-      <h3 className="font-semibold">Guardrails on the way in</h3>
+      <h3 className="font-medium">Guardrails on the way in</h3>
       <p className="text-muted-foreground">
         {raw.toLocaleString("en")} lines read.{" "}
         {redactions.length
@@ -130,7 +130,7 @@ export function Templates({ batch }: { batch: ParsedBatch }) {
           <li key={t.template_id} className="grid gap-1.5 rounded-lg bg-raised p-4">
             <p className="font-mono text-xs leading-5 break-all">{t.template}</p>
             <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-              <span className="tabular font-semibold text-foreground">
+              <span className="tabular font-medium text-foreground">
                 {t.count.toLocaleString("en")}x
               </span>
               {Object.entries(t.levels).map(([level, n]) => (
@@ -205,7 +205,7 @@ export function Similar({ retrieval }: { retrieval: RetrievalResult }) {
       )}
       {retrieval.attempts.length ? (
         <div className="grid gap-2">
-          <h3 className="text-sm font-semibold">Retrieval attempts</h3>
+          <h3 className="text-sm font-medium">Retrieval attempts</h3>
           <ol className="grid gap-1.5 text-xs">
             {retrieval.attempts.map((a) => (
               <li key={a.attempt} className="grid gap-0.5 rounded-sm bg-sunken p-2">

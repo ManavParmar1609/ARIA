@@ -3,7 +3,7 @@ import { type ReactNode } from "react";
 
 import { THEME_SCRIPT } from "@/lib/theme-script";
 
-import { geist, geistMono } from "./fonts";
+import { inter } from "./fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -22,19 +22,15 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#012624" },
-    { media: "(prefers-color-scheme: light)", color: "#edfffe" },
+    { media: "(prefers-color-scheme: light)", color: "#f5f1e4" },
+    { media: "(prefers-color-scheme: dark)", color: "#1f211c" },
   ],
-  colorScheme: "dark light",
+  colorScheme: "light dark",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html
-      lang="en"
-      className={`dark ${geist.variable} ${geistMono.variable}`}
-      suppressHydrationWarning
-    >
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
       <head>
         {/* Before first paint: apply the stored theme, and mark that script runs so animated
             elements can start hidden. */}

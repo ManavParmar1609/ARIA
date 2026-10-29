@@ -275,7 +275,7 @@ export function NewRun() {
           </h2>
           {SNIPPETS.map((s) => (
             <div key={s.title} className="grid gap-2 border-t border-rule pt-4">
-              <h3 className="text-sm font-semibold">{s.title}</h3>
+              <h3 className="text-sm font-medium">{s.title}</h3>
               <p className="text-sm text-muted-foreground">{s.body}</p>
               <pre
                 tabIndex={0}

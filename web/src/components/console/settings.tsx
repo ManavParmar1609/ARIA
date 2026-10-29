@@ -27,8 +27,8 @@ import { useTheme, type ThemeChoice } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 const THEMES: [ThemeChoice, string][] = [
-  ["dark", "Dark"],
   ["light", "Light"],
+  ["dark", "Dark"],
   ["system", "Match my system"],
 ];
 
@@ -288,7 +288,7 @@ export function Settings() {
           ) : null}
         </div>
         <fieldset className="grid gap-2">
-          <legend className="mb-2 text-sm font-semibold">Theme</legend>
+          <legend className="mb-2 text-sm font-medium">Theme</legend>
           <div className="flex flex-wrap gap-2">
             {THEMES.map(([value, label]) => {
               const checked = theme === value;
@@ -298,7 +298,7 @@ export function Settings() {
                   className={cn(
                     "relative inline-flex h-9 cursor-pointer items-center rounded-md border px-3 text-sm has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-ring",
                     checked
-                      ? "border-primary bg-highlight font-semibold text-highlight-foreground"
+                      ? "border-primary bg-highlight font-medium text-highlight-foreground"
                       : "border-rule text-muted-foreground hover:text-foreground",
                   )}
                 >

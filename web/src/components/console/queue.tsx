@@ -9,6 +9,7 @@ import { useState } from "react";
 import { SeverityBadge } from "@/components/aria/severity";
 import { runTitle } from "@/components/console/run-row";
 import { EmptyState, ErrorState, LoadingRows, PageHeader } from "@/components/console/states";
+import { AllClearSpot, SearchSpot } from "@/components/illustrations/spots";
 import { decidedByLabel, RunStatus } from "@/components/console/status";
 import { Button } from "@/components/ui/button";
 import {
@@ -134,7 +135,7 @@ export function Queue() {
               className={cn(
                 "h-8 rounded-md border px-3 text-sm transition-colors duration-(--duration-quick)",
                 status === f.value
-                  ? "border-primary bg-highlight font-semibold text-highlight-foreground"
+                  ? "border-primary bg-highlight font-medium text-highlight-foreground"
                   : "border-rule text-muted-foreground hover:border-control hover:text-foreground",
               )}
             >
@@ -151,6 +152,13 @@ export function Queue() {
       ) : list.length === 0 ? (
         <EmptyState
           icon={InboxIcon}
+          art={
+            status === "all" ? (
+              <AllClearSpot className="h-auto w-full" />
+            ) : (
+              <SearchSpot className="h-auto w-full" />
+            )
+          }
           title={EMPTY[status] ?? EMPTY.all ?? ""}
           action={
             status === "all" ? (
@@ -188,7 +196,7 @@ export function Queue() {
                     <TableCell className="max-w-0">
                       <Link
                         href={`/console/runs/${encodeURIComponent(run.id)}` as never}
-                        className="block truncate font-semibold after:absolute after:inset-0 after:content-['']"
+                        className="block truncate font-medium after:absolute after:inset-0 after:content-['']"
                       >
                         {runTitle(run)}
                       </Link>
@@ -228,7 +236,7 @@ export function Queue() {
                 </div>
                 <Link
                   href={`/console/runs/${encodeURIComponent(run.id)}` as never}
-                  className="mt-2 block font-semibold after:absolute after:inset-0 after:content-['']"
+                  className="mt-2 block font-medium after:absolute after:inset-0 after:content-['']"
                 >
                   {runTitle(run)}
                 </Link>

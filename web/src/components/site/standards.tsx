@@ -1,5 +1,4 @@
-import { ArrowUpRightIcon } from "lucide-react";
-
+import { ArrowCircle } from "@/components/ui/button";
 import { REPO_URL } from "@/lib/site-data";
 
 const ADR = `${REPO_URL}/blob/main/docs/adr`;
@@ -50,19 +49,18 @@ export function Standards() {
       {STANDARDS.map((s) => (
         <li
           key={s.name}
-          className="relative grid content-start gap-3 rounded-lg bg-raised p-6 transition-colors duration-(--duration-quick) focus-within:ring-2 focus-within:ring-ring hover:bg-raised/80 sm:p-9"
+          className="group/button relative grid content-start gap-4 rounded-lg bg-raised p-7 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring sm:p-9"
         >
-          <div className="flex items-start justify-between gap-4">
-            <h3 className="text-xl leading-tight tracking-heading">{s.name}</h3>
-            <a
-              href={s.href}
-              aria-label={`Why ARIA uses ${s.short}`}
-              className="inline-flex size-8 shrink-0 items-center justify-center rounded-sm bg-foreground/8 text-heading outline-none after:absolute after:inset-0 after:rounded-lg after:content-['']"
-            >
-              <ArrowUpRightIcon aria-hidden className="size-4" strokeWidth={1.5} />
-            </a>
-          </div>
+          <h3 className="text-2xl leading-tight tracking-heading">{s.name}</h3>
           <p className="text-muted-foreground">{s.what}</p>
+          {/* The whole card is the link's target; the words say where it goes. */}
+          <a
+            href={s.href}
+            className="mt-1 inline-flex items-center gap-3 justify-self-start text-base font-medium text-heading outline-none after:absolute after:inset-0 after:rounded-lg after:content-['']"
+          >
+            Why ARIA uses {s.short}
+            <ArrowCircle size="md" />
+          </a>
         </li>
       ))}
     </ul>
@@ -85,7 +83,7 @@ export function Limitations() {
           key={item}
           className="grid grid-cols-[1.25rem_1fr] gap-3 border-b border-rule py-5 text-muted-foreground last:border-b-0"
         >
-          <span aria-hidden className="mt-2.5 block h-px w-3 bg-primary/70" />
+          <span aria-hidden className="mt-2 block size-2.5 rounded-full bg-coral" />
           <span>{item}</span>
         </li>
       ))}

@@ -204,7 +204,7 @@ export function ReviewPanel({
       ) : null}
       {proposed.length > 0 ? (
         <fieldset className="grid gap-2">
-          <legend className="mb-1 text-sm font-semibold">Messages to send on approval</legend>
+          <legend className="mb-1 text-sm font-medium">Messages to send on approval</legend>
           <ul className="grid gap-2">
             {proposed.map((action) => (
               <ActionChoice

@@ -1,14 +1,15 @@
 "use client";
 
-import { ArrowRightIcon, InboxIcon, PlusIcon } from "lucide-react";
+import { InboxIcon, PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
 
 import { SEVERITY_BG } from "@/components/aria/severity";
+import { AllClearSpot, WelcomeSpot } from "@/components/illustrations/spots";
 import { RunRow } from "@/components/console/run-row";
 import { EmptyState, ErrorState, LoadingRows, PageHeader } from "@/components/console/states";
 import { RunStatus } from "@/components/console/status";
-import { Button } from "@/components/ui/button";
+import { ArrowCircle, Button } from "@/components/ui/button";
 import samples from "@/data/samples.json";
 import { useProviders, useRuns } from "@/lib/api/hooks";
 import { isSeverity, SEVERITIES, type RunSummary, type Severity } from "@/lib/api/types";
@@ -43,12 +44,21 @@ function summarize(runs: RunSummary[]) {
   };
 }
 
-/** A statistic: the lavender number first, then its name and what it counts. */
+/** A statistic: the number first, then its name and what it counts. Words ("None yet") are set
+ * smaller and quieter than numbers, so an empty console does not shout. */
 function Fact({ label, value, note }: { label: string; value: string; note?: string }) {
+  const numeric = /\d/.test(value);
   return (
     <div className="grid content-start gap-3 rounded-lg bg-raised p-5 sm:p-6">
       <dt className="eyebrow order-2 text-foreground">{label}</dt>
-      <dd className="stat order-1 text-4xl">{value}</dd>
+      <dd
+        className={cn(
+          "stat order-1",
+          numeric ? "text-4xl" : "flex h-[3.3125rem] items-end text-2xl text-muted-foreground",
+        )}
+      >
+        {value}
+      </dd>
       {note ? <dd className="order-3 -mt-1.5 text-sm text-muted-foreground">{note}</dd> : null}
     </div>
   );
@@ -89,24 +99,25 @@ function StartHere() {
   return (
     <section
       aria-labelledby="start-title"
-      className="grid gap-5 rounded-lg bg-raised p-6 sm:p-8 md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
+      className="grid items-center gap-6 rounded-lg bg-raised p-6 sm:p-8 md:grid-cols-[minmax(0,1fr)_14rem]"
     >
-      <div className="grid gap-2">
+      <div className="grid justify-items-start gap-3">
         <p className="eyebrow text-muted-foreground">New to ARIA?</p>
-        <h2 id="start-title" className="text-xl tracking-heading">
+        <h2 id="start-title" className="text-2xl leading-tight tracking-heading sm:text-3xl">
           Triage a sample in one click
         </h2>
-        <p className="max-w-2xl text-sm text-muted-foreground">
+        <p className="max-w-2xl text-muted-foreground">
           Pick one of {samples.length} short incidents built from real logs and watch ARIA work
           through it. The guide also explains how to read a run and the words ARIA uses.
         </p>
+        <Button asChild variant="primary" size="md" className="mt-2 pr-1.5">
+          <Link href="/console/guide">
+            Open the guide
+            <ArrowCircle tone="white" size="md" />
+          </Link>
+        </Button>
       </div>
-      <Button asChild variant="secondary" className="justify-self-start">
-        <Link href="/console/guide">
-          Open the guide
-          <ArrowRightIcon aria-hidden />
-        </Link>
-      </Button>
+      <WelcomeSpot className="hidden h-auto w-full md:block" />
     </section>
   );
 }
@@ -126,9 +137,11 @@ export function Overview() {
       <PageHeader
         title="Overview"
         description={
-          runs.data
-            ? `The last ${stats.total.toLocaleString("en")} runs at a glance.`
-            : "Recent runs at a glance."
+          !runs.data
+            ? "Recent runs at a glance."
+            : stats.total === 0
+              ? "Nothing has run yet. A sample below takes seconds."
+              : `The last ${stats.total.toLocaleString("en")} runs at a glance.`
         }
         actions={
           <Button asChild variant="primary">
@@ -160,6 +173,7 @@ export function Overview() {
             {waiting.length === 0 ? (
               <EmptyState
                 icon={InboxIcon}
+                art={<AllClearSpot className="h-auto w-full" />}
                 title="Nothing is waiting for review"
                 action={
                   <Button asChild size="sm">

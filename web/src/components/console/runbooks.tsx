@@ -56,7 +56,7 @@ export function Runbooks() {
               <div className="flex items-start justify-between gap-3">
                 <Link
                   href={`/console/runbooks/${encodeURIComponent(rb.slug)}` as never}
-                  className="font-semibold after:absolute after:inset-0 after:content-['']"
+                  className="font-medium after:absolute after:inset-0 after:content-['']"
                 >
                   {rb.title}
                 </Link>
@@ -104,7 +104,7 @@ function Steps({ title, steps }: { title: string; steps: RunbookStep[] }) {
       <ol className="grid gap-2.5">
         {steps.map((step, i) => (
           <li key={i} className="grid grid-cols-[1.75rem_1fr] gap-2">
-            <span className="tabular flex size-6 items-center justify-center rounded-full border border-control text-xs font-semibold">
+            <span className="tabular flex size-6 items-center justify-center rounded-full border border-control text-xs font-medium">
               {i + 1}
             </span>
             <div className="grid gap-1">

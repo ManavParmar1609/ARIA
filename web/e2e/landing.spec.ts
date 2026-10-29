@@ -30,25 +30,28 @@ test.describe("landing page", () => {
   test("meets WCAG 2.2 AA in both themes", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/");
-    await expectAccessible(page, "landing, dark");
-    await page.evaluate(() => {
-      localStorage.setItem("theme", "light");
-    });
-    await page.reload();
     await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
     await expectAccessible(page, "landing, light");
+    await page.evaluate(() => {
+      localStorage.setItem("theme", "dark");
+    });
+    await page.reload();
+    await expect(page.locator("html")).toHaveClass(/\bdark\b/);
+    await expectAccessible(page, "landing, dark");
   });
 
-  test("switches theme and remembers it", async ({ page }) => {
+  test("switches theme from the menu and remembers it", async ({ page }) => {
     await page.goto("/");
     const html = page.locator("html");
-    await expect(html).toHaveClass(/\bdark\b/);
-    await page.getByRole("button", { name: "Use the light theme" }).click();
     await expect(html).not.toHaveClass(/\bdark\b/);
-    await page.reload();
-    await expect(html).not.toHaveClass(/\bdark\b/);
+    await page.getByRole("button", { name: "Open the menu" }).click();
     await page.getByRole("button", { name: "Use the dark theme" }).click();
     await expect(html).toHaveClass(/\bdark\b/);
+    await page.reload();
+    await expect(html).toHaveClass(/\bdark\b/);
+    await page.getByRole("button", { name: "Open the menu" }).click();
+    await page.getByRole("button", { name: "Use the light theme" }).click();
+    await expect(html).not.toHaveClass(/\bdark\b/);
   });
 
   test("reflows to 320 px without sideways scrolling", async ({ page }) => {
