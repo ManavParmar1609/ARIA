@@ -31,11 +31,19 @@ def _inline_refs(node: Any, defs: dict[str, Any]) -> Any:
 
 def _strictify(node: Any) -> Any:
     if isinstance(node, dict):
-        node = {k: _strictify(v) for k, v in node.items() if k not in ("default", "title")}
-        if node.get("type") == "object" and "properties" in node:
-            node["required"] = list(node["properties"])
-            node["additionalProperties"] = False
-        return node
+        out: dict[str, Any] = {}
+        for key, value in node.items():
+            if key in ("default", "title"):
+                continue  # annotation keywords; strict mode rejects or ignores them
+            if key == "properties" and isinstance(value, dict):
+                # Field names are data here, not keywords: a field called "title" stays.
+                out[key] = {name: _strictify(schema) for name, schema in value.items()}
+            else:
+                out[key] = _strictify(value)
+        if out.get("type") == "object" and "properties" in out:
+            out["required"] = list(out["properties"])
+            out["additionalProperties"] = False
+        return out
     if isinstance(node, list):
         return [_strictify(item) for item in node]
     return node

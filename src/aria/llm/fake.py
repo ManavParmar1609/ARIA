@@ -18,7 +18,7 @@ from typing import Any
 from aria.config import ProviderKind
 from aria.contracts.base import Severity
 from aria.llm.base import Message, ProviderError, TokenCallback, Usage, estimate_tokens
-from aria.llm.prompts import parse_context
+from aria.llm.prompts import parse_context, parse_evidence_block
 
 Responder = Callable[[dict[str, Any]], dict[str, Any]]
 _WORD = re.compile(r"[a-z0-9_]{3,}")
@@ -144,7 +144,7 @@ def _overlap(claim: str, evidence_text: str) -> float:
 
 def _critic(ctx: dict[str, Any]) -> dict[str, Any]:
     known = set(_ids(ctx))
-    texts: dict[str, str] = ctx.get("evidence_text", {})
+    texts: dict[str, str] = ctx.get("evidence_text") or ctx.get("_evidence_block", {})
     issues = []
     for claim in ctx.get("claims", []):
         cited = claim.get("evidence_ids", [])
@@ -280,7 +280,9 @@ class FakeProvider:
             if responder is None:
                 msg = f"fake provider has no responder for task {schema_name!r}"
                 raise ProviderError(msg, status=400)
-            text = json.dumps(responder(parse_context(messages)), ensure_ascii=False)
+            ctx = parse_context(messages)
+            ctx["_evidence_block"] = parse_evidence_block(messages)
+            text = json.dumps(responder(ctx), ensure_ascii=False)
         if on_token is not None:
             for piece in re.findall(r"\S+\s*", text):
                 on_token(piece)

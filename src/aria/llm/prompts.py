@@ -14,6 +14,7 @@ model receives, so offline runs exercise the real prompt contract.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -53,7 +54,9 @@ SYSTEM_PROMPTS: dict[str, str] = {
     ),
     "narrative": (
         "You are ARIA's incident report writer. Improve the draft report in aria_context into a "
-        "clear first-pass report for on-call engineers. Keep the severity exactly as given. "
+        "clear first-pass report for on-call engineers. Keep every fact and citation the draft "
+        "has: you may rephrase, reorder or merge claims, but do not drop them. Keep the title "
+        "field and the severity exactly as given. "
         "Every claim must cite evidence that contains what the claim states; do not add "
         "numbers, components, causes or fixes the cited evidence lacks. Present causes as "
         "suspected unless the evidence confirms them. Recommend actions only from the listed "
@@ -110,13 +113,23 @@ def _one_line(text: str, limit: int) -> str:
     return flat if len(flat) <= limit else flat[: limit - 1] + "…"
 
 
-def render_evidence(evidence: Sequence[Evidence], *, max_detail: int = 700) -> str:
-    """Evidence as an indented list inside one fence, so detail lines cannot forge headers."""
+def render_evidence(
+    evidence: Sequence[Evidence], *, max_detail: int = 700, max_data: int = 400
+) -> str:
+    """Evidence as an indented list inside one fence, so detail lines cannot forge headers.
+
+    Each item's structured data is shown too: facts such as which components are critical
+    often live there, and a model (or critic) that cannot see them would call true claims
+    unsupported.
+    """
     rows: list[str] = []
     for item in evidence:
         rows.append(f"{item.id} | {item.kind} | {item.source} | {_one_line(item.title, 160)}")
         detail = item.detail if len(item.detail) <= max_detail else item.detail[:max_detail] + "…"
         rows.extend(f"    {line}" for line in detail.splitlines() if line.strip())
+        if item.data:
+            data = json.dumps(item.data, default=str, ensure_ascii=False, separators=(", ", ": "))
+            rows.append(f"    data: {data if len(data) <= max_data else data[:max_data] + '…'}")
     return fence_untrusted(_neutralize("\n".join(rows) or "(no evidence)"), "evidence")
 
 
@@ -176,6 +189,30 @@ def parse_context(messages: Sequence[Message]) -> dict[str, Any]:
         value = json.loads(raw)
         return value if isinstance(value, dict) else {}
     return {}
+
+
+_EVIDENCE_HEADER = re.compile(r"^(E\d{1,5}) \| (\w+) \| ([^|]*) \| (.*)$")
+
+
+def parse_evidence_block(messages: Sequence[Message]) -> dict[str, str]:
+    """Evidence text by ID from the fenced evidence block (used by the offline fake)."""
+    texts: dict[str, list[str]] = {}
+    current: str | None = None
+    for message in messages:
+        if message.role != "user" or "<untrusted_evidence>" not in message.content:
+            continue
+        block = message.content.split("<untrusted_evidence>", 1)[1].split(
+            "</untrusted_evidence>", 1
+        )[0]
+        for line in block.splitlines():
+            header = _EVIDENCE_HEADER.match(line)
+            if header:
+                current = header.group(1)
+                texts[current] = [header.group(4)]
+            elif current and line.startswith("    "):
+                texts[current].append(line.strip())
+        break
+    return {eid: " ".join(parts) for eid, parts in texts.items()}
 
 
 def repair_message(errors: Sequence[str]) -> Message:

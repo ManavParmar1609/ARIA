@@ -54,6 +54,22 @@ def test_schemas_are_strict_and_self_contained(model: type) -> None:
             assert node["required"] == list(node["properties"])
 
 
+@pytest.mark.parametrize("model", ALL_SCHEMAS, ids=lambda m: m.__name__)
+def test_strict_schemas_keep_every_field_even_ones_named_title(model: type) -> None:
+    """Regression: stripping the JSON Schema ``title`` keyword once deleted fields named title."""
+    schema = strict_schema(model)
+    assert list(schema["properties"]) == list(model.model_fields)  # type: ignore[attr-defined]
+    assert schema["required"] == list(model.model_fields)  # type: ignore[attr-defined]
+
+
+def test_nested_title_fields_survive() -> None:
+    comms = strict_schema(CommsOutput)
+    for draft in ("responders", "stakeholders", "status_page"):
+        assert "title" in comms["properties"][draft]["properties"]
+        assert "title" in comms["properties"][draft]["required"]
+    assert "title" in strict_schema(NarrativeOutput)["properties"]
+
+
 def test_restrict_enum_narrows_severity_to_the_prediction_set() -> None:
     schema = restrict_enum(strict_schema(AdjudicationOutput), ["severity"], ["SEV1", "SEV2"])
     assert schema["properties"]["severity"]["enum"] == ["SEV1", "SEV2"]

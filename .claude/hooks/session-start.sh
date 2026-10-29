@@ -30,7 +30,7 @@ fail() {
 hashes=.venv/.session-start.sha256
 if ! sha256sum --check --status "$hashes" 2>/dev/null; then
   rm -f "$hashes"
-  uv sync --all-groups --frozen >> "$log" 2>&1 || fail "uv sync"
+  uv sync --all-groups --all-extras --frozen >> "$log" 2>&1 || fail "uv sync"
   sha256sum .claude/hooks/session-start.sh pyproject.toml uv.lock > "$hashes"
   summary+=("python deps installed")
 else

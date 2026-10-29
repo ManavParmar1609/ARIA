@@ -123,6 +123,7 @@ class SeverityEngine:
                 "probabilities": {str(k): round(v, 6) for k, v in probabilities.items()},
                 "prediction_set": [str(s) for s in raw_set],
                 "alpha": self.alpha,
+                "coverage_target": round(1 - self.alpha, 4),
                 "model_version": version,
                 "conformal": conformal,
                 **extra,
