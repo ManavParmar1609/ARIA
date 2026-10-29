@@ -334,6 +334,11 @@
   .hero-spring {
     animation-timing-function: cubic-bezier(0.34, 1.4, 0.64, 1);
   }
+}
+/* The drift never stops, and Chrome repaints an SVG's moving parts on the main thread every frame
+   (it can't hand them to the compositor), so it runs on wide screens only: on a phone the scene
+   rests once it has settled, and the page stops painting. */
+@media (min-width: 1024px) and (prefers-reduced-motion: no-preference) {
   .hero-drift {
     transform-box: fill-box;
     transform-origin: center;
@@ -387,8 +392,8 @@
   transition: transform 1.1s var(--ease-emphasized) calc(var(--roll-i) * 70ms);
 }
 
-/* Severity stamp: the badge drops in like a rubber stamp, leaves a ring of ink that fades, and the
-   prediction-set bracket then draws across the bars. */
+/* Severity stamp: the badge comes down like a rubber stamp, leaves a ring of ink that fades, and
+   the prediction-set bracket then draws across the bars. */
 @media (prefers-reduced-motion: no-preference) {
   .sev-stamp {
     position: relative;
@@ -409,14 +414,14 @@
   }
 }
 
+/* Scale and turn only, never opacity: the label keeps its full contrast in every frame, so an
+   accessibility check that runs mid-stamp still reads it as AA. */
 @keyframes sev-stamp {
   0% {
-    opacity: 0;
-    transform: scale(2.4) rotate(-14deg);
+    transform: scale(2) rotate(-12deg);
     animation-timing-function: cubic-bezier(0.55, 0, 1, 0.45);
   }
   45% {
-    opacity: 1;
     transform: scale(0.88) rotate(-2deg);
     animation-timing-function: var(--ease-out);
   }
@@ -424,7 +429,6 @@
     transform: scale(1.05) rotate(1deg);
   }
   100% {
-    opacity: 1;
     transform: none;
   }
 }

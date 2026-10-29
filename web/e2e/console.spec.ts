@@ -236,6 +236,17 @@ test.describe("console in the dark theme", () => {
       .click();
     await expect(page.getByRole("heading", { name: "Severity", exact: true })).toBeVisible();
     await expectAccessible(page, "run view, dark");
+    // The severity stamp is still landing when the page opens. Freeze it at a few frames, so a
+    // stamp that dims its label fails here every time, not only when axe happens to catch it.
+    for (const ms of [0, 100, 250, 400]) {
+      await page.evaluate((at) => {
+        for (const animation of document.getAnimations()) {
+          animation.pause();
+          animation.currentTime = at;
+        }
+      }, ms);
+      await expectAccessible(page, `run view mid-stamp at ${ms} ms, dark`);
+    }
     await page.goto("/console/evals");
     await expectAccessible(page, "evaluation, dark");
   });
