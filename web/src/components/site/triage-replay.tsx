@@ -224,7 +224,7 @@ export function TriageReplay({ data }: { data: Replay }) {
           <p className="mt-0.5 text-sm text-muted-foreground">
             {data.system}, a {data.windowMinutes}-minute window of {data.nLines} lines
           </p>
-          <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,13rem)_1fr] sm:items-end">
+          <div className="mt-4 grid gap-4">
             <SeverityScale
               probabilities={data.probabilities}
               predictionSet={data.predictionSet}

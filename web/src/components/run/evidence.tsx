@@ -6,6 +6,7 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type ReactNode,
@@ -122,11 +123,39 @@ function EvidencePreview({ evidence, lines }: { evidence: Evidence; lines: LogEv
 }
 
 /**
+ * Bring the evidence panel into view after a pin. Beside the report the side column scrolls on
+ * its own, just far enough to show the panel, so the page stays put; in one column the panel sits
+ * below the report, so the page scrolls to it.
+ */
+function revealPanel() {
+  const panel = document.getElementById("evidence-panel");
+  if (!panel) return;
+  const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ? "auto"
+    : "smooth";
+  const column = panel.closest("aside");
+  if (!column || !window.matchMedia("(min-width: 1280px)").matches) {
+    panel.scrollIntoView({ block: "nearest", behavior });
+    return;
+  }
+  const top = panel.offsetTop;
+  const bottom = top + panel.offsetHeight;
+  const { scrollTop, clientHeight } = column;
+  if (top < scrollTop) column.scrollTo({ top, behavior });
+  else if (bottom > scrollTop + clientHeight) {
+    column.scrollTo({ top: Math.min(top, bottom - clientHeight), behavior });
+  }
+}
+
+/**
  * A citation. Hovering shows the evidence beside it; focusing or hovering also fills the
  * evidence panel (announced to screen readers); a click pins it there.
  */
 export function EvidenceChip({ id }: { id: string }) {
   const { byId, active, pinned, hover, pin, linesFor } = useEvidence();
+  const [preview, setPreview] = useState(false);
+  // After a click pins the evidence, the card stays shut until the pointer or focus leaves.
+  const quiet = useRef(false);
   const evidence = byId.get(id);
   const button = (
     <button
@@ -140,15 +169,20 @@ export function EvidenceChip({ id }: { id: string }) {
       }
       aria-controls="evidence-panel"
       onMouseEnter={() => hover(id)}
-      onMouseLeave={() => hover(null)}
+      onMouseLeave={() => {
+        hover(null);
+        quiet.current = false;
+      }}
       onFocus={() => hover(id)}
-      onBlur={() => hover(null)}
+      onBlur={() => {
+        hover(null);
+        quiet.current = false;
+      }}
       onClick={() => {
         pin(pinned === id ? null : id);
-        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        document
-          .getElementById("evidence-panel")
-          ?.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
+        quiet.current = true; // the panel shows it now; a card on top would repeat it
+        setPreview(false);
+        requestAnimationFrame(() => revealPanel());
       }}
       className={cn(
         "inline-flex h-6 items-center rounded-xs border px-1.5 align-baseline font-mono text-xs transition-colors duration-(--duration-quick)",
@@ -164,7 +198,12 @@ export function EvidenceChip({ id }: { id: string }) {
   );
   if (!evidence) return button;
   return (
-    <HoverCard openDelay={180} closeDelay={80}>
+    <HoverCard
+      open={preview}
+      onOpenChange={(open) => setPreview(open && !quiet.current)}
+      openDelay={180}
+      closeDelay={80}
+    >
       <HoverCardTrigger asChild>{button}</HoverCardTrigger>
       <HoverCardContent side="top" className="w-96">
         <EvidencePreview evidence={evidence} lines={linesFor(id)} />

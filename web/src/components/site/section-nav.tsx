@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 const LINK =
-  "relative z-10 rounded-sm px-3 py-2 text-base text-foreground transition-colors duration-(--duration-quick) hover:bg-foreground/6 aria-[current=true]:text-pop-ink xl:text-lg";
+  "relative z-10 rounded-sm px-3 py-2 text-base whitespace-nowrap text-foreground transition-colors duration-(--duration-quick) hover:bg-foreground/6 aria-[current=true]:text-pop-ink xl:text-lg";
 
 interface NavLink {
   href: string;
@@ -86,7 +86,7 @@ export function SectionNav({ links }: { links: NavLink[] }) {
     <nav
       ref={nav}
       aria-label="Page sections"
-      className="relative hidden items-center gap-0.5 lg:flex"
+      className="relative hidden items-center gap-0.5 xl:flex"
     >
       <span
         ref={pill}

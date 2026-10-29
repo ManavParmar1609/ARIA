@@ -174,8 +174,8 @@ export function Queue() {
         />
       ) : (
         <>
-          {/* table from md up, stacked rows on phones */}
-          <div className="hidden md:block">
+          {/* the table on wide screens, where its columns leave the incident room; rows below */}
+          <div className="hidden xl:block">
             <Table aria-label="Incidents">
               <TableHeader>
                 <TableRow>
@@ -224,7 +224,7 @@ export function Queue() {
               </TableBody>
             </Table>
           </div>
-          <ul className="grid gap-2 md:hidden">
+          <ul className="grid gap-2 xl:hidden">
             {list.map((run) => (
               <li key={run.id} className="relative rounded-lg bg-raised p-4">
                 <div className="flex items-center justify-between gap-2">

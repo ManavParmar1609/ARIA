@@ -150,7 +150,7 @@ function RunSkeleton() {
           <Skeleton key={i} className="h-8" />
         ))}
       </div>
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:gap-8">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] xl:gap-8">
         <Skeleton className="h-[40rem] w-full" />
         <div className="grid content-start gap-4">
           <Skeleton className="h-[26rem] w-full" />
@@ -284,7 +284,7 @@ export function RunView({ runId }: { runId: string }) {
           />
         ) : null}
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:gap-8">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] xl:gap-8">
           <div className="grid min-w-0 content-start gap-6">
             {prompt && !viewing ? (
               <ReviewPanel
@@ -311,7 +311,7 @@ export function RunView({ runId }: { runId: string }) {
             )}
             {detail.trigger === "replay" ? <ExpertCheck runId={detail.id} /> : null}
           </div>
-          <aside className="grid min-w-0 content-start gap-4 lg:sticky lg:top-6 lg:self-start">
+          <aside className="grid min-w-0 [scrollbar-width:thin] content-start gap-4 xl:sticky xl:top-6 xl:max-h-[calc(100dvh-3rem)] xl:self-start xl:overflow-y-auto">
             {severity ? (
               <SeverityPanel assessment={severity} />
             ) : (

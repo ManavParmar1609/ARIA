@@ -26,7 +26,7 @@ export function TabsTrigger({ className, ...props }: ComponentProps<typeof TabsP
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
       className={cn(
-        "relative -mb-px inline-flex h-10 shrink-0 items-center gap-2 border-b-2 border-transparent px-3 text-sm font-medium text-muted-foreground transition-colors duration-(--duration-quick) hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-foreground [&_svg]:size-4",
+        "relative -mb-px inline-flex h-10 shrink-0 items-center gap-2 rounded-t-sm border-b-2 border-transparent px-3 text-sm font-medium text-muted-foreground transition-colors duration-(--duration-quick) hover:text-foreground focus-visible:outline-offset-[-2px] data-[state=active]:border-primary data-[state=active]:text-foreground [&_svg]:size-4",
         className,
       )}
       {...props}
@@ -36,10 +36,6 @@ export function TabsTrigger({ className, ...props }: ComponentProps<typeof TabsP
 
 export function TabsContent({ className, ...props }: ComponentProps<typeof TabsPrimitive.Content>) {
   return (
-    <TabsPrimitive.Content
-      data-slot="tabs-content"
-      className={cn("pt-5 outline-none", className)}
-      {...props}
-    />
+    <TabsPrimitive.Content data-slot="tabs-content" className={cn("pt-5", className)} {...props} />
   );
 }
