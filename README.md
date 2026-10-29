@@ -94,7 +94,9 @@ uv run aria db upgrade && uv run aria seed
 make dev
 ```
 
-Open http://localhost:3000 for the landing page, then **Open the console**. The API listens on
+Open http://localhost:3000 for the landing page, then **Open the console**. New to ARIA? The
+console's **How to use ARIA** page starts a sample triage in one click and explains how to read
+a run. The API listens on
 http://127.0.0.1:8000 (OpenAPI docs at `/docs`). Without `make data`, ARIA seeds incident memory
 from the small test fixtures; `make data` downloads the Loghub samples (pinned commit, checked
 hashes) for realistic memory and for `make eval`.
@@ -153,7 +155,7 @@ lines. With `ARIA_ENV=prod`, every call needs an API key from `ARIA_API_KEYS`.
 
 | Surface | Where | What it is for |
 |---|---|---|
-| Console | `web/`, http://localhost:3000/console | Queue, live run view with rule trace, prediction set, evidence and cited report; review, time travel, Ask ARIA, evals, memory, settings |
+| Console | `web/`, http://localhost:3000/console | Queue, live run view with rule trace, prediction set, evidence and cited report; review, time travel, Ask ARIA, evals, memory, settings, and a guide with one-click samples |
 | REST and SSE | `/api/v1/*`, [docs/openapi.json](docs/openapi.json) | Runs, live event stream, report (JSON and Markdown), postmortem draft, review, history, fork |
 | Alert webhooks | `/api/v1/alerts/alertmanager`, `/grafana`, `/alerts` | Turn alert storms into one grouped run |
 | Log scan | `ARIA_SCAN_SOURCES`, `ARIA_SCAN_INTERVAL_S` | Open a run on an error burst no alert caught |

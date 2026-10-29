@@ -17,8 +17,8 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "@fontsource-variable/atkinson-hyperlegible-mono": "^5.3.0",
-    "@fontsource-variable/atkinson-hyperlegible-next": "^5.3.0",
+    "@fontsource-variable/geist": "5.3.0",
+    "@fontsource-variable/geist-mono": "5.3.0",
     "@remotion/cli": "4.0.537",
     "@remotion/fonts": "4.0.537",
     "@remotion/transitions": "4.0.537",

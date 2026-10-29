@@ -1,90 +1,75 @@
-import { useCurrentFrame } from "remotion";
+import { AbsoluteFill, useCurrentFrame } from "remotion";
 
-import { Lead, Stage } from "../components";
+import { Label, Lead } from "../components";
 import { run } from "../data";
 import { enter, progress } from "../motion";
-import { color, size } from "../theme";
+import { Orb } from "../orb";
+import { SAFE, SANS, color, size } from "../theme";
 
-/** The triage tag: a strip, a punched hole, and the promise. */
+/** The landing page's hero: the orb rising behind the promise. */
 export const Opening = () => {
   const frame = useCurrentFrame();
-  const strip = progress(frame, 6, 30);
   return (
-    <Stage>
+    <AbsoluteFill
+      style={{ backgroundColor: color.background, color: color.foreground, fontFamily: SANS }}
+    >
+      <Orb
+        size={1000}
+        style={{
+          position: "absolute",
+          left: 460,
+          top: -150,
+          opacity: progress(frame, 0, 45),
+          maskImage: "linear-gradient(to bottom, #000 36%, transparent 64%)",
+        }}
+      />
       <div
-        style={{ marginTop: "auto", marginBottom: "auto", display: "flex", ...enter(frame, 0, 40) }}
+        style={{
+          position: "absolute",
+          inset: 0,
+          padding: `${SAFE.y}px ${SAFE.x}px`,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "flex-end",
+          textAlign: "center",
+          gap: 30,
+        }}
       >
-        <div
+        <Label style={enter(frame, 10)}>Open-source incident triage</Label>
+        <h1
           style={{
-            width: 132,
-            backgroundColor: color.raised,
-            borderRadius: "6px 0 0 6px",
-            border: `2px solid ${color.rule}`,
-            borderRight: `4px dashed ${color.background}`,
-            position: "relative",
-            overflow: "hidden",
+            margin: 0,
+            fontSize: size.display,
+            fontWeight: 500,
+            letterSpacing: "-0.046em",
+            lineHeight: 1,
+            color: color.heading,
+            maxWidth: 1500,
+            ...enter(frame, 16, 32),
           }}
         >
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              backgroundColor: color.manila,
-              scale: `1 ${strip}`,
-              transformOrigin: "top",
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              top: 48,
-              left: 40,
-              width: 48,
-              height: 48,
-              borderRadius: 24,
-              backgroundColor: color.background,
-            }}
-          />
-        </div>
-        <div
+          Incident triage that shows its work.
+        </h1>
+        <Lead style={{ maxWidth: 1260, ...enter(frame, 28) }}>
+          It reads the logs, rates severity, finds similar incidents and drafts a report in which
+          every claim cites evidence. A person approves it.
+        </Lead>
+        <p
           style={{
-            flex: 1,
-            backgroundColor: color.raised,
-            border: `2px solid ${color.rule}`,
-            borderLeft: "none",
-            borderRadius: "0 6px 6px 0",
-            padding: "72px 80px",
-            display: "flex",
-            flexDirection: "column",
-            gap: 36,
+            margin: 0,
+            marginTop: 20,
+            fontSize: 28,
+            color: color.faint,
+            ...enter(frame, 44),
           }}
         >
-          <div style={{ fontSize: 40, fontWeight: 800, color: color.manila, ...enter(frame, 12) }}>
-            ARIA
-          </div>
-          <div
-            style={{
-              fontSize: size.display,
-              fontWeight: 800,
-              letterSpacing: "-0.03em",
-              lineHeight: 1,
-              ...enter(frame, 18),
-            }}
-          >
-            Incident triage that shows its work.
-          </div>
-          <Lead style={{ maxWidth: 1300, ...enter(frame, 30) }}>
-            It reads the logs, scores severity, finds similar incidents and drafts a report in which
-            every claim cites evidence. A person approves it.
-          </Lead>
-        </div>
+          A recorded ARIA run.{" "}
+          {run.synthetic
+            ? "The incident is semi-synthetic: real Loghub lines, composed by ARIA's scenario builder."
+            : ""}
+        </p>
       </div>
-      <p style={{ margin: 0, fontSize: 30, color: color.faint, ...enter(frame, 44) }}>
-        A recorded ARIA run.{" "}
-        {run.synthetic
-          ? "The incident is semi-synthetic: real Loghub lines, composed by ARIA's scenario builder."
-          : ""}
-      </p>
-    </Stage>
+    </AbsoluteFill>
   );
 };

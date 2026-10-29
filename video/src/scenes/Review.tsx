@@ -3,7 +3,7 @@ import { useCurrentFrame } from "remotion";
 import { Heading, Lead, Panel, Rail, SevBadge, Stage } from "../components";
 import { cited, review } from "../data";
 import { enter, progress } from "../motion";
-import { color, size } from "../theme";
+import { color, gradient, radius, size } from "../theme";
 
 const KIND: Record<string, string> = {
   slack: "Slack message to responders",
@@ -21,13 +21,15 @@ export const Review = () => {
       <Panel style={{ display: "flex", flexDirection: "column", gap: 26 }}>
         <div style={{ display: "flex", gap: 22, alignItems: "center" }}>
           <SevBadge severity={cited.severity} />
-          <span style={{ fontSize: size.body, fontWeight: 800 }}>{cited.title}</span>
+          <span style={{ fontSize: size.body, fontWeight: 500, color: color.heading }}>
+            {cited.title}
+          </span>
           <span
             style={{
               marginLeft: "auto",
               fontSize: 34,
-              fontWeight: 800,
-              color: approved > 0.5 ? color.ok : color.manila,
+              fontWeight: 500,
+              color: approved > 0.5 ? color.ok : color.accent,
             }}
           >
             {approved > 0.5 ? "Published" : "Waiting for a person to approve"}
@@ -55,11 +57,14 @@ export const Review = () => {
       <div style={{ display: "flex", gap: 32, alignItems: "center" }}>
         <div
           style={{
-            fontSize: size.body,
-            fontWeight: 800,
-            padding: "16px 40px",
-            borderRadius: 6,
-            backgroundColor: approved > 0.5 ? color.ok : color.manila,
+            fontSize: 34,
+            fontWeight: 500,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            padding: "18px 40px",
+            borderRadius: radius.small,
+            backgroundImage: approved > 0.5 ? "none" : gradient.aurora,
+            backgroundColor: approved > 0.5 ? color.ok : undefined,
             color: color.ink,
             scale: `${1 - 0.06 * Math.sin(Math.PI * approved)}`,
             ...enter(frame, 90),

@@ -3,7 +3,7 @@ import { useCurrentFrame } from "remotion";
 import { Heading, Lead, Panel, Rail, SevBadge, Stage } from "../components";
 import { assessment } from "../data";
 import { enter, progress } from "../motion";
-import { color, sevColor, size } from "../theme";
+import { color, radius, sevColor, size } from "../theme";
 
 const BAR_HEIGHT = 230;
 
@@ -18,7 +18,14 @@ export const Severity = () => {
       <Heading>Severity: rules, a model, then a prediction set.</Heading>
       <div style={{ display: "flex", gap: 56, alignItems: "stretch" }}>
         <Panel style={{ width: 640, display: "flex", flexDirection: "column", gap: 22 }}>
-          <div style={{ fontSize: size.body, fontWeight: 800, ...enter(frame, 14) }}>
+          <div
+            style={{
+              fontSize: size.body,
+              fontWeight: 500,
+              color: color.heading,
+              ...enter(frame, 14),
+            }}
+          >
             Rules point to <SevBadge severity={assessment.rule} scale={0.9} />
           </div>
           {assessment.hits.map((hit, i) => (
@@ -39,7 +46,14 @@ export const Severity = () => {
           ))}
         </Panel>
         <Panel style={{ flex: 1, display: "flex", flexDirection: "column", gap: 20 }}>
-          <div style={{ fontSize: size.body, fontWeight: 800, ...enter(frame, 90) }}>
+          <div
+            style={{
+              fontSize: size.body,
+              fontWeight: 500,
+              color: color.heading,
+              ...enter(frame, 90),
+            }}
+          >
             Calibrated model
           </div>
           <div
@@ -74,9 +88,9 @@ export const Severity = () => {
                         left: -14,
                         right: -14,
                         bottom: 54,
-                        border: `4px solid ${color.manila}`,
+                        border: `4px solid ${color.accent}`,
                         borderBottom: "none",
-                        borderRadius: "6px 6px 0 0",
+                        borderRadius: `${radius.small}px ${radius.small}px 0 0`,
                         opacity: bracket,
                       }}
                     />
@@ -85,7 +99,8 @@ export const Severity = () => {
                     style={{
                       fontSize: 34,
                       fontVariantNumeric: "tabular-nums",
-                      fontWeight: set ? 800 : 400,
+                      fontWeight: set ? 600 : 400,
+                      color: set ? color.heading : color.muted,
                     }}
                   >
                     {(100 * item.p * grown).toFixed(1)}%
@@ -95,7 +110,7 @@ export const Severity = () => {
                       width: "70%",
                       height: Math.max(4, BAR_HEIGHT * item.p * grown),
                       backgroundColor: sevColor[item.severity],
-                      borderRadius: 2,
+                      borderRadius: radius.small,
                     }}
                   />
                   <SevBadge severity={item.severity} scale={0.8} />
@@ -103,7 +118,7 @@ export const Severity = () => {
               );
             })}
           </div>
-          <div style={{ fontSize: 32, color: color.manila, opacity: bracket }}>
+          <div style={{ fontSize: 32, color: color.accent, opacity: bracket }}>
             The {assessment.coverage} prediction set: {"{"}
             {assessment.set.join(", ")}
             {"}"}

@@ -40,5 +40,7 @@ The scenes follow the pipeline in order:
 6. human review;
 7. the measured results, with their caveat.
 
-The look follows [web/DESIGN.md](../web/DESIGN.md): the night-shift palette, Atkinson
-Hyperlegible, and one moving thing per scene.
+The look follows [web/DESIGN.md](../web/DESIGN.md), the Auros style reference: an abyssal teal
+surface stack, Geist and Geist Mono, lavender statistics and an aurora call to action. The
+particle-sphere orb from the landing page opens and closes the film, and each scene has one
+moving thing.

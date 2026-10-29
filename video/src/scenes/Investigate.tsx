@@ -39,14 +39,21 @@ export const Investigate = () => {
                 key={h.name}
                 style={{
                   padding: 32,
-                  borderColor: lead ? color.manila : color.rule,
+                  outline: lead ? `3px solid ${color.accent}` : "none",
+                  outlineOffset: -3,
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "baseline",
                   ...enter(frame, 100 + i * 20),
                 }}
               >
-                <span style={{ fontSize: size.body, fontWeight: lead ? 800 : 400 }}>
+                <span
+                  style={{
+                    fontSize: size.body,
+                    fontWeight: lead ? 500 : 400,
+                    color: lead ? color.heading : color.foreground,
+                  }}
+                >
                   {h.name.charAt(0).toUpperCase() + h.name.slice(1)}
                 </span>
                 <span
@@ -68,7 +75,7 @@ export const Investigate = () => {
           translate: `0px ${(1 - recall) * 20}px`,
         }}
       >
-        <div style={{ fontSize: size.body, fontWeight: 800 }}>
+        <div style={{ fontSize: size.body, fontWeight: 500, color: color.heading }}>
           The closest past incidents, and the runbook they used
         </div>
         <div style={{ display: "flex", gap: 24 }}>
@@ -83,7 +90,7 @@ export const Investigate = () => {
             </Panel>
           ))}
         </div>
-        <span style={{ fontFamily: MONO, fontSize: size.detail, color: color.manila }}>
+        <span style={{ fontFamily: MONO, fontSize: size.detail, color: color.accent }}>
           runbook: {investigate.runbook}
         </span>
       </div>

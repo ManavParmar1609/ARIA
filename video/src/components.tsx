@@ -2,9 +2,19 @@ import type { CSSProperties, ReactNode } from "react";
 import { AbsoluteFill, useCurrentFrame } from "remotion";
 
 import { enter } from "./motion";
-import { MONO, SAFE, SANS, color, sevColor, size, type Severity } from "./theme";
+import {
+  MONO,
+  SAFE,
+  SANS,
+  color,
+  labelStyle,
+  radius,
+  sevColor,
+  size,
+  type Severity,
+} from "./theme";
 
-/** A full frame on the night-shift background, with the safe area as padding. */
+/** A full frame on the abyss, with the safe area as padding. */
 export const Stage = ({ children }: { children: ReactNode }) => (
   <AbsoluteFill
     style={{
@@ -29,9 +39,10 @@ export const Heading = ({ children }: { children: ReactNode }) => {
       style={{
         margin: 0,
         fontSize: size.title,
-        fontWeight: 800,
-        letterSpacing: "-0.03em",
-        lineHeight: 1.05,
+        fontWeight: 500,
+        letterSpacing: "-0.04em",
+        lineHeight: 1.02,
+        color: color.heading,
         maxWidth: 1640,
         ...enter(frame, 0),
       }}
@@ -48,19 +59,23 @@ export const Lead = ({ children, style }: { children: ReactNode; style?: CSSProp
   </p>
 );
 
-/** A raised panel; the console's panels and tags share it. */
+/** A kelp card: depth from the surface stack, never a border or a shadow. */
 export const Panel = ({ children, style }: { children: ReactNode; style?: CSSProperties }) => (
   <div
     style={{
       backgroundColor: color.raised,
-      border: `2px solid ${color.rule}`,
-      borderRadius: 6,
-      padding: 32,
+      borderRadius: radius.card,
+      padding: 36,
       ...style,
     }}
   >
     {children}
   </div>
+);
+
+/** An uppercase instrument label above content; it names what follows. */
+export const Label = ({ children, style }: { children: ReactNode; style?: CSSProperties }) => (
+  <div style={{ ...labelStyle, color: color.muted, ...style }}>{children}</div>
 );
 
 /** A severity label on its strip colour, always in dark ink so colour is never the only cue. */
@@ -70,10 +85,11 @@ export const SevBadge = ({ severity, scale = 1 }: { severity: Severity; scale?: 
       display: "inline-block",
       backgroundColor: sevColor[severity],
       color: color.ink,
-      fontWeight: 800,
+      fontWeight: 600,
+      letterSpacing: "0.02em",
       fontSize: 34 * scale,
       padding: `${6 * scale}px ${16 * scale}px`,
-      borderRadius: 2,
+      borderRadius: radius.small,
       fontVariantNumeric: "tabular-nums",
     }}
   >
@@ -90,8 +106,8 @@ export const Chip = ({ id, lit = false }: { id: string; lit?: boolean }) => (
       fontSize: 28,
       padding: "2px 10px",
       marginLeft: 10,
-      borderRadius: 4,
-      border: `2px solid ${lit ? color.manila : color.rule}`,
+      borderRadius: radius.small,
+      border: `2px solid ${lit ? color.accent : color.faint}`,
       backgroundColor: lit ? color.highlight : "transparent",
       color: lit ? color.foreground : color.muted,
       verticalAlign: "middle",
@@ -105,25 +121,27 @@ const STEPS = ["Intake", "Parse", "Severity", "Investigate", "Report", "Review"]
 export type Step = (typeof STEPS)[number];
 
 /** Where the run is in the pipeline: the steps really are a sequence, so they are numbered. */
-export const Rail = ({ active }: { active: Step }) => (
-  <div style={{ marginTop: "auto", display: "flex", gap: 12 }}>
-    {STEPS.map((step, i) => {
-      const on = step === active;
-      return (
-        <div
-          key={step}
-          style={{
-            flex: 1,
-            borderTop: `6px solid ${on ? color.manila : color.rule}`,
-            paddingTop: 14,
-            fontSize: 30,
-            fontWeight: on ? 800 : 400,
-            color: on ? color.foreground : color.faint,
-          }}
-        >
-          {i + 1}. {step}
-        </div>
-      );
-    })}
-  </div>
-);
+export const Rail = ({ active }: { active: Step }) => {
+  const at = STEPS.indexOf(active);
+  return (
+    <div style={{ marginTop: "auto", display: "flex", gap: 12 }}>
+      {STEPS.map((step, i) => {
+        const on = step === active;
+        return (
+          <div
+            key={step}
+            style={{
+              flex: 1,
+              borderTop: `4px solid ${on ? color.accent : i < at ? color.teal : color.rule}`,
+              paddingTop: 16,
+              ...labelStyle,
+              color: on ? color.heading : color.faint,
+            }}
+          >
+            {i + 1} {step}
+          </div>
+        );
+      })}
+    </div>
+  );
+};

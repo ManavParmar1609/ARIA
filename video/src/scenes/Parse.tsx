@@ -3,7 +3,7 @@ import { useCurrentFrame } from "remotion";
 import { Heading, Lead, Rail, Stage } from "../components";
 import { run } from "../data";
 import { enter, progress } from "../motion";
-import { MONO, color, size } from "../theme";
+import { MONO, color, gradient, radius, size } from "../theme";
 
 /** Drain folds the lines into templates; the bars grow with each template's line count. */
 export const Parse = () => {
@@ -32,18 +32,27 @@ export const Parse = () => {
                   {t.text}
                 </span>
                 {t.novel ? (
-                  <span style={{ fontSize: 28, color: color.manila, fontWeight: 800 }}>
-                    new: not in routine traffic
+                  <span
+                    style={{
+                      fontSize: 24,
+                      color: color.accent,
+                      fontWeight: 500,
+                      letterSpacing: "0.12em",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    New: not in routine traffic
                   </span>
                 ) : null}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
                 <div
                   style={{
-                    height: 22,
+                    height: 18,
                     width: `${(t.count / most) * 70 * grown}%`,
-                    backgroundColor: t.novel ? color.manila : color.rule,
-                    borderRadius: 2,
+                    backgroundImage: t.novel ? gradient.bio : "none",
+                    backgroundColor: t.novel ? undefined : "rgba(255, 255, 255, 0.18)",
+                    borderRadius: radius.small,
                   }}
                 />
                 <span

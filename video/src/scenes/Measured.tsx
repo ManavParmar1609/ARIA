@@ -29,17 +29,18 @@ const Row = ({
     >
       <span
         style={{
-          fontSize: 100,
-          fontWeight: 800,
-          letterSpacing: "-0.03em",
+          fontSize: 104,
+          fontWeight: 500,
+          letterSpacing: "-0.046em",
+          lineHeight: 1,
           fontVariantNumeric: "tabular-nums",
-          color: color.manila,
+          color: color.stat,
         }}
       >
         {figure}
       </span>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <span style={{ fontSize: 44 }}>{label}</span>
+        <span style={{ fontSize: 44, color: color.heading }}>{label}</span>
         <span style={{ fontSize: 32, color: color.muted }}>{note}</span>
       </div>
     </div>

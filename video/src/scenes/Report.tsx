@@ -3,7 +3,7 @@ import { useCurrentFrame } from "remotion";
 import { Chip, Heading, Panel, Rail, SevBadge, Stage } from "../components";
 import { cited } from "../data";
 import { enter, progress } from "../motion";
-import { MONO, color, size } from "../theme";
+import { MONO, color, radius, size } from "../theme";
 
 const FOCUS_CLAIM = 1; // the claim about the new warning template, which cites E2
 
@@ -19,7 +19,9 @@ export const Report = () => {
         <Panel style={{ flex: 1.45, display: "flex", flexDirection: "column", gap: 16 }}>
           <div style={{ display: "flex", gap: 20, alignItems: "center", ...enter(frame, 10) }}>
             <SevBadge severity={cited.severity} />
-            <span style={{ fontSize: size.body, fontWeight: 800 }}>{cited.title}</span>
+            <span style={{ fontSize: size.body, fontWeight: 500, color: color.heading }}>
+              {cited.title}
+            </span>
           </div>
           {cited.claims.slice(1).map((claim, i) => (
             <div
@@ -28,9 +30,9 @@ export const Report = () => {
                 fontSize: 30,
                 lineHeight: 1.3,
                 padding: "6px 10px",
-                borderRadius: 4,
+                borderRadius: radius.small,
                 backgroundColor:
-                  i === FOCUS_CLAIM ? `oklch(0.86 0.07 84 / ${0.14 * focus})` : "transparent",
+                  i === FOCUS_CLAIM ? `rgba(203, 255, 252, ${0.16 * focus})` : "transparent",
                 ...enter(frame, 30 + i * 26),
               }}
             >
@@ -50,7 +52,9 @@ export const Report = () => {
           <Panel
             style={{
               flex: 1,
-              borderColor: color.manila,
+              backgroundColor: color.sunken,
+              outline: `3px solid ${color.accent}`,
+              outlineOffset: -3,
               display: "flex",
               flexDirection: "column",
               gap: 18,
@@ -58,7 +62,15 @@ export const Report = () => {
               translate: `${(1 - focus) * 40}px 0px`,
             }}
           >
-            <span style={{ fontSize: 30, color: color.manila, fontWeight: 800 }}>
+            <span
+              style={{
+                fontSize: 24,
+                color: color.accent,
+                fontWeight: 500,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+              }}
+            >
               {cited.focus.id}: {cited.focus.kind}
             </span>
             <span

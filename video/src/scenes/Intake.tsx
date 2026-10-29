@@ -3,7 +3,7 @@ import { useCurrentFrame } from "remotion";
 import { Heading, Rail, Stage } from "../components";
 import { run } from "../data";
 import { enter, progress } from "../motion";
-import { MONO, color, size } from "../theme";
+import { MONO, color, radius, size } from "../theme";
 
 const ROW_EVERY = 10; // frames between rows
 
@@ -23,9 +23,8 @@ export const Intake = () => {
       <div
         style={{
           backgroundColor: color.sunken,
-          border: `2px solid ${color.rule}`,
-          borderRadius: 6,
-          padding: "24px 32px",
+          borderRadius: radius.card,
+          padding: "28px 36px",
           display: "flex",
           flexDirection: "column",
           gap: 8,
@@ -42,10 +41,10 @@ export const Intake = () => {
               gap: 24,
               whiteSpace: "nowrap",
               padding: "4px 12px",
-              borderRadius: 4,
-              outline: row.planted ? `3px solid oklch(0.7 0.19 27 / ${flagged})` : "none",
+              borderRadius: radius.small,
+              outline: row.planted ? `3px solid oklch(0.8 0.13 18 / ${flagged})` : "none",
               backgroundColor: row.planted
-                ? `oklch(0.7 0.19 27 / ${0.16 * flagged})`
+                ? `oklch(0.8 0.13 18 / ${0.14 * flagged})`
                 : "transparent",
               ...enter(frame, 18 + i * ROW_EVERY, 12),
             }}
@@ -53,7 +52,7 @@ export const Intake = () => {
             <span style={{ color: color.faint }}>{row.time}</span>
             <span
               style={{
-                color: row.level === "WARN" ? "oklch(0.78 0.15 58)" : color.faint,
+                color: row.level === "WARN" ? "oklch(0.86 0.11 68)" : color.faint,
                 width: 64,
               }}
             >
@@ -76,10 +75,12 @@ export const Intake = () => {
           style={{
             backgroundColor: color.danger,
             color: color.ink,
-            fontWeight: 800,
-            fontSize: size.body,
-            padding: "4px 18px",
-            borderRadius: 2,
+            fontWeight: 600,
+            fontSize: 30,
+            letterSpacing: "0.1em",
+            textTransform: "uppercase",
+            padding: "8px 18px",
+            borderRadius: radius.small,
           }}
         >
           Quarantined
