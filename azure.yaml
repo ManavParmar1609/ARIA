@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
 #
 # `azd up` provisions infra/ (Container Apps, Azure SQL, Key Vault, registry, monitoring) and
-# deploys the api and worker images. Before the first run:
+# deploys the api, worker and web images. Before the first run:
 #   azd env set ARIA_API_KEYS "ops:<a long random secret>"
 #   azd env set ARIA_PSEUDONYM_KEY "<another long random secret>"
 #   azd env set NVIDIA_API_KEY "<key from build.nvidia.com>"   # optional
@@ -37,6 +37,14 @@ services:
       target: worker
       buildArgs:
         - ARIA_EXTRAS=azure
+  web:
+    project: .
+    language: js
+    host: containerapp
+    docker:
+      path: ./Dockerfile
+      context: .
+      target: web
 
 hooks:
   # azd updates the two apps; give the seed job the image the worker now runs.

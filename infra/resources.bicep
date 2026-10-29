@@ -512,6 +512,79 @@ resource worker 'Microsoft.App/containerApps@2024-03-01' = {
   ]
 }
 
+// The landing page and console. It holds no secrets: people sign in with an API key, kept in an
+// HttpOnly cookie, and the app forwards their requests to the API over HTTPS.
+resource web 'Microsoft.App/containerApps@2024-03-01' = {
+  name: 'ca-web-${token}'
+  location: location
+  tags: union(tags, {
+    'azd-service-name': 'web'
+  })
+  identity: appIdentity
+  properties: {
+    managedEnvironmentId: environment.id
+    configuration: {
+      activeRevisionsMode: 'Single'
+      ingress: {
+        external: true
+        targetPort: 3000
+        transport: 'auto'
+        allowInsecure: false
+      }
+      registries: registries
+    }
+    template: {
+      containers: [
+        {
+          name: 'web'
+          image: placeholderImage
+          env: [
+            {
+              name: 'ARIA_API_URL'
+              value: 'https://${api.properties.configuration.ingress.fqdn}'
+            }
+            {
+              name: 'ARIA_WEB_URL'
+              value: 'https://ca-web-${token}.${environment.properties.defaultDomain}'
+            }
+          ]
+          resources: {
+            cpu: json('0.5')
+            memory: '1Gi'
+          }
+          probes: [
+            {
+              type: 'Liveness'
+              httpGet: {
+                path: '/api/healthz'
+                port: 3000
+              }
+              periodSeconds: 15
+              failureThreshold: 4
+            }
+            {
+              type: 'Readiness'
+              httpGet: {
+                path: '/api/healthz'
+                port: 3000
+              }
+              periodSeconds: 10
+              failureThreshold: 3
+            }
+          ]
+        }
+      ]
+      scale: {
+        minReplicas: 1
+        maxReplicas: 3
+      }
+    }
+  }
+  dependsOn: [
+    appPulls
+  ]
+}
+
 // Seeds incident memory and the template history once the API has migrated the database:
 //   az containerapp job start -g <resource group> -n <ARIA_SEED_JOB output>
 resource seedJob 'Microsoft.App/jobs@2024-03-01' = {
@@ -577,5 +650,7 @@ output keyVaultName string = vault.name
 output sqlServerFqdn string = sqlServer.properties.fullyQualifiedDomainName
 output apiUrl string = 'https://${api.properties.configuration.ingress.fqdn}'
 output apiName string = api.name
+output webUrl string = 'https://${web.properties.configuration.ingress.fqdn}'
+output webName string = web.name
 output workerName string = worker.name
 output seedJobName string = seedJob.name

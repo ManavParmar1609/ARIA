@@ -90,9 +90,26 @@ dev: ## Run API and web together (Ctrl-C stops both)
 	@trap 'kill 0' INT TERM EXIT; $(UV) run aria serve --reload & pnpm --dir $(WEB) dev & wait
 
 .PHONY: openapi
-openapi: ## Export the OpenAPI schema and regenerate the web client types
-	$(UV) run aria openapi --out $(WEB)/openapi.json
-	pnpm --dir $(WEB) gen:api
+openapi: ## Export docs/openapi.json and regenerate the web client types from it
+	pnpm --dir $(WEB) gen:api --refresh
+
+# --- web app -------------------------------------------------------------------
+.PHONY: web-check
+web-check: ## Format-check, lint, type-check and unit-test the web app
+	pnpm --dir $(WEB) format:check
+	pnpm --dir $(WEB) lint
+	pnpm --dir $(WEB) typecheck
+	pnpm --dir $(WEB) test
+
+.PHONY: web-e2e
+web-e2e: ## Build the web app and run the Playwright and axe suite against an offline API
+	pnpm --dir $(WEB) build
+	pnpm --dir $(WEB) test:e2e
+
+.PHONY: web-lighthouse
+web-lighthouse: ## Build the web app and check every page against the Lighthouse bars
+	pnpm --dir $(WEB) build
+	cd $(WEB) && ./scripts/lighthouse-ci.sh
 
 .PHONY: video
 video: ## Render the demo video to video/out/aria-demo.mp4

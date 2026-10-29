@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Smoke-test a running stack (`make up`): health and readiness, then one triage run through the
-# worker to the review pause, an approval, and the published report.
+# worker to the review pause, an approval, and the published report, which the web console must
+# then serve through its API proxy.
 set -euo pipefail
 
 base="${ARIA_URL:-http://127.0.0.1:8000}"
+web="${ARIA_WEB_URL:-http://127.0.0.1:3000}"
 export NO_PROXY="${NO_PROXY:+${NO_PROXY},}127.0.0.1,localhost"  # never send local calls to a proxy
 auth=()
 if [[ -n "${ARIA_API_KEY:-}" ]]; then
@@ -58,3 +60,12 @@ final=$(curl -fsS "${auth[@]}" -H 'Content-Type: application/json' \
   "${base}/api/v1/runs/${run_id}/review" | json '["status"]')
 [[ "${final}" == "published" ]] || { echo "review left the run in '${final}'" >&2; exit 1; }
 echo "run ${run_id}: triaged, reviewed and published"
+
+# The web app: its own health, the landing page, and the same run read through the console's
+# proxy (in dev mode the API needs no key, so no session is required).
+curl -fsS "${web}/api/healthz" >/dev/null
+curl -fsS "${web}/" | grep -q "Incident triage that shows its work" \
+  || { echo "the landing page did not render" >&2; exit 1; }
+seen=$(curl -fsS "${web}/api/v1/runs/${run_id}" | json '["status"]')
+[[ "${seen}" == "published" ]] || { echo "the console proxy saw '${seen}'" >&2; exit 1; }
+echo "web: ${web} serves the console and reads run ${run_id} through its proxy"

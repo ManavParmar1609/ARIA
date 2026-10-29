@@ -89,5 +89,7 @@ output AZURE_KEY_VAULT_NAME string = resources.outputs.keyVaultName
 output AZURE_SQL_SERVER string = resources.outputs.sqlServerFqdn
 output SERVICE_API_ENDPOINT_URL string = resources.outputs.apiUrl
 output SERVICE_API_NAME string = resources.outputs.apiName
+output SERVICE_WEB_ENDPOINT_URL string = resources.outputs.webUrl
+output SERVICE_WEB_NAME string = resources.outputs.webName
 output SERVICE_WORKER_NAME string = resources.outputs.workerName
 output ARIA_SEED_JOB string = resources.outputs.seedJobName
