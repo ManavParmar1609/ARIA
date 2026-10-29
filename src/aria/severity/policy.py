@@ -58,11 +58,14 @@ class Preliminary:
         return float(self.probabilities.get(self.top, 0.0))
 
     def floor_applied(self) -> bool:
-        """True when the floor removed classes from (or replaced) the conformal set."""
+        """True when the floor removed classes from (or replaced) the conformal set.
+
+        A set already at or above the floor is left as it is, so the floor decided nothing.
+        """
         if self.floor is None:
             return False
         floor = self.floor
-        return floor not in self.raw_set or any(s.rank > floor.rank for s in self.raw_set)
+        return any(s.rank > floor.rank for s in self.raw_set)
 
     def auto_decision(self, gate: float) -> DecidedBy | None:
         pset = self.prediction_set

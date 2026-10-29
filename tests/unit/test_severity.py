@@ -272,6 +272,18 @@ def test_floor_removes_less_severe_classes() -> None:
     )
 
 
+def test_a_floor_below_the_set_decides_nothing() -> None:
+    """A critical alert floors at SEV2; a confident SEV1 model is the decider, not the rules."""
+    confident = {Severity.SEV1: 0.95, Severity.SEV2: 0.03, Severity.SEV3: 0.01, Severity.SEV4: 0.01}
+    pre = _pre(confident, [Severity.SEV1], floor=Severity.SEV2, rule=Severity.SEV4)
+    assert not pre.floor_applied()
+    assert pre.prediction_set == [Severity.SEV1]
+    assert decide(pre, gate=0.85).decided_by == "model"
+    replaced = _pre(confident, [Severity.SEV4], floor=Severity.SEV2)
+    assert replaced.floor_applied()
+    assert replaced.prediction_set == [Severity.SEV2]
+
+
 def test_confident_singleton_is_decided_without_llm() -> None:
     confident = dict(P) | {Severity.SEV3: 0.9, Severity.SEV2: 0.0}
     assert decide(_pre(confident, [Severity.SEV3]), gate=0.85).decided_by == "rules"
