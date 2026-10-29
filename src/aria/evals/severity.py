@@ -135,6 +135,22 @@ def majority_label(report_path: Path = REPORT_PATH) -> str:
     return str(Severity.SEV3)
 
 
+# Raw lines from these systems open with the sysadmin alert tag ("-" or e.g. "KERNDTLB").
+TAGGED_SYSTEMS = frozenset({"bgl", "thunderbird"})
+
+
+def baseline_text(scenario: Scenario) -> str:
+    """The window's raw lines without the alert tag BGL and Thunderbird lines open with.
+
+    The BGL labels come from that tag, so a baseline that read it would see the answer.
+    ARIA's features and the evidence it shows models never read the tag either.
+    """
+    lines = scenario.lines
+    if scenario.system in TAGGED_SYSTEMS:
+        lines = [line.split(" ", 1)[1] if " " in line else "" for line in lines]
+    return "\n".join(lines)
+
+
 def tfidf_baseline(
     builder: ScenarioBuilder,
     test: Sequence[Scenario],
@@ -154,10 +170,10 @@ def tfidf_baseline(
         sublinear_tf=True,
         token_pattern=r"[A-Za-z_]{3,}",  # noqa: S106 - a regex, not a password
     )
-    x_train = vectorizer.fit_transform(["\n".join(s.lines) for s in train])
+    x_train = vectorizer.fit_transform([baseline_text(s) for s in train])
     classifier = LogisticRegression(max_iter=3_000, class_weight="balanced", C=3.0)
     classifier.fit(x_train, [str(s.severity) for s in train])
-    predictions = classifier.predict(vectorizer.transform(["\n".join(s.lines) for s in test]))
+    predictions = classifier.predict(vectorizer.transform([baseline_text(s) for s in test]))
     return [str(p) for p in predictions]
 
 

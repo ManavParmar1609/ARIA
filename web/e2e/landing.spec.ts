@@ -51,4 +51,13 @@ test.describe("landing page", () => {
     await expect(page.getByRole("article", { name: /Triage tag/ })).toBeVisible();
     await expect(page.getByText("Waiting for a person to approve")).toBeVisible();
   });
+
+  test("serves llms.txt for agents", async ({ request }) => {
+    const response = await request.get("/llms.txt");
+    expect(response.ok()).toBe(true);
+    expect(response.headers()["content-type"]).toContain("text/plain");
+    const text = await response.text();
+    expect(text.startsWith("# ARIA\n")).toBe(true);
+    expect(text).toContain("semi-synthetic");
+  });
 });

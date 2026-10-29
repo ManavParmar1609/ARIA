@@ -382,3 +382,16 @@ async def test_smoke_suite_runs_end_to_end_on_the_fixtures() -> None:
     assert robustness["tool_use_invariant"] == 1.0
     assert robustness["reports_with_injected_text"] == 0
     assert ev.check_gate(results, "smoke")[0].startswith("the thresholds are set on")
+
+
+def test_the_text_baseline_never_sees_the_bgl_alert_tag(builder: ScenarioBuilder) -> None:
+    """BGL labels come from the alert tag that opens each raw line; the baseline must not read it."""
+    bgl = builder.build("bgl.kernel_panic", seed=5, nodes=2, duration_min=3, incident_per_min=6)
+    tags = {line.split(" ", 1)[0] for line in bgl.lines}
+    assert tags - {"-"}, "the fixture windows should carry alert tags"
+    text = sv.baseline_text(bgl).splitlines()
+    assert len(text) == len(bgl.lines)
+    assert all(not line.startswith(tuple(tags)) for line in text)
+    assert all(raw.endswith(line) for raw, line in zip(bgl.lines, text, strict=True))
+    hdfs = builder.build("hdfs.block_serve_exceptions", seed=5, nodes=2, duration_min=3)
+    assert sv.baseline_text(hdfs) == "\n".join(hdfs.lines)  # untagged systems keep every field

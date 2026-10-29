@@ -27,7 +27,7 @@ sources:
       - "2k_dataset/*/*_2k.log_templates_corrected.csv"
     license: Loghub license
     citation: "Z. Jiang et al. A Large-scale Evaluation for Log Parsing Techniques: How Far are We? ISSTA 2024."
-    description: Corrected ground-truth templates for the 2k samples, used to score the log parser.
+    description: Corrected ground-truth templates for the 2k samples. Downloaded but not read yet; the parsing evaluation scores against the original Loghub templates.
 
   hdfs-100k:
     kind: git
@@ -38,7 +38,7 @@ sources:
       - data/HDFS/anomaly_label.csv
     license: Loghub license (loglizer code is MIT)
     citation: "W. Xu, L. Huang, A. Fox, D. Patterson, M. I. Jordan. Detecting Large-Scale System Problems by Mining Console Logs. SOSP 2009."
-    description: The first ~105k contiguous HDFS_v1 lines with expert block-level anomaly labels.
+    description: The first ~105k contiguous HDFS_v1 lines with expert block-level anomaly labels. Ingested, but no training or evaluation reads it yet.
 
   loghub-bgl:
     kind: zenodo
@@ -46,7 +46,7 @@ sources:
     files: [BGL.zip]
     license: Loghub license
     citation: "A. J. Oliner, J. Stearley. What Supercomputers Say: A Study of Five System Logs. DSN 2007."
-    description: Full BlueGene/L log (~4.75M lines) with sysadmin alert tags; the primary severity benchmark.
+    description: Full BlueGene/L log (~4.75M lines) with sysadmin alert tags, meant as a contiguous severity benchmark. It could not be downloaded in the build environment, and no code reads it yet.
 
   loghub-hadoop:
     kind: zenodo
@@ -54,7 +54,7 @@ sources:
     files: [Hadoop.zip]
     license: Loghub license
     citation: "Q. Lin et al. Log Clustering based Problem Identification for Online Service Systems. ICSE 2016."
-    description: Hadoop application logs with injected failure types (machine down, network disconnection, disk full).
+    description: Hadoop application logs with injected failure types (machine down, network disconnection, disk full). It was not downloaded in the build environment, and nothing ingests it yet.
 
   uci-incidents:
     kind: uci
