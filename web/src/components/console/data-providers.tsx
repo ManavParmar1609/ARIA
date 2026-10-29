@@ -1,6 +1,7 @@
 "use client";
 
 import { QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { LazyMotion, MotionConfig, domAnimation } from "motion/react";
 import { useState, type ReactNode } from "react";
 
 import { Toaster } from "@/components/ui/sonner";
@@ -29,12 +30,20 @@ function makeQueryClient(): QueryClient {
   return client;
 }
 
-/** The console's data layer: TanStack Query against the API proxy, plus toasts. */
+/**
+ * The console's data layer (TanStack Query against the API proxy), toasts, and Motion with its
+ * DOM features only. Motion follows the reduced-motion setting: transforms are skipped for people
+ * who asked for less motion.
+ */
 export function DataProviders({ children }: { children: ReactNode }) {
   const [client] = useState(makeQueryClient);
   return (
     <QueryClientProvider client={client}>
-      {children}
+      <MotionConfig reducedMotion="user">
+        <LazyMotion features={domAnimation} strict>
+          {children}
+        </LazyMotion>
+      </MotionConfig>
       <Toaster />
     </QueryClientProvider>
   );

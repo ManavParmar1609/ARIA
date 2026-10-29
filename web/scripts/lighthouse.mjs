@@ -2,11 +2,13 @@
 //
 //   node scripts/lighthouse.mjs [--base http://127.0.0.1:3200] [--run <run id>] [--runs 3]
 //
-// Each page is measured several times and judged on the median run (Lighthouse CI's practice:
-// single runs vary by several points). Bars: the landing page at least 95 in every category on
-// desktop, and on mobile at least 95 for accessibility, best practices and SEO with performance
-// at least 90 (a blank Next.js page measures 95 to 98 on a 4-vCPU runner, so 95 is not a
-// reliable gate there); console pages at least 90 for performance; every page CLS under 0.05.
+// Each page is measured several times (the mobile landing page five times) and judged on the
+// median run (Lighthouse CI's practice: single runs vary by several points).
+//
+// Bars: the landing page at least 95 in every category on desktop, and on mobile at least 95 for
+// accessibility, best practices and SEO with performance at least 90 (a blank Next.js page
+// measures 95 to 98 on a 4-vCPU runner, so 95 is not a reliable gate there); console pages at
+// least 90 for performance; every page CLS under 0.05.
 // Reports land in lighthouse/ as JSON; the summary prints as a table.
 import { mkdirSync, writeFileSync } from "node:fs";
 
@@ -34,6 +36,8 @@ const pages = [
     path: "/",
     preset: "mobile",
     min: { ...all(0.95), performance: 0.9 },
+    // The noisiest measurement (simulated 4x CPU slowdown), so it gets more runs.
+    runs: Math.max(runs, 5),
   },
   { name: "landing (desktop)", path: "/", preset: "desktop", min: all(0.95) },
   { name: "console overview", path: "/console", preset: "desktop", min: console90 },
@@ -58,7 +62,7 @@ try {
   for (const page of pages) {
     const config = page.preset === "desktop" ? desktopConfig : undefined;
     const results = [];
-    for (let i = 0; i < runs; i++) {
+    for (let i = 0; i < (page.runs ?? runs); i++) {
       const result = await lighthouse(
         base + page.path,
         { port: chrome.port, output: "json", logLevel: "error", onlyCategories: CATEGORIES },

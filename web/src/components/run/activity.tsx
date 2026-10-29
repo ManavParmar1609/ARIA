@@ -16,6 +16,8 @@ import {
   WrenchIcon,
   type LucideIcon,
 } from "lucide-react";
+import { AnimatePresence } from "motion/react";
+import * as m from "motion/react-m";
 import { useMemo } from "react";
 
 import type { RunEvent } from "@/lib/api/types";
@@ -312,34 +314,40 @@ const TONE: Record<string, string> = {
 export function Activity({ events }: { events: RunEvent[] }) {
   const list = useMemo(() => rows(events), [events]);
   if (list.length === 0) return <p className="text-sm text-muted-foreground">No activity yet.</p>;
+  // Rows present on first render stay put; rows that arrive while the run is live slide in.
   return (
     <ol className="grid">
-      {list.map((row) => {
-        const Icon = row.icon;
-        return (
-          <li
-            key={row.key}
-            className="grid grid-cols-[4.5rem_1.25rem_1fr] gap-3 border-b border-rule/60 py-2.5 text-sm last:border-0"
-          >
-            <span className="tabular pt-0.5 text-right font-mono text-xs text-faint">
-              +{duration(row.t)}
-            </span>
-            <Icon
-              aria-hidden
-              className={cn("mt-0.5 size-4", row.tone ? TONE[row.tone] : "text-faint")}
-            />
-            <div className="grid min-w-0 gap-0.5">
-              <p className={cn("wrap-anywhere", row.icon === WrenchIcon && "font-mono text-xs")}>
-                {row.title}
-              </p>
-              {row.detail ? (
-                <p className="text-xs wrap-anywhere text-muted-foreground">{row.detail}</p>
-              ) : null}
-              {row.evidence?.length ? <Citations ids={row.evidence} className="mt-1" /> : null}
-            </div>
-          </li>
-        );
-      })}
+      <AnimatePresence initial={false}>
+        {list.map((row) => {
+          const Icon = row.icon;
+          return (
+            <m.li
+              key={row.key}
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
+              className="grid grid-cols-[4.5rem_1.25rem_minmax(0,1fr)] gap-3 border-b border-rule/60 py-2.5 text-sm last:border-0"
+            >
+              <span className="tabular pt-0.5 text-right font-mono text-xs text-faint">
+                +{duration(row.t)}
+              </span>
+              <Icon
+                aria-hidden
+                className={cn("mt-0.5 size-4", row.tone ? TONE[row.tone] : "text-faint")}
+              />
+              <div className="grid min-w-0 gap-0.5">
+                <p className={cn("wrap-anywhere", row.icon === WrenchIcon && "font-mono text-xs")}>
+                  {row.title}
+                </p>
+                {row.detail ? (
+                  <p className="text-xs wrap-anywhere text-muted-foreground">{row.detail}</p>
+                ) : null}
+                {row.evidence?.length ? <Citations ids={row.evidence} className="mt-1" /> : null}
+              </div>
+            </m.li>
+          );
+        })}
+      </AnimatePresence>
     </ol>
   );
 }

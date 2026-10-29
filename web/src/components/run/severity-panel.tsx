@@ -1,6 +1,8 @@
 "use client";
 
 import { ChevronDownIcon } from "lucide-react";
+import { AnimatePresence, useReducedMotion } from "motion/react";
+import * as m from "motion/react-m";
 import { useState } from "react";
 
 import { SeverityBadge, SeverityScale } from "@/components/aria/severity";
@@ -23,6 +25,7 @@ const HOW: Record<string, string> = {
 /** Severity and why: the instrument, the decision path and the rule trace. */
 export function SeverityPanel({ assessment }: { assessment: SeverityAssessment }) {
   const [traceOpen, setTraceOpen] = useState(false);
+  const reduceMotion = useReducedMotion();
   const coverage = Math.round((1 - assessment.alpha) * 100);
   const how =
     assessment.decided_by === "fallback" && assessment.set_empty
@@ -86,53 +89,65 @@ export function SeverityPanel({ assessment }: { assessment: SeverityAssessment }
               )}
             />
           </Button>
-          {traceOpen ? (
-            <div id="rule-trace" className="grid gap-2">
-              <ul className="grid gap-2">
-                {assessment.rule_hits.map((hit) => (
-                  <li
-                    key={hit.rule_id}
-                    className="grid gap-0.5 border-l-2 border-rule pl-3 text-sm"
-                  >
-                    <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="font-medium">{hit.title}</span>
-                      <span
-                        className={cn(
-                          "rounded-xs border px-1 text-[0.6875rem]",
-                          hit.effect === "floor"
-                            ? "border-sev1-fg/60 text-sev1-fg"
-                            : "border-control text-muted-foreground",
-                        )}
-                      >
-                        {hit.effect === "floor"
-                          ? `floor ${hit.severity}`
-                          : `+${hit.weight} to ${hit.severity}`}
+          <AnimatePresence initial={false}>
+            {traceOpen ? (
+              <m.div
+                key="rule-trace"
+                id="rule-trace"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: reduceMotion ? 0 : 0.22, ease: [0.25, 1, 0.5, 1] }}
+                className="grid gap-2 overflow-hidden"
+              >
+                <ul className="grid gap-2">
+                  {assessment.rule_hits.map((hit) => (
+                    <li
+                      key={hit.rule_id}
+                      className="grid gap-0.5 border-l-2 border-rule pl-3 text-sm"
+                    >
+                      <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="font-medium">{hit.title}</span>
+                        <span
+                          className={cn(
+                            "rounded-xs border px-1 text-[0.6875rem]",
+                            hit.effect === "floor"
+                              ? "border-sev1-fg/60 text-sev1-fg"
+                              : "border-control text-muted-foreground",
+                          )}
+                        >
+                          {hit.effect === "floor"
+                            ? `floor ${hit.severity}`
+                            : `+${hit.weight} to ${hit.severity}`}
+                        </span>
+                        <Citations ids={hit.evidence_ids} />
+                      </p>
+                      {hit.detail ? (
+                        <p className="font-mono text-xs text-muted-foreground">{hit.detail}</p>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+                <div className="grid grid-cols-4 gap-1.5 pt-1" aria-label="Rule score per severity">
+                  {SEVERITIES.map((s) => (
+                    <div key={s} className="grid gap-1">
+                      <div className="h-1.5 rounded-full bg-sunken">
+                        <div
+                          className="h-1.5 rounded-full bg-control"
+                          style={{
+                            width: `${((assessment.rule_scores[s] ?? 0) / maxScore) * 100}%`,
+                          }}
+                        />
+                      </div>
+                      <span className="tabular text-[0.6875rem] text-muted-foreground">
+                        {s} {(assessment.rule_scores[s] ?? 0).toFixed(1)}
                       </span>
-                      <Citations ids={hit.evidence_ids} />
-                    </p>
-                    {hit.detail ? (
-                      <p className="font-mono text-xs text-muted-foreground">{hit.detail}</p>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-              <div className="grid grid-cols-4 gap-1.5 pt-1" aria-label="Rule score per severity">
-                {SEVERITIES.map((s) => (
-                  <div key={s} className="grid gap-1">
-                    <div className="h-1.5 rounded-full bg-sunken">
-                      <div
-                        className="h-1.5 rounded-full bg-control"
-                        style={{ width: `${((assessment.rule_scores[s] ?? 0) / maxScore) * 100}%` }}
-                      />
                     </div>
-                    <span className="tabular text-[0.6875rem] text-muted-foreground">
-                      {s} {(assessment.rule_scores[s] ?? 0).toFixed(1)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
+                  ))}
+                </div>
+              </m.div>
+            ) : null}
+          </AnimatePresence>
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">No severity rule matched this window.</p>
