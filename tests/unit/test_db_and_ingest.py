@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import struct
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import func, select
@@ -81,3 +83,33 @@ def test_bgl_windows_are_labelled_and_split_in_time_order() -> None:
     assert windows[-1]["label_severity"] == "SEV1"  # 4 nodes with critical alerts
     assert all(w["label_severity"] == "SEV4" for w in windows[:-1])
     assert len(assignment) == len(records)
+
+
+def test_entra_connections_send_a_token_instead_of_windows_auth(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sqlalchemy import create_engine
+
+    from aria.db import engine as engine_module
+
+    class Credential:
+        def get_token(self, scope: str) -> SimpleNamespace:
+            assert scope == "https://database.windows.net/.default"
+            return SimpleNamespace(token="tok")
+
+    monkeypatch.setattr("azure.identity.DefaultAzureCredential", Credential)
+    # A stand-in DBAPI module: nothing connects, so the ODBC libraries need not be installed.
+    dbapi = SimpleNamespace(paramstyle="qmark", version="5.3.0", Error=Exception, Cursor=object)
+    sql = create_engine(
+        "mssql+pyodbc://@srv.database.windows.net/aria?driver=ODBC+Driver+18", module=dbapi
+    )
+    engine_module._attach_entra_token(sql)
+    args, cparams = sql.dialect.create_connect_args(sql.url)
+    cargs = list(args)  # create_engine hands the hooks a mutable list, as here
+    assert "Trusted_Connection=Yes" in cargs[0]  # what SQLAlchemy asks for without a user
+    for listener in sql.dialect.dispatch.do_connect:
+        listener(sql.dialect, None, cargs, cparams)
+    assert "Trusted_Connection" not in cargs[0]
+    assert "srv.database.windows.net" in cargs[0]
+    token = "tok".encode("utf-16-le")
+    assert cparams["attrs_before"] == {1256: struct.pack(f"<I{len(token)}s", len(token), token)}

@@ -227,6 +227,9 @@ class Settings(BaseSettings):
     otel_exporter: Literal["none", "console", "otlp", "azure"] = "none"
     otlp_endpoint: str | None = None
     worker_mode: Literal["inprocess", "external"] = "inprocess"
+    # Bring the schema to the latest migration when the API starts (containers). Run one API
+    # replica while a release migrates, or run `aria db upgrade` as a job instead.
+    migrate_on_start: bool = False
     worker_concurrency: int = Field(default=4, ge=1, le=64)
     require_approval: bool = True
     rate_limit_per_minute: int = Field(default=120, ge=1)

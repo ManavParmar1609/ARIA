@@ -79,7 +79,7 @@ llm:
       kind: azure_openai
       base_url: ${AZURE_OPENAI_ENDPOINT:-}
       api_key_env: AZURE_OPENAI_API_KEY
-      azure_ad: false
+      azure_ad: ${AZURE_OPENAI_USE_ENTRA:-false}
       chat_model: ${AZURE_OPENAI_CHAT_DEPLOYMENT:-gpt-5.1}
       embedding_model: ${AZURE_OPENAI_EMBED_DEPLOYMENT:-text-embedding-3-small}
       structured_output: json_schema
@@ -87,7 +87,7 @@ llm:
       notes: >-
         Azure OpenAI v1 data-plane API (https://<resource>.openai.azure.com/openai/v1). Model
         fields are deployment names. GPT-4 is retired; Microsoft lists gpt-5.1 as the successor
-        to gpt-4o. Set azure_ad: true to use managed identity instead of an API key.
+        to gpt-4o. Set AZURE_OPENAI_USE_ENTRA=true to use managed identity instead of an API key.
 
     openai_compat:
       kind: openai_compatible

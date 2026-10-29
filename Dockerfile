@@ -6,6 +6,10 @@
 #
 #   docker build --target api -t aria-api .
 #
+# For Azure, add the `azure` extra (Azure SQL through Microsoft's ODBC Driver 18, managed
+# identity, Azure Monitor). Installing the driver accepts Microsoft's ODBC driver EULA:
+#   docker build --build-arg ARIA_EXTRAS=azure --target api -t aria-api .
+#
 # Behind a TLS-inspecting proxy, pass its CA as a build secret; it is used for downloads only
 # and never stored in an image layer:
 #   docker build --secret id=ca,src=/path/to/ca.pem --target api -t aria-api .
@@ -15,6 +19,7 @@ ARG PYTHON_IMAGE=python:3.13-slim
 # --- build: locked dependencies and the project, installed into /app/.venv --------------------
 FROM ${PYTHON_IMAGE} AS build
 ARG UV_VERSION=0.11.32
+ARG ARIA_EXTRAS=""
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never \
@@ -31,16 +36,34 @@ RUN --mount=type=secret,id=ca,required=false \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     if [ -s /run/secrets/ca ]; then export SSL_CERT_FILE=/run/secrets/ca UV_SYSTEM_CERTS=1; fi; \
-    uv sync --locked --no-install-project --no-dev
+    uv sync --locked --no-install-project --no-dev ${ARIA_EXTRAS:+--extra "$ARIA_EXTRAS"}
 COPY pyproject.toml uv.lock README.md LICENSE ./
 COPY src ./src
 RUN --mount=type=secret,id=ca,required=false \
     --mount=type=cache,target=/root/.cache/uv \
     if [ -s /run/secrets/ca ]; then export SSL_CERT_FILE=/run/secrets/ca UV_SYSTEM_CERTS=1; fi; \
-    uv sync --locked --no-dev --no-editable
+    uv sync --locked --no-dev --no-editable ${ARIA_EXTRAS:+--extra "$ARIA_EXTRAS"}
 
 # --- runtime: the virtual environment, configuration, runbooks and the trained model ----------
 FROM ${PYTHON_IMAGE} AS runtime
+ARG ARIA_EXTRAS=""
+# Azure SQL needs Microsoft's ODBC driver, from Microsoft's package repository for this Debian.
+# (The CA is readable by apt's unprivileged fetcher; like every secret mount, it is not kept.)
+RUN --mount=type=secret,id=ca,required=false,mode=0444 \
+    if [ "$ARIA_EXTRAS" = "azure" ]; then \
+      set -eu; \
+      ca=/etc/ssl/certs/ca-certificates.crt; \
+      if [ -s /run/secrets/ca ]; then ca=/run/secrets/ca; fi; \
+      . /etc/os-release; \
+      SSL_CERT_FILE="$ca" python -c "import urllib.request as u; u.urlretrieve('https://packages.microsoft.com/config/debian/${VERSION_ID}/packages-microsoft-prod.deb', '/tmp/ms.deb')"; \
+      dpkg -i /tmp/ms.deb; \
+      rm /tmp/ms.deb; \
+      sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources; \
+      apt-get -o Acquire::https::CaInfo="$ca" update; \
+      ACCEPT_EULA=Y apt-get -o Acquire::https::CaInfo="$ca" install -y --no-install-recommends \
+        msodbcsql18 unixodbc; \
+      rm -rf /var/lib/apt/lists/*; \
+    fi
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:${PATH}" \
@@ -58,6 +81,8 @@ COPY --from=build --chown=aria:aria /app/.venv /app/.venv
 COPY --chown=aria:aria config ./config
 COPY --chown=aria:aria runbooks ./runbooks
 COPY --chown=aria:aria models/severity_log.json models/severity_log.report.json ./models/
+# Small public Loghub samples: `aria seed` falls back to them when the full set is not downloaded.
+COPY --chown=aria:aria tests/fixtures/loghub ./tests/fixtures/loghub
 USER aria
 VOLUME ["/var/lib/aria"]
 

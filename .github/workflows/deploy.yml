@@ -1,0 +1,64 @@
+name: Deploy to Azure
+
+# Manual: provisions infra/ and deploys the images with azd, signing in to Azure through OpenID
+# Connect (no stored Azure credentials). Configure the GitHub environment first:
+#   variables  AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID (an app registration with
+#              a federated credential for this repository and environment), AZURE_PRINCIPAL_ID
+#              (that service principal's object id), AZURE_ENV_NAME, AZURE_LOCATION
+#   secrets    ARIA_API_KEYS, ARIA_PSEUDONYM_KEY, NVIDIA_API_KEY (optional)
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: GitHub environment to deploy (its variables and secrets are used)
+        type: choice
+        options: [production, staging]
+        default: production
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Provision and deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      id-token: write # the OIDC token Azure exchanges for an access token
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      AZURE_ENV_NAME: ${{ vars.AZURE_ENV_NAME }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+      AZURE_PRINCIPAL_ID: ${{ vars.AZURE_PRINCIPAL_ID }}
+      AZURE_PRINCIPAL_TYPE: ServicePrincipal
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: Azure/setup-azd@0b7e3a35ab00f2eee7080c845eb39c3f0ebfa553 # v2.4.0
+      - name: Sign in the Azure CLI (used by the postdeploy hook)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Sign in azd
+        run: >-
+          azd auth login --client-id "$AZURE_CLIENT_ID" --tenant-id "$AZURE_TENANT_ID"
+          --federated-credential-provider github
+      - name: Provision
+        run: azd provision --no-prompt
+        env:
+          ARIA_API_KEYS: ${{ secrets.ARIA_API_KEYS }}
+          ARIA_PSEUDONYM_KEY: ${{ secrets.ARIA_PSEUDONYM_KEY }}
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+      - name: Deploy
+        run: azd deploy --no-prompt

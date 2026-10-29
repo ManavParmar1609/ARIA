@@ -116,8 +116,9 @@ smoke: ## Triage, review and publish one run through the running stack (make up 
 	./scripts/compose-smoke.sh
 
 .PHONY: bicep
-bicep: ## Compile the Bicep templates to catch errors
-	bicep build infra/main.bicep --stdout > /dev/null
+bicep: ## Compile the Bicep templates to catch errors (bicep, or the Azure CLI's copy)
+	@if command -v bicep >/dev/null; then bicep build infra/main.bicep --stdout >/dev/null; \
+	else az bicep build --file infra/main.bicep --stdout >/dev/null; fi
 
 .PHONY: clean
 clean: ## Remove caches and build output

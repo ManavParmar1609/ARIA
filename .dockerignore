@@ -30,6 +30,7 @@ reports
 docs
 research_notes
 tests
+!tests/fixtures/loghub
 models/embed_local.npz
 
 # Front ends build in their own stages

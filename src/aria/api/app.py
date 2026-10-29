@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -109,6 +110,11 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         configure_logging(settings.log_level, settings.log_format)
         configure_tracing(settings.otel_exporter, endpoint=settings.otlp_endpoint)
+        if settings.migrate_on_start and services is None:
+            from aria.db.migrate import upgrade  # noqa: PLC0415 - Alembic only when asked
+
+            await asyncio.to_thread(upgrade, "head", settings.database_url)
+            log.info("api.migrated")
         owned = services is None
         svc = services or await Services.create(settings=settings)
         run = runner or TriageRunner(svc)

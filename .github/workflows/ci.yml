@@ -33,7 +33,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true
       - name: Install locked dependencies
-        run: uv sync --locked
+        run: uv sync --locked --all-extras
       - name: Lint and type-check
         run: make lint
       - name: Test (coverage gate 80%)
@@ -61,7 +61,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true
       - name: Install locked dependencies
-        run: uv sync --locked
+        run: uv sync --locked --all-extras
       - name: Cache the Loghub 2k samples
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -94,7 +94,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true
       - name: Install locked dependencies
-        run: uv sync --locked
+        run: uv sync --locked --all-extras
       - name: Known vulnerabilities in Python dependencies
         run: uv run pip-audit --progress-spinner off --skip-editable
       - name: Lint workflows
@@ -128,6 +128,20 @@ jobs:
           tags: aria-worker:dev
           load: true
           cache-from: type=gha,scope=aria
+      - name: Build the Azure variant (azure extra and ODBC Driver 18)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: api
+          build-args: ARIA_EXTRAS=azure
+          tags: aria-api:azure
+          load: true
+          cache-from: type=gha,scope=aria-azure
+          cache-to: type=gha,scope=aria-azure,mode=max
+      - name: Check the Azure variant can reach Azure SQL
+        run: >-
+          docker run --rm aria-api:azure python -c "import pyodbc, azure.identity;
+          assert 'ODBC Driver 18 for SQL Server' in pyodbc.drivers(), pyodbc.drivers()"
       - name: Start the stack and wait until healthy
         run: docker compose up -d --no-build --wait --wait-timeout 420
       - name: Triage, review and publish one run through the stack
@@ -138,3 +152,19 @@ jobs:
       - name: Stop the stack
         if: always()
         run: docker compose down -v
+
+  infra:
+    name: Bicep templates
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Bicep
+        run: az bicep install
+      - name: Compile infra/main.bicep (warnings fail the build)
+        run: |
+          az bicep build --file infra/main.bicep --stdout > /dev/null 2> bicep.log || { cat bicep.log; exit 1; }
+          cat bicep.log
+          if grep -qi "warning" bicep.log; then exit 1; fi

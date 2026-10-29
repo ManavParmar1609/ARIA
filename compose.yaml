@@ -53,8 +53,6 @@ services:
         else aria seed --workers 2 && touch /var/lib/aria/.seeded; fi
     volumes:
       - aria-data:/var/lib/aria
-      # Seeding falls back to these small Loghub samples (run `make data` for the full ones).
-      - ./tests/fixtures/loghub:/app/tests/fixtures/loghub:ro
     healthcheck:
       disable: true  # a one-shot job; the image's check is for the long-running worker
     restart: "no"

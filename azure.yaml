@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+#
+# `azd up` provisions infra/ (Container Apps, Azure SQL, Key Vault, registry, monitoring) and
+# deploys the api and worker images. Before the first run:
+#   azd env set ARIA_API_KEYS "ops:<a long random secret>"
+#   azd env set ARIA_PSEUDONYM_KEY "<another long random secret>"
+#   azd env set NVIDIA_API_KEY "<key from build.nvidia.com>"   # optional
+# After the first deploy, seed incident memory once:
+#   az containerapp job start -g "$(azd env get-value AZURE_RESOURCE_GROUP)" \
+#     -n "$(azd env get-value ARIA_SEED_JOB)"
+name: aria
+metadata:
+  template: aria@0.1.0
+
+infra:
+  provider: bicep
+  path: infra
+
+services:
+  api:
+    project: .
+    language: python
+    host: containerapp
+    docker:
+      path: ./Dockerfile
+      context: .
+      target: api
+      buildArgs:
+        - ARIA_EXTRAS=azure
+  worker:
+    project: .
+    language: python
+    host: containerapp
+    docker:
+      path: ./Dockerfile
+      context: .
+      target: worker
+      buildArgs:
+        - ARIA_EXTRAS=azure
+
+hooks:
+  # azd updates the two apps; give the seed job the image the worker now runs.
+  postdeploy:
+    shell: sh
+    continueOnError: false
+    run: |
+      set -eu
+      image=$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$SERVICE_WORKER_NAME" \
+        --query "properties.template.containers[0].image" -o tsv)
+      az containerapp job update -g "$AZURE_RESOURCE_GROUP" -n "$ARIA_SEED_JOB" --image "$image" -o none
+      echo "seed job now uses $image"

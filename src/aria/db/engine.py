@@ -51,7 +51,11 @@ def _attach_entra_token(engine: Engine) -> None:
     credential = DefaultAzureCredential()
 
     @event.listens_for(engine, "do_connect")
-    def _provide_token(_dialect: Any, _rec: Any, _cargs: Any, cparams: dict[str, Any]) -> None:
+    def _provide_token(_dialect: Any, _rec: Any, cargs: list[Any], cparams: dict[str, Any]) -> None:
+        # A URL without a user makes SQLAlchemy ask for Windows auth, which the driver refuses to
+        # combine with an access token; drop it (the recipe in SQLAlchemy's mssql docs).
+        if cargs and isinstance(cargs[0], str):
+            cargs[0] = cargs[0].replace(";Trusted_Connection=Yes", "")
         token = credential.get_token(_AZURE_SQL_SCOPE).token.encode("utf-16-le")
         cparams["attrs_before"] = {
             _SQL_COPT_SS_ACCESS_TOKEN: struct.pack(f"<I{len(token)}s", len(token), token)

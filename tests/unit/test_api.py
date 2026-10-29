@@ -563,3 +563,22 @@ async def test_worker_heartbeat_follows_its_polls(tmp_path: Path) -> None:
     age = heartbeat_age(beat)
     assert age is not None
     assert age < 5
+
+
+async def test_the_api_can_migrate_its_database_on_start(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    url = f"sqlite:///{tmp_path / 'fresh.db'}"
+    monkeypatch.setenv("ARIA_DATABASE_URL", url)
+    monkeypatch.setenv("ARIA_MIGRATE_ON_START", "true")
+    reset_caches()
+    app = create_app()
+    async with LifespanManager(app):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as c:
+            assert (await c.get("/readyz")).status_code == 200
+    from sqlalchemy import create_engine, inspect
+
+    tables = set(inspect(create_engine(url)).get_table_names())
+    assert {"alembic_version", "runs", "incidents"} <= tables
+    dispose_engines()
