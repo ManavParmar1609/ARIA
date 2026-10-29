@@ -1,3 +1,4 @@
+import { RollingNumber } from "@/components/aria/rolling-number";
 import { PageHeader } from "@/components/console/states";
 import { BaselineChart, RiskCoverageChart } from "@/components/site/charts";
 import {
@@ -46,7 +47,9 @@ function Facts({ items }: { items: [string, string][] }) {
       {items.map(([label, value]) => (
         <div key={label} className="grid content-start gap-2 border-t border-rule pt-3">
           <dt className="order-2 text-sm text-muted-foreground">{label}</dt>
-          <dd className="stat order-1 text-[1.75rem]">{value}</dd>
+          <dd className="stat order-1 text-[1.75rem]">
+            <RollingNumber value={value} />
+          </dd>
         </div>
       ))}
     </dl>

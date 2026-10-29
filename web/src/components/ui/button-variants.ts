@@ -12,8 +12,10 @@ export const buttonVariants = cva(
         primary: "bg-grass text-pop-ink hover:bg-grass-deep",
         raised: "bg-raised text-heading hover:bg-raised/85",
         secondary: "bg-foreground/7 text-heading hover:bg-foreground/12 active:bg-foreground/16",
+        // Dot bloom: the hover and focus fill grows out of a dot at the centre. A circle twice the
+        // button's width covers it from there; overflow clips it to the button's corners.
         ghost:
-          "text-muted-foreground hover:bg-foreground/6 hover:text-heading active:bg-foreground/10",
+          "relative isolate overflow-hidden text-muted-foreground before:pointer-events-none before:absolute before:top-1/2 before:left-1/2 before:-z-10 before:aspect-square before:w-[200%] before:-translate-1/2 before:scale-0 before:rounded-full before:bg-foreground/6 before:transition-[scale,background-color] before:duration-(--duration-slow) before:ease-(--ease-in-out) hover:text-heading hover:before:scale-100 focus-visible:before:scale-100 active:before:bg-foreground/10",
         danger: "bg-danger/12 text-danger hover:bg-danger/20 active:bg-danger/25",
         link: "h-auto px-0 text-foreground underline decoration-control underline-offset-4 hover:decoration-foreground",
         coral: "bg-coral text-pop-ink hover:bg-coral/85",

@@ -1,7 +1,15 @@
 "use client";
 
 import { PinIcon, XIcon } from "lucide-react";
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 
 import { Button } from "@/components/ui/button";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/popover";
@@ -199,22 +207,27 @@ export function LogLines({
   lines,
   limit = 12,
   wrap = false,
+  sweep = false,
 }: {
   lines: LogEvent[];
   limit?: number;
   /** Wrap long lines instead of scrolling (inside hover cards, where nothing can take focus). */
   wrap?: boolean;
+  /** Sweep one pass of the highlight across the lines as they appear (globals.css: .thread-pass). */
+  sweep?: boolean;
 }) {
   if (lines.length === 0) return null;
   const list = (
     <ol>
-      {lines.slice(0, limit).map((line) => (
+      {lines.slice(0, limit).map((line, i) => (
         <li
           key={line.idx}
           className={cn(
             "grid grid-cols-[2.5rem_2.75rem_1fr] gap-2 px-2",
             wrap ? "break-all whitespace-pre-wrap" : "whitespace-pre",
+            sweep && "thread-pass",
           )}
+          style={sweep ? ({ "--thread-i": i } as CSSProperties) : undefined}
         >
           <span className="tabular text-right text-faint">{line.line_no ?? line.idx + 1}</span>
           <span
@@ -309,7 +322,8 @@ export function EvidencePanel({ className }: { className?: string }) {
               {evidence.detail}
             </pre>
           ) : null}
-          <LogLines lines={linesFor(evidence.id)} />
+          {/* Keyed by evidence, so each citation pointed at sends its own pass of light. */}
+          <LogLines key={evidence.id} lines={linesFor(evidence.id)} sweep />
           <DataTable data={(evidence.data ?? {}) as Record<string, unknown>} />
         </>
       ) : (

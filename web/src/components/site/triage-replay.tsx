@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type CSSProperties } from "react";
 
 import { SeverityScale, TagStrip } from "@/components/aria/severity";
 import { useWideMotion } from "@/lib/motion";
@@ -39,6 +39,12 @@ export function TriageReplay({ data }: { data: Replay }) {
     () => new Set(active ? (data.evidence[active]?.lines ?? []) : []),
     [active, data.evidence],
   );
+  // Each lit line's place in the order the highlight sweeps onto them.
+  const litOrder = useMemo(() => {
+    const order = new Map<number, number>();
+    for (const line of data.lines) if (lit.has(line.lineNo)) order.set(line.lineNo, order.size);
+    return order;
+  }, [lit, data.lines]);
   const evidence = active ? data.evidence[active] : undefined;
   const p = Math.round((data.probabilities[data.severity] ?? 0) * 100);
   const firstShown = data.lines[0]?.lineNo ?? 1;
@@ -59,6 +65,19 @@ export function TriageReplay({ data }: { data: Replay }) {
         { scaleY: 0 },
         { scaleY: 1, transformOrigin: "bottom", duration: 0.6, stagger: 0.07 },
         "-=0.35",
+      )
+      // the severity lands like a rubber stamp, then the prediction-set bracket draws across
+      .fromTo(
+        "[data-tag] [data-stamp]",
+        { autoAlpha: 0, scale: 2.4, rotation: -14 },
+        { autoAlpha: 1, scale: 1, rotation: 0, duration: 0.5, ease: "back.out(2.2)" },
+        "-=0.2",
+      )
+      .fromTo(
+        "[data-tag] [data-bracket]",
+        { scaleX: 0 },
+        { scaleX: 1, transformOrigin: "left center", duration: 0.5, ease: "power2.inOut" },
+        "-=0.15",
       )
       .fromTo(
         "[data-anim=claim]",
@@ -112,6 +131,7 @@ export function TriageReplay({ data }: { data: Replay }) {
           className="py-3 font-mono text-[0.75rem] leading-6"
           aria-label="Log lines from the recorded run"
         >
+          {/* the evidence thread sweeps the highlight onto each cited line in order */}
           {data.lines.map((line, i) => {
             const isLit = lit.has(line.lineNo);
             const gap = i > 0 && line.lineNo - (data.lines[i - 1]?.lineNo ?? 0) > 1;
@@ -126,10 +146,15 @@ export function TriageReplay({ data }: { data: Replay }) {
                   className={cx(
                     "grid grid-cols-[2.25rem_3rem_1fr] items-baseline gap-2 border-l-2 px-4 transition-colors duration-(--duration-quick)",
                     isLit
-                      ? "border-primary bg-highlight text-highlight-foreground [&>span]:text-highlight-foreground"
+                      ? "thread-lit border-primary text-highlight-foreground [&>span]:text-highlight-foreground"
                       : "border-transparent",
                     line.quarantined && !isLit && "text-muted-foreground",
                   )}
+                  style={
+                    isLit
+                      ? ({ "--thread-i": litOrder.get(line.lineNo) ?? 0 } as CSSProperties)
+                      : undefined
+                  }
                 >
                   <span className="tabular text-right text-faint">{line.lineNo}</span>
                   <span className={cx(line.level === "WARN" ? "text-sev2-fg" : "text-faint")}>

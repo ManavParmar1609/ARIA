@@ -1,3 +1,5 @@
+import type { CSSProperties, SVGProps } from "react";
+
 import {
   C,
   Clipboard,
@@ -24,12 +26,61 @@ export function HeroSceneFrame({ className }: { className?: string }) {
   return <svg viewBox={HERO_VIEWBOX} className={className} aria-hidden focusable="false" />;
 }
 
+/** How a part of the hero settles in on the site: offset (viewBox units), scale and timing. */
+interface Entrance {
+  delay: number;
+  x?: number;
+  y?: number;
+  s?: number;
+  ms?: number;
+  spring?: boolean;
+}
+
+/** Props that settle a part of the hero in once (globals.css: .hero-in), or none in the video. */
+function settle(on: boolean, e: Entrance): SVGProps<SVGGElement> {
+  if (!on) return {};
+  return {
+    className: e.spring ? "hero-in hero-spring" : "hero-in",
+    style: {
+      "--hero-delay": `${e.delay}ms`,
+      "--hero-x": `${e.x ?? 0}px`,
+      "--hero-y": `${e.y ?? 28}px`,
+      "--hero-s": `${e.s ?? 1}`,
+      "--hero-ms": `${e.ms ?? 700}ms`,
+    } as CSSProperties,
+  };
+}
+
+/** Props that keep a loose page drifting (globals.css: .hero-drift), or none in the video. */
+function drift(
+  on: boolean,
+  dx: number,
+  dy: number,
+  turn: number,
+  seconds: number,
+): SVGProps<SVGGElement> {
+  if (!on) return {};
+  return {
+    className: "hero-drift",
+    style: {
+      "--drift-x": `${dx}px`,
+      "--drift-y": `${dy}px`,
+      "--drift-turn": `${turn}deg`,
+      "--drift-s": `${seconds}s`,
+      // A negative delay starts each page part-way through its swing, so they never move together.
+      "--drift-delay": `${-seconds / 2}s`,
+    } as CSSProperties,
+  };
+}
+
 /** The on-call crew riding a long sheet of log lines: one reads, one looks closer, one points on. */
 export function HeroScene({ className, t }: { className?: string; t?: number }) {
   // `t` (seconds) is for the video: the sheet bobs and the loose pages drift. The site leaves it
-  // out, so the page draws one still frame.
+  // out and animates with CSS instead (globals.css): the scene settles in once, back to front,
+  // then the loose pages keep drifting. Reduced motion shows the still frame.
   const wave = (speed: number, amount: number, phase = 0) =>
     t == null ? 0 : Math.sin(t * speed + phase) * amount;
+  const site = t == null;
   return (
     // On narrow screens the page gives the scene a fixed height and it crops to the crew in the
     // middle (slice), rather than shrinking the whole width down to a strip.
@@ -40,109 +91,138 @@ export function HeroScene({ className, t }: { className?: string; t?: number }) 
       aria-hidden
       focusable="false"
     >
-      <Cloud x={0} y={470} w={250} />
-      <Cloud x={990} y={110} w={200} />
-      <Cloud x={630} y={56} w={110} />
+      <g {...settle(site, { delay: 0, x: -36, y: 0, ms: 900 })}>
+        <Cloud x={0} y={470} w={250} />
+      </g>
+      <g {...settle(site, { delay: 80, x: 36, y: 0, ms: 900 })}>
+        <Cloud x={990} y={110} w={200} />
+      </g>
+      <g {...settle(site, { delay: 160, x: 24, y: 0, ms: 900 })}>
+        <Cloud x={630} y={56} w={110} />
+      </g>
 
       <g transform={`translate(0 ${wave(1.6, 7)})`}>
         {/* the log sheet, its back end rolled up like a scroll, lines of text along it */}
-        <path
-          d="M120 500C360 456 540 540 770 450C900 400 1000 350 1090 260L1112 290C1032 380 932 432 802 488C572 582 372 522 140 566Z"
-          fill={C.white}
-        />
-        <ellipse cx="128" cy="533" rx="26" ry="40" fill={C.white} />
-        <ellipse cx="131" cy="533" rx="12" ry="21" fill={C.sand} />
-        <g fill="none" stroke={INK} strokeWidth="3" strokeLinecap="round">
+        <g {...settle(site, { delay: 100, y: 44, ms: 800 })}>
           <path
-            d="M196 514C410 482 576 548 790 466C900 422 984 380 1052 312"
-            strokeDasharray="38 12 20 12 52 12 26 12"
+            d="M120 500C360 456 540 540 770 450C900 400 1000 350 1090 260L1112 290C1032 380 932 432 802 488C572 582 372 522 140 566Z"
+            fill={C.white}
           />
-          <path
-            d="M206 538C420 508 590 566 800 486C908 444 990 404 1070 330"
-            strokeDasharray="22 12 44 12 30 12 18 12"
-          />
+          <ellipse cx="128" cy="533" rx="26" ry="40" fill={C.white} />
+          <ellipse cx="131" cy="533" rx="12" ry="21" fill={C.sand} />
+          <g fill="none" stroke={INK} strokeWidth="3" strokeLinecap="round">
+            <path
+              d="M196 514C410 482 576 548 790 466C900 422 984 380 1052 312"
+              strokeDasharray="38 12 20 12 52 12 26 12"
+            />
+            <path
+              d="M206 538C420 508 590 566 800 486C908 444 990 404 1070 330"
+              strokeDasharray="22 12 44 12 30 12 18 12"
+            />
+          </g>
         </g>
 
-        <Sheet x={1000} y={330 + wave(2, 10)} w={50} rotate={16 + wave(1.4, 8)} mark="alert" />
-        <Sheet
-          x={1112}
-          y={150 + wave(1.7, 12, 1)}
-          w={40}
-          rotate={-12 + wave(1.2, 9, 2)}
-          mark="tick"
-        />
-        <Sheet x={470} y={250 + wave(1.9, 10, 2)} w={44} rotate={-20 + wave(1.5, 7, 1)} />
-        <Squiggle x={900} y={190} rotate={-18} w={80} />
-        <Squiggle x={230} y={330} w={60} color={C.lilac} rotate={12} />
-        <circle cx="960" cy="146" r="8" fill={C.sky} />
-        <circle cx="1150" cy="300" r="10" fill={C.sky} />
-        <circle cx="290" cy="280" r="7" fill={C.sunshine} />
+        {/* the loose pages fly in last, then keep drifting */}
+        <g {...settle(site, { delay: 700, y: -36, s: 0.8, ms: 550, spring: true })}>
+          <g {...drift(site, 6, -12, 6, 6.5)}>
+            <Sheet x={1000} y={330 + wave(2, 10)} w={50} rotate={16 + wave(1.4, 8)} mark="alert" />
+          </g>
+        </g>
+        <g {...settle(site, { delay: 780, y: -36, s: 0.8, ms: 550, spring: true })}>
+          <g {...drift(site, -5, -14, -7, 8)}>
+            <Sheet
+              x={1112}
+              y={150 + wave(1.7, 12, 1)}
+              w={40}
+              rotate={-12 + wave(1.2, 9, 2)}
+              mark="tick"
+            />
+          </g>
+        </g>
+        <g {...settle(site, { delay: 740, y: -36, s: 0.8, ms: 550, spring: true })}>
+          <g {...drift(site, 7, -10, 5, 7.2)}>
+            <Sheet x={470} y={250 + wave(1.9, 10, 2)} w={44} rotate={-20 + wave(1.5, 7, 1)} />
+          </g>
+        </g>
+        <g {...settle(site, { delay: 820, y: 0, s: 0.6, ms: 500 })}>
+          <Squiggle x={900} y={190} rotate={-18} w={80} />
+          <Squiggle x={230} y={330} w={60} color={C.lilac} rotate={12} />
+          <circle cx="960" cy="146" r="8" fill={C.sky} />
+          <circle cx="1150" cy="300" r="10" fill={C.sky} />
+          <circle cx="290" cy="280" r="7" fill={C.sunshine} />
+        </g>
 
         {/* reads the run's report */}
-        <Person
-          x={318}
-          y={488}
-          s={1.45}
-          lean={-10}
-          skin={SKIN.brown}
-          top={C.sky}
-          bottom={C.sunshine}
-          shoe={C.coral}
-          hair={INK}
-          hairStyle="curly"
-          face="calm"
-          legBack={{ to: [62, 8], bend: [28, -8] }}
-          legFront={{ to: [70, 0], bend: [38, -30] }}
-          armBack={{ to: [34, -10], bend: [16, 10] }}
-          armFront={{ to: [40, -14], bend: [28, 10] }}
-        />
-        <g transform="translate(392 318) rotate(10)">
-          <Clipboard size={1.35} />
+        <g {...settle(site, { delay: 320, y: 52, s: 0.94, ms: 650, spring: true })}>
+          <Person
+            x={318}
+            y={488}
+            s={1.45}
+            lean={-10}
+            skin={SKIN.brown}
+            top={C.sky}
+            bottom={C.sunshine}
+            shoe={C.coral}
+            hair={INK}
+            hairStyle="curly"
+            face="calm"
+            legBack={{ to: [62, 8], bend: [28, -8] }}
+            legFront={{ to: [70, 0], bend: [38, -30] }}
+            armBack={{ to: [34, -10], bend: [16, 10] }}
+            armFront={{ to: [40, -14], bend: [28, 10] }}
+          />
+          <g transform="translate(392 318) rotate(10)">
+            <Clipboard size={1.35} />
+          </g>
         </g>
 
         {/* looks closer at a line */}
-        <Person
-          x={606}
-          y={434}
-          s={1.45}
-          lean={20}
-          skin={SKIN.peach}
-          top={C.coral}
-          bottom={C.lilac}
-          shoe={C.white}
-          hair={INK}
-          hairStyle="bun"
-          face="focus"
-          legBack={{ to: [-38, 46], bend: [6, 52] }}
-          legFront={{ to: [42, 46], bend: [46, 2] }}
-          armBack={{ to: [28, 34], bend: [6, 22] }}
-          armFront={{ to: [44, 30], bend: [32, -4] }}
-          handFront="fist"
-          holdFront={<Magnifier size={1.1} />}
-        />
+        <g {...settle(site, { delay: 420, y: 52, s: 0.94, ms: 650, spring: true })}>
+          <Person
+            x={606}
+            y={434}
+            s={1.45}
+            lean={20}
+            skin={SKIN.peach}
+            top={C.coral}
+            bottom={C.lilac}
+            shoe={C.white}
+            hair={INK}
+            hairStyle="bun"
+            face="focus"
+            legBack={{ to: [-38, 46], bend: [6, 52] }}
+            legFront={{ to: [42, 46], bend: [46, 2] }}
+            armBack={{ to: [28, 34], bend: [6, 22] }}
+            armFront={{ to: [44, 30], bend: [32, -4] }}
+            handFront="fist"
+            holdFront={<Magnifier size={1.1} />}
+          />
+        </g>
 
         {/* points the way on */}
-        <Person
-          x={880}
-          y={318}
-          s={1.45}
-          lean={18}
-          skin={SKIN.sky}
-          top={C.lilac}
-          bottom={C.coral}
-          shoe={C.sky}
-          hair={INK}
-          hairStyle="band"
-          band={C.sunshine}
-          face="grin"
-          legBack={{ to: [-22, 62], bend: [-16, 30] }}
-          legFront={{ to: [32, 56], bend: [26, 20] }}
-          armBack={{ to: [-42, 8], bend: [-30, -22] }}
-          armFront={{ to: [70, -30], bend: [40, -2] }}
-          handBack="open"
-          handFront="point"
-          handFrontScale={1.7}
-        />
+        <g {...settle(site, { delay: 520, y: 52, s: 0.94, ms: 650, spring: true })}>
+          <Person
+            x={880}
+            y={318}
+            s={1.45}
+            lean={18}
+            skin={SKIN.sky}
+            top={C.lilac}
+            bottom={C.coral}
+            shoe={C.sky}
+            hair={INK}
+            hairStyle="band"
+            band={C.sunshine}
+            face="grin"
+            legBack={{ to: [-22, 62], bend: [-16, 30] }}
+            legFront={{ to: [32, 56], bend: [26, 20] }}
+            armBack={{ to: [-42, 8], bend: [-30, -22] }}
+            armFront={{ to: [70, -30], bend: [40, -2] }}
+            handBack="open"
+            handFront="point"
+            handFrontScale={1.7}
+          />
+        </g>
       </g>
     </svg>
   );

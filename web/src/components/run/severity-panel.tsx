@@ -46,9 +46,11 @@ export function SeverityPanel({ assessment }: { assessment: SeverityAssessment }
       : (HOW[assessment.decided_by] ?? assessment.decided_by);
   const maxScore = Math.max(1, ...SEVERITIES.map((s) => assessment.rule_scores[s] ?? 0));
   return (
+    // overflow-clip: the stamp starts large, and a transform still counts as overflow; clipped to
+    // the card, it can never make a narrow screen scroll sideways.
     <section
       aria-labelledby="severity-title"
-      className="grid min-w-0 gap-4 rounded-lg bg-raised p-4 sm:p-5"
+      className="grid min-w-0 gap-4 overflow-clip rounded-lg bg-raised p-4 sm:p-5"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="grid gap-1">
@@ -57,7 +59,8 @@ export function SeverityPanel({ assessment }: { assessment: SeverityAssessment }
           </h2>
           <p className="text-xs text-muted-foreground">{SEVERITY_MEANING[assessment.severity]}</p>
         </div>
-        <SeverityBadge severity={assessment.severity} />
+        {/* Keyed by level, so a reviewer's correction lands with its own stamp. */}
+        <SeverityBadge key={assessment.severity} severity={assessment.severity} stamp />
       </div>
       <SeverityScale
         probabilities={assessment.probabilities}
@@ -66,6 +69,7 @@ export function SeverityPanel({ assessment }: { assessment: SeverityAssessment }
         floor={assessment.floor}
         alpha={assessment.alpha}
         setEmpty={assessment.set_empty ?? false}
+        drawBracket
       />
       <p className="text-sm leading-relaxed">
         {how}{" "}

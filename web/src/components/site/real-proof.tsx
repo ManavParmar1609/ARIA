@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { RollingNumber } from "@/components/aria/rolling-number";
 import { ArrowCircle, Button } from "@/components/ui/button";
 import { EVAL_DOC_URL, type RealLogs } from "@/lib/site-data";
 import { cn } from "@/lib/utils";
@@ -15,7 +16,9 @@ function Headline({ value, label, note }: { value: string; label: string; note: 
         <span className="eyebrow text-foreground">{label}</span>
         <span className="text-sm text-muted-foreground">{note}</span>
       </dt>
-      <dd className="stat order-1 text-[2.75rem] sm:text-5xl xl:text-[5.375rem]">{value}</dd>
+      <dd className="stat order-1 text-[2.75rem] sm:text-5xl xl:text-[5.375rem]">
+        <RollingNumber value={value} />
+      </dd>
     </div>
   );
 }

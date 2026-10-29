@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { Wordmark } from "@/components/aria/wordmark";
+import { SectionNav } from "@/components/site/section-nav";
 import { SiteMenu } from "@/components/site/site-menu";
 import { REPO_URL } from "@/lib/site-data";
 
@@ -12,9 +13,6 @@ export const SECTIONS = [
   { href: "#results", label: "Results" },
   { href: "#standards", label: "Standards" },
 ];
-
-const LINK =
-  "rounded-sm px-3 py-2 text-base text-foreground transition-colors duration-(--duration-quick) hover:bg-foreground/6 xl:text-lg";
 
 /** A small face in a sky-blue disc: the reference's "chromatic dot" on the console button. */
 function Face() {
@@ -50,16 +48,7 @@ export function SiteHeader() {
           <Link href="/" prefetch={false} className="rounded-sm" aria-label="ARIA home">
             <Wordmark />
           </Link>
-          <nav aria-label="Page sections" className="hidden items-center gap-0.5 lg:flex">
-            {SECTIONS.map((link) => (
-              <a key={link.href} href={link.href} className={LINK}>
-                {link.label}
-              </a>
-            ))}
-            <a href={REPO_URL} className={LINK}>
-              GitHub
-            </a>
-          </nav>
+          <SectionNav links={[...SECTIONS, { href: REPO_URL, label: "GitHub" }]} />
           <SiteMenu links={[...SECTIONS, { href: REPO_URL, label: "GitHub" }]} />
         </div>
         <Link

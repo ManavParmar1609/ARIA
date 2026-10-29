@@ -33,11 +33,14 @@ export function SeverityBadge({
   className,
   size = "md",
   withMeaning = false,
+  stamp = false,
 }: {
   severity: Severity | null | undefined;
   className?: string;
   size?: "sm" | "md";
   withMeaning?: boolean;
+  /** Land like a rubber stamp when it appears (globals.css: .sev-stamp). */
+  stamp?: boolean;
 }) {
   if (!severity) {
     return (
@@ -62,6 +65,7 @@ export function SeverityBadge({
           "tabular inline-flex items-center rounded-xs border border-sev-edge px-1.5 font-medium text-sev-ink",
           SEVERITY_BG[severity],
           size === "sm" ? "h-5 text-[0.6875rem]" : "h-6 text-xs",
+          stamp && "sev-stamp",
         )}
       >
         {severity}
@@ -93,6 +97,7 @@ export function TagStrip({
       style={style}
     >
       <span
+        data-stamp
         className={cx(
           "tabular text-sm font-medium tracking-[0.04em]",
           severity ? "text-sev-ink" : "text-faint",
@@ -116,6 +121,7 @@ export function SeverityScale({
   alpha = 0.1,
   setEmpty = false,
   compact = false,
+  drawBracket = false,
   className,
 }: {
   probabilities: Partial<Record<Severity, number>>;
@@ -126,6 +132,8 @@ export function SeverityScale({
   /** No class reached the conformal threshold: the bracket is drawn dashed, as a stand-in. */
   setEmpty?: boolean;
   compact?: boolean;
+  /** Draw the bracket across the bars when it appears (globals.css: .sev-bracket). */
+  drawBracket?: boolean;
   className?: string;
 }) {
   const inSet = new Set(predictionSet);
@@ -145,9 +153,11 @@ export function SeverityScale({
       <div className="relative grid grid-cols-4 gap-1.5" aria-hidden>
         {setIdx.length > 0 ? (
           <div
+            data-bracket
             className={cx(
               "pointer-events-none absolute -top-0.5 h-2 rounded-t-xs border-x border-t",
               setEmpty ? "border-dashed border-faint" : "border-foreground/60",
+              drawBracket && "sev-bracket",
             )}
             style={{
               left: `calc(${(first / 4) * 100}% + 2px)`,

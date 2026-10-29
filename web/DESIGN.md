@@ -65,7 +65,22 @@ quiet moments (a first visit, an empty queue, a search with no match, a missing 
 9. **Motion answers people.**
    - Presses scale to 98%, and the round arrow nudges right on hover.
    - The landing page plays the recorded run in as it scrolls past (wide screens only).
-   - Larger animations are proposed to the owner and built only when chosen.
+   - Larger animations are proposed to the owner and built only when chosen. The owner chose
+     these six:
+     - **Hero entrance:** the scene settles in once, back to front (about 1.2 s), then its loose
+       pages keep drifting. CSS on the scene's groups (`scenes.tsx`, `.hero-in`, `.hero-drift`).
+     - **Sliding nav pill:** a grass pill glides to the section being read on the landing page,
+       and between pages in the console sidebar. It moves by FLIP, so only transforms animate.
+     - **Rolling stats:** headline numbers roll up digit by digit as they come into view
+       (`RollingNumber`). The real value is always in the page as text.
+     - **Severity stamp:** a new severity lands like a rubber stamp, then the prediction-set
+       bracket draws across the bars (`.sev-stamp`, `.sev-bracket`, and the replay's timeline).
+     - **Evidence thread:** pointing at a citation sweeps the highlight across each line it cites
+       (`.thread-lit` on the landing page, one pass of light, `.thread-pass`, in a run's panel).
+     - **Dot bloom:** a ghost button's hover and focus fill grows out of a dot at its centre.
+   - Every animation moves only `transform` and `opacity`, so it runs on the compositor at 60 fps
+     and never shifts layout. Anything that starts larger than its box (the stamp) is clipped to
+     its card, so a transform can never make a narrow screen scroll sideways.
    - `prefers-reduced-motion` shows final states.
 
 ## Tokens

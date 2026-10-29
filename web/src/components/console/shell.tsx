@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { Wordmark } from "@/components/aria/wordmark";
 import { ConsoleCommands, useCommands } from "@/components/console/command-palette";
@@ -126,8 +126,44 @@ function ReviewCount() {
 
 function Nav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const nav = useRef<HTMLElement>(null);
+  const pill = useRef<HTMLSpanElement>(null);
+  const lastY = useRef<number | null>(null);
+
+  // A grass pill glides from the page you left to the one you opened (a vertical translate:
+  // every item is the same size). Until it has measured, the current link keeps its own grass
+  // background, so the first paint and no-script views are unchanged.
+  useLayoutEffect(() => {
+    const el = pill.current;
+    const root = nav.current;
+    if (!el || !root) return;
+    const link = root.querySelector<HTMLElement>('a[aria-current="page"]');
+    if (!link) {
+      el.style.opacity = "0";
+      lastY.current = null;
+      return;
+    }
+    const y = link.offsetTop;
+    el.style.left = `${link.offsetLeft}px`;
+    el.style.width = `${link.offsetWidth}px`;
+    el.style.height = `${link.offsetHeight}px`;
+    el.style.transition = "none";
+    el.style.transform = `translateY(${lastY.current ?? y}px)`;
+    void el.offsetWidth;
+    el.style.transition = "";
+    el.style.transform = `translateY(${y}px)`;
+    el.style.opacity = "1";
+    lastY.current = y;
+    root.dataset.pill = "on";
+  }, [pathname]);
+
   return (
-    <nav aria-label="Console" className="grid gap-6">
+    <nav ref={nav} aria-label="Console" className="group/nav relative grid gap-6">
+      <span
+        ref={pill}
+        aria-hidden
+        className="absolute top-0 left-0 rounded-md bg-grass opacity-0 transition-[transform,opacity] duration-(--duration-slow) ease-(--ease-out)"
+      />
       {NAV.map((group) => (
         <div key={group.label} role="group" aria-labelledby={`nav-${group.label}`}>
           <p id={`nav-${group.label}`} className="eyebrow mb-1.5 px-3 text-muted-foreground">
@@ -144,9 +180,9 @@ function Nav({ onNavigate }: { onNavigate?: () => void }) {
                   onClick={onNavigate}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "flex h-10 items-center gap-3 rounded-md px-3 text-[0.9375rem] transition-colors duration-(--duration-quick)",
+                    "relative flex h-10 items-center gap-3 rounded-md px-3 text-[0.9375rem] transition-colors duration-(--duration-quick)",
                     active
-                      ? "bg-grass font-medium text-pop-ink"
+                      ? "bg-grass font-medium text-pop-ink group-data-[pill=on]/nav:bg-transparent"
                       : "text-foreground hover:bg-foreground/6",
                   )}
                 >
