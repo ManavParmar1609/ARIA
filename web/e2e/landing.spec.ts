@@ -15,6 +15,8 @@ test.describe("landing page", () => {
   });
 
   test("opens a plain-English definition from a dotted term", async ({ page }) => {
+    // Still frames, so axe never measures text mid-fade (the replay plays in as it scrolls past).
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/");
     await page.getByRole("button", { name: "safety floors" }).click();
     const card = page.locator("#term-safety-floor");
