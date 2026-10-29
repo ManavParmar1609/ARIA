@@ -382,6 +382,9 @@ async def test_comms_are_proposals_and_leaky_polish_is_rejected(builder: Scenari
     drafts = deterministic_drafts(
         report, service="BlueGene/L compute", run_url="http://aria/runs/run-r1"
     )
+    sev = str(report.severity)
+    assert drafts["responders"].title.startswith(f"[{sev}] ")
+    assert drafts["responders"].title.count(sev) == 1  # not "[SEV1] SEV1 · ..."
     leaky = {k: v.model_dump() for k, v in drafts.items()}
     leaky["status_page"]["body"] = (
         "Node R02-M1-N0 crashed because of a kernel bug; root cause is the firmware."

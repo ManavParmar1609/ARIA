@@ -14,6 +14,7 @@ rules is dropped in favour of the deterministic one.
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass, field
 
 from aria.contracts.base import SEVERITY_DESCRIPTIONS, Severity
@@ -57,8 +58,10 @@ def deterministic_drafts(
         bullets.append(f"• Suspected: {report.suspected_cause[0].text}")
     if report.actions:
         bullets.append(f"• Next step: {report.actions[0].text}")
+    # Report titles already lead with the severity ("SEV3 · ..."); say it once, in brackets.
+    headline = re.sub(r"^SEV[1-4]\s*·\s*", "", report.title)
     responders = MessageDraft(
-        title=f"[{report.severity}] {report.title}"[:140],
+        title=f"[{report.severity}] {headline}"[:140],
         body=("\n".join(bullets) + f"\nReport: {run_url}")[:1_500],
         evidence_ids=ids,
     )
