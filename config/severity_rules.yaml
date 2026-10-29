@@ -17,7 +17,7 @@
 # (see config/lexicon.yaml), n_critical_components, alerts.firing, alerts.critical and
 # alerts.warning. Unknown feature names fail at load time.
 
-version: "2026.10.1"
+version: "2026.10.2"
 
 # A severity is decided without the LLM only when the prediction set is a single class and the
 # calibrated model gives it at least this probability.
@@ -137,6 +137,16 @@ rules:
         - {feature: keyword_hits.storage, op: ">=", value: 3}
         - {feature: error_events, op: ">=", value: 3}
 
+  - id: unfinished_work_widespread
+    title: One in twenty units of work or more broke off partway
+    effect: score
+    severity: SEV2
+    weight: 2.0
+    when:
+      all:
+        - {feature: broken_flows, op: ">=", value: 20}
+        - {feature: broken_flow_ratio, op: ">=", value: 0.05}
+
   - id: attack_widespread
     title: Authentication attacks against six or more hosts
     effect: score
@@ -186,6 +196,13 @@ rules:
     weight: 1.0
     when: {feature: keyword_hits.security, op: ">=", value: 5}
 
+  - id: unfinished_work
+    title: Units of work (blocks, task attempts) that broke off partway
+    effect: score
+    severity: SEV3
+    weight: 1.0
+    when: {feature: broken_flows, op: ">=", value: 3}
+
   - id: persistent_errors
     title: Errors persisting for ten minutes or more
     effect: score
@@ -197,12 +214,17 @@ rules:
         - {feature: error_events, op: ">=", value: 10}
 
   # --- SEV4: noise -----------------------------------------------------------------------------
+  # Work that silently breaks off logs no errors, so a quiet window is noise only when its
+  # units of work also finished.
   - id: no_errors
-    title: No error-level events
+    title: No error-level events, and units of work finish
     effect: score
     severity: SEV4
     weight: 2.0
-    when: {feature: error_events, op: "==", value: 0}
+    when:
+      all:
+        - {feature: error_events, op: "==", value: 0}
+        - {feature: broken_flows, op: "<", value: 3}
 
   - id: low_error_rate
     title: Errors are rare and confined to low-criticality components
@@ -214,6 +236,7 @@ rules:
         - {feature: error_ratio, op: "<", value: 0.05}
         - {feature: max_component_criticality, op: "<", value: 0.5}
         - {feature: keyword_hits.crash, op: "==", value: 0}
+        - {feature: broken_flows, op: "<", value: 3}
 
   # --- floors: severities ARIA must never go below ---------------------------------------------
   - id: data_risk_floor
@@ -239,3 +262,11 @@ rules:
     effect: floor
     severity: SEV2
     when: {feature: alerts.critical, op: ">=", value: 1}
+
+  # Silent failures log no errors, so the model, trained on windows that do, can read them as
+  # noise. Work that broke off partway always gets a person's look.
+  - id: unfinished_work_floor
+    title: Units of work broke off partway, with no error logged
+    effect: floor
+    severity: SEV3
+    when: {feature: broken_flows, op: ">=", value: 3}

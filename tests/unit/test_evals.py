@@ -12,7 +12,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from aria.config import GuardrailConfig
+from aria.config import GuardrailConfig, get_app_config
 from aria.contracts.parsing import WindowFeatures
 from aria.contracts.run import EventKind, RunEvent
 from aria.data.scenarios import LinePools, ScenarioBuilder
@@ -20,11 +20,12 @@ from aria.evals import edge as ed
 from aria.evals import metrics as m
 from aria.evals import parsing as ps
 from aria.evals import pipeline as pl
-from aria.evals import report
+from aria.evals import real, report
 from aria.evals import run as ev
 from aria.evals import severity as sv
 from aria.evidence import EvidenceStore
 from aria.parsing.parser import parse_lines
+from aria.severity.engine import SeverityEngine
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "loghub"
 labels = st.sampled_from(m.CLASSES)
@@ -395,3 +396,44 @@ def test_the_text_baseline_never_sees_the_bgl_alert_tag(builder: ScenarioBuilder
     assert all(raw.endswith(line) for raw, line in zip(bgl.lines, text, strict=True))
     hdfs = builder.build("hdfs.block_serve_exceptions", seed=5, nodes=2, duration_min=3)
     assert sv.baseline_text(hdfs) == "\n".join(hdfs.lines)  # untagged systems keep every field
+
+
+# --- real logs ---------------------------------------------------------------------------------
+
+
+@pytest.mark.slow
+def test_real_suite_judges_the_committed_hdfs_cut_against_the_experts() -> None:
+    sample = real.load_hdfs(real.HDFS_FIXTURE, fixture=True)
+    assert sample is not None
+    assert (len(sample.records), len(sample.anomalous)) == (9914, 873)
+    result = real.evaluate_hdfs(sample, engine=SeverityEngine.load(get_app_config().severity))
+    assert result["fixture"]
+    assert result["anomalous_blocks"] == 37
+    assert result["judged"] > 250
+    assert result["lifecycle"]["precision"] >= 0.9
+    assert result["visible"]["caught"] == result["visible"]["anomalous"] > 0
+    # A keyword rule pages on nearly every healthy block; ARIA's engine alone sees few failures.
+    assert result["baselines"]["keyword_per_block"]["false_alarm_rate"] > 0.9
+    assert result["baselines"]["engine_per_block"]["recall"] < result["lifecycle"]["recall"]
+    assert {(s["min_support"], s["settle_quantile"]) for s in result["sensitivity"]} == {
+        (support, q) for support in real.SUPPORTS for q in real.SETTLE_QUANTILES
+    }
+    assert result["windows"][0]["severity"] in {"SEV1", "SEV2", "SEV3"}
+    text = "\n".join(report._real({"hdfs": result}))
+    assert "## Real logs, expert labels" in text
+    assert "small committed HDFS cut" in text
+    assert "| ARIA lifecycle check |" in text
+    summary = "\n".join(report._real_summary({"hdfs": result}))
+    assert "from the small committed cut" in summary
+
+
+def test_real_suite_says_when_the_hdfs_sample_is_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(real, "HDFS_FIXTURE", tmp_path / "no-fixture")
+    result = real.summarize(
+        engine=SeverityEngine.load(get_app_config().severity), hdfs_dir=tmp_path
+    )
+    assert "missing" in result["hdfs"]
+    assert "not downloaded" in "\n".join(report._real(result))
+    assert report._real_summary(result) == []

@@ -10,6 +10,7 @@ Docs that quote results hold them in generated blocks, which ``make eval`` rewri
 from __future__ import annotations
 
 import re
+from collections import Counter
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -191,6 +192,124 @@ def _pipeline(section: Mapping[str, Any], title: str) -> list[str]:
     ]
 
 
+def _detection_row(label: str, r: Mapping[str, Any]) -> str:
+    healthy = r["fp"] + r["tn"]
+    return (
+        f"| {label} | {_pct(r['precision'])} ({_ci(r['precision_ci95'])}) | "
+        f"{_pct(r['recall'])} ({_ci(r['recall_ci95'])}) | {r['f1']:.3f} | "
+        f"{r['fp']:,} of {healthy:,} ({_pct(r['false_alarm_rate'])}) |"
+    )
+
+
+def _real(section: Mapping[str, Any]) -> list[str]:
+    hdfs = section.get("hdfs") or {}
+    lines = ["## Real logs, expert labels", ""]
+    if "missing" in hdfs:
+        return [*lines, f"The HDFS sample is not downloaded: {hdfs['missing']}.", ""]
+    if hdfs.get("fixture"):
+        lines += [
+            (
+                "> **These numbers come from the small committed HDFS cut, not the full sample.** "
+                "Run `aria data download --source hdfs-100k` and regenerate before quoting them."
+            ),
+            "",
+        ]
+    rp, life, vis = hdfs["replay"], hdfs["lifecycle"], hdfs["visible"]
+    base = hdfs["baselines"]
+    lines += [
+        (
+            f"Real lines that no scenario builder touched: the first {hdfs['lines']:,} lines "
+            f"({hdfs['minutes']} minutes) of the log of a Hadoop cluster of more than 200 nodes, and "
+            f"the label Hadoop experts gave each of its {hdfs['blocks']:,} storage blocks "
+            f"({hdfs['anomalous_blocks']} failed). Source: {hdfs['source']}; {hdfs['citation']}"
+        ),
+        "",
+        (
+            f"ARIA replayed the log the way its periodic log scan would: {rp['windows']} "
+            f"overlapping {rp['window_min']:g}-minute windows, one every {rp['step_min']:g} minutes, "
+            "each parsed by the production parser. The parser learns from each window which steps "
+            "of a block's life come in equal numbers, and flags blocks that break them. It never "
+            "sees a label. Each block was judged in the first window that saw it from start to "
+            f"finish: {hdfs['judged']:,} blocks, {hdfs['judged_anomalous']} of them failures. The "
+            "cluster logged about 7,500 lines a minute, so the replay raises the per-run line cap "
+            f"from 20,000 to {rp['max_lines']:,}."
+        ),
+        "",
+        "| Method, per block | Precision (95% CI) | Recall (95% CI) | F1 | False alarms |",
+        "|---|---|---|---|---|",
+        _detection_row("ARIA lifecycle check", life),
+        _detection_row(
+            "ARIA severity engine, each block on its own (no lifecycle check)",
+            base["engine_per_block"],
+        ),
+        _detection_row("Keyword categories, each block on its own", base["keyword_per_block"]),
+        "",
+        (
+            f"- **Failures with a visible trace.** {vis['anomalous']} of the "
+            f"{hdfs['judged_anomalous']} judged failures differ from every healthy block in the "
+            f"sample; ARIA flagged {vis['caught']} of them ({_pct(vis['recall'])}). The other "
+            f"{vis['look_healthy']} take the same steps, the same number of times, as a healthy "
+            "block here (their trouble shows later in the full log), so nothing that reads only "
+            "these lines can tell them apart."
+        ),
+        (
+            "- **How the flagged failures broke**: "
+            + "; ".join(f"{p['pattern']} ({p['blocks']})" for p in hdfs["top_patterns"])
+            + "."
+        ),
+    ]
+    if hdfs["false_alarms"]:
+        lines.append(
+            "- **False alarms**: "
+            + "; ".join(f"{f['block']}: {f['reason']}" for f in hdfs["false_alarms"])
+            + "."
+        )
+    if hdfs["missed_visible"]:
+        lines.append(
+            "- **Visible failures missed**: "
+            + "; ".join(f"{f['block']} ({', '.join(f['steps'])})" for f in hdfs["missed_visible"])
+            + "."
+        )
+    severities = Counter(w.get("severity") for w in hdfs["windows"] if w.get("severity"))
+    if severities:
+        lines.append(
+            "- **Severity**: ARIA's offline policy rated the windows "
+            + ", ".join(f"{n} × {sev}" for sev, n in sorted(severities.items()))
+            + "."
+        )
+    overlap = hdfs.get("overlap_with_scenario_pool")
+    if overlap:
+        lines.append(
+            f"- **Overlap with training data**: {overlap['lines']} of these lines "
+            f"({overlap['blocks']} blocks) also appear in the Loghub HDFS 2k sample the scenario "
+            "builder draws on. The lifecycle check uses no trained model; the severity baseline does."
+        )
+    lines += [
+        "",
+        (
+            "How much the result depends on two settings: the share of a window's blocks on which "
+            "a step pair must hold, and how long ARIA waits before judging a block (the quantile "
+            f"of complete blocks' durations). ARIA uses {rp['min_support']:g} and "
+            f"{rp['settle_quantile']:g}."
+        ),
+        "",
+        "| Pair support | Settle quantile | Judged | Precision | Recall | F1 | False alarms |",
+        "|---|---|---|---|---|---|---|",
+        *(
+            f"| {r['min_support']:g} | {r['settle_quantile']:g} | {r['judged']:,} | "
+            f"{_pct(r['precision'])} | {_pct(r['recall'])} | {r['f1']:.3f} | {r['fp']} |"
+            for r in hdfs["sensitivity"]
+        ),
+        "",
+        (
+            "At a pair support of 0.98, a window in which more than 2% of blocks fail stops ARIA "
+            "learning the pair those failures break, which is why ARIA uses 0.95."
+        ),
+        "",
+    ]
+    return lines
+
+
 def _cost(value: float | None) -> str:
     return "not priced" if value is None else f"${value:.4f}"
 
@@ -296,7 +415,8 @@ def render(results: Mapping[str, Any], live: Mapping[str, Any] | None = None) ->
         ),
         "",
         (
-            "**Data.** Every number here comes from semi-synthetic incident windows: real lines from "
+            "**Data.** The first section uses real logs with labels from the system's experts. "
+            "Every other number comes from semi-synthetic incident windows: real lines from "
             "the public Loghub samples, composed into incidents by ARIA's scenario builder. Severity "
             "labels come from the BGL alert-tag rubric for BGL windows and from the documented "
             "scenario policy elsewhere. The windows use held-out seeds "
@@ -315,6 +435,8 @@ def render(results: Mapping[str, Any], live: Mapping[str, Any] | None = None) ->
             ),
             "",
         ]
+    if "real" in results:
+        lines += _real(results["real"])
     if "severity" in results:
         lines += _severity(results["severity"])
     if "pipeline" in results:
@@ -369,6 +491,11 @@ def render(results: Mapping[str, Any], live: Mapping[str, Any] | None = None) ->
             "over-triages rather than under-triages when the model is unsure."
         ),
         (
+            "- The real-log section covers one system (HDFS) and one kind of failure signal: units "
+            "of work that stop partway. Its labels say whether a block failed, not how severe the "
+            "incident was, so it measures detection, not severity."
+        ),
+        (
             "- Contiguous BGL windows and the UCI incident log could not be downloaded in the build "
             "environment, so no results on them are reported."
         ),
@@ -377,22 +504,49 @@ def render(results: Mapping[str, Any], live: Mapping[str, Any] | None = None) ->
     return "\n".join(lines)
 
 
-def _provenance(results: Mapping[str, Any]) -> str:
+def _provenance(results: Mapping[str, Any], *, real: bool = False) -> str:
     seeds = ", ".join(map(str, results["data"]["test_seeds"]))
+    which = "Apart from the real-log results, the data" if real else "The data"
     return (
         f"Generated by `make eval` at commit `{results.get('git_sha') or 'unknown'}`; do not edit "
-        "by hand. The data is **semi-synthetic**: real lines from the public Loghub samples, "
+        f"by hand. {which} is **semi-synthetic**: real lines from the public Loghub samples, "
         f"composed into incidents by ARIA's scenario builder, on held-out seeds {seeds}. These "
         "numbers show how ARIA behaves on that distribution, not its accuracy on production "
         "incidents."
     )
 
 
+def _real_summary(section: Mapping[str, Any]) -> list[str]:
+    hdfs = section.get("hdfs") or {}
+    if "lifecycle" not in hdfs:
+        return []
+    life, vis = hdfs["lifecycle"], hdfs["visible"]
+    keyword = hdfs["baselines"]["keyword_per_block"]
+    flagged = life["tp"] + life["fp"]
+    note = " (from the small committed cut, not the full sample)" if hdfs.get("fixture") else ""
+    return [
+        (
+            f"**Real logs, expert labels**{note}: on {hdfs['judged']:,} storage blocks from a real "
+            "Hadoop cluster of more than 200 nodes, labelled by Hadoop experts, ARIA's lifecycle "
+            "check flagged "
+            f"{flagged} blocks, {_pct(life['precision'])} of them real failures "
+            f"({life['fp']} false alarms among {life['fp'] + life['tn']:,} healthy blocks). It "
+            f"caught {vis['caught']} of the {vis['anomalous']} failures that leave a visible trace "
+            f"in the log, {_pct(life['recall'])} of all labelled failures: the rest take exactly "
+            "the steps a healthy block takes within the sample. A keyword rule flags "
+            f"{_pct(keyword['false_alarm_rate'])} of healthy blocks."
+        ),
+        "",
+    ]
+
+
 def _results(results: Mapping[str, Any], live: Mapping[str, Any] | None) -> list[str]:
     """The README's summary: headline numbers, each linked to its section of the full report."""
-    lines = [_provenance(results), ""]
+    lines = [_provenance(results, real="real" in results), ""]
     if results["data"].get("fixtures"):
         lines += ["**These numbers come from the small test fixtures.** Run `make data` first.", ""]
+    if "real" in results:
+        lines += _real_summary(results["real"])
     if "severity" in results:
         sev = results["severity"]
         lines += [

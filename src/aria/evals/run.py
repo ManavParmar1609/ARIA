@@ -1,8 +1,8 @@
-"""Evaluation suites: ``aria eval run --suite smoke|severity|pipeline|robustness|all``.
+"""Evaluation suites: ``aria eval run --suite smoke|severity|pipeline|robustness|real|all``.
 
-``smoke`` is small and deterministic: CI runs it as a regression gate (``--gate``). ``all`` runs
-every suite at full size and regenerates ``docs/evaluation.md``. Results are written as JSON to
-``reports/eval/<suite>.json``.
+``smoke`` is small and deterministic: CI runs it as a regression gate (``--gate``). ``real``
+replays real, expert-labelled logs (``evals/real.py``). ``all`` runs every suite at full size and
+regenerates ``docs/evaluation.md``. Results are written as JSON to ``reports/eval/<suite>.json``.
 """
 
 from __future__ import annotations
@@ -21,16 +21,18 @@ from typing import Any
 import yaml
 
 from aria.config import get_app_config
+from aria.data.loghub import iter_structured_csv
 from aria.data.scenarios import LinePools, Scenario, ScenarioBuilder
 from aria.evals import edge as ed
 from aria.evals import parsing as ps
 from aria.evals import pipeline as pl
+from aria.evals import real as rl
 from aria.evals import severity as sv
 from aria.retrieval.seed import MEMORY_SEEDS
 from aria.severity.engine import SeverityEngine
-from aria.severity.training import SplitSeeds
+from aria.severity.training import SplitSeeds, known_templates
 
-SUITES = ("smoke", "severity", "pipeline", "robustness", "parsing", "edge", "all")
+SUITES = ("smoke", "severity", "pipeline", "robustness", "parsing", "edge", "real", "all")
 THRESHOLDS = Path("config/eval_thresholds.yaml")
 FIXTURES_DIR = Path("tests/fixtures/loghub")  # tiny samples for tests, not for measurement
 
@@ -118,6 +120,15 @@ async def run(
         results["parsing"] = ps.summarize(loghub_dir)
     if suite in ("smoke", "edge", "all"):
         results["edge"] = ed.evaluate(ed.generate())
+    if suite in ("real", "all"):
+        pool = loghub_dir / "HDFS" / "HDFS_2k.log_structured.csv"
+        results["real"] = rl.summarize(
+            engine=SeverityEngine.load(config.severity),
+            known=known_templates(builder, "hdfs"),
+            pool_lines={r.message for r in iter_structured_csv("hdfs", pool)}
+            if pool.exists()
+            else None,
+        )
     test = sv.held_out(
         builder,
         seeds=size.severity_seeds,

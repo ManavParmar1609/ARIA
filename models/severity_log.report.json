@@ -1,10 +1,10 @@
 {
- "model_version": "severity-log-20261029-f3351920",
- "rules_version": "2026.10.1",
+ "model_version": "severity-log-20261029-a362d541",
+ "rules_version": "2026.10.2",
  "c": 3.0,
  "alpha": 0.1,
- "temperature": 0.8269,
- "conformal_q": 0.5555425157990233,
+ "temperature": 0.8271,
+ "conformal_q": 0.5574191536038096,
  "labels": {
   "train": {
    "SEV2": 157,
@@ -29,14 +29,14 @@
   "n": 660,
   "accuracy": 0.9591,
   "nll": 0.1354,
-  "ece": 0.0311,
+  "ece": 0.031,
   "coverage": 0.9667,
   "mean_set_size": 1.015
  },
  "temperature_split": {
   "n": 165,
   "accuracy": 0.9515,
-  "nll": 0.1825,
+  "nll": 0.1823,
   "ece": 0.0229,
   "coverage": 0.9576,
   "mean_set_size": 1.018
@@ -44,10 +44,10 @@
  "conformal_split": {
   "n": 330,
   "accuracy": 0.8879,
-  "nll": 0.2947,
+  "nll": 0.2945,
   "ece": 0.0504,
-  "coverage": 0.9061,
-  "mean_set_size": 1.033
+  "coverage": 0.9091,
+  "mean_set_size": 1.036
  },
  "synthetic": true,
  "seeds": {

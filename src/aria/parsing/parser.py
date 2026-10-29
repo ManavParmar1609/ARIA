@@ -18,6 +18,9 @@ from typing import Any
 from aria.config import GuardrailConfig
 from aria.contracts.base import EvidenceKind
 from aria.contracts.parsing import (
+    BrokenUnit,
+    FlowCheck,
+    FlowPair,
     GuardReport,
     InjectionFinding,
     LogEvent,
@@ -29,6 +32,7 @@ from aria.data.loghub import LogRecord, parse_raw_line
 from aria.evidence import EvidenceStore
 from aria.parsing.drain import Drain, drain_for, template_id
 from aria.parsing.features import ERROR_LEVELS, FeatureInput, compute_features
+from aria.parsing.flows import FlowResult, Step, check_flows, pair_groups, short_step
 from aria.parsing.signals import WARN, line_rank
 from aria.security.injection import scan_line
 from aria.security.redaction import Redactor, new_salt
@@ -36,6 +40,8 @@ from aria.security.redaction import Redactor, new_salt
 MAX_TEMPLATE_EVIDENCE = 12
 MAX_LINE_EVIDENCE = 15
 MAX_INJECTION_EVIDENCE = 5
+MAX_FLOW_EVIDENCE = 5  # broken units shown as evidence; the batch keeps up to MAX_FLOW_EXAMPLES
+MAX_FLOW_EXAMPLES = 20
 QUARANTINE_FLAG = "injection_suspect"
 QUARANTINE_TEMPLATE = "<quarantined: possible prompt injection>"
 _SURROGATES = re.compile("[\ud800-\udfff]")
@@ -78,6 +84,7 @@ class ParseOutput:
     lines: list[ParsedLine]  # analysed lines; quarantined ones are excluded
     evidence_ids: list[str]
     quarantined: list[ParsedLine] = field(default_factory=list)
+    flows: FlowResult = field(default_factory=FlowResult)  # every broken unit, for evaluations
 
 
 def split_shards(lines: Sequence[str], shards: int) -> list[tuple[int, list[str]]]:
@@ -202,6 +209,17 @@ def merge_shards(
         system=system,
         novel_template_ids=novel_ids,
     )
+    flows = check_flows(
+        [Step(pl.idx, pl.record.ts, pl.template_id, pl.template, pl.record.message) for pl in lines]
+    )
+    if flows.n_checked:
+        features = features.model_copy(
+            update={
+                "flows_checked": flows.n_checked,
+                "broken_flows": len(flows.broken),
+                "broken_flow_ratio": flows.broken_ratio,
+            }
+        )
 
     by_template: dict[str, list[ParsedLine]] = defaultdict(list)
     for line in lines:
@@ -267,6 +285,9 @@ def merge_shards(
                 },
             )
         )
+
+    flow_check, flow_evidence = _flow_evidence(flows, evidence, {pl.idx: pl for pl in lines})
+    evidence_ids.extend(flow_evidence)
 
     def error_count(tid: str) -> int:
         return sum(1 for pl in by_template[tid] if pl.record.level in ERROR_LEVELS)
@@ -414,8 +435,108 @@ def merge_shards(
         ),
         shards=len(shards),
         template_history=len(history),
+        flows=flow_check,
     )
-    return ParseOutput(batch=batch, lines=lines, evidence_ids=evidence_ids, quarantined=quarantined)
+    return ParseOutput(
+        batch=batch,
+        lines=lines,
+        evidence_ids=evidence_ids,
+        quarantined=quarantined,
+        flows=flows,
+    )
+
+
+def _flow_evidence(
+    flows: FlowResult, evidence: EvidenceStore, by_idx: dict[int, ParsedLine]
+) -> tuple[FlowCheck, list[str]]:
+    """Evidence for units of work that broke off: one summary per kind, then a few examples."""
+    check = FlowCheck(
+        units=flows.units,
+        checked=flows.checked,
+        broken=len(flows.broken),
+        settle_s=flows.settle_s,
+        pairs=[
+            FlowPair(
+                kind=p.kind,
+                steps=[flows.templates[p.a], flows.templates[p.b]],
+                units=p.units,
+                support=p.support,
+            )
+            for p in flows.pairs[:20]
+        ],
+    )
+    if not flows.broken:
+        return check, []
+    groups = pair_groups(flows.pairs)
+    summary_ids: list[str] = []
+    for kind, checked in flows.checked.items():
+        broken = [b for b in flows.broken if b.kind.name == kind]
+        if not broken:
+            continue
+        plural = broken[0].kind.plural
+        missing = sum(1 for b in broken if b.problem == "mismatch")
+        unusual = len(broken) - missing
+        title = f"{missing} of {checked} {plural} never finished every step"
+        if not missing:
+            title = f"{unusual} of {checked} {plural} took a step few {plural} take"
+        elif unusual:
+            title += f"; {unusual} more took a rare step"
+        steps = next((members for k, members in groups if k == kind), [])
+        summary_ids.append(
+            evidence.add(
+                EvidenceKind.FEATURE,
+                title,
+                source="parser.flows",
+                detail=(
+                    f"Steps that came in equal numbers on almost every {broken[0].kind.name}: "
+                    + ", ".join(f"“{short_step(flows.templates[t])}”" for t in steps)
+                    + f". ARIA judged the {checked} {plural} it saw from start to finish."
+                ),
+                data={
+                    "kind": kind,
+                    "checked": checked,
+                    "broken": len(broken),
+                    "missing_steps": missing,
+                    "unusual_step": unusual,
+                    "settle_s": flows.settle_s.get(kind),
+                },
+                ts=min((b.first for b in broken if b.first), default=None),
+            )
+        )
+    examples: list[BrokenUnit] = []
+    for n, unit in enumerate(flows.broken[:MAX_FLOW_EXAMPLES]):
+        ev_id = None
+        if n < MAX_FLOW_EVIDENCE:
+            shown = [by_idx[i] for i in unit.lines if i in by_idx][:6]
+            ev_id = evidence.add(
+                EvidenceKind.LOG,
+                f"{unit.kind.name} {unit.key}: {unit.reason}",
+                source="parser.flows",
+                detail="\n".join(f"line {pl.idx + 1}: {pl.record.message[:300]}" for pl in shown),
+                data={
+                    "kind": unit.kind.name,
+                    "key": unit.key,
+                    "problem": unit.problem,
+                    "lines": [i + 1 for i in unit.lines],
+                },
+                ts=unit.first,
+            )
+        examples.append(
+            BrokenUnit(
+                kind=unit.kind.name,
+                key=unit.key,
+                problem=unit.problem,
+                reason=unit.reason,
+                first_ts=unit.first,
+                last_ts=unit.last,
+                lines=list(unit.lines),
+                evidence_id=ev_id,
+            )
+        )
+    check = check.model_copy(
+        update={"examples": examples, "evidence_id": summary_ids[0] if summary_ids else None}
+    )
+    return check, summary_ids + [b.evidence_id for b in examples if b.evidence_id]
 
 
 def parse_lines(

@@ -13,6 +13,9 @@ from aria.contracts.base import (
 )
 from aria.contracts.inputs import AlertSignal, RunOptions, TicketContext, TriageRequest
 from aria.contracts.parsing import (
+    BrokenUnit,
+    FlowCheck,
+    FlowPair,
     GuardReport,
     InjectionFinding,
     LogEvent,
@@ -50,6 +53,7 @@ __all__ = [
     "SEVERITY_ORDER",
     "ActionItem",
     "AlertSignal",
+    "BrokenUnit",
     "BudgetUsage",
     "Claim",
     "Contract",
@@ -57,6 +61,8 @@ __all__ = [
     "Evidence",
     "EvidenceId",
     "EvidenceKind",
+    "FlowCheck",
+    "FlowPair",
     "GuardReport",
     "Hypothesis",
     "IncidentReport",

@@ -1,0 +1,57 @@
+# Units of work ARIA follows from start to finish.
+#
+# Many systems log each unit of work as a series of steps: an HDFS block is allocated, received
+# by each datanode, and confirmed; a task attempt is launched, runs and reports back. A unit
+# that fails often logs no error at all: its steps simply stop. ARIA groups a window's lines by
+# the unit's ID, learns from the window itself which steps always come in equal numbers, and
+# flags units whose steps don't add up, or that took a step almost no other unit takes.
+#
+# Nothing here reads labels. The step relations are mined from each window, so ARIA needs no
+# training or history for a system it has never seen; a window with too few units to learn from
+# is simply not checked.
+#
+# kinds: a regex finds a unit's ID in a line; `hint` is a literal every match contains, used to
+#        skip lines cheaply. A line that names several units counts towards each.
+
+kinds:
+  - id: hdfs_block
+    name: HDFS block
+    plural: HDFS blocks
+    hint: "blk_"
+    pattern: 'blk_-?\d+'
+  - id: task_attempt
+    name: task attempt
+    plural: task attempts
+    hint: "attempt_"
+    pattern: 'attempt_\d+_\d+_[mr]_\d+_\d+'
+  - id: yarn_container
+    name: container
+    plural: containers
+    hint: "container_"
+    pattern: 'container_(?:e\d+_)?\d+_\d+_\d+_\d+'
+  - id: vm_instance
+    name: VM instance
+    plural: VM instances
+    hint: "[instance: "
+    pattern: '\[instance: [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\]'
+
+mining:
+  # Two steps count as a pair only when at least `min_units` units show them, and their counts
+  # are equal on at least `min_support` of those units. Failures are usually rare, but in a bad
+  # window a few percent of units fail at once, and they break exactly the pair that matters;
+  # at 0.98 such a window would stop ARIA learning that pair (docs/evaluation.md shows this).
+  min_units: 30
+  min_support: 0.95
+  # A step taken by fewer than this share of a kind's checked units is unusual.
+  rare_share: 0.005
+  # ARIA judges only units it saw from start to finish: units that start at least the settle
+  # time after the window opens and before it closes. The settle time is learned per window:
+  # this quantile of how long complete units took, and never less than `min_settle_s`. Units
+  # starting `probe_s` inside the window (at most a quarter of it) are used to learn it. At
+  # 0.999, about one healthy unit in a thousand is judged before its last step arrives: a false
+  # alarm costs a person's time, while waiting a little longer costs a window nothing.
+  settle_quantile: 0.999
+  min_settle_s: 5
+  probe_s: 60
+  # At most this many units are mined per kind, so very large windows stay fast.
+  max_units: 20000

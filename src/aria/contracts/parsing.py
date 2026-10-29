@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import Field
 
@@ -62,6 +63,11 @@ class WindowFeatures(Contract):
     critical_components: list[str] = Field(default_factory=list)
     max_component_criticality: float = Field(ge=0, le=1)
     persistence_s: float = Field(ge=0)
+    # Units of work (an HDFS block, a task attempt) followed from start to finish, and how many
+    # broke off partway or took a step almost no other unit takes (see parsing/flows.py).
+    flows_checked: int = Field(default=0, ge=0)
+    broken_flows: int = Field(default=0, ge=0)
+    broken_flow_ratio: float = Field(default=0.0, ge=0, le=1)
 
 
 class RedactionSummary(Contract):
@@ -94,6 +100,38 @@ class GuardReport(Contract):
     dropped_lines: int = Field(default=0, ge=0)
 
 
+class FlowPair(Contract):
+    """Two steps that came in equal numbers on almost every unit of a kind in the window."""
+
+    kind: str
+    steps: list[str] = Field(min_length=2, max_length=2)
+    units: int = Field(ge=0)
+    support: float = Field(ge=0, le=1)
+
+
+class BrokenUnit(Contract):
+    kind: str
+    key: str
+    problem: Literal["mismatch", "unusual_step"]
+    reason: str
+    first_ts: datetime | None = None
+    last_ts: datetime | None = None
+    lines: list[int] = Field(default_factory=list)  # 0-based line indices, at most 12
+    evidence_id: EvidenceId | None = None
+
+
+class FlowCheck(Contract):
+    """Units of work the parser followed from start to finish (config/flows.yaml)."""
+
+    units: dict[str, int] = Field(default_factory=dict)  # units seen, by kind
+    checked: dict[str, int] = Field(default_factory=dict)  # units judged, by kind
+    broken: int = Field(default=0, ge=0)
+    settle_s: dict[str, float] = Field(default_factory=dict)
+    pairs: list[FlowPair] = Field(default_factory=list)
+    examples: list[BrokenUnit] = Field(default_factory=list)
+    evidence_id: EvidenceId | None = None
+
+
 class ParsedBatch(Contract):
     system: str
     n_raw_lines: int = Field(ge=0)
@@ -104,3 +142,4 @@ class ParsedBatch(Contract):
     shards: int = Field(default=1, ge=1)
     # Known templates novelty was judged against; 0 means no history, so nothing is "novel".
     template_history: int = Field(default=0, ge=0)
+    flows: FlowCheck = Field(default_factory=FlowCheck)
