@@ -313,6 +313,28 @@ def review_feedback(engine: Engine) -> list[tuple[int, dict[str, Any], bool]]:
         return [(row.id, dict(row.value), row.used_for_training) for row in rows]
 
 
+def list_feedback(engine: Engine, *, limit: int = 50) -> list[dict[str, Any]]:
+    """The newest reviews first, for people: who decided what, and whether it was used."""
+    with session_scope(engine) as session:
+        rows = session.scalars(
+            select(FeedbackRow)
+            .where(FeedbackRow.field == "review")
+            .order_by(FeedbackRow.id.desc())
+            .limit(limit)
+        )
+        return [
+            {
+                "run_id": row.run_id,
+                "author": row.author,
+                "comment": row.comment,
+                "value": dict(row.value),
+                "used": row.used_for_training,
+                "created_at": row.created_at,
+            }
+            for row in rows
+        ]
+
+
 def mark_feedback_used(engine: Engine, ids: Sequence[int]) -> None:
     if not ids:
         return

@@ -211,6 +211,40 @@ class SettingsOut(BaseModel):
     safety: list[str]
 
 
+class ReviewOut(BaseModel):
+    """One human review, as the active-learning queue keeps it."""
+
+    run_id: str
+    decision: str
+    from_severity: Severity | None = None
+    to_severity: Severity | None = None
+    reviewer: str
+    comment: str | None = None
+    failure_mode: str | None = None
+    used_for_recalibration: bool
+    created_at: datetime
+
+
+class CalibrationOut(BaseModel):
+    """Where the severity model's calibration stands against the reviews gathered so far."""
+
+    model_version: str | None
+    trained_version: str | None
+    recalibrated: bool
+    reviews_in_model: int
+    reviewed: int  # approvals and edits that can recalibrate the loaded model
+    pending: int  # reviewed incidents since the loaded model was calibrated
+    recalibrate_after: int
+    check_interval_s: int
+    coverage_before: float | None = None
+    coverage_after: float | None = None
+
+
+class FeedbackOut(BaseModel):
+    calibration: CalibrationOut
+    reviews: list[ReviewOut]
+
+
 class Health(BaseModel):
     status: Literal["ok", "degraded"]
     version: str

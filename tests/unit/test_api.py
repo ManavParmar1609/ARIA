@@ -375,6 +375,36 @@ async def test_catalog_lists_incidents_and_runbooks(api: Api) -> None:
     assert (await api.client.get("/api/v1/runbooks/nope")).status_code == 404
 
 
+async def test_reviews_calibration_evaluation_and_tickets(api: Api) -> None:
+    run = await start(api)
+    done = await api.client.post(f"/api/v1/runs/{run['id']}/review", json={"decision": "approve"})
+    assert done.json()["status"] == "published"
+
+    body = (await api.client.get("/api/v1/feedback")).json()
+    [review] = body["reviews"]
+    assert (review["run_id"], review["decision"], review["reviewer"]) == (
+        run["id"],
+        "approve",
+        "ana",
+    )
+    assert review["from_severity"] == review["to_severity"] == run["severity"]
+    assert review["used_for_recalibration"] is False
+    calibration = body["calibration"]
+    assert (calibration["reviewed"], calibration["pending"]) == (1, 1)
+    assert calibration["recalibrated"] is False
+    assert calibration["recalibrate_after"] == 30
+    assert calibration["model_version"] == api.state.services.severity.model.version  # type: ignore[union-attr]
+
+    results = await api.client.get("/api/v1/eval")
+    assert results.status_code == 200
+    assert results.json()["severity"]["n"] > 0
+
+    ticket = {"category": "network", "impact": "1 - High", "urgency": "1 - High"}
+    untrained = await api.client.post("/api/v1/tickets/assess", json=ticket)
+    assert untrained.status_code == 503  # the UCI log is not ingested in tests
+    assert "aria train tickets" in untrained.json()["detail"]
+
+
 # --- agent protocols ------------------------------------------------------------------------------
 
 

@@ -1272,6 +1272,118 @@
         }
       }
     },
+    "/api/v1/feedback": {
+      "get": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Feedback",
+        "description": "Human reviews (the active-learning queue) and where model recalibration stands.",
+        "operationId": "feedback_api_v1_feedback_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/eval": {
+      "get": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Evaluation",
+        "description": "The latest evaluation results: what `make eval` measured, and on what data.",
+        "operationId": "evaluation_api_v1_eval_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Evaluation Api V1 Eval Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tickets/assess": {
+      "post": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Assess Ticket",
+        "description": "Priority and SLA-breach risk for an ITSM ticket, from the model trained on UCI history.",
+        "operationId": "assess_ticket_api_v1_tickets_assess_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TicketContext"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketAssessment"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/agui": {
       "post": {
         "tags": [
@@ -1609,6 +1721,91 @@
         ],
         "title": "AskResponse"
       },
+      "CalibrationOut": {
+        "properties": {
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "trained_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trained Version"
+          },
+          "recalibrated": {
+            "type": "boolean",
+            "title": "Recalibrated"
+          },
+          "reviews_in_model": {
+            "type": "integer",
+            "title": "Reviews In Model"
+          },
+          "reviewed": {
+            "type": "integer",
+            "title": "Reviewed"
+          },
+          "pending": {
+            "type": "integer",
+            "title": "Pending"
+          },
+          "recalibrate_after": {
+            "type": "integer",
+            "title": "Recalibrate After"
+          },
+          "check_interval_s": {
+            "type": "integer",
+            "title": "Check Interval S"
+          },
+          "coverage_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Before"
+          },
+          "coverage_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage After"
+          }
+        },
+        "type": "object",
+        "required": [
+          "model_version",
+          "trained_version",
+          "recalibrated",
+          "reviews_in_model",
+          "reviewed",
+          "pending",
+          "recalibrate_after",
+          "check_interval_s"
+        ],
+        "title": "CalibrationOut",
+        "description": "Where the severity model's calibration stands against the reviews gathered so far."
+      },
       "Checkpoint": {
         "properties": {
           "checkpoint_id": {
@@ -1826,6 +2023,26 @@
           "review"
         ],
         "title": "EvidenceKind"
+      },
+      "FeedbackOut": {
+        "properties": {
+          "calibration": {
+            "$ref": "#/components/schemas/CalibrationOut"
+          },
+          "reviews": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewOut"
+            },
+            "type": "array",
+            "title": "Reviews"
+          }
+        },
+        "type": "object",
+        "required": [
+          "calibration",
+          "reviews"
+        ],
+        "title": "FeedbackOut"
       },
       "ForkRequest": {
         "properties": {
@@ -2371,6 +2588,83 @@
           "markdown"
         ],
         "title": "ReportOut"
+      },
+      "ReviewOut": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "decision": {
+            "type": "string",
+            "title": "Decision"
+          },
+          "from_severity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Severity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "to_severity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Severity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reviewer": {
+            "type": "string",
+            "title": "Reviewer"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "failure_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Mode"
+          },
+          "used_for_recalibration": {
+            "type": "boolean",
+            "title": "Used For Recalibration"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "decision",
+          "reviewer",
+          "used_for_recalibration",
+          "created_at"
+        ],
+        "title": "ReviewOut",
+        "description": "One human review, as the active-learning queue keeps it."
       },
       "ReviewRequest": {
         "properties": {
@@ -3372,6 +3666,68 @@
           "source"
         ],
         "title": "SimilarIncident"
+      },
+      "TicketAssessment": {
+        "properties": {
+          "predicted_priority": {
+            "type": "string",
+            "title": "Predicted Priority"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "probabilities": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Probabilities"
+          },
+          "prediction_set": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Prediction Set"
+          },
+          "sla_breach_risk": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Breach Risk"
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "string",
+              "pattern": "^E\\d{1,5}$"
+            },
+            "type": "array",
+            "title": "Evidence Ids"
+          },
+          "model_version": {
+            "type": "string",
+            "title": "Model Version",
+            "default": "unversioned"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "predicted_priority",
+          "severity",
+          "probabilities",
+          "prediction_set"
+        ],
+        "title": "TicketAssessment",
+        "description": "Priority and SLA-breach risk for an ITSM ticket, from the model trained on UCI history."
       },
       "TicketContext": {
         "properties": {

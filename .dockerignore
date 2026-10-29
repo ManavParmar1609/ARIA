@@ -28,6 +28,7 @@ htmlcov
 data
 reports
 docs
+!docs/eval-results.json
 research_notes
 tests
 !tests/fixtures/loghub

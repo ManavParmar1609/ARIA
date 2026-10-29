@@ -83,6 +83,8 @@ COPY --from=build --chown=aria:aria /app/.venv /app/.venv
 COPY --chown=aria:aria config ./config
 COPY --chown=aria:aria runbooks ./runbooks
 COPY --chown=aria:aria models/severity_log.json models/severity_log.report.json ./models/
+# The evaluation results released with this build, served at /api/v1/eval.
+COPY --chown=aria:aria docs/eval-results.json ./docs/eval-results.json
 # Small public Loghub samples: `aria seed` falls back to them when the full set is not downloaded.
 COPY --chown=aria:aria tests/fixtures/loghub ./tests/fixtures/loghub
 USER aria

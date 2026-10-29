@@ -1,6 +1,7 @@
 "use client";
 
 import { LogOutIcon } from "lucide-react";
+import Link from "next/link";
 
 import { ErrorState, LoadingRows, PageHeader } from "@/components/console/states";
 import { Button } from "@/components/ui/button";
@@ -13,13 +14,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  useFeedback,
   useProviders,
   useSession,
   useSettingsView,
   useSignOut,
+  type FeedbackView,
   type SettingsView,
 } from "@/lib/api/hooks";
-import { money } from "@/lib/format";
+import { money, percent, relativeTime } from "@/lib/format";
 import { useTheme, type ThemeChoice } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
@@ -171,11 +174,94 @@ function Configuration({ view }: { view: SettingsView }) {
   );
 }
 
+const DECISION: Record<string, string> = {
+  approve: "Approved",
+  edit: "Edited",
+  reject: "Rejected",
+};
+
+function Learning({ view }: { view: FeedbackView }) {
+  const c = view.calibration;
+  return (
+    <>
+      <Pairs
+        items={[
+          [
+            "Severity model",
+            <span key="model" className="font-mono text-xs">
+              {c.model_version ?? "none"}
+            </span>,
+          ],
+          [
+            "Recalibrated on",
+            c.recalibrated ? `${c.reviews_in_model} reviewed incidents` : "Not yet (as trained)",
+          ],
+          ["Reviews since then", `${c.pending} of ${c.recalibrate_after} needed`],
+          [
+            "Coverage on reviewed incidents",
+            c.coverage_before != null && c.coverage_after != null
+              ? `${percent(c.coverage_before)} before, ${percent(c.coverage_after)} after`
+              : "Measured at the first recalibration",
+          ],
+          [
+            "Checked",
+            c.check_interval_s > 0
+              ? `every ${Math.round(c.check_interval_s / 60)} min`
+              : "Never (off)",
+          ],
+        ]}
+      />
+      {view.reviews.length ? (
+        <Table aria-label="Recent reviews">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Run</TableHead>
+              <TableHead>Decision</TableHead>
+              <TableHead>Severity</TableHead>
+              <TableHead>Reviewer</TableHead>
+              <TableHead>When</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {view.reviews.map((r) => (
+              <TableRow key={`${r.run_id}-${r.created_at}`}>
+                <TableCell className="font-mono text-xs">
+                  <Link
+                    href={`/console/runs/${encodeURIComponent(r.run_id)}` as never}
+                    className="underline decoration-control underline-offset-2 hover:decoration-foreground"
+                  >
+                    {r.run_id}
+                  </Link>
+                </TableCell>
+                <TableCell>{DECISION[r.decision] ?? r.decision}</TableCell>
+                <TableCell className="tabular">
+                  {r.from_severity && r.to_severity && r.from_severity !== r.to_severity
+                    ? `${r.from_severity} to ${r.to_severity}`
+                    : (r.to_severity ?? "")}
+                </TableCell>
+                <TableCell>{r.reviewer}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {relativeTime(r.created_at)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          No reviews yet. Approve or edit a report and it is recorded here.
+        </p>
+      )}
+    </>
+  );
+}
+
 export function Settings() {
   const session = useSession();
   const signOut = useSignOut();
   const providers = useProviders();
   const view = useSettingsView();
+  const feedback = useFeedback();
   const { theme, setTheme } = useTheme();
 
   return (
@@ -296,6 +382,20 @@ export function Settings() {
       ) : (
         <Configuration view={view.data} />
       )}
+
+      <Section
+        id="set-learning"
+        title="Learning from reviews"
+        intro="Every review records the severity a reviewer settled on. Once enough have gathered, ARIA recalibrates its prediction sets on them, so the sets hold the reviewer's severity on this deployment's own incidents."
+      >
+        {feedback.isPending ? (
+          <LoadingRows rows={3} label="Loading reviews" />
+        ) : feedback.isError ? (
+          <ErrorState error={feedback.error} onRetry={() => void feedback.refetch()} />
+        ) : (
+          <Learning view={feedback.data} />
+        )}
+      </Section>
     </div>
   );
 }

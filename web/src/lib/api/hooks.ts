@@ -26,6 +26,7 @@ import type {
 import type { components } from "./schema";
 
 export type SettingsView = components["schemas"]["SettingsOut"];
+export type FeedbackView = components["schemas"]["FeedbackOut"];
 
 export const keys = {
   session: ["session"] as const,
@@ -45,6 +46,7 @@ export const keys = {
   runbook: (slug: string) => ["runbooks", slug] as const,
   providers: ["providers"] as const,
   settings: ["settings"] as const,
+  feedback: ["feedback"] as const,
 };
 
 const v1 = (path: string) => `/api/v1${path}`;
@@ -190,6 +192,14 @@ export function useSettingsView() {
     queryKey: keys.settings,
     queryFn: () => apiFetch<SettingsView>(v1("/settings")),
     staleTime: 60_000,
+  });
+}
+
+export function useFeedback(limit = 8) {
+  return useQuery({
+    queryKey: [...keys.feedback, limit],
+    queryFn: () => apiFetch<FeedbackView>(v1(`/feedback?limit=${limit}`)),
+    staleTime: 30_000,
   });
 }
 

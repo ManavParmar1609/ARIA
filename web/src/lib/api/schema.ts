@@ -157,6 +157,46 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/eval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Evaluation
+         * @description The latest evaluation results: what `make eval` measured, and on what data.
+         */
+        get: operations["evaluation_api_v1_eval_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Feedback
+         * @description Human reviews (the active-learning queue) and where model recalibration stands.
+         */
+        get: operations["feedback_api_v1_feedback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/incidents": {
         parameters: {
             query?: never;
@@ -517,6 +557,26 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tickets/assess": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Assess Ticket
+         * @description Priority and SLA-breach risk for an ITSM ticket, from the model trained on UCI history.
+         */
+        post: operations["assess_ticket_api_v1_tickets_assess_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -662,6 +722,32 @@ export type components = {
             /** @example scheme */
             scheme?: string;
         };
+        /**
+         * CalibrationOut
+         * @description Where the severity model's calibration stands against the reviews gathered so far.
+         */
+        CalibrationOut: {
+            /** Check Interval S */
+            check_interval_s: number;
+            /** Coverage After */
+            coverage_after?: number | null;
+            /** Coverage Before */
+            coverage_before?: number | null;
+            /** Model Version */
+            model_version: string | null;
+            /** Pending */
+            pending: number;
+            /** Recalibrate After */
+            recalibrate_after: number;
+            /** Recalibrated */
+            recalibrated: boolean;
+            /** Reviewed */
+            reviewed: number;
+            /** Reviews In Model */
+            reviews_in_model: number;
+            /** Trained Version */
+            trained_version: string | null;
+        };
         CancelTaskRequest: {
             /** @example id */
             id?: string;
@@ -747,6 +833,12 @@ export type components = {
          * @enum {string}
          */
         EvidenceKind: "log" | "template" | "feature" | "rule" | "model" | "alert" | "incident" | "tickets" | "runbook" | "tool" | "hypothesis" | "feedback" | "review";
+        /** FeedbackOut */
+        FeedbackOut: {
+            calibration: components["schemas"]["CalibrationOut"];
+            /** Reviews */
+            reviews: components["schemas"]["ReviewOut"][];
+        };
         /** ForkRequest */
         ForkRequest: {
             /** Checkpoint Id */
@@ -1034,6 +1126,31 @@ export type components = {
             /** Markdown */
             markdown: string;
             report: components["schemas"]["IncidentReport"];
+        };
+        /**
+         * ReviewOut
+         * @description One human review, as the active-learning queue keeps it.
+         */
+        ReviewOut: {
+            /** Comment */
+            comment?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Decision */
+            decision: string;
+            /** Failure Mode */
+            failure_mode?: string | null;
+            from_severity?: components["schemas"]["Severity"] | null;
+            /** Reviewer */
+            reviewer: string;
+            /** Run Id */
+            run_id: string;
+            to_severity?: components["schemas"]["Severity"] | null;
+            /** Used For Recalibration */
+            used_for_recalibration: boolean;
         };
         /**
          * ReviewRequest
@@ -1424,6 +1541,30 @@ export type components = {
             url?: string;
         };
         /**
+         * TicketAssessment
+         * @description Priority and SLA-breach risk for an ITSM ticket, from the model trained on UCI history.
+         */
+        TicketAssessment: {
+            /** Evidence Ids */
+            evidence_ids?: string[];
+            /**
+             * Model Version
+             * @default unversioned
+             */
+            model_version?: string;
+            /** Predicted Priority */
+            predicted_priority: string;
+            /** Prediction Set */
+            prediction_set: string[];
+            /** Probabilities */
+            probabilities: {
+                [key: string]: number;
+            };
+            severity: components["schemas"]["Severity"];
+            /** Sla Breach Risk */
+            sla_breach_risk?: number | null;
+        };
+        /**
          * TicketContext
          * @description ITSM ticket fields as they exist when a ticket is opened (ServiceNow-style).
          */
@@ -1769,6 +1910,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AskResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    evaluation_api_v1_eval_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    feedback_api_v1_feedback_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackOut"];
                 };
             };
             /** @description Validation Error */
@@ -2422,6 +2616,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SettingsOut"];
+                };
+            };
+        };
+    };
+    assess_ticket_api_v1_tickets_assess_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TicketContext"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TicketAssessment"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

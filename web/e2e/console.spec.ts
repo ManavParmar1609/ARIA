@@ -106,6 +106,10 @@ test.describe("console", () => {
       await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
       await expectAccessible(page, path);
     }
+    // Reviews from the earlier tests feed the recalibration queue.
+    await expect(page.getByRole("table", { name: "Recent reviews" })).toContainText("Approved");
+    await expect(page.getByText(/of 30 needed/)).toBeVisible();
+
     // The theme setting applies at once and survives a reload. The radios are styled labels
     // around visually hidden inputs, so click the label as a person would.
     const themeOption = (name: string) => page.locator("label").filter({ hasText: name });
