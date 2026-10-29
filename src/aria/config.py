@@ -183,6 +183,9 @@ class CommsConfig(_Strict):
     slack_webhook_env: str = "SLACK_WEBHOOK_URL"
     teams_webhook_env: str = "TEAMS_WEBHOOK_URL"
     generic_webhook_env: str = "ARIA_OUTBOUND_WEBHOOK_URL"
+    # Name of the variable holding the HMAC key that signs generic webhook deliveries.
+    generic_webhook_secret_env: str = "ARIA_OUTBOUND_WEBHOOK_SECRET"  # noqa: S105
+    timeout_s: float = Field(default=10.0, gt=0, le=60)
 
 
 class InvestigationConfig(_Strict):
@@ -226,6 +229,14 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = Field(default=120, ge=1)
     public_base_url: str = "http://localhost:8000"
     web_dist_dir: Path | None = None
+    # Keys each run's pseudonym salt as HMAC(key, run id), so pseudonyms stay stable when a run
+    # retries or resumes and no salt is stored in graph state. When unset, a random key is made
+    # at process start.
+    pseudonym_key: SecretStr | None = None
+    # The investigator calls tools on this MCP endpoint (streamable HTTP) when set, otherwise on
+    # an in-process server that shares the caller's services.
+    mcp_url: str | None = None
+    mcp_token: SecretStr | None = None
 
     @field_validator("cors_origins", mode="before")
     @classmethod

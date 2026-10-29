@@ -63,6 +63,8 @@ class TriageRequest(Contract):
     alerts: list[AlertSignal] = Field(default_factory=list)
     ticket: TicketContext | None = None
     options: RunOptions = Field(default_factory=RunOptions)
+    # True when the logs come from a semi-synthetic scenario; reports and memory label it.
+    synthetic: bool = False
 
     @model_validator(mode="after")
     def _has_something_to_triage(self) -> TriageRequest:

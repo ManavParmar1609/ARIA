@@ -26,7 +26,7 @@ from langgraph.store.base import (
     SearchItem,
     SearchOp,
 )
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.engine import Engine
 
 from aria.db.engine import session_scope
@@ -34,6 +34,7 @@ from aria.db.models import StoreItemRow
 
 SEP = "\x1f"  # unit separator: cannot appear in normal namespace labels
 _WORD = re.compile(r"[a-z0-9_]{2,}")
+_LIKE_SPECIAL = re.compile(r"[\\%_]")
 
 
 def _ns(namespace: tuple[str, ...]) -> str:
@@ -85,13 +86,19 @@ class SqlStore(BaseStore):
 
     def _search(self, session: Any, op: SearchOp) -> list[SearchItem]:
         prefix = _ns(op.namespace_prefix)
-        rows = list(session.scalars(select(StoreItemRow).order_by(StoreItemRow.updated_at.desc())))
+        stmt = select(StoreItemRow).order_by(StoreItemRow.updated_at.desc())
+        if prefix:
+            pattern = _LIKE_SPECIAL.sub(r"\\\g<0>", prefix + SEP) + "%"
+            stmt = stmt.where(
+                or_(
+                    StoreItemRow.namespace == prefix,
+                    StoreItemRow.namespace.like(pattern, escape="\\"),
+                )
+            )
         matched = []
         terms = set(_WORD.findall((op.query or "").lower()))
-        for row in rows:
+        for row in session.scalars(stmt):
             namespace = _unns(row.namespace)
-            if namespace[: len(op.namespace_prefix)] != op.namespace_prefix and prefix:
-                continue
             if op.filter and not all(row.value.get(k) == v for k, v in op.filter.items()):
                 continue
             score = None

@@ -13,13 +13,17 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from collections.abc import Callable, Iterable
+from collections.abc import AsyncIterator, Callable, Iterable
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
 from types import TracebackType
 from typing import Any
 
 from mcp import Client, StdioServerParameters
+from mcp.client._transport import TransportStreams
+from mcp.client.streamable_http import streamable_http_client
 from mcp.server.mcpserver import MCPServer
+from mcp.shared._httpx_utils import create_mcp_http_client
 
 from aria.contracts.base import EvidenceKind
 from aria.contracts.retrieval import ToolCallRecord
@@ -27,7 +31,19 @@ from aria.evidence import EvidenceStore
 from aria.llm.budget import BudgetGuard
 from aria.observability.tracing import mark_error, tool_span
 
-Target = MCPServer | StdioServerParameters | str
+Target = MCPServer | StdioServerParameters | str | AbstractAsyncContextManager[TransportStreams]
+
+
+@asynccontextmanager
+async def _bearer_http(url: str, token: str) -> AsyncIterator[TransportStreams]:
+    client = create_mcp_http_client(headers={"Authorization": f"Bearer {token}"})
+    async with client, streamable_http_client(url, http_client=client) as streams:
+        yield streams
+
+
+def remote_target(url: str, token: str | None = None) -> Target:
+    """A streamable-HTTP MCP endpoint, sending a bearer token when one is given."""
+    return _bearer_http(url, token) if token else url
 
 
 class ToolNotAllowedError(PermissionError):
@@ -110,6 +126,7 @@ class ToolBelt:
         budget: BudgetGuard | None = None,
         on_call: Callable[[ToolCallRecord], None] | None = None,
         timeout_s: float = 30.0,
+        pin_run: bool = True,
     ) -> None:
         self.target = target
         self.allowed = frozenset(allowed)
@@ -119,6 +136,7 @@ class ToolBelt:
         self.budget = budget
         self.on_call = on_call
         self.timeout_s = timeout_s
+        self.pin_run = pin_run
         self.records: list[ToolCallRecord] = []
         self._client: Client | None = None
         self._specs: dict[str, ToolSpec] = {}
@@ -193,6 +211,8 @@ class ToolBelt:
             self.budget.check_tool()
         accepted = set(self._specs[tool].parameters.get("properties", {}))
         args = {k: v for k, v in raw.items() if k in accepted}
+        if self.pin_run and "run_id" in accepted:
+            args["run_id"] = self.run_id  # ARIA chooses the run, never the model
         with tool_span(tool, agent=self.agent, call_id=self.run_id) as span:
             try:
                 result = await self._client.call_tool(tool, args)

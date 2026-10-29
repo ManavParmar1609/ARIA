@@ -10,6 +10,7 @@ exhausted it raises ``NoProviderAvailableError`` and the caller takes its determ
 
 from __future__ import annotations
 
+import copy
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -178,6 +179,24 @@ class LLMRouter:
 
     def chain(self, role: str) -> list[str]:
         return [name for name in self.config.chain(role) if self.is_available(name)]
+
+    def prefer(self, name: str | None) -> LLMRouter:
+        """A view that tries ``name`` first for every role; providers and breakers are shared.
+
+        Roles keep their own fallbacks after it. The fake provider is never added to a chain that
+        leaves it out on purpose (the adjudicator's).
+        """
+        if not name or name not in self.config.providers:
+            return self
+        routing = {
+            role: [name, *(n for n in chain if n != name)]
+            if name != "fake" or "fake" in chain
+            else list(chain)
+            for role, chain in self.config.routing.items()
+        }
+        view = copy.copy(self)
+        view.config = self.config.model_copy(update={"routing": routing})
+        return view
 
     def has_real_llm(self, role: str) -> bool:
         """True when a non-fake provider is available for the role."""

@@ -80,6 +80,8 @@ class EvidenceKind(StrEnum):
     RUNBOOK = "runbook"
     TOOL = "tool"
     HYPOTHESIS = "hypothesis"
+    FEEDBACK = "feedback"  # reviewer corrections from earlier runs (long-term memory)
+    REVIEW = "review"  # what this run's reviewer said or changed
 
 
 class Evidence(Contract):

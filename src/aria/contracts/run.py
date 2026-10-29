@@ -70,6 +70,7 @@ EventKind = Literal[
     "review",
     "action",
     "run_finished",
+    "checkpoint",
     "error",
 ]
 

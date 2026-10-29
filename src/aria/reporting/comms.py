@@ -13,7 +13,7 @@ rules is dropped in favour of the deterministic one.
 
 from __future__ import annotations
 
-import uuid
+import hashlib
 from dataclasses import dataclass, field
 
 from aria.contracts.base import SEVERITY_DESCRIPTIONS, Severity
@@ -34,6 +34,11 @@ _IMPACT_WORDS = {
     Severity.SEV3: "a limited issue",
     Severity.SEV4: "a minor issue",
 }
+
+
+def action_id(report_id: str, key: str) -> str:
+    """Stable per report and audience, so a re-run proposes the same action ids for review."""
+    return "act-" + hashlib.sha256(f"{report_id}:{key}".encode()).hexdigest()[:12]
 
 
 @dataclass
@@ -137,7 +142,7 @@ async def draft_comms(
             continue
         outcome.actions.append(
             OutboundAction(
-                action_id=f"act-{uuid.uuid4().hex[:12]}",
+                action_id=action_id(report.report_id, key),
                 kind=KIND[key],  # type: ignore[arg-type]
                 audience=AUDIENCE[key],  # type: ignore[arg-type]
                 title=draft.title,

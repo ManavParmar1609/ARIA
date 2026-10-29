@@ -51,6 +51,32 @@ def store_run_lines(engine: Engine, run_id: str, system: str, lines: Sequence[Pa
     return len(rows)
 
 
+def copy_run_lines(engine: Engine, source_run: str, target_run: str) -> int:
+    """Give a forked run its own copy of the source run's lines, so its tools stay run-scoped."""
+    columns = ("system", "line_no", "ts", "node", "component", "level", "message", "template_id")
+    with session_scope(engine) as session:
+        rows = [
+            {
+                **{c: getattr(row, c) for c in columns},
+                "dataset": RUN_DATASET,
+                "window_id": target_run,
+            }
+            for row in session.scalars(
+                select(LogEventRow).where(
+                    LogEventRow.window_id == source_run, LogEventRow.dataset == RUN_DATASET
+                )
+            )
+        ]
+        session.execute(
+            delete(LogEventRow).where(
+                LogEventRow.window_id == target_run, LogEventRow.dataset == RUN_DATASET
+            )
+        )
+        for start in range(0, len(rows), 5_000):
+            session.execute(insert(LogEventRow), rows[start : start + 5_000])
+    return len(rows)
+
+
 def _like(term: str) -> str:
     """A LIKE pattern matching ``term`` literally (``%``, ``_`` and ``\\`` are escaped)."""
     return "%" + _LIKE_ESCAPE.sub(lambda m: "\\" + m.group(1), term) + "%"

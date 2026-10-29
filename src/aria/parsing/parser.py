@@ -11,6 +11,8 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any
 
 from aria.config import GuardrailConfig
 from aria.contracts.base import EvidenceKind
@@ -397,4 +399,66 @@ def parse_lines(
         known_templates=known_templates,
         context_lines=context_lines,
         n_raw_lines=len(raw_lines),
+    )
+
+
+# --- shard transport (graph fan-out) -------------------------------------------------------------
+
+
+def shard_to_payload(shard: ShardResult) -> dict[str, Any]:
+    """A JSON-shaped shard result, so parallel graph workers can return it through state."""
+    return {
+        "system": shard.system,
+        "offset": shard.offset,
+        "lines": [
+            {
+                "idx": line.idx,
+                "shard_template": line.shard_template,
+                "flags": line.flags,
+                "line_no": line.record.line_no,
+                "message": line.record.message,
+                "ts": line.record.ts.isoformat() if line.record.ts else None,
+                "node": line.record.node,
+                "component": line.record.component,
+                "level": line.record.level,
+                "level_raw": line.record.level_raw,
+            }
+            for line in shard.lines
+        ],
+        "injections": [f.model_dump() for f in shard.injections],
+        "redactions": shard.redactions,
+        "pseudonyms": sorted(shard.pseudonyms),
+        "truncated": shard.truncated,
+        "dropped": shard.dropped,
+    }
+
+
+def shard_from_payload(data: dict[str, Any]) -> ShardResult:
+    lines = [
+        ParsedLine(
+            idx=int(item["idx"]),
+            record=LogRecord(
+                system=data["system"],
+                line_no=int(item["line_no"]),
+                message=item["message"],
+                ts=datetime.fromisoformat(item["ts"]) if item.get("ts") else None,
+                node=item.get("node"),
+                component=item.get("component"),
+                level=item.get("level"),
+                level_raw=item.get("level_raw"),
+            ),
+            shard_template=item["shard_template"],
+            flags=list(item.get("flags") or []),
+        )
+        for item in data["lines"]
+    ]
+    return ShardResult(
+        system=data["system"],
+        offset=int(data["offset"]),
+        lines=lines,
+        injections=[InjectionFinding.model_validate(f) for f in data.get("injections", [])],
+        redactions=dict(data.get("redactions") or {}),
+        pseudonyms=set(data.get("pseudonyms") or []),
+        truncated=int(data.get("truncated", 0)),
+        dropped=int(data.get("dropped", 0)),
     )

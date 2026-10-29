@@ -6,6 +6,7 @@ import operator
 from typing import Annotated, TypedDict
 
 import pytest
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, Send, interrupt
 
@@ -48,7 +49,7 @@ def saver() -> SqlCheckpointSaver:
 
 
 def test_fan_out_interrupt_and_resume_survive_a_new_saver(saver: SqlCheckpointSaver) -> None:
-    config = {"configurable": {"thread_id": "t1"}}
+    config: RunnableConfig = {"configurable": {"thread_id": "t1"}}
     paused = _graph(saver).invoke({"items": [], "big": ["x" * 100] * 50}, config)
     assert paused["__interrupt__"][0].value == {"question": "approve?", "count": 3}
     assert sorted(paused["items"]) == ["done:w0", "done:w1", "done:w2"]
@@ -59,7 +60,7 @@ def test_fan_out_interrupt_and_resume_survive_a_new_saver(saver: SqlCheckpointSa
 
 def test_history_replay_and_fork(saver: SqlCheckpointSaver) -> None:
     graph = _graph(saver)
-    config = {"configurable": {"thread_id": "t2"}}
+    config: RunnableConfig = {"configurable": {"thread_id": "t2"}}
     graph.invoke({"items": []}, config)
     graph.invoke(Command(resume=False), config)
     history = list(graph.get_state_history(config))
@@ -67,7 +68,7 @@ def test_history_replay_and_fork(saver: SqlCheckpointSaver) -> None:
     assert history[0].values["approved"] is False
     # Fork: copy the thread, then rewind the copy to before the review and decide differently.
     saver.copy_thread("t2", "t2-fork")
-    fork_config = {"configurable": {"thread_id": "t2-fork"}}
+    fork_config: RunnableConfig = {"configurable": {"thread_id": "t2-fork"}}
     before_review = next(s for s in graph.get_state_history(fork_config) if s.next == ("review",))
     graph.invoke(None, before_review.config)  # replay to the interrupt
     forked = graph.invoke(Command(resume=True), fork_config)
@@ -84,7 +85,7 @@ def test_large_values_are_stored_once_not_per_checkpoint(saver: SqlCheckpointSav
     from aria.db.models import CheckpointBlobRow
 
     graph = _graph(saver)
-    config = {"configurable": {"thread_id": "t3"}}
+    config: RunnableConfig = {"configurable": {"thread_id": "t3"}}
     graph.invoke({"items": [], "big": ["line"] * 5_000}, config)
     with session_scope(saver.engine) as session:
         big_versions = session.scalar(
@@ -97,7 +98,7 @@ def test_large_values_are_stored_once_not_per_checkpoint(saver: SqlCheckpointSav
 
 def test_list_filters_and_limits(saver: SqlCheckpointSaver) -> None:
     graph = _graph(saver)
-    config = {"configurable": {"thread_id": "t4"}}
+    config: RunnableConfig = {"configurable": {"thread_id": "t4"}}
     graph.invoke({"items": []}, config)
     everything = list(saver.list(config))
     assert len(list(saver.list(config, limit=2))) == 2
@@ -110,7 +111,7 @@ def test_list_filters_and_limits(saver: SqlCheckpointSaver) -> None:
 
 def test_prune_keeps_only_the_latest_checkpoint(saver: SqlCheckpointSaver) -> None:
     graph = _graph(saver)
-    config = {"configurable": {"thread_id": "t5"}}
+    config: RunnableConfig = {"configurable": {"thread_id": "t5"}}
     graph.invoke({"items": [], "big": ["x"] * 10}, config)
     latest = graph.get_state(config).values
     saver.prune(["t5"])
@@ -122,7 +123,7 @@ def test_prune_keeps_only_the_latest_checkpoint(saver: SqlCheckpointSaver) -> No
 
 async def test_async_api_matches_sync(saver: SqlCheckpointSaver) -> None:
     graph = _graph(saver)
-    config = {"configurable": {"thread_id": "t6"}}
+    config: RunnableConfig = {"configurable": {"thread_id": "t6"}}
     paused = await graph.ainvoke({"items": []}, config)
     assert "__interrupt__" in paused
     done = await graph.ainvoke(Command(resume=True), config)
