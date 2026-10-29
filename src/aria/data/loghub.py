@@ -95,22 +95,107 @@ SYSTEMS: dict[str, SystemSpec] = {
             labelled=True,
             description="Thunderbird supercomputer (Sandia)",
         ),
-        SystemSpec("hdfs", "<Date> <Time> <Pid> <Level> <Component>: <Content>", 2008, description="Hadoop distributed file system"),
-        SystemSpec("hadoop", r"<Date> <Time> <Level> \[<Process>\] <Component>: <Content>", 2015, description="Hadoop MapReduce"),
-        SystemSpec("spark", "<Date> <Time> <Level> <Component>: <Content>", 2017, description="Apache Spark"),
-        SystemSpec("zookeeper", r"<Date> <Time> - <Level>  \[<Node>:<Component>@<Id>\] - <Content>", 2015, node_field="Node", description="Apache ZooKeeper"),
-        SystemSpec("openstack", r"<Logrecord> <Date> <Time> <Pid> <Level> <Component> \[<ADDR>\] <Content>", 2017, node_field="ADDR", description="OpenStack Nova"),
-        SystemSpec("hpc", "<LogId> <Node> <Component> <State> <Time> <Flag> <Content>", 2004, node_field="Node", level_field=None, description="HPC cluster (LANL)"),
-        SystemSpec("windows", "<Date> <Time>, <Level>                  <Component>    <Content>", 2016, description="Windows CBS"),
+        SystemSpec(
+            "hdfs",
+            "<Date> <Time> <Pid> <Level> <Component>: <Content>",
+            2008,
+            description="Hadoop distributed file system",
+        ),
+        SystemSpec(
+            "hadoop",
+            r"<Date> <Time> <Level> \[<Process>\] <Component>: <Content>",
+            2015,
+            description="Hadoop MapReduce",
+        ),
+        SystemSpec(
+            "spark",
+            "<Date> <Time> <Level> <Component>: <Content>",
+            2017,
+            description="Apache Spark",
+        ),
+        SystemSpec(
+            "zookeeper",
+            r"<Date> <Time> - <Level>  \[<Node>:<Component>@<Id>\] - <Content>",
+            2015,
+            node_field="Node",
+            description="Apache ZooKeeper",
+        ),
+        SystemSpec(
+            "openstack",
+            r"<Logrecord> <Date> <Time> <Pid> <Level> <Component> \[<ADDR>\] <Content>",
+            2017,
+            node_field="ADDR",
+            description="OpenStack Nova",
+        ),
+        SystemSpec(
+            "hpc",
+            "<LogId> <Node> <Component> <State> <Time> <Flag> <Content>",
+            2004,
+            node_field="Node",
+            level_field=None,
+            description="HPC cluster (LANL)",
+        ),
+        SystemSpec(
+            "windows",
+            "<Date> <Time>, <Level>                  <Component>    <Content>",
+            2016,
+            description="Windows CBS",
+        ),
         # Linux: the column Loghub names "Level" holds the host name.
-        SystemSpec("linux", r"<Month> <Date> <Time> <Level> <Component>(\[<PID>\])?: <Content>", 2005, node_field="Level", level_field=None, description="Linux syslog"),
-        SystemSpec("mac", r"<Month>  <Date> <Time> <User> <Component>\[<PID>\]( \(<Address>\))?: <Content>", 2017, node_field="User", level_field=None, description="macOS system log"),
-        SystemSpec("android", "<Date> <Time>  <Pid>  <Tid> <Level> <Component>: <Content>", 2017, description="Android framework"),
-        SystemSpec("healthapp", r"<Time>\|<Component>\|<Pid>\|<Content>", 2017, level_field=None, description="Health app"),
-        SystemSpec("apache", r"\[<Time>\] \[<Level>\] <Content>", 2005, component_field=None, description="Apache HTTP server error log"),
+        SystemSpec(
+            "linux",
+            r"<Month> <Date> <Time> <Level> <Component>(\[<PID>\])?: <Content>",
+            2005,
+            node_field="Level",
+            level_field=None,
+            description="Linux syslog",
+        ),
+        SystemSpec(
+            "mac",
+            r"<Month>  <Date> <Time> <User> <Component>\[<PID>\]( \(<Address>\))?: <Content>",
+            2017,
+            node_field="User",
+            level_field=None,
+            description="macOS system log",
+        ),
+        SystemSpec(
+            "android",
+            "<Date> <Time>  <Pid>  <Tid> <Level> <Component>: <Content>",
+            2017,
+            description="Android framework",
+        ),
+        SystemSpec(
+            "healthapp",
+            r"<Time>\|<Component>\|<Pid>\|<Content>",
+            2017,
+            level_field=None,
+            description="Health app",
+        ),
+        SystemSpec(
+            "apache",
+            r"\[<Time>\] \[<Level>\] <Content>",
+            2005,
+            component_field=None,
+            description="Apache HTTP server error log",
+        ),
         # In OpenSSH logs the <Component> column is the host name, so it is the node.
-        SystemSpec("openssh", r"<Date> <Day> <Time> <Component> sshd\[<Pid>\]: <Content>", 2017, node_field="Component", component_field=None, level_field=None, description="OpenSSH server"),
-        SystemSpec("proxifier", r"\[<Time>\] <Program> - <Content>", 2017, component_field="Program", level_field=None, description="Proxifier client"),
+        SystemSpec(
+            "openssh",
+            r"<Date> <Day> <Time> <Component> sshd\[<Pid>\]: <Content>",
+            2017,
+            node_field="Component",
+            component_field=None,
+            level_field=None,
+            description="OpenSSH server",
+        ),
+        SystemSpec(
+            "proxifier",
+            r"\[<Time>\] <Program> - <Content>",
+            2017,
+            component_field="Program",
+            level_field=None,
+            description="Proxifier client",
+        ),
     )
 }
 
@@ -135,7 +220,12 @@ LOGHUB_DIRS = {
 }
 
 _DROP_FIELDS = frozenset({"Content", "EventTemplate", "EventId", "LineId"})
-_MONTHS = {m: i for i, m in enumerate(("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"), 1)}
+_MONTHS = {
+    m: i
+    for i, m in enumerate(
+        ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"), 1
+    )
+}
 
 
 @dataclass(slots=True)
@@ -198,10 +288,18 @@ def parse_timestamp(system: str, fields: dict[str, str]) -> datetime | None:
             return _try("%Y.%m.%d %H:%M:%S", f"{year}.{get('Time', '')}")
         case "linux" | "mac":
             month = _MONTHS.get(get("Month", ""))
-            return _try("%Y-%m-%d %H:%M:%S", f"{year}-{month}-{get('Date', '')} {get('Time', '')}") if month else None
+            return (
+                _try("%Y-%m-%d %H:%M:%S", f"{year}-{month}-{get('Date', '')} {get('Time', '')}")
+                if month
+                else None
+            )
         case "openssh":
             month = _MONTHS.get(get("Date", ""))
-            return _try("%Y-%m-%d %H:%M:%S", f"{year}-{month}-{get('Day', '')} {get('Time', '')}") if month else None
+            return (
+                _try("%Y-%m-%d %H:%M:%S", f"{year}-{month}-{get('Day', '')} {get('Time', '')}")
+                if month
+                else None
+            )
         case _:
             return None
 
@@ -222,19 +320,34 @@ def _derive_level(system: str, fields: dict[str, str], message: str) -> str | No
     return "INFO"
 
 
+def _split_zookeeper(node: str | None, component: str | None) -> tuple[str | None, str | None]:
+    """ZooKeeper logs ``[thread:Class@line]`` and thread names hold colons of their own
+    (``QuorumPeer[myid=1]/0:0:0:0:0:0:0:0:2181``). Loghub's split, at the first colon, leaves
+    part of the thread in the component; the class is the last part, the rest is the thread."""
+    if not component or ":" not in component:
+        return node, component
+    prefix, _, component = component.rpartition(":")
+    thread = ":".join(part for part in (node, prefix) if part).rstrip(":")
+    return thread or None, component or None
+
+
 def record_from_fields(system: str, line_no: int, fields: dict[str, str]) -> LogRecord:
     spec = SYSTEMS[system]
     message = fields.get("Content", "").strip()
     level_raw = fields.get(spec.level_field, "") if spec.level_field else ""
     level = normalize_level(level_raw) or _derive_level(system, fields, message)
     label = fields.get("Label")
+    node = (fields.get(spec.node_field) or None) if spec.node_field else None
+    component = (fields.get(spec.component_field) or None) if spec.component_field else None
+    if system == "zookeeper":
+        node, component = _split_zookeeper(node, component)
     return LogRecord(
         system=system,
         line_no=line_no,
         message=message,
         ts=parse_timestamp(system, fields),
-        node=(fields.get(spec.node_field) or None) if spec.node_field else None,
-        component=(fields.get(spec.component_field) or None) if spec.component_field else None,
+        node=node,
+        component=component,
         level=level,
         level_raw=level_raw or None,
         label=None if label in (None, "", "-") else label,
@@ -339,9 +452,13 @@ def format_raw_line(record: LogRecord) -> str:
         case "hadoop":
             return f"{ts:%Y-%m-%d %H:%M:%S},{ms} {get('Level', 'INFO')} [{get('Process', 'main')}] {get('Component', 'app')}: {msg}"
         case "spark":
-            return f"{ts:%y/%m/%d %H:%M:%S} {get('Level', 'INFO')} {get('Component', 'spark')}: {msg}"
+            return (
+                f"{ts:%y/%m/%d %H:%M:%S} {get('Level', 'INFO')} {get('Component', 'spark')}: {msg}"
+            )
         case "zookeeper":
-            return f"{ts:%Y-%m-%d %H:%M:%S},{ms} - {get('Level', 'INFO')}  [{node}:{get('Component', 'Server')}@{get('Id', '100')}] - {msg}"
+            # The record holds the normalised thread (as node) and class; see _split_zookeeper.
+            component = record.component or get("Component", "Server")
+            return f"{ts:%Y-%m-%d %H:%M:%S},{ms} - {get('Level', 'INFO')}  [{node}:{component}@{get('Id', '100')}] - {msg}"
         case "openstack":
             return f"{get('Logrecord', 'nova-compute.log')} {ts:%Y-%m-%d %H:%M:%S}.{ms} {get('Pid', '2931')} {get('Level', 'INFO')} {get('Component', 'nova.compute')} [{node}] {msg}"
         case "hpc":
@@ -350,7 +467,9 @@ def format_raw_line(record: LogRecord) -> str:
             return f"{ts:%Y-%m-%d %H:%M:%S}, {get('Level', 'Info')}                  {get('Component', 'CBS')}    {msg}"
         case "linux":
             pid = f"[{f['PID']}]" if f.get("PID") else ""
-            return f"{ts:%b} {ts.day:2d} {ts:%H:%M:%S} {node} {get('Component', 'kernel')}{pid}: {msg}"
+            return (
+                f"{ts:%b} {ts.day:2d} {ts:%H:%M:%S} {node} {get('Component', 'kernel')}{pid}: {msg}"
+            )
         case "mac":
             address = f" ({f['Address']})" if f.get("Address") else ""
             return f"{ts:%b} {ts.day:2d} {ts:%H:%M:%S} {node} {get('Component', 'kernel')}[{get('PID', '0')}]{address}: {msg}"

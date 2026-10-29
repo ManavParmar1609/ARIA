@@ -16,10 +16,14 @@ from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import get_context
 from pathlib import Path
 
+from langgraph.store.base import BaseStore, PutOp
+
 from aria.config import GuardrailConfig
 from aria.data.scenarios import Scenario, ScenarioBuilder
 from aria.evidence import EvidenceStore
+from aria.parsing.drain import template_id
 from aria.parsing.parser import parse_lines
+from aria.parsing.signals import signal_components, signal_templates
 from aria.retrieval.memory import MemoryIncident
 from aria.retrieval.runbooks import Runbook, load_runbooks
 
@@ -27,17 +31,22 @@ MEMORY_SEEDS = (51, 52)
 SEED_SALT = b"aria-memory-v1"
 
 
-def incident_from_scenario(scenario: Scenario, runbooks: dict[str, Runbook]) -> MemoryIncident:
+def incident_from_scenario(
+    scenario: Scenario, runbooks: dict[str, Runbook], known_templates: Iterable[str] = ()
+) -> MemoryIncident:
+    """``known_templates`` is the system's routine history, so the incident's signal (errors and
+    new warnings) is judged the way a live run judges it."""
     batch = parse_lines(
         scenario.lines,
         system=scenario.system,
         guard=GuardrailConfig(),
         evidence=EvidenceStore(),
+        known_templates=known_templates,
         salt=SEED_SALT,
     ).batch
     features = batch.features
-    errors = [t for t in batch.templates if t.error_like][:3] or batch.templates[:2]
-    signature = " | ".join(t.template for t in errors)
+    signal = signal_templates(batch)[:3] or batch.templates[:2]
+    signature = " | ".join(t.template for t in signal)
     minutes = features.duration_s / 60
     summary = (
         f"{features.error_events} error events on {features.error_nodes} of {features.distinct_nodes} "
@@ -60,7 +69,7 @@ def incident_from_scenario(scenario: Scenario, runbooks: dict[str, Runbook]) -> 
         summary=summary,
         resolution=resolution,
         signature=signature[:2_000],
-        components=(features.critical_components or features.components)[:6],
+        components=signal_components(batch, 6) or features.components[:6],
         runbook_slug=runbook.slug if runbook else None,
         first_seen=scenario.start,
         last_seen=scenario.end,
@@ -72,8 +81,10 @@ def incident_from_scenario(scenario: Scenario, runbooks: dict[str, Runbook]) -> 
     )
 
 
-def _from_scenario(scenario: Scenario, runbooks_dir: str) -> MemoryIncident:
-    return incident_from_scenario(scenario, load_runbooks(Path(runbooks_dir)))
+def _from_scenario(
+    scenario: Scenario, runbooks_dir: str, known_templates: list[str]
+) -> MemoryIncident:
+    return incident_from_scenario(scenario, load_runbooks(Path(runbooks_dir)), known_templates)
 
 
 def seed_incidents(
@@ -93,12 +104,48 @@ def seed_incidents(
         )
         if scenario.failure_mode != "none"  # quiet windows are not incidents
     ]
+    from aria.severity.training import known_templates  # noqa: PLC0415 - avoids an import cycle
+
+    known = {system: known_templates(builder, system) for system in {s.system for s in scenarios}}
+    histories = [known[s.system] for s in scenarios]
     if workers > 1 and len(scenarios) > 2 * workers:
         with ProcessPoolExecutor(max_workers=workers, mp_context=get_context("spawn")) as pool:
             return list(
                 pool.map(
-                    _from_scenario, scenarios, [str(runbooks_dir)] * len(scenarios), chunksize=4
+                    _from_scenario,
+                    scenarios,
+                    [str(runbooks_dir)] * len(scenarios),
+                    histories,
+                    chunksize=4,
                 )
             )
     runbooks = load_runbooks(runbooks_dir)
-    return [incident_from_scenario(s, runbooks) for s in scenarios]
+    return [
+        incident_from_scenario(s, runbooks, history)
+        for s, history in zip(scenarios, histories, strict=True)
+    ]
+
+
+async def seed_known_templates(
+    store: BaseStore, builder: ScenarioBuilder, systems: Iterable[str] | None = None
+) -> int:
+    """Store each system's routine-traffic templates: the history "novel template" is judged by.
+
+    The severity model was trained with novelty measured against this same quiet history, so a
+    deployment without it would see no novel templates at all and rate incidents too low.
+    """
+    from aria.severity.training import known_templates  # noqa: PLC0415 - avoids an import cycle
+
+    wanted = sorted(systems or builder.pools.background)
+    ops = [
+        PutOp(
+            ("templates", system),
+            template_id(system, template),
+            {"template": template, "count": 0, "error_like": False, "source": "seed"},
+        )
+        for system in wanted
+        for template in known_templates(builder, system)
+    ]
+    if ops:
+        await store.abatch(ops)
+    return len(ops)

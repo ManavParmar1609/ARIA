@@ -19,6 +19,7 @@ from aria.db.engine import session_scope
 from aria.db.models import LogEventRow
 from aria.parsing.features import ERROR_LEVELS
 from aria.parsing.parser import ParsedLine
+from aria.parsing.signals import WARN
 
 RUN_DATASET = "run"
 _LIKE_ESCAPE = re.compile(r"([%_\\])")
@@ -146,7 +147,7 @@ def _run_events(engine: Engine, run_id: str, component: str | None = None) -> li
 
 
 def component_timeline(engine: Engine, run_id: str, component: str) -> list[dict[str, Any]]:
-    """Per-minute totals and error counts for one component, from its first line onward."""
+    """Per-minute totals, errors and warnings for one component, from its first line onward."""
     stamped = [(e.ts, e.level) for e in _run_events(engine, run_id, component) if e.ts is not None]
     if not stamped:
         return []
@@ -157,8 +158,10 @@ def component_timeline(engine: Engine, run_id: str, component: str) -> list[dict
         buckets[minute]["total"] += 1
         if level in ERROR_LEVELS:
             buckets[minute]["errors"] += 1
+        elif level == WARN:
+            buckets[minute]["warnings"] += 1
     return [
-        {"minute": m, "total": c["total"], "errors": c["errors"]}
+        {"minute": m, "total": c["total"], "errors": c["errors"], "warnings": c["warnings"]}
         for m, c in sorted(buckets.items())
     ]
 
@@ -168,10 +171,16 @@ def node_breakdown(
 ) -> list[dict[str, Any]]:
     totals: Counter[str] = Counter()
     errors: Counter[str] = Counter()
+    warnings: Counter[str] = Counter()
     for event in _run_events(engine, run_id, component):
         node = event.node or "(unknown)"
         totals[node] += 1
         if event.level in ERROR_LEVELS:
             errors[node] += 1
-    ranked = sorted(totals, key=lambda n: (-errors[n], -totals[n], n))[:limit]
-    return [{"node": n, "errors": errors[n], "total": totals[n]} for n in ranked]
+        elif event.level == WARN:
+            warnings[node] += 1
+    ranked = sorted(totals, key=lambda n: (-errors[n], -warnings[n], -totals[n], n))[:limit]
+    return [
+        {"node": n, "errors": errors[n], "warnings": warnings[n], "total": totals[n]}
+        for n in ranked
+    ]

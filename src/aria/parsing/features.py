@@ -13,6 +13,7 @@ from aria.contracts.parsing import WindowFeatures
 from aria.parsing.catalog import ServiceCatalog, load_catalog, load_lexicon
 
 ERROR_LEVELS = frozenset({"ERROR", "FATAL"})
+WARN = "WARN"
 CRITICAL_COMPONENT = 0.8
 
 
@@ -57,6 +58,7 @@ def compute_features(
     n = len(lines)
     levels = Counter(line.level or "UNKNOWN" for line in lines)
     errors = [line for line in lines if line.level in ERROR_LEVELS]
+    warnings = [line for line in lines if line.level == WARN]
     times = sorted(line.ts for line in lines if line.ts is not None)
     error_times = sorted(line.ts for line in errors if line.ts is not None)
     start, end = (times[0], times[-1]) if times else (None, None)
@@ -67,6 +69,11 @@ def compute_features(
         burst, peak = burst_score(series), float(max(series))
     else:
         burst, peak = 0.0, float(len(errors) > 0)
+    warning_times = sorted(line.ts for line in warnings if line.ts is not None)
+    if start and end and warning_times:
+        peak_warnings = float(max(per_minute_counts(warning_times, start, end)))
+    else:
+        peak_warnings = float(len(warnings) > 0)
 
     lowered = [line.message.lower() for line in lines]
     keyword_hits = {
@@ -79,6 +86,7 @@ def compute_features(
     error_components = {line.component for line in errors if line.component}
     criticality = {c: catalog.criticality(system, c) for c in error_components}
     error_templates = {line.template_id for line in errors}
+    warning_templates = {line.template_id for line in warnings}
 
     return WindowFeatures(
         n_events=n,
@@ -96,6 +104,9 @@ def compute_features(
         node_spread=round(len(error_nodes) / len(nodes), 4) if nodes else 0.0,
         novel_templates=len({line.template_id for line in lines} & novel_template_ids),
         novel_error_templates=len(error_templates & novel_template_ids),
+        warn_nodes=len({line.node for line in warnings if line.node}),
+        peak_warnings_per_min=peak_warnings,
+        novel_warn_templates=len(warning_templates & novel_template_ids),
         components=components[:50],
         critical_components=sorted(c for c, v in criticality.items() if v >= CRITICAL_COMPONENT)[
             :20

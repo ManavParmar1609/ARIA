@@ -14,11 +14,12 @@ from datetime import datetime
 
 from aria.contracts.base import SEVERITY_DESCRIPTIONS, Claim, Evidence, EvidenceKind, Severity
 from aria.contracts.inputs import AlertSignal
-from aria.contracts.parsing import ParsedBatch
+from aria.contracts.parsing import ParsedBatch, TemplateStat
 from aria.contracts.report import ActionItem, TimelineEntry
 from aria.contracts.retrieval import Hypothesis, Investigation, RetrievalResult
 from aria.contracts.severity import SeverityAssessment
 from aria.llm.schemas import ActionOut, ClaimOut, NarrativeOutput
+from aria.parsing.signals import signal_templates
 from aria.retrieval.runbooks import Runbook
 
 DECIDED_BY_TEXT = {
@@ -112,6 +113,13 @@ def _mode_words(mode: str) -> str:
     return mode.replace("_", " ").strip()
 
 
+def _own_evidence(ctx: ReportContext, template: TemplateStat) -> Evidence | None:
+    """The template's own evidence item: it records the count and node spread a claim quotes.
+    Templates past the evidence cap point at the window's evidence instead, which does not."""
+    item = ctx.by_id.get(template.evidence_id)
+    return item if item is not None and item.kind is EvidenceKind.TEMPLATE else None
+
+
 def compose_title(ctx: ReportContext) -> str:
     if ctx.title_hint:
         return f"{ctx.severity.severity} · {ctx.title_hint}"[:140]
@@ -124,10 +132,13 @@ def compose_title(ctx: ReportContext) -> str:
         what = f"Suspected {_mode_words(top.failure_mode)}"
     elif features.error_events:
         what = "Error spike"
+    elif signal_templates(ctx.batch):
+        what = "New warnings"
     else:
         what = "Log anomaly check"
     where = f"{ctx.system_name}" + (f" ({ctx.service})" if ctx.service else "")
-    nodes = f" on {features.error_nodes} nodes" if features.error_nodes > 1 else ""
+    affected = features.error_nodes or features.warn_nodes
+    nodes = f" on {affected} nodes" if affected > 1 else ""
     return f"{ctx.severity.severity} · {what} in {where}{nodes}"[:140]
 
 
@@ -139,8 +150,10 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
     window = ctx.find(EvidenceKind.FEATURE, source="parser", key="n_events")
     burst = ctx.find(EvidenceKind.FEATURE, source="parser", key="burst_score")
     spread = ctx.find(EvidenceKind.FEATURE, source="parser", key="error_nodes")
+    warn_spread = ctx.find(EvidenceKind.FEATURE, source="parser", key="warn_nodes")
     floor_ev = next((e for e in rule_evs if e.data.get("effect") == "floor"), None)
     by_id = ctx.by_id
+    signal = signal_templates(ctx.batch)
 
     summary: list[ClaimOut | None] = []
     p = sev.probabilities.get(sev.severity, 0.0)
@@ -152,13 +165,21 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
         _claim(f"{severity_text}.", model_ev, floor_ev or (rule_evs[0] if rule_evs else None))
     )
     if window is not None and features.n_events:
+        warnings = features.level_counts.get("WARN", 0)
         scale = (
-            f"{features.error_events} error events ({features.error_ratio:.1%} of {features.n_events}) "
-            f"in {features.duration_s / 60:.1f} minutes of logs"
+            f"{features.error_events} error events ({features.error_ratio:.1%} of {features.n_events})"
+            + (f" and {warnings} warnings" if warnings else "")
+            + f" in {features.duration_s / 60:.1f} minutes of logs"
         )
         if spread is not None:
             scale += f", on {features.error_nodes} of {features.distinct_nodes} nodes"
-        summary.append(_claim(f"{scale}.", window, spread))
+        elif warn_spread is not None:
+            scale += f", warnings on {features.warn_nodes} of {features.distinct_nodes} nodes"
+        summary.append(_claim(f"{scale}.", window, spread or warn_spread))
+        if not signal:
+            summary.append(
+                _claim("No errors and no new warnings: this looks like routine traffic.", window)
+            )
     if burst is not None and features.burst_score >= 2:
         summary.append(
             _claim(
@@ -167,23 +188,28 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
                 burst,
             )
         )
-    top_error = next(
-        (t for t in ctx.batch.templates if t.error_like and t.evidence_id in by_id), None
-    )
-    if top_error is not None:
+    top = next(((t, e) for t in signal if (e := _own_evidence(ctx, t)) is not None), None)
+    if top is not None:
+        template, template_ev = top
+        kind = "error" if template.error_like else "new warning" if template.novel else "warning"
+        on_nodes = f" on {template.nodes} nodes" if template.nodes else ""
         summary.append(
             _claim(
-                f'Most frequent error: "{top_error.template[:160]}" ({top_error.count} lines on {top_error.nodes} nodes).',
-                by_id[top_error.evidence_id],
+                f'Most frequent {kind}: "{template.template[:160]}" ({template.count} lines{on_nodes}).',
+                template_ev,
             )
         )
     incidents = [i for i in ctx.retrieval.incidents if i.evidence_id in by_id]
+    # Retrieval may fall back to analogues on other systems; only this system's incidents can
+    # suggest a cause.
+    local = [i for i in incidents if i.system == ctx.batch.system]
     if incidents:
         best = incidents[0]
         seen = f"seen {best.occurrences} times" if best.occurrences > 1 else "seen once"
+        where = "" if best in local else f" (an analogue on {best.system}, another system)"
         summary.append(
             _claim(
-                f"Closest past incident: {best.title} ({best.severity}, {seen}).",
+                f"Closest past incident{where}: {best.title} ({best.severity}, {seen}).",
                 by_id[best.evidence_id or ""],
             )
         )
@@ -229,13 +255,14 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
             # Quote the confidence only from the evidence that records it.
             text += f" (investigation confidence {float(hyp_ev.data['confidence']):.0%})"
         cause.append(_claim(f"{text}.", hyp_ev, *supporting[:4]))
-    elif incidents:
-        best = incidents[0]
-        agreeing = [i for i in incidents if i.failure_mode == best.failure_mode]
+    elif local and signal:
+        best = local[0]
+        agreeing = [i for i in local if i.failure_mode == best.failure_mode]
+        which = "incident" if len(agreeing) == 1 else "incidents"
         cause.append(
             _claim(
-                f"Likely {_mode_words(best.failure_mode)}: it matches {len(agreeing)} of the "
-                f"{len(incidents)} closest past incidents.",
+                f"Likely {_mode_words(best.failure_mode)}: the closest past {which} on this "
+                "system had this failure mode.",
                 *[by_id[i.evidence_id or ""] for i in agreeing],
             )
         )
@@ -277,11 +304,11 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
         )
 
     questions: list[str] = []
-    if not incidents or ctx.retrieval.grade < 0.35:
+    if signal and (not local or ctx.retrieval.grade < 0.35):
         questions.append("No close match in incident memory. Is this a new failure mode?")
     if len(sev.prediction_set) > 1:
         questions.append(f"Is the impact closer to {' or '.join(sev.prediction_set)}?")
-    if lead is None and ctx.investigation.hypotheses:
+    if signal and lead is None and ctx.investigation.hypotheses:
         questions.append(
             "The investigation did not confirm a cause. What changed just before the errors began?"
         )
@@ -304,14 +331,20 @@ def _fallback_claim(ctx: ReportContext) -> ClaimOut:
 
 
 def compose_timeline(ctx: ReportContext, *, limit: int = 12) -> list[TimelineEntry]:
-    by_id = ctx.by_id
     events: list[tuple[datetime, str, str]] = [
         (t.first_ts, f'First "{t.template[:100]}" ({t.count} lines)', t.evidence_id)
-        for t in ctx.batch.templates
-        if t.error_like and t.first_ts and t.evidence_id in by_id
+        for t in signal_templates(ctx.batch)
+        if t.first_ts and _own_evidence(ctx, t) is not None
     ]
     events.extend(
-        (item.ts, f"Error logged: {item.title.split(': ', 1)[-1][:120]}", item.id)
+        (
+            item.ts,
+            (
+                f"{'Warning' if item.data.get('level') == 'WARN' else 'Error'} logged: "
+                f"{item.title.split(': ', 1)[-1][:120]}"
+            ),
+            item.id,
+        )
         for item in ctx.all_of(EvidenceKind.LOG, source="parser")
         if item.ts is not None
     )

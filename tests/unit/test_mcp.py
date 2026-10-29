@@ -122,10 +122,12 @@ async def test_tools_answer_with_structured_results(services: tuple[Services, st
         assert examples.structured_content["lines"]
         nodes = await client.call_tool("node_breakdown", {"run_id": RUN_ID})
         assert nodes.structured_content["nodes"][0]["errors"] > 0
+        assert "warnings" in nodes.structured_content["nodes"][0]
         timeline = await client.call_tool(
             "component_timeline", {"run_id": RUN_ID, "component": "KERNEL"}
         )
         assert timeline.structured_content["buckets"]
+        assert {"total", "errors", "warnings"} <= set(timeline.structured_content["buckets"][0])
         resource = await client.read_resource("runbook://ssh-bruteforce")
         content = resource.contents[0]
         assert getattr(content, "text", "").startswith("# SSH brute-force")

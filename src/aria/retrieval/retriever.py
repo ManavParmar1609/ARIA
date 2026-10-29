@@ -41,6 +41,7 @@ from aria.llm.prompts import build_messages
 from aria.llm.router import LLMRouter
 from aria.llm.schemas import QueryRewrite
 from aria.observability.logging import get_logger
+from aria.parsing.signals import signal_components, signal_templates
 from aria.retrieval.hybrid import Hit
 from aria.retrieval.memory import IncidentMemory, MemoryIncident
 from aria.retrieval.runbooks import Runbook
@@ -66,14 +67,14 @@ def _template_terms(template: str) -> list[str]:
 
 
 def build_query(batch: ParsedBatch, hypotheses: Sequence[Hypothesis] = ()) -> RetrievalQuery:
-    errors = [t for t in batch.templates if t.error_like][:3] or batch.templates[:2]
+    signal = signal_templates(batch)[:3] or batch.templates[:2]
     terms: list[str] = []
-    for template in errors:
+    for template in signal:
         terms.extend(_template_terms(template.template))
     keywords = [
         k for k, v in sorted(batch.features.keyword_hits.items(), key=lambda kv: -kv[1]) if v
     ][:4]
-    components = (batch.features.critical_components or batch.features.components)[:4]
+    components = signal_components(batch, 4) or batch.features.components[:4]
     hints = [h.failure_mode for h in hypotheses if h.status in ("open", "supported")][:3]
     text = " ".join([*hints, *components, *keywords, *terms])
     return RetrievalQuery(
@@ -293,6 +294,7 @@ class Retriever:
                     last_seen=history.last_seen,
                     resolution=incident.resolution,
                     runbook_slug=incident.runbook_slug,
+                    components=incident.components[:6],
                     mttr_minutes=history.mttr_minutes,
                     source=incident.source,
                     evidence_id=eid,

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -25,12 +27,14 @@ from aria.llm.schemas import InvestigatorStep
 from aria.mcp.client import ToolBelt
 from aria.mcp.server import build_server
 from aria.parsing.parser import QUARANTINE_FLAG, parse_lines
+from aria.parsing.signals import signal_templates
 from aria.retrieval.memory import IncidentMemory
 from aria.retrieval.retriever import build_query
 from aria.retrieval.runbooks import load_runbooks
 from aria.retrieval.runlog import store_run_lines
 from aria.retrieval.seed import incident_from_scenario
 from aria.services import Services
+from aria.severity.training import known_templates
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "loghub"
 RUN = "run-inv-1"
@@ -65,10 +69,53 @@ def _belt(services: Services, evidence: EvidenceStore, **kwargs: Any) -> ToolBel
         build_server(services),
         allowed=kwargs.pop("allowed", INVESTIGATOR_TOOLS),
         agent="investigator",
-        run_id=RUN,
+        run_id=kwargs.pop("run_id", RUN),
         evidence=evidence,
         **kwargs,
     )
+
+
+@dataclass
+class Hdfs:
+    services: Services
+    builder: ScenarioBuilder
+    known: tuple[str, ...]
+
+
+@pytest.fixture
+async def hdfs() -> AsyncIterator[Hdfs]:
+    """Memory holds one past HDFS block-serve incident, a problem that only logs at WARN."""
+    engine = get_engine()
+    init_db(engine)
+    builder = ScenarioBuilder(LinePools.from_loghub(FIXTURES))
+    known = known_templates(builder, "hdfs")
+    past = builder.build("hdfs.block_serve_exceptions", seed=7, nodes=3, duration_min=5)
+    await IncidentMemory(engine, None).bulk_insert(
+        [incident_from_scenario(past, load_runbooks(Path("runbooks")), known)]
+    )
+    services = await Services.create()
+    yield Hdfs(services, builder, known)
+    await services.aclose()
+
+
+async def _inputs(
+    case: Hdfs, lines: list[str], run_id: str
+) -> tuple[InvestigationInputs, EvidenceStore]:
+    evidence = EvidenceStore()
+    out = parse_lines(
+        lines, system="hdfs", guard=GuardrailConfig(), evidence=evidence, known_templates=case.known
+    )
+    store_run_lines(case.services.engine, run_id, "hdfs", out.lines)
+    severity = await case.services.severity.assess(
+        out.batch.features, system="hdfs", evidence=evidence, use_llm=False
+    )
+    retrieval = await case.services.retriever.retrieve(
+        build_query(out.batch), evidence=evidence, use_llm=False
+    )
+    inputs = InvestigationInputs(
+        run_id, "hdfs", out.batch, severity.assessment, retrieval.incidents
+    )
+    return inputs, evidence
 
 
 async def test_deterministic_loop_follows_the_plan_and_cites_its_hypotheses(
@@ -82,6 +129,8 @@ async def test_deterministic_loop_follows_the_plan_and_cites_its_hypotheses(
             inputs, belt, evidence, emit=lambda k, p: events.append((k, p))
         )
     assert sorted(c.tool for c in result.tool_calls) == sorted(p["tool"] for p in plan)
+    calls = {(c.tool, json.dumps(c.arguments, sort_keys=True)) for c in result.tool_calls}
+    assert len(calls) == len(result.tool_calls)  # no call runs twice
     assert all(c.arguments.get("run_id", RUN) == RUN for c in result.tool_calls)
     assert result.stopped_reason == "finished"
     assert result.leading_hypothesis is not None
@@ -210,3 +259,28 @@ def test_quarantined_lines_never_choose_the_component(
         InvestigationInputs(RUN, "bgl", poisoned, inputs.severity, inputs.similar)
     )
     assert plain == tainted
+
+
+async def test_warning_level_incidents_are_tested_on_the_component_that_warns(hdfs: Hdfs) -> None:
+    scenario = hdfs.builder.build("hdfs.block_serve_exceptions", seed=8, nodes=4, duration_min=6)
+    inputs, evidence = await _inputs(hdfs, scenario.lines, "run-inv-hdfs")
+    assert inputs.batch.features.error_events == 0  # the incident only logs at WARN
+    async with _belt(hdfs.services, evidence, run_id="run-inv-hdfs") as belt:
+        result = await Investigator(None).run(inputs, belt, evidence)
+    leading = next(h for h in result.hypotheses if h.id == result.leading_hypothesis)
+    assert leading.failure_mode == "block_serve_exceptions"
+    assert leading.status == "supported"
+    assert leading.component == "dfs.DataNode$DataXceiver"
+    timeline = next(c for c in result.tool_calls if c.tool == "component_timeline")
+    assert "warnings" in timeline.summary
+
+
+async def test_a_window_without_signal_supports_no_hypothesis(hdfs: Hdfs) -> None:
+    quiet = hdfs.builder.build_quiet("hdfs", seed=5, duration_min=10)
+    inputs, evidence = await _inputs(hdfs, quiet.lines, "run-inv-quiet")
+    assert not signal_templates(inputs.batch)
+    async with _belt(hdfs.services, evidence, run_id="run-inv-quiet") as belt:
+        result = await Investigator(None).run(inputs, belt, evidence)
+    assert result.leading_hypothesis is None
+    assert all(h.status != "supported" for h in result.hypotheses)
+    assert "node_breakdown" not in {c.tool for c in result.tool_calls}  # nowhere to look

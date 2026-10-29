@@ -133,7 +133,10 @@ class IncidentSummary:
 
 
 def _order_key(event: dict[str, Any]) -> tuple[int, datetime]:
-    return (event.get("sys_mod_count") or 0, event.get("sys_updated_at") or datetime.min.replace(tzinfo=UTC))
+    return (
+        event.get("sys_mod_count") or 0,
+        event.get("sys_updated_at") or datetime.min.replace(tzinfo=UTC),
+    )
 
 
 def aggregate(events: Iterable[dict[str, Any]]) -> list[IncidentSummary]:
@@ -191,4 +194,6 @@ def assign_time_splits(
     n = len(ordered)
     for i, summary in enumerate(ordered):
         fraction = i / n if n else 0
-        summary.split = "train" if fraction < train else "calib" if fraction < train + calib else "test"
+        summary.split = (
+            "train" if fraction < train else "calib" if fraction < train + calib else "test"
+        )

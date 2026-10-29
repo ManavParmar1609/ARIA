@@ -80,6 +80,7 @@ from aria.mcp.server import build_server
 from aria.notify import send_action
 from aria.parsing.parser import merge_shards, shard_from_payload, shard_to_payload, split_shards
 from aria.parsing.parser import parse_shard as parse_shard_lines
+from aria.parsing.signals import signal_components, signal_templates
 from aria.reporting.comms import AUDIENCE, action_id, draft_comms
 from aria.reporting.composer import ReportContext
 from aria.reporting.grounding import validate_report
@@ -573,6 +574,11 @@ def assess(state: TriageState, runtime: Runtime[TriageContext]) -> Command[Any]:
         )
     if run_plan.investigate and investigation.leading_hypothesis is None:
         reasons.append("no hypothesis is supported yet")
+    if reasons and not signal_templates(ParsedBatch.model_validate(state["batch"])):
+        # No errors and no new warnings: there is no problem to explain, and a wider search
+        # cannot find a cause for one. Say so instead of replanning.
+        note = "no errors or new warnings in the window, so ARIA did not replan"
+        return Command(update={"replan_reasons": [*reasons, note]}, goto="report")
     can_replan = (
         run_plan.replans < run_plan.max_replans and run_plan.widen_level < 3 and not usage.exhausted
     )
@@ -771,7 +777,7 @@ def _memory_incident(
         summary=" ".join(claim.text for claim in incident.summary)[:2_000],
         resolution=resolution[:2_000],
         signature=" | ".join(errors),
-        components=batch.features.components[:8],
+        components=signal_components(batch, 8) or batch.features.components[:8],
         runbook_slug=runbook,
         first_seen=batch.templates[0].first_ts if batch.templates else None,
         last_seen=datetime.now(UTC),

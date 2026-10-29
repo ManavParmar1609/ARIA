@@ -112,7 +112,9 @@ class LinePools:
             self.nodes[system] = sorted({rec.node for rec in recs if rec.node})
 
     @classmethod
-    def from_loghub(cls, loghub_dir: Path, modes: dict[str, FailureMode] | None = None) -> LinePools:
+    def from_loghub(
+        cls, loghub_dir: Path, modes: dict[str, FailureMode] | None = None
+    ) -> LinePools:
         modes = modes or load_catalog()
         wanted = {m.system for m in modes.values()}
         records: dict[str, list[LogRecord]] = {}
@@ -123,20 +125,48 @@ class LinePools:
         return cls(records, modes)
 
     def available_modes(self) -> list[str]:
-        return [key for key in self.modes if self.incident.get(key) and self.background.get(self.modes[key].system)]
+        return [
+            key
+            for key in self.modes
+            if self.incident.get(key) and self.background.get(self.modes[key].system)
+        ]
 
 
-def _policy_severity(mode: FailureMode, nodes: int, peak_rate: float) -> tuple[Severity, dict[str, Any]]:
+@lru_cache(maxsize=64)
+def node_visible(system: str) -> bool:
+    """Whether the system's raw line format names the host, so a node count is observable."""
+    probe = LogRecord(
+        system=system, line_no=1, message="probe", ts=SCENARIO_EPOCH, node="aria-node-probe"
+    )
+    return "aria-node-probe" in format_raw_line(probe)
+
+
+def _policy_severity(
+    mode: FailureMode, nodes: int, peak_rate: float
+) -> tuple[Severity, dict[str, Any]]:
+    """The scenario's label. A node-count escalation applies only where the logs show hosts.
+
+    Some formats (HDFS, Hadoop, Apache, Proxifier) carry no host field, so a label that escalated
+    on how many hosts were affected would depend on information no reader of the logs has.
+    """
     severity = mode.base
     fired: list[dict[str, Any]] = []
+    observable = node_visible(mode.system)
     for rule in mode.escalate:
         target = Severity(rule["to"])
-        if nodes >= int(rule.get("nodes_at_least", 10**9)) or peak_rate >= float(
-            rule.get("rate_per_min_at_least", float("inf"))
-        ):
+        by_nodes = observable and nodes >= int(rule.get("nodes_at_least", 10**9))
+        by_rate = peak_rate >= float(rule.get("rate_per_min_at_least", float("inf")))
+        if by_nodes or by_rate:
             fired.append(rule)
             severity = severity.more_severe(target)
-    return severity, {"policy": "scenario", "base": mode.base.value, "escalations": fired, "nodes": nodes, "peak_rate_per_min": round(peak_rate, 2)}
+    return severity, {
+        "policy": "scenario",
+        "base": mode.base.value,
+        "escalations": fired,
+        "nodes": nodes,
+        "nodes_observable": observable,
+        "peak_rate_per_min": round(peak_rate, 2),
+    }
 
 
 class ScenarioBuilder:
@@ -223,7 +253,9 @@ class ScenarioBuilder:
             label_detail=detail,
         )
 
-    def build_quiet(self, system: str, *, seed: int, duration_min: int = 20, background_per_min: float = 30.0) -> Scenario:
+    def build_quiet(
+        self, system: str, *, seed: int, duration_min: int = 20, background_per_min: float = 30.0
+    ) -> Scenario:
         """A window with background traffic only: the SEV4 'nothing is wrong' case."""
         rng = random.Random(f"quiet:{system}:{seed}")
         start = SCENARIO_EPOCH + timedelta(hours=seed % 5000)

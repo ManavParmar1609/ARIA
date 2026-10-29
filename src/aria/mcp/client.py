@@ -90,18 +90,24 @@ def summarize(tool: str, args: dict[str, Any], data: dict[str, Any]) -> str:
         )
     if "buckets" in data:
         buckets = data["buckets"]
-        peak = max(buckets, key=lambda b: b["errors"], default=None)
+        peak = max(buckets, key=lambda b: (b["errors"], b.get("warnings", 0)), default=None)
         if not peak:
             return f"no lines for component {data.get('component')}"
-        return f"{data.get('component')}: {sum(b['total'] for b in buckets)} lines over {len(buckets)} min, peak {peak['errors']} errors at minute {peak['minute']}"
+        errors = sum(b["errors"] for b in buckets)
+        warnings = sum(b.get("warnings", 0) for b in buckets)
+        return (
+            f"{data.get('component')}: {sum(b['total'] for b in buckets)} lines over "
+            f"{len(buckets)} min, {errors} errors and {warnings} warnings; peak at minute "
+            f"{peak['minute']} ({peak['errors']} errors, {peak.get('warnings', 0)} warnings)"
+        )
     if "nodes" in data:
         nodes = data["nodes"]
-        top = ", ".join(f"{n['node']} ({n['errors']} errors)" for n in nodes[:3])
-        return (
-            f"{sum(1 for n in nodes if n['errors'])} nodes with errors; top: {top}"
-            if nodes
-            else "no nodes"
+        top = ", ".join(
+            f"{n['node']} ({n['errors']} errors, {n.get('warnings', 0)} warnings)"
+            for n in nodes[:3]
         )
+        erring = sum(1 for n in nodes if n["errors"] or n.get("warnings", 0))
+        return f"{erring} nodes with errors or warnings; top: {top}" if nodes else "no nodes"
     if "runbooks" in data:
         return "runbooks: " + ", ".join(r["slug"] for r in data["runbooks"][:3])
     if "mitigate" in data:
@@ -190,6 +196,17 @@ class ToolBelt:
             self.on_call(record)
         return record
 
+    def prepared(self, tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        """The arguments a call would send: only those the tool accepts, pinned to this run."""
+        spec = self._specs.get(tool)
+        if spec is None:
+            return {k: v for k, v in arguments.items() if v is not None}
+        accepted = set(spec.parameters.get("properties", {}))
+        args = {k: v for k, v in arguments.items() if k in accepted and v is not None}
+        if self.pin_run and "run_id" in accepted:
+            args["run_id"] = self.run_id  # ARIA chooses the run, never the model
+        return args
+
     async def call(self, tool: str, arguments: dict[str, Any] | None = None) -> ToolOutcome:
         started = time.perf_counter()
         raw = {k: v for k, v in (arguments or {}).items() if v is not None}
@@ -209,10 +226,7 @@ class ToolBelt:
             raise RuntimeError(msg)
         if self.budget is not None:
             self.budget.check_tool()
-        accepted = set(self._specs[tool].parameters.get("properties", {}))
-        args = {k: v for k, v in raw.items() if k in accepted}
-        if self.pin_run and "run_id" in accepted:
-            args["run_id"] = self.run_id  # ARIA chooses the run, never the model
+        args = self.prepared(tool, raw)
         with tool_span(tool, agent=self.agent, call_id=self.run_id) as span:
             try:
                 result = await self._client.call_tool(tool, args)

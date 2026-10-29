@@ -52,10 +52,42 @@ def test_records_render_and_parse_back_exactly(directory: str, system: str) -> N
         back = parse_raw_line(system, format_raw_line(rec))
         assert back.message == rec.message
         assert (back.node or None) == (rec.node or None)
+        assert (back.component or None) == (rec.component or None)
         assert back.level == rec.level
         if rec.ts is not None:
             assert back.ts is not None
             assert abs((back.ts - rec.ts).total_seconds()) < 1
+
+
+@pytest.mark.parametrize(
+    ("bracket", "thread", "component"),
+    [
+        (
+            "SendWorker:188978561024:QuorumCnxManager$SendWorker@679",
+            "SendWorker:188978561024",
+            "QuorumCnxManager$SendWorker",
+        ),
+        (
+            "QuorumPeer[myid=1]/0:0:0:0:0:0:0:0:2181:FastLeaderElection@774",
+            "QuorumPeer[myid=1]/0:0:0:0:0:0:0:0:2181",
+            "FastLeaderElection",
+        ),
+        (
+            "ProcessThread(sid:2 cport:-1)::PrepRequestProcessor@476",
+            "ProcessThread(sid:2 cport:-1)",
+            "PrepRequestProcessor",
+        ),
+        ("main:QuorumPeerMain@127", "main", "QuorumPeerMain"),
+    ],
+)
+def test_zookeeper_component_is_the_class_and_the_thread_keeps_its_colons(
+    bracket: str, thread: str, component: str
+) -> None:
+    line = f"2015-07-29 19:04:29,071 - WARN  [{bracket}] - Interrupted while waiting for message"
+    record = parse_raw_line("zookeeper", line)
+    assert (record.node, record.component) == (thread, component)
+    back = parse_raw_line("zookeeper", format_raw_line(record))
+    assert (back.node, back.component) == (thread, component)
 
 
 def test_bgl_alert_tags_are_kept_as_labels() -> None:

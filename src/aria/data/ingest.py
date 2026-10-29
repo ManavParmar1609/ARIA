@@ -84,7 +84,9 @@ def _insert_events(engine: Engine, rows: Iterable[dict[str, Any]]) -> int:
     return count
 
 
-def ingest_loghub_samples(engine: Engine, loghub_dir: Path, dataset: str = "loghub-2k") -> IngestResult:
+def ingest_loghub_samples(
+    engine: Engine, loghub_dir: Path, dataset: str = "loghub-2k"
+) -> IngestResult:
     """The 16 official 2k-line samples, with ground-truth templates and BGL alert tags."""
     _replace_dataset(engine, dataset)
     result = IngestResult(dataset)
@@ -237,7 +239,9 @@ def ingest_uci(engine: Engine, uci_dir: Path) -> IngestResult:
     return IngestResult("uci-incidents", events=len(events), incidents=len(summaries))
 
 
-def ingest_all(engine: Engine, raw_dir: Path, *, bgl_max_lines: int = 500_000) -> list[IngestResult]:
+def ingest_all(
+    engine: Engine, raw_dir: Path, *, bgl_max_lines: int = 500_000
+) -> list[IngestResult]:
     """Ingest every source that has been downloaded; missing sources are skipped."""
     results: list[IngestResult] = []
     if (raw_dir / "loghub-2k").exists():

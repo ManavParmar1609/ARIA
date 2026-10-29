@@ -31,6 +31,7 @@ class TemplateStat(Contract):
     last_ts: datetime | None = None
     error_like: bool = False
     novel: bool = False
+    components: list[str] = Field(default_factory=list)  # most frequent first, at most 3
     sample_idx: list[int] = Field(default_factory=list)
     evidence_id: EvidenceId
 
@@ -53,6 +54,10 @@ class WindowFeatures(Contract):
     node_spread: float = Field(ge=0, le=1)
     novel_templates: int = Field(ge=0)
     novel_error_templates: int = Field(ge=0)
+    # Many incidents only log at WARN, so warnings get their own spread, peak and novelty.
+    warn_nodes: int = Field(default=0, ge=0)
+    peak_warnings_per_min: float = Field(default=0.0, ge=0)
+    novel_warn_templates: int = Field(default=0, ge=0)
     components: list[str] = Field(default_factory=list)
     critical_components: list[str] = Field(default_factory=list)
     max_component_criticality: float = Field(ge=0, le=1)
@@ -97,3 +102,5 @@ class ParsedBatch(Contract):
     features: WindowFeatures
     guard: GuardReport = Field(default_factory=GuardReport)
     shards: int = Field(default=1, ge=1)
+    # Known templates novelty was judged against; 0 means no history, so nothing is "novel".
+    template_history: int = Field(default=0, ge=0)

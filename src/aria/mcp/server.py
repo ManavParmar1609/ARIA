@@ -120,6 +120,7 @@ class TimelineBucket(BaseModel):
     minute: int
     total: int
     errors: int
+    warnings: int = 0
 
 
 class TimelineOut(BaseModel):
@@ -130,6 +131,7 @@ class TimelineOut(BaseModel):
 class NodeCount(BaseModel):
     node: str
     errors: int
+    warnings: int = 0
     total: int
 
 

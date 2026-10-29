@@ -170,7 +170,7 @@ def _extract(archive: Path, dest: Path) -> None:
             if not path.is_relative_to(dest.resolve()):  # zip-slip guard
                 msg = f"refusing to extract {member.filename} outside {dest}"
                 raise DownloadError(msg)
-        bundle.extractall(dest)  # noqa: S202 - members validated above
+        bundle.extractall(dest)  # members were validated above
         nested = [m for m in bundle.namelist() if m.endswith(".zip")]
     for inner in nested:
         _extract(dest / inner, dest)

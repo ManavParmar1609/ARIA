@@ -25,6 +25,7 @@ class SimilarIncident(Contract):
     last_seen: datetime | None = None
     resolution: str
     runbook_slug: str | None = None
+    components: list[str] = Field(default_factory=list)  # where its signal was, strongest first
     mttr_minutes: float | None = Field(default=None, ge=0)
     source: Literal["memory", "curated", "run"]
     evidence_id: EvidenceId | None = None

@@ -96,7 +96,7 @@ module-name = "aria"
 line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
-extend-exclude = ["web", "video", "data", "src/aria/db/migrations/versions"]
+extend-exclude = ["/web", "/video", "/data", "src/aria/db/migrations/versions"]
 
 [tool.ruff.lint]
 select = [
@@ -117,6 +117,9 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S105", "S106", "S108", "S311", "ARG", "PLC0415", "PERF", "N802"]
 "src/aria/cli.py" = ["T201", "PLC0415"]
+# A seeded scenario generator: `random` is not used for security, and the explicit loops fix the
+# order of random draws, which keeps every seed's scenarios reproducible.
+"src/aria/data/scenarios.py" = ["S311", "PERF401"]
 "scripts/**" = ["T201", "INP001"]
 
 [tool.ruff.lint.flake8-bugbear]

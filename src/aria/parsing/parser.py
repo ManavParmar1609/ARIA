@@ -28,6 +28,7 @@ from aria.data.loghub import LogRecord, parse_raw_line
 from aria.evidence import EvidenceStore
 from aria.parsing.drain import Drain, drain_for, template_id
 from aria.parsing.features import ERROR_LEVELS, FeatureInput, compute_features
+from aria.parsing.signals import WARN, line_rank
 from aria.security.injection import scan_line
 from aria.security.redaction import Redactor, new_salt
 
@@ -164,7 +165,8 @@ def merge_shards(
     context_lines: int = 120,
     n_raw_lines: int | None = None,
 ) -> ParseOutput:
-    mapping, novel_ids = _unify_templates(shards, system, list(known_templates))
+    history = sorted(set(known_templates))
+    mapping, novel_ids = _unify_templates(shards, system, history)
     every_line = sorted(
         (line for shard in shards for line in shard.lines), key=lambda line: line.idx
     )
@@ -241,10 +243,42 @@ def merge_shards(
             )
         )
 
+    if features.warn_nodes:
+        evidence_ids.append(
+            evidence.add(
+                EvidenceKind.FEATURE,
+                f"Warnings on {features.warn_nodes} of {features.distinct_nodes} nodes",
+                source="parser",
+                data={
+                    "warn_nodes": features.warn_nodes,
+                    "distinct_nodes": features.distinct_nodes,
+                    "peak_warnings_per_min": features.peak_warnings_per_min,
+                },
+            )
+        )
+
     def error_count(tid: str) -> int:
         return sum(1 for pl in by_template[tid] if pl.record.level in ERROR_LEVELS)
 
-    ranked = sorted(by_template, key=lambda tid: (-error_count(tid), -len(by_template[tid])))
+    def warning_count(tid: str) -> int:
+        return sum(1 for pl in by_template[tid] if pl.record.level == WARN)
+
+    def new_warnings(tid: str) -> int:
+        # Without a history to judge novelty against, every warning may be the news.
+        return warning_count(tid) if tid in novel_ids or not history else 0
+
+    def rank(tid: str) -> tuple[int, ...]:
+        # Errors first, then warnings the history has never shown, then other warnings.
+        novel = tid in novel_ids
+        return (
+            -error_count(tid),
+            -new_warnings(tid),
+            -warning_count(tid),
+            -novel,
+            -len(by_template[tid]),
+        )
+
+    ranked = sorted(by_template, key=rank)
     templates: list[TemplateStat] = []
     template_evidence = 0
     for tid in ranked:
@@ -252,8 +286,12 @@ def merge_shards(
         levels = Counter(pl.record.level or "UNKNOWN" for pl in members)
         stamps = [pl.record.ts for pl in members if pl.record.ts]
         error_like = any(pl.record.level in ERROR_LEVELS for pl in members)
+        new_warning = new_warnings(tid) > 0
+        components = Counter(pl.record.component for pl in members if pl.record.component)
         ev_id = ""
-        if template_evidence < MAX_TEMPLATE_EVIDENCE and (error_like or template_evidence < 3):
+        if template_evidence < MAX_TEMPLATE_EVIDENCE and (
+            error_like or new_warning or template_evidence < 3
+        ):
             ev_id = evidence.add(
                 EvidenceKind.TEMPLATE,
                 f"{len(members)}x {members[0].template[:140]}",
@@ -281,14 +319,20 @@ def merge_shards(
                 last_ts=max(stamps) if stamps else None,
                 error_like=error_like,
                 novel=tid in novel_ids,
+                components=[c for c, _ in components.most_common(3)],
                 sample_idx=[pl.idx for pl in members[:5]],
                 evidence_id=ev_id or window,
             )
         )
 
-    first_errors = [by_template[tid] for tid in ranked if error_count(tid)][:MAX_LINE_EVIDENCE]
-    for members in first_errors:
-        line = next(pl for pl in members if pl.record.level in ERROR_LEVELS)
+    def strength(pl: ParsedLine) -> int:
+        return line_rank(pl.record.level, novel=pl.template_id in novel_ids)
+
+    signal = [by_template[tid] for tid in ranked if error_count(tid) or new_warnings(tid)][
+        :MAX_LINE_EVIDENCE
+    ]
+    for members in signal:
+        line = min(members, key=lambda pl: (strength(pl), pl.idx))  # first error, else warning
         evidence_ids.append(
             evidence.add(
                 EvidenceKind.LOG,
@@ -321,10 +365,9 @@ def merge_shards(
             )
         )
 
-    keep = [pl for pl in lines if pl.record.level in ERROR_LEVELS or pl.flags][:context_lines]
-    if len(keep) < context_lines:
-        kept = {pl.idx for pl in keep}
-        keep += [pl for pl in lines if pl.idx not in kept][: context_lines - len(keep)]
+    # Context for reviewers and agents: errors, then new warnings, warnings, other new lines and
+    # the rest, each group in log order. (Redaction flags say nothing about the problem.)
+    keep = sorted(lines, key=lambda pl: (strength(pl), pl.idx))[:context_lines]
     keep += quarantined[:MAX_INJECTION_EVIDENCE]  # shown to reviewers, flagged, never analysed
     keep.sort(key=lambda pl: pl.idx)
     redactions: Counter[str] = Counter()
@@ -359,6 +402,7 @@ def merge_shards(
             dropped_lines=sum(s.dropped for s in shards),
         ),
         shards=len(shards),
+        template_history=len(history),
     )
     return ParseOutput(batch=batch, lines=lines, evidence_ids=evidence_ids, quarantined=quarantined)
 

@@ -75,7 +75,7 @@ class LabelledWindow:
 
 
 @cache
-def _known_templates(builder: ScenarioBuilder, system: str) -> tuple[str, ...]:
+def known_templates(builder: ScenarioBuilder, system: str) -> tuple[str, ...]:
     """Templates of routine traffic, standing in for the history a deployment accumulates."""
     history = builder.build_quiet(system, seed=9_999, duration_min=30)
     return tuple(t.template for t in _parse(system, history.lines, ()).templates)
@@ -92,7 +92,7 @@ def _parse(system: str, lines: Sequence[str], known: Sequence[str]) -> ParsedBat
     ).batch
 
 
-def _features(system: str, lines: Sequence[str], known: Sequence[str]) -> WindowFeatures:
+def features_for(system: str, lines: Sequence[str], known: Sequence[str]) -> WindowFeatures:
     return _parse(system, lines, known).features
 
 
@@ -100,7 +100,7 @@ def featurize_all(
     scenarios: Sequence[Scenario], builder: ScenarioBuilder, rules: RuleSet, *, workers: int = 1
 ) -> list[LabelledWindow]:
     """Parse every scenario with the production parser (in parallel processes if asked)."""
-    known = {s.system: _known_templates(builder, s.system) for s in scenarios}
+    known = {s.system: known_templates(builder, s.system) for s in scenarios}
     args = (
         [s.system for s in scenarios],
         [s.lines for s in scenarios],
@@ -108,9 +108,9 @@ def featurize_all(
     )
     if workers > 1 and len(scenarios) > 2 * workers:
         with ProcessPoolExecutor(max_workers=workers, mp_context=get_context("spawn")) as pool:
-            features = list(pool.map(_features, *args, chunksize=4))
+            features = list(pool.map(features_for, *args, chunksize=4))
     else:
-        features = [_features(*item) for item in zip(*args, strict=True)]
+        features = [features_for(*item) for item in zip(*args, strict=True)]
     windows: list[LabelledWindow] = []
     for scenario, feats in zip(scenarios, features, strict=True):
         values = feature_space(feats)

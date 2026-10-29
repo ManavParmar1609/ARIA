@@ -14,6 +14,8 @@ from aria.evidence import EvidenceStore
 from aria.parsing.drain import WILDCARD, Drain, drain_for, parameters, template_id
 from aria.parsing.features import FeatureInput, burst_score, compute_features
 from aria.parsing.parser import parse_lines
+from aria.parsing.signals import line_rank, signal_components, signal_templates
+from aria.severity.training import known_templates
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "loghub"
 
@@ -156,6 +158,74 @@ def test_sharded_parse_matches_single_pass(builder: ScenarioBuilder) -> None:
     assert one.batch.features == four.batch.features
     assert [t.template for t in one.batch.templates] == [t.template for t in four.batch.templates]
     assert four.batch.shards == 4
+
+
+def test_templates_do_not_depend_on_the_pseudonym_key(builder: ScenarioBuilder) -> None:
+    # Each run pseudonymises IPs with a fresh key; templates and features must not change with it,
+    # or "novel template" would count hash noise and template memory would never match.
+    scenario = builder.build("openstack.image_cache_missing", seed=4)
+    runs = [
+        parse_lines(
+            scenario.lines,
+            system="openstack",
+            guard=GuardrailConfig(),
+            evidence=EvidenceStore(),
+            known_templates=["<*> GET /v2/<*>/servers/detail HTTP/<*> status: <*>"],
+            salt=salt,
+        )
+        for salt in (b"a" * 16, b"b" * 16)
+    ]
+    assert any("ip-" in line.record.message for line in runs[0].lines)
+    assert runs[0].batch.features == runs[1].batch.features
+    first, second = ([t.template for t in run.batch.templates] for run in runs)
+    assert first == second
+    assert not any("ip-" in template for template in first)
+
+
+def test_line_rank_puts_errors_then_new_warnings_first() -> None:
+    ranks = [
+        line_rank("FATAL", novel=False),
+        line_rank("WARN", novel=True),
+        line_rank("WARN", novel=False),
+        line_rank("INFO", novel=True),
+        line_rank("INFO", novel=False),
+    ]
+    assert ranks == sorted(set(ranks))
+
+
+def test_warning_only_incidents_still_carry_signal(builder: ScenarioBuilder) -> None:
+    # HDFS block-serve failures only ever log at WARN: an error-only view would see nothing.
+    scenario = builder.build("hdfs.block_serve_exceptions", seed=3, nodes=4)
+    evidence = EvidenceStore()
+    batch = parse_lines(
+        scenario.lines,
+        system="hdfs",
+        guard=GuardrailConfig(),
+        evidence=evidence,
+        known_templates=known_templates(builder, "hdfs"),
+        context_lines=20,
+    ).batch
+    assert batch.features.error_events == 0
+    assert batch.template_history > 0
+    top = signal_templates(batch)[0]
+    assert "serving" in top.template
+    assert top.novel
+    assert not top.error_like
+    assert top.components == ["dfs.DataNode$DataXceiver"]
+    assert signal_components(batch)[0] == "dfs.DataNode$DataXceiver"
+    assert all(event.level == "WARN" for event in batch.events)  # context leads with the news
+    logs = [e for e in evidence.all() if e.kind is EvidenceKind.LOG]
+    assert any("serving" in e.title for e in logs)
+
+
+def test_without_a_history_every_warning_is_signal(builder: ScenarioBuilder) -> None:
+    scenario = builder.build("hdfs.block_serve_exceptions", seed=3, nodes=4)
+    batch = parse_lines(
+        scenario.lines, system="hdfs", guard=GuardrailConfig(), evidence=EvidenceStore()
+    ).batch
+    assert batch.template_history == 0
+    assert not any(t.novel for t in batch.templates)
+    assert "serving" in signal_templates(batch)[0].template
 
 
 def test_guard_caps_lines_and_truncates_long_ones() -> None:

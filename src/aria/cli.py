@@ -19,6 +19,8 @@ train_app = typer.Typer(
     help="Train and export the severity and ticket models.", invoke_without_command=True
 )
 providers_app = typer.Typer(no_args_is_help=True, help="Inspect LLM providers.")
+eval_app = typer.Typer(no_args_is_help=True, help="Evaluate ARIA and gate regressions.")
+app.add_typer(eval_app, name="eval")
 app.add_typer(db_app, name="db")
 app.add_typer(data_app, name="data")
 app.add_typer(train_app, name="train")
@@ -106,12 +108,13 @@ def data_ingest(bgl_max_lines: int = 500_000) -> None:
 
 def _loghub_dir() -> Path:
     from aria.config import get_settings
+    from aria.evals.run import FIXTURES_DIR
 
     real = get_settings().data_dir / "raw" / "loghub-2k"
     if real.exists():
         return real
-    console.print("[yellow]data/raw/loghub-2k not found; training on the small test fixtures[/]")
-    return Path("tests/fixtures/loghub")
+    console.print("[yellow]data/raw/loghub-2k not found (make data); using the test fixtures[/]")
+    return FIXTURES_DIR
 
 
 @train_app.callback()
@@ -207,6 +210,11 @@ def seed(
         f"incident memory: {count} synthetic incidents (embeddings: {memory.embedding_model}); "
         f"offline embedder: {model_path}"
     )
+    from aria.graph.store import SqlStore
+    from aria.retrieval.seed import seed_known_templates
+
+    templates = asyncio.run(seed_known_templates(SqlStore(engine), builder))
+    console.print(f"template memory: {templates} routine-traffic templates")
 
 
 @app.command()
@@ -323,6 +331,85 @@ def triage(
             await services.aclose()
 
     asyncio.run(main())
+
+
+@eval_app.command("run")
+def eval_run(
+    *,
+    suite: Annotated[
+        str, typer.Option(help="smoke, severity, pipeline, robustness or all")
+    ] = "smoke",
+    gate: Annotated[bool, typer.Option(help="Fail when a threshold is missed (CI).")] = False,
+    llm: Annotated[bool, typer.Option(help="Use the configured LLM chain (costs calls).")] = False,
+    limit: Annotated[int | None, typer.Option(help="Cap end-to-end and robustness cases.")] = None,
+    workers: Annotated[int, typer.Option(help="Parser processes.")] = 0,
+    docs: Annotated[Path, typer.Option(help="Where `--suite all` writes the report.")] = Path(
+        "docs/evaluation.md"
+    ),
+) -> None:
+    """Run an evaluation suite; `--suite all` also regenerates docs/evaluation.md."""
+    import json
+
+    from aria.evals import report
+    from aria.evals.run import check_gate, default_workers, run, save
+
+    results = asyncio.run(
+        run(
+            suite,
+            loghub_dir=_loghub_dir(),
+            use_llm=llm,
+            workers=workers or default_workers(),
+            limit=limit,
+        )
+    )
+    console.print(f"results: {save(results)}")
+    for section in ("severity", "pipeline", "robustness"):
+        if section in results:
+            headline = {
+                k: v
+                for k, v in results[section].items()
+                if k
+                in ("n", "groundedness", "retrieval", "severity_invariant", "tool_use_invariant")
+            }
+            if section == "severity":
+                headline["aria_policy"] = {
+                    k: results[section]["methods"]["aria_policy"][k]
+                    for k in ("accuracy", "macro_f1", "severe_under_triage")
+                }
+            console.print(f"[bold]{section}[/bold] {json.dumps(headline, default=str)}")
+    if suite == "all" and not llm:
+        live_path = Path("reports/eval/pipeline-llm.json")
+        live = json.loads(live_path.read_text()) if live_path.exists() else None
+        docs.parent.mkdir(parents=True, exist_ok=True)
+        docs.write_text(report.render(results, live), encoding="utf-8")
+        Path("docs/eval-results.json").write_text(
+            json.dumps({k: v for k, v in results.items() if not k.endswith("_cases")}, indent=2)
+            + "\n",
+            encoding="utf-8",
+        )
+        console.print(f"wrote {docs}")
+    if gate:
+        failures = check_gate(results, suite)
+        for failure in failures:
+            console.print(f"[red]gate:[/red] {failure}")
+        if failures:
+            raise typer.Exit(1)
+        console.print("[green]gate passed[/green]")
+
+
+@app.command()
+def openapi(
+    out: Annotated[Path, typer.Option(help="Where to write the schema.")] = Path("openapi.json"),
+) -> None:
+    """Export the API's OpenAPI schema (for generating the web client)."""
+    import json
+
+    from aria.api.app import create_app
+
+    schema = create_app().openapi()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(schema, indent=2) + "\n", encoding="utf-8")
+    console.print(f"wrote {out} ({len(schema.get('paths', {}))} paths)")
 
 
 # --- providers ---------------------------------------------------------------------------------

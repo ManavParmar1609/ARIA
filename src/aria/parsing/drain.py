@@ -15,8 +15,13 @@ from dataclasses import dataclass, field
 
 WILDCARD = "<*>"
 
+# Redaction pseudonyms (``ip-3fa2c1d0``) are keyed per run, so they are always a variable; left
+# to the number mask, their hex letters would leak into templates and differ from run to run.
+PSEUDONYM_MASK = (r"\b(?:ip|email)-[0-9a-f]{8}\b", WILDCARD)
+
 # Order matters: specific shapes before the generic number mask.
 DEFAULT_MASKS: tuple[tuple[str, str], ...] = (
+    PSEUDONYM_MASK,
     (r"blk_-?\d+", "blk_<*>"),
     (r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b", WILDCARD),
     (r"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?\b", WILDCARD),
@@ -155,8 +160,12 @@ class Drain:
         return [self.add(m).id for m in messages]
 
     def seed(self, templates: Iterable[str]) -> None:
-        """Pre-load known templates (for example from earlier runs) so novelty can be measured."""
-        for template in templates:
+        """Pre-load known templates (for example from earlier runs) so novelty can be measured.
+
+        Seeding generalises clusters as it goes, so the templates are deduplicated and sorted
+        first: the same history always builds the same tree, whatever order a store returns it.
+        """
+        for template in sorted(set(templates)):
             self.add(template)
 
 
@@ -226,7 +235,9 @@ GENERIC_SETTINGS = DrainSettings(DEFAULT_MASKS, 0.5, 4)
 def drain_for(system: str, *, generic_masks: bool = False) -> Drain:
     """A Drain configured for a known system, or with ARIA's generic masks otherwise."""
     settings = SYSTEM_SETTINGS.get(system, GENERIC_SETTINGS)
-    masks = settings.masks + (
-        DEFAULT_MASKS if generic_masks and settings is not GENERIC_SETTINGS else ()
-    )
+    masks = settings.masks
+    if settings is not GENERIC_SETTINGS:
+        # Redaction runs before mining, so the benchmark's IP masks never see a raw address:
+        # the per-run pseudonyms that replace them are masked first.
+        masks = (PSEUDONYM_MASK, *masks, *(DEFAULT_MASKS if generic_masks else ()))
     return Drain(depth=max(3, settings.depth), sim_threshold=settings.sim_threshold, masks=masks)

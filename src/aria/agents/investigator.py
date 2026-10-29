@@ -40,7 +40,7 @@ from aria.llm.schemas import (
     ToolRequest,
 )
 from aria.mcp.client import ToolBelt, ToolNotAllowedError
-from aria.parsing.parser import QUARANTINE_FLAG
+from aria.parsing.signals import signal_components, signal_templates
 
 INVESTIGATOR_TOOLS = (
     "search_logs",
@@ -96,23 +96,37 @@ class _Loop:
 
 
 def _top_component(batch: ParsedBatch) -> str | None:
-    features = batch.features
-    if features.critical_components:
-        return features.critical_components[0]
-    counts: dict[str, int] = {}
-    for event in batch.events:
-        # Quarantined lines are shown to reviewers but must never steer the investigation.
-        quarantined = QUARANTINE_FLAG in event.flags
-        if event.level in ("ERROR", "FATAL") and event.component and not quarantined:
-            counts[event.component] = counts.get(event.component, 0) + 1
-    if counts:
-        return max(counts, key=counts.__getitem__)
-    return features.components[0] if features.components else None
+    """Where the signal is: a critical component logging errors, else the component of the
+    strongest error or new-warning template; None for a window without either. Templates leave
+    out quarantined lines, which are shown to reviewers but must never steer the investigation."""
+    components = signal_components(batch, 1)
+    return components[0] if components else None
+
+
+def _ran(loop: _Loop, tool: str, arguments: dict[str, Any]) -> bool:
+    """Has this call run already? Compared as the belt sends it: filtered and pinned to the run."""
+    wanted = loop.belt.prepared(tool, arguments)
+    return any(o.tool == tool and o.arguments == wanted for o in loop.observations)
+
+
+def _component_for(
+    incident: SimilarIncident, batch: ParsedBatch, fallback: str | None
+) -> str | None:
+    """The component to test a past incident's cause on: where that incident's signal was, if
+    that component carries signal here too; else one of its components present here (a quiet
+    timeline then counts against it); else the window's top component."""
+    signal = signal_components(batch)
+    present = set(batch.features.components)
+    return next(
+        (c for c in signal if c in incident.components),
+        next((c for c in incident.components if c in present), fallback),
+    )
 
 
 def candidate_hypotheses(inputs: InvestigationInputs, *, limit: int = 3) -> list[NewHypothesis]:
-    """Plausible causes to test, from similar incidents and the window's own error signals."""
-    component = _top_component(inputs.batch)
+    """Plausible causes to test, from similar incidents and the window's own signal."""
+    batch = inputs.batch
+    component = _top_component(batch)
     seen: set[str] = set()
     out: list[NewHypothesis] = []
     for incident in inputs.similar:
@@ -124,17 +138,18 @@ def candidate_hypotheses(inputs: InvestigationInputs, *, limit: int = 3) -> list
             NewHypothesis(
                 statement=f"{label.capitalize()}, as in past incident {incident.incident_id}",
                 failure_mode=incident.failure_mode,
-                component=component,
+                component=_component_for(incident, batch, component),
             )
         )
-    errors = [t for t in inputs.batch.templates if t.error_like]
-    if errors and component and "component_errors" not in seen:
-        top = errors[0]
+    signal = signal_templates(batch)
+    if signal and component and "component_errors" not in seen:
+        top = signal[0]
+        where = top.components[0] if top.components else component
         out.append(
             NewHypothesis(
-                statement=f'{component} is failing: "{top.template[:80]}" repeats {top.count} times',
+                statement=f'{where} is failing: "{top.template[:80]}" repeats {top.count} times',
                 failure_mode="component_errors",
-                component=component,
+                component=where,
             )
         )
     return out[:limit]
@@ -143,30 +158,42 @@ def candidate_hypotheses(inputs: InvestigationInputs, *, limit: int = 3) -> list
 def suggested_plan(inputs: InvestigationInputs) -> list[dict[str, Any]]:
     """A sensible default sequence of tool calls; the LLM may deviate within the allowlist."""
     plan: list[dict[str, Any]] = []
-    errors = [t for t in inputs.batch.templates if t.error_like]
+    signal = signal_templates(inputs.batch)
     component = _top_component(inputs.batch)
-    if errors:
+    if signal:
         plan.append(
             {
                 "tool": "get_template_examples",
-                "arguments": {"template_id": errors[0].template_id, "limit": 5},
+                "arguments": {"template_id": signal[0].template_id, "limit": 5},
             }
         )
     if component:
         plan.append({"tool": "component_timeline", "arguments": {"component": component}})
         plan.append({"tool": "node_breakdown", "arguments": {"component": component}})
-    if errors:
-        words = " ".join(_WORDS.findall(errors[0].template.lower())[:8])
+    if signal:
+        words = " ".join(_WORDS.findall(signal[0].template.lower())[:8])
         if len(words) >= 2:
             plan.append({"tool": "search_incidents", "arguments": {"query": words, "limit": 3}})
     runbook = next((i.runbook_slug for i in inputs.similar if i.runbook_slug), None)
     if runbook:
         plan.append({"tool": "get_runbook", "arguments": {"slug": runbook}})
+    # A rival cause on another component gets its own timeline, so the two can be told apart.
+    rival = next(
+        (
+            h.component
+            for h in candidate_hypotheses(inputs)
+            if h.component and h.component != component
+        ),
+        None,
+    )
+    if rival:
+        plan.append({"tool": "component_timeline", "arguments": {"component": rival}})
     return plan
 
 
-def _errors_in(buckets: Sequence[dict[str, Any]]) -> int:
-    return sum(int(b.get("errors", 0)) for b in buckets)
+def _signal_in(buckets: Sequence[dict[str, Any]]) -> int:
+    """Errors and warnings: many incidents in these systems only log at WARN."""
+    return sum(int(b.get("errors", 0)) + int(b.get("warnings", 0)) for b in buckets)
 
 
 def supports(hypothesis: Hypothesis, observation: Observation) -> bool:
@@ -176,9 +203,9 @@ def supports(hypothesis: Hypothesis, observation: Observation) -> bool:
         return False
     component = observation.arguments.get("component")
     if observation.tool == "component_timeline":
-        return hypothesis.component == component and _errors_in(data.get("buckets", [])) > 0
+        return hypothesis.component == component and _signal_in(data.get("buckets", [])) > 0
     if observation.tool == "node_breakdown":
-        erring = sum(1 for n in data.get("nodes", []) if n.get("errors"))
+        erring = sum(1 for n in data.get("nodes", []) if n.get("errors") or n.get("warnings"))
         return component in (None, hypothesis.component) and erring >= 2
     if observation.tool == "search_incidents":
         top = data.get("incidents", [])[:2]
@@ -195,7 +222,7 @@ def supports(hypothesis: Hypothesis, observation: Observation) -> bool:
 
 
 def refutes(hypothesis: Hypothesis, observation: Observation) -> bool:
-    """A clean timeline for the suspected component counts against the hypothesis."""
+    """A clean timeline (no errors or warnings) for the suspected component counts against it."""
     data = observation.data or {}
     return (
         observation.ok
@@ -203,7 +230,7 @@ def refutes(hypothesis: Hypothesis, observation: Observation) -> bool:
         and hypothesis.component is not None
         and hypothesis.component == observation.arguments.get("component")
         and bool(data.get("buckets"))
-        and _errors_in(data.get("buckets", [])) == 0
+        and _signal_in(data.get("buckets", [])) == 0
     )
 
 
@@ -239,9 +266,8 @@ class Investigator:
     # --- decisions -----------------------------------------------------------------------------
 
     def _deterministic(self, loop: _Loop, room: int) -> InvestigatorStep:
-        done = {o.tool for o in loop.observations}
         new = [] if loop.hypotheses else candidate_hypotheses(loop.inputs)
-        upcoming = [p for p in loop.plan if p["tool"] not in done][:room]
+        upcoming = [p for p in loop.plan if not _ran(loop, p["tool"], p["arguments"])][:room]
         if not upcoming:
             return InvestigatorStep(
                 rationale="Planned checks complete.", new_hypotheses=new, finish=True
@@ -422,14 +448,15 @@ class Investigator:
 
     @staticmethod
     def _dedupe(loop: _Loop, requests: Sequence[ToolRequest]) -> list[ToolRequest]:
-        seen = {(o.tool, json.dumps(o.arguments, sort_keys=True)) for o in loop.observations}
+        seen: set[tuple[str, str]] = set()
         out = []
         for request in requests:
-            args = {k: v for k, v in request.arguments.model_dump().items() if v is not None}
+            args = loop.belt.prepared(request.tool, request.arguments.model_dump())
             key = (request.tool, json.dumps(args, sort_keys=True))
-            if key not in seen:
-                seen.add(key)
-                out.append(request)
+            if key in seen or _ran(loop, request.tool, args):
+                continue
+            seen.add(key)
+            out.append(request)
         return out
 
     async def _call(

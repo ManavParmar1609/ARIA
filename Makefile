@@ -79,7 +79,7 @@ worker: ## Run a background worker that executes queued triage runs
 
 .PHONY: mcp
 mcp: ## Run the ARIA MCP server over stdio
-	$(UV) run aria mcp serve --transport stdio
+	$(UV) run aria mcp --transport stdio
 
 .PHONY: web
 web: ## Run the web app dev server on :3000

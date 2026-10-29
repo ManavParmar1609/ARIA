@@ -373,6 +373,17 @@ async def test_weak_evidence_replans_with_wider_retrieval(env: Env) -> None:
     assert "no replans left" in state["replan_reasons"][-1]
 
 
+async def test_a_window_without_signal_is_reported_without_replanning(env: Env) -> None:
+    quiet = env.builder.build_quiet("hdfs", seed=5, duration_min=10)
+    outcome = await env.runner.start(
+        TriageRequest(title="Routine traffic", system="hdfs", logs=quiet.lines, synthetic=True)
+    )
+    state = (await env.runner.snapshot(outcome.run_id)).values
+    assert state["plan"]["replans"] == 0
+    assert "did not replan" in state["replan_reasons"][-1]
+    assert outcome.status is RunStatus.AWAITING_REVIEW
+
+
 def _poison(lines: list[str], node: str, at: Any) -> list[str]:
     attacks = [
         format_raw_line(
