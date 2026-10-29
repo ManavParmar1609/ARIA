@@ -36,6 +36,7 @@ Run what covers the files you changed before you commit:
 | A quick Python loop | `make test-fast`, or `uv run pytest tests/unit/test_<area>.py -q` |
 | API routes or schemas | `make openapi`, then commit `docs/openapi.json` and `web/src/lib/api/schema.ts` |
 | `web/` | `make web-check`; for pages and flows, `make web-e2e` too |
+| `video/` | `pnpm --dir video format:check`, `pnpm --dir video typecheck`, then `make video` |
 | Severity, parsing, retrieval or reporting | `make eval-smoke` (the CI gate in `config/eval_thresholds.yaml`) |
 | Anything a published number depends on | `make eval`, then commit what it rewrote |
 | Workflows | `make audit` (actionlint, zizmor, pip-audit) |
@@ -52,7 +53,7 @@ must never need a network call or a real key. Contract tests mock HTTP.
 | Blocks between `<!-- generated:NAME -->` and `<!-- /generated:NAME -->` in `README.md` and `docs/model-card.md` | `make eval` |
 | `docs/eval-live.json` | `uv run aria eval run --suite pipeline --llm` (makes paid or rate-limited provider calls; ask first) |
 | `web/src/data/eval-results.json`, `web/src/data/eval-live.json` | `pnpm --dir web sync:data` |
-| `web/src/data/demo-run.json` | `uv run python -I scripts/record_demo_run.py` |
+| `web/src/data/demo-run.json` | `uv run python -I scripts/record_demo_run.py` (the landing page and `video/` both read it) |
 | `docs/openapi.json`, `web/src/lib/api/schema.ts` | `make openapi` |
 | `models/*.json`, `models/*.npz` | `make train` and `aria seed` |
 | `uv.lock`, `web/pnpm-lock.yaml` | `uv add` / `uv lock`, `pnpm add` |
@@ -118,4 +119,5 @@ falls out of date.
 | `tests/unit/` | One file per area, for example `test_severity.py` |
 | `web/src/app/` | Landing page (`page.tsx`) and console (`console/`) |
 | `web/e2e/` | Playwright and axe tests |
+| `video/src/` | The Remotion explainer: one scene per pipeline step, data from `web/src/data/demo-run.json` and `docs/eval-results.json` |
 | `docs/adr/` | Why the architecture is the way it is |

@@ -309,12 +309,14 @@ Every section, with its method: [docs/evaluation.md](docs/evaluation.md).
 | `make web-e2e` | Playwright and axe (WCAG 2.2 AA) against an offline API |
 | `make web-lighthouse` | Lighthouse bars, median of three runs per page |
 | `make audit` | pip-audit, actionlint, zizmor |
+| `make video` | Render the explainer video with Remotion to `video/out/aria-demo.mp4` |
 | `make openapi` | Re-export the API schema and regenerate the web client types |
 | `make help` | Everything else |
 
 Tests and evals run offline with the fake provider. CI runs lint, types and tests, the eval gate,
 the web checks with Playwright and Lighthouse, dependency and workflow audits, the Bicep build
-and the image builds. See [.github/workflows/ci.yml](.github/workflows/ci.yml).
+and the image builds, and renders the explainer video (uploaded as the `aria-demo` artifact). See
+[.github/workflows/ci.yml](.github/workflows/ci.yml).
 
 ## Deploying to Azure
 
@@ -350,6 +352,7 @@ on manual trigger only. Day-two operations are in the [ops runbook](docs/ops-run
 | `src/aria/api/` | FastAPI app, webhooks, log scan, A2A, AG-UI, worker |
 | `src/aria/evals/` | Evaluation suites and the report generator |
 | `web/` | Next.js landing page and console |
+| `video/` | The Remotion explainer, built from one recorded run and the measured results |
 | `runbooks/` | The runbook library ARIA retrieves from |
 | `models/` | The exported severity model and offline embeddings |
 | `data/manifest.yaml` | Dataset sources, pinned commits and checksums (raw data is never committed) |

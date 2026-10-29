@@ -1,0 +1,14 @@
+# Single-package workspace: this file only carries pnpm settings (the same as web/).
+packages:
+  - "."
+
+# Supply-chain guard: never resolve a version published less than a week ago.
+minimumReleaseAge: 10080
+
+# pnpm runs no dependency install scripts unless listed here.
+onlyBuiltDependencies: []
+
+# Security fixes for transitive dependencies (the same as web/). Remotion's studio pins zod 4.5,
+# which GHSA-mrhx-c7xc-m3w5 affects (memory exhaustion on oversized collections).
+overrides:
+  zod: ^4.6.7

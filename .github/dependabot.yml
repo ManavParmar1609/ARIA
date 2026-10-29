@@ -1,6 +1,6 @@
 version: 2
 # Only ecosystems whose manifests exist are listed: Dependabot fails a run for a directory with
-# nothing to update. The video/ npm entry is added in the commit that creates it.
+# nothing to update.
 updates:
   - package-ecosystem: uv
     directory: /
@@ -29,4 +29,13 @@ updates:
       default-days: 7
     groups:
       web:
+        patterns: ["*"]
+  - package-ecosystem: npm
+    directory: /video
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      video:
         patterns: ["*"]

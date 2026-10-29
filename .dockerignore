@@ -38,6 +38,8 @@ models/embed_local.npz
 web/node_modules
 web/.next
 web/out
+# The demo video is rendered on its own (make video), never in an image
+video
 web/test-results
 web/playwright-report
 web/blob-report
