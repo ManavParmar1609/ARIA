@@ -26,6 +26,7 @@ from aria.llm.router import LLMRouter
 from aria.llm.schemas import CommsOutput, MessageDraft
 from aria.reporting.grounding import validate_external_text
 from aria.reporting.writer import cited_evidence
+from aria.security.safety import check_text
 
 AUDIENCE = {"responders": "responders", "stakeholders": "stakeholders", "status_page": "customers"}
 KIND = {"responders": "slack", "stakeholders": "webhook", "status_page": "status_page"}
@@ -101,6 +102,7 @@ async def draft_comms(
     router: LLMRouter | None = None,
     budget: BudgetGuard | None = None,
     use_llm: bool = True,
+    safety_check: bool = False,
 ) -> CommsOutcome:
     drafts = deterministic_drafts(report, service=service, run_url=run_url)
     known = {e.id for e in report.evidence}
@@ -132,6 +134,12 @@ async def draft_comms(
             outcome.polished_by = f"{result.provider}/{result.model}"
             for key, candidate in polished.items():
                 problems = _problems(key, candidate, known)
+                if not problems and safety_check:
+                    verdict = await check_text(
+                        router, f"{candidate.title}\n{candidate.body}", budget=budget
+                    )
+                    if not verdict.safe:
+                        problems = [verdict.describe()]
                 if problems:
                     outcome.rejected[key] = problems
                 else:

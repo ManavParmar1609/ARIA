@@ -123,7 +123,7 @@ async def _context(builder: ScenarioBuilder, *, with_hypothesis: bool = True) ->
     )
 
 
-def _router(fake: FakeProvider, *roles: str) -> LLMRouter:
+def _router(fake: FakeProvider, *roles: str, safety: bool = False) -> LLMRouter:
     config = LLMConfig(
         providers={
             "llm": ProviderConfig(
@@ -131,9 +131,11 @@ def _router(fake: FakeProvider, *roles: str) -> LLMRouter:
                 base_url="http://x/v1",
                 allow_no_key=True,
                 chat_model="m",
+                safety_model="guard" if safety else None,
             )
         },
         routing={role: ["llm"] for role in roles},
+        safety=["llm"] if safety else [],
     )
     fake.kind = ProviderKind.NVIDIA_NIM
     return LLMRouter(config, providers={"llm": fake})
@@ -409,6 +411,57 @@ async def test_comms_are_proposals_and_leaky_polish_is_rejected(builder: Scenari
     assert "R02" not in status.body  # the leaky polish was dropped for the deterministic draft
     assert "status_page" in outcome.rejected
     assert outcome.polished_by == "llm/aria-fake-1"
+
+
+SAFE = json.dumps({"User Safety": "safe", "Response Safety": "safe"})
+UNSAFE = json.dumps({"Response Safety": "unsafe", "Safety Categories": "Harassment"})
+
+
+async def test_the_safety_guardrail_keeps_flagged_llm_text_out(builder: ScenarioBuilder) -> None:
+    ctx = await _context(builder)
+    flagged = await ReportWriter(
+        _router(FakeProvider(script={"text": [UNSAFE]}), "reporter", "critic", safety=True),
+        RUNBOOKS,
+        safety_check=True,
+    ).write(ctx, report_id="rep-9")
+    assert (flagged.safety, flagged.fell_back) == ("flagged", True)
+    assert flagged.report.generated_by == "template"
+    assert flagged.report.validation.ok
+    assert any("content-safety check (Harassment)" in note for note in flagged.notes)
+
+    passed = await ReportWriter(
+        _router(FakeProvider(script={"text": [SAFE]}), "reporter", "critic", safety=True),
+        RUNBOOKS,
+        safety_check=True,
+    ).write(ctx, report_id="rep-10")
+    assert passed.safety == "passed"
+    assert passed.report.generated_by == "llm"
+
+    off = await ReportWriter(_router(FakeProvider(), "reporter", "critic"), RUNBOOKS).write(
+        ctx, report_id="rep-11"
+    )
+    assert (off.safety, off.report.generated_by) == ("skipped", "llm")
+
+    report = flagged.report
+    drafts = deterministic_drafts(report, service="BlueGene/L", run_url="http://aria/runs/r")
+    polished = {k: v.model_dump() for k, v in drafts.items()}
+    for draft in polished.values():
+        draft["title"] = f"{draft['title']} (polished)"
+    outcome = await draft_comms(
+        report,
+        service="BlueGene/L",
+        run_url="http://aria/runs/r",
+        router=_router(
+            FakeProvider(script={"comms": [json.dumps(polished)], "text": [UNSAFE, SAFE, SAFE]}),
+            "comms",
+            safety=True,
+        ),
+        safety_check=True,
+    )
+    titles = {a.audience: a.title for a in outcome.actions}
+    assert titles["responders"] == drafts["responders"].title  # flagged: the deterministic draft
+    assert titles["stakeholders"].endswith("(polished)")
+    assert "content-safety" in outcome.rejected["responders"][0]
 
 
 async def test_a_dropped_severity_statement_is_restored(builder: ScenarioBuilder) -> None:

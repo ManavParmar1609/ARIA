@@ -31,6 +31,7 @@ from aria.reporting.composer import (
 )
 from aria.reporting.grounding import validate_report
 from aria.retrieval.runbooks import Runbook
+from aria.security.safety import check_text
 
 FLAGGING = {"unsupported", "contradicted", "overstated", "missing_citation"}
 
@@ -45,13 +46,21 @@ class ReportOutcome:
     critic_issues: list[CriticIssue] = field(default_factory=list)
     removed_claims: list[str] = field(default_factory=list)
     fell_back: bool = False
+    safety: Literal["passed", "flagged", "skipped"] = "skipped"
     notes: list[str] = field(default_factory=list)
 
 
 class ReportWriter:
-    def __init__(self, router: LLMRouter | None, runbooks: dict[str, Runbook]) -> None:
+    def __init__(
+        self,
+        router: LLMRouter | None,
+        runbooks: dict[str, Runbook],
+        *,
+        safety_check: bool = False,
+    ) -> None:
         self.router = router
         self.runbooks = runbooks
+        self.safety_check = safety_check
 
     # --- building and validating ---------------------------------------------------------------
 
@@ -267,6 +276,16 @@ class ReportWriter:
                     ctx, value, report_id=report_id, generated_by="llm", model=model
                 )
                 outcome.llm_used, outcome.provider, outcome.model = True, provider, model
+                if self.safety_check:
+                    text = "\n".join(claim.text for _, claim in candidate.claims())
+                    verdict = await check_text(self.router, text, budget=budget)
+                    outcome.safety = "passed" if verdict.safe else "flagged"
+                    if not verdict.safe:
+                        outcome.fell_back = True
+                        outcome.notes.append(
+                            f"the LLM report was {verdict.describe()}; published the grounded draft"
+                        )
+                        candidate = draft_report
 
         review, critic_kind = await self._critic(candidate, ctx, budget=budget, use_llm=use_llm)
         outcome.critic, outcome.critic_issues = critic_kind, list(review.issues)

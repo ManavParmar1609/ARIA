@@ -641,7 +641,11 @@ async def report(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
     ctx = _report_context(state, services)
     guard = _guard(state, services)
     before = guard.snapshot()
-    writer = ReportWriter(_router(services, request, run_plan), services.runbooks)
+    writer = ReportWriter(
+        _router(services, request, run_plan),
+        services.runbooks,
+        safety_check=services.config.guardrails.safety_model,
+    )
     outcome = await writer.write(
         ctx,
         report_id=report_id_for(state["run_id"]),
@@ -661,6 +665,7 @@ async def report(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
         "critic": outcome.critic,
         "removed_claims": outcome.removed_claims,
         "fell_back": outcome.fell_back,
+        "safety": outcome.safety,
         "validation": run_plan.validation,
     }
     return {
@@ -684,6 +689,7 @@ async def comms(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
         router=_router(services, request, run_plan),
         budget=guard,
         use_llm=run_plan.use_llm,
+        safety_check=services.config.guardrails.safety_model,
     )
     await _db(repo.save_actions, services.engine, state["run_id"], outcome.actions)
     notes = [
