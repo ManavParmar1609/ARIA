@@ -90,6 +90,8 @@ services:
     build:
       <<: *aria-build
       target: web
+      args:
+        ARIA_WEB_URL: http://127.0.0.1:3000
     environment:
       ARIA_API_URL: http://api:8000
       ARIA_WEB_URL: http://127.0.0.1:3000

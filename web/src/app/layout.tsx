@@ -7,7 +7,8 @@ import { geist, geistMono } from "./fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.ARIA_WEB_URL ?? "http://localhost:3000"),
+  // Read at build time (pages are prerendered); an empty value falls back too.
+  metadataBase: new URL(process.env.ARIA_WEB_URL || "http://localhost:3000"),
   title: {
     default: "ARIA: incident triage that shows its work",
     template: "%s | ARIA",
@@ -15,6 +16,8 @@ export const metadata: Metadata = {
   description:
     "ARIA reads the alert and the logs, rates severity with calibrated confidence, finds similar past incidents and drafts a report in which every claim cites its evidence. Nothing is sent until a person approves.",
   applicationName: "ARIA",
+  openGraph: { type: "website", siteName: "ARIA" },
+  twitter: { card: "summary_large_image" },
 };
 
 export const viewport: Viewport = {

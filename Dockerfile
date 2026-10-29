@@ -104,6 +104,9 @@ CMD ["aria", "serve", "--host", "0.0.0.0", "--port", "8000"]
 # --- web-build: the Next.js app, compiled to a standalone server ---------------------------------
 FROM ${NODE_IMAGE} AS web-build
 ARG PNPM_VERSION=10.28.0
+# The site's public URL. Pages are prerendered here, so their absolute links (the social preview
+# image, for one) take it from the build, not from the running container.
+ARG ARIA_WEB_URL=""
 ENV NEXT_TELEMETRY_DISABLED=1 \
     CI=1
 WORKDIR /web
@@ -118,7 +121,7 @@ RUN --mount=type=secret,id=ca,required=false \
     if [ -s /run/secrets/ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca; fi; \
     pnpm install --frozen-lockfile --store-dir /pnpm/store
 COPY web/ ./
-RUN pnpm build
+RUN ARIA_WEB_URL="${ARIA_WEB_URL}" pnpm build
 
 # --- web: the standalone server and its static files, as an unprivileged user --------------------
 FROM ${NODE_IMAGE} AS web

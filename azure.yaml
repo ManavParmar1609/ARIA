@@ -45,6 +45,10 @@ services:
       path: ./Dockerfile
       context: .
       target: web
+      # Set it once the site has a public address (`azd env set ARIA_WEB_URL https://...`), so
+      # link previews point at it; empty falls back to localhost.
+      buildArgs:
+        - ARIA_WEB_URL=${ARIA_WEB_URL}
 
 hooks:
   # azd updates the two apps; give the seed job the image the worker now runs.

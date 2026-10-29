@@ -165,7 +165,7 @@ Both are read when a process starts, so restart after a change. `GET /api/v1/set
 | `ARIA_SCAN_INTERVAL_S`, `ARIA_SCAN_SOURCES` | The periodic log scan: seconds between polls (`0` turns it off), and `system=path` pairs |
 | `SLACK_WEBHOOK_URL`, `TEAMS_WEBHOOK_URL`, `ARIA_OUTBOUND_WEBHOOK_URL`, `ARIA_OUTBOUND_WEBHOOK_SECRET` | Destinations for approved messages, and the key that signs generic webhook deliveries |
 | `ARIA_API_URL` | Web app: where its server reaches the API |
-| `ARIA_WEB_URL` | Web app: its public URL, used in page metadata |
+| `ARIA_WEB_URL` | Web app: its public URL, used in page metadata and link previews. Pages are prerendered, so pass it when building the image too (`--build-arg ARIA_WEB_URL=...`; azd reads it from `azd env set ARIA_WEB_URL`) |
 | `ARIA_URL`, `ARIA_WEB_URL`, `ARIA_API_KEY` | `make smoke`: the stack to test, and the key to use |
 
 The `config/aria.yaml` settings operators change most often:
