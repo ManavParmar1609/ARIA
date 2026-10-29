@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+.python-version
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Data: raw downloads and local databases never go in git
+data/raw/
+data/processed/
+data/cache/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Node / web / video
+node_modules/
+.next/
+out/
+web/test-results/
+web/playwright-report/
+video/out/
+.turbo/
+*.tsbuildinfo
+npm-debug.log*
+pnpm-debug.log*
+
+# Azure / IaC
+.azure/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
