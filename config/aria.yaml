@@ -1,0 +1,120 @@
+# ARIA runtime configuration.
+#
+# Secrets never live in this file. Each provider names the environment variable holding its key;
+# a provider without a key (or endpoint) is disabled and fallback chains skip it, ending at the
+# deterministic `fake` provider so every path still works offline.
+#
+# Model IDs move quickly. `verified: false` marks IDs taken from provider announcements that have
+# not been checked against a live model list; run `aria providers models <name>` to read the
+# provider's /v1/models catalog and confirm before relying on them.
+
+llm:
+  routing:
+    adjudicator: [nim, azure, openai_compat, fake]
+    investigator: [nim, azure, openai_compat, fake]
+    reporter: [nim, azure, openai_compat, fake]
+    critic: [nim, azure, openai_compat, fake]
+    comms: [nim, azure, openai_compat, fake]
+    ask: [nim, azure, openai_compat, fake]
+    default: [nim, azure, openai_compat, fake]
+  embeddings: [nim, azure, local]
+  rerank: [nim]
+  safety: [nim]
+
+  providers:
+    nim:
+      kind: nvidia_nim
+      base_url: ${NVIDIA_NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}
+      api_key_env: NVIDIA_API_KEY
+      chat_model: ${NVIDIA_NIM_CHAT_MODEL:-nvidia/nemotron-3-super-120b-a12b}
+      embedding_model: ${NVIDIA_NIM_EMBED_MODEL:-nvidia/nemotron-3.5-embed-1b}
+      rerank_model: ${NVIDIA_NIM_RERANK_MODEL:-nvidia/nemotron-3.5-rerank-8b}
+      rerank_url: ${NVIDIA_NIM_RERANK_URL:-https://ai.api.nvidia.com/v1/retrieval/nvidia/reranking}
+      safety_model: ${NVIDIA_NIM_SAFETY_MODEL:-nvidia/nemotron-content-safety-reasoning-4b}
+      structured_output: json_schema
+      verified: false
+      notes: >-
+        Hosted NVIDIA NIM (build.nvidia.com). OpenAI-compatible chat and embeddings; embeddings
+        take input_type=query|passage. Set NVIDIA_NIM_BASE_URL to a self-hosted NIM container
+        (for example http://nim:8000/v1) to run on your own GPUs.
+
+    nim-local:
+      kind: nvidia_nim
+      base_url: ${NIM_LOCAL_BASE_URL:-}
+      allow_no_key: true
+      chat_model: ${NIM_LOCAL_CHAT_MODEL:-}
+      embedding_model: ${NIM_LOCAL_EMBED_MODEL:-}
+      rerank_model: ${NIM_LOCAL_RERANK_MODEL:-}
+      rerank_url: ${NIM_LOCAL_RERANK_URL:-}
+      structured_output: guided_json
+      verified: false
+      notes: Self-hosted NIM containers started by the `nim` docker compose profile.
+
+    azure:
+      kind: azure_openai
+      base_url: ${AZURE_OPENAI_ENDPOINT:-}
+      api_key_env: AZURE_OPENAI_API_KEY
+      azure_ad: false
+      chat_model: ${AZURE_OPENAI_CHAT_DEPLOYMENT:-gpt-5.1}
+      embedding_model: ${AZURE_OPENAI_EMBED_DEPLOYMENT:-text-embedding-3-small}
+      structured_output: json_schema
+      verified: false
+      notes: >-
+        Azure OpenAI v1 data-plane API (https://<resource>.openai.azure.com/openai/v1). Model
+        fields are deployment names. GPT-4 is retired; Microsoft lists gpt-5.1 as the successor
+        to gpt-4o. Set azure_ad: true to use managed identity instead of an API key.
+
+    openai_compat:
+      kind: openai_compatible
+      base_url: ${OPENAI_BASE_URL:-}
+      api_key_env: OPENAI_API_KEY
+      chat_model: ${OPENAI_CHAT_MODEL:-}
+      embedding_model: ${OPENAI_EMBED_MODEL:-}
+      structured_output: json_schema
+      verified: false
+      notes: Any OpenAI-compatible endpoint (OpenAI, vLLM, Ollama, LM Studio).
+
+    fake:
+      kind: fake
+      verified: true
+      notes: Deterministic offline provider used by tests, evals and the demo.
+
+    local:
+      kind: local
+      verified: true
+      notes: Offline embeddings (TF-IDF + truncated SVD) fitted on the incident corpus.
+
+budgets:
+  max_tokens: 60000
+  max_cost_usd: 0.50
+  max_latency_s: 180
+  max_steps: 80
+  max_tool_calls: 40
+  max_llm_calls: 16
+
+guardrails:
+  redact_pii: true
+  pseudonymize_ips: true
+  detect_injection: true
+  safety_model: false
+  max_line_chars: 2000
+  max_lines: 20000
+
+severity:
+  alpha: 0.10
+
+retrieval:
+  k: 3
+  candidates: 12
+  widen_candidates: 40
+  min_grade: 0.35
+  max_attempts: 3
+
+investigation:
+  max_steps: 6
+  max_hypotheses: 4
+
+triggers:
+  alert_group_window_s: 300
+  scan_interval_s: 0
+  scan_min_burst_score: 3.0
