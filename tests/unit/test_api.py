@@ -921,6 +921,22 @@ async def test_the_api_can_migrate_its_database_on_start(
     dispose_engines()
 
 
+async def test_a_stream_ends_when_its_run_is_deleted_or_runs_too_long(api: Api) -> None:
+    from aria.api.sse import run_events
+
+    runner = api.state.runner
+    queued = runner.submit(TriageRequest(system="bgl", logs=logs(api)))  # never executed here
+
+    async def collect(**limits: float) -> list[dict[str, Any]]:
+        return [m async for m in run_events(runner, queued, poll_s=0.05, **limits)]
+
+    assert await asyncio.wait_for(collect(max_s=0.2), timeout=5) == []  # a forgotten stream stops
+    stream = asyncio.create_task(collect())
+    await asyncio.sleep(0.1)
+    await runner.delete(queued)
+    assert await asyncio.wait_for(stream, timeout=5) == []  # it ends instead of pinging forever
+
+
 async def test_streamed_runs_wait_for_a_worker_slot() -> None:
     """AG-UI and A2A runs execute inside the request that streams them; however many streams are
     open, no more of them run at once than the worker's concurrency allows."""

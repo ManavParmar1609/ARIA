@@ -39,3 +39,32 @@ def test_recalibrate_says_when_there_is_nothing_to_do() -> None:
     result = CliRunner().invoke(app, ["train", "recalibrate", "--dry-run"])
     assert result.exit_code == 0, result.output
     assert "not enough new reviews" in result.output
+
+
+@pytest.mark.parametrize(
+    ("args", "says"),
+    [
+        (["triage", "/no/such/file.log"], "does not exist"),
+        (["triage", "--scenario", "no.such"], "unknown scenario"),
+        (["eval", "run", "--suite", "bogus"], "unknown suite"),
+        (["providers", "check", "bogus"], "unknown provider"),
+        (["data", "download", "--source", "nope"], "unknown source"),
+    ],
+)
+def test_mistakes_get_a_clear_message_not_a_traceback(args: list[str], says: str) -> None:
+    result = CliRunner().invoke(app, args)
+    assert result.exit_code == 2
+    assert says in " ".join(result.output.split())  # rich wraps long messages
+    assert "Traceback" not in result.output
+
+
+def test_triage_asks_for_the_database_to_be_set_up_first(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    logs = tmp_path / "app.log"
+    logs.write_text("2026-10-29T10:00:00Z ERROR app: disk full\n", encoding="utf-8")
+    monkeypatch.setenv("ARIA_DATABASE_URL", f"sqlite:///{tmp_path / 'fresh.db'}")
+    reset_caches()
+    result = CliRunner().invoke(app, ["triage", str(logs)])
+    assert result.exit_code == 1
+    assert "aria db upgrade" in result.output

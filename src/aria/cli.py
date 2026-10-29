@@ -7,6 +7,7 @@ import contextlib
 import json
 import os
 import signal
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Annotated
 
@@ -48,6 +49,22 @@ def version() -> None:
     console.print(__version__)
 
 
+def _require_database() -> None:
+    """Stop with the commands to run, not a traceback, when the database is not set up."""
+    from sqlalchemy import inspect
+
+    from aria.db.engine import get_engine
+
+    if not inspect(get_engine()).has_table("incidents"):
+        console.print("The database is not set up yet. Run `aria db upgrade`, then `aria seed`.")
+        raise typer.Exit(code=1)
+
+
+def _require_provider(providers: Mapping[str, object], name: str | None) -> None:
+    if name is not None and name not in providers:
+        raise typer.BadParameter(f"unknown provider {name!r}; choose one of {', '.join(providers)}")
+
+
 # --- database ----------------------------------------------------------------------------------
 
 
@@ -81,8 +98,13 @@ def data_download(
     from aria.data.manifest import load_manifest
 
     settings = get_settings()
+    sources = load_manifest().sources
+    unknown = sorted(set(source or ()) - set(sources))
+    if unknown:
+        known = ", ".join(sorted(sources))
+        raise typer.BadParameter(f"unknown source {', '.join(unknown)}; choose from {known}")
     failures = 0
-    for name, item in load_manifest().sources.items():
+    for name, item in sources.items():
         if source and name not in source:
             continue
         try:
@@ -357,7 +379,12 @@ def worker_health(
 
 @app.command()
 def triage(
-    logs: Annotated[Path | None, typer.Argument(help="A log file (one line per event).")] = None,
+    logs: Annotated[
+        Path | None,
+        typer.Argument(
+            help="A log file (one line per event).", exists=True, dir_okay=False, readable=True
+        ),
+    ] = None,
     system: Annotated[str, typer.Option(help="Log format, e.g. bgl, hdfs, openssh.")] = "generic",
     scenario: Annotated[
         str | None, typer.Option(help="Use a semi-synthetic scenario, e.g. bgl.kernel_panic.")
@@ -374,12 +401,20 @@ def triage(
 
     synthetic = False
     if scenario:
-        built = ScenarioBuilder(LinePools.from_loghub(_loghub_dir())).build(scenario, seed=1)
+        builder = ScenarioBuilder(LinePools.from_loghub(_loghub_dir()))
+        if scenario not in builder.pools.modes:
+            known = ", ".join(sorted(builder.pools.available_modes()))
+            raise typer.BadParameter(f"unknown scenario {scenario!r}; choose one of {known}")
+        built = builder.build(scenario, seed=1)
         lines, system, synthetic = built.lines, built.system, True
     elif logs is not None:
-        lines = [line for line in logs.read_text(encoding="utf-8").splitlines() if line.strip()]
+        text = logs.read_text(encoding="utf-8", errors="replace")
+        lines = [line for line in text.splitlines() if line.strip()]
+        if not lines:
+            raise typer.BadParameter(f"{logs} has no log lines")
     else:
         raise typer.BadParameter("give a log file or --scenario")
+    _require_database()
     request = TriageRequest(
         system=system, logs=lines, synthetic=synthetic, options=RunOptions(use_llm=use_llm)
     )
@@ -422,7 +457,10 @@ def eval_run(
     import json
 
     from aria.evals import report
-    from aria.evals.run import check_gate, default_workers, run, save
+    from aria.evals.run import SUITES, check_gate, default_workers, run, save
+
+    if suite not in SUITES:
+        raise typer.BadParameter(f"unknown suite {suite!r}; choose one of {', '.join(SUITES)}")
 
     results = asyncio.run(
         run(
@@ -523,6 +561,7 @@ def providers_check(
     from aria.llm.router import get_router
 
     router = get_router()
+    _require_provider(router.config.providers, name)
     names = [name] if name else [n for n in router.config.providers if n not in ("fake", "local")]
 
     async def run() -> list[ProviderCheck]:
@@ -570,6 +609,7 @@ def providers_models(name: str) -> None:
     from aria.llm.router import get_router
 
     router = get_router()
+    _require_provider(router.config.providers, name)
     provider = router.provider(name)
     if not hasattr(provider, "list_models"):
         console.print(f"{name} has no model catalog")

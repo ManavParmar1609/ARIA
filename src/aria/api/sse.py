@@ -18,6 +18,9 @@ from aria.contracts.run import RunEvent, RunStatus
 from aria.db import repository as repo
 from aria.graph.runner import TriageRunner
 
+# A stream ends after this long; a browser reconnects with Last-Event-ID, a forgotten tab stops.
+MAX_STREAM_S = 3_600.0
+
 
 def _message(event: RunEvent) -> dict[str, Any]:
     data = json.dumps(event.model_dump(mode="json"), separators=(",", ":"))
@@ -34,8 +37,10 @@ async def run_events(
     poll_s: float = 1.0,
     follow: bool = True,
     until_review: bool = False,
+    max_s: float = MAX_STREAM_S,
 ) -> AsyncIterator[dict[str, Any]]:
-    """Events for ``run_id``. Ends at ``run_finished``, or at the review pause if asked."""
+    """Events for ``run_id``. Ends at ``run_finished``, at the review pause if asked, when the
+    run is deleted, or after ``max_s``."""
     queue = runner.subscribe(run_id)
     last = after
     try:
@@ -51,7 +56,9 @@ async def run_events(
             return
         if until_review and run["status"] == RunStatus.AWAITING_REVIEW:
             return
-        while True:
+        loop = asyncio.get_running_loop()
+        ends = loop.time() + max_s
+        while loop.time() < ends:
             try:
                 event = await asyncio.wait_for(queue.get(), timeout=poll_s)
             except TimeoutError:
@@ -65,6 +72,11 @@ async def run_events(
                         return
                 if until_review and any(item.kind == "interrupt" for item in stored):
                     return
+                if (
+                    not stored
+                    and await asyncio.to_thread(repo.get_run, runner.engine, run_id) is None
+                ):
+                    return  # the run was deleted: nothing more will come
                 continue
             if event.kind == "token":
                 yield _message(event)
