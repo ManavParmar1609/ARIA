@@ -15,7 +15,8 @@ is a config change.
 
 > [!IMPORTANT]
 > One set of results comes from **real logs with expert labels**: a real Hadoop cluster's log,
-> replayed as it was written, scored against the label Hadoop experts gave every storage block.
+> replayed offline window by window, scored against the label Hadoop experts gave every storage
+> block.
 > The rest come from **semi-synthetic** incidents: real log lines from the public Loghub samples,
 > composed into incidents by ARIA's scenario builder, which show how ARIA behaves on that data,
 > not how accurate it is on your production incidents. See [Limitations](#limitations) and the
@@ -212,9 +213,9 @@ optional content-safety check (`guardrails.safety_model`, off by default) asks
 
 | Step | What it does | Why |
 |---|---|---|
-| Rules | Component criticality, burst patterns, fatal markers set a floor | Transparent and never under-triage a known-bad pattern |
+| Rules | Component criticality, burst patterns, fatal markers set a floor | Transparent: a known-bad pattern is never rated below its floor (SEV2 or SEV3) |
 | Calibrated model | Linear model on window features, temperature-calibrated | Probabilities that mean what they say |
-| Conformal set | Split-conformal (LAC) set at alpha 0.10 | A label set that holds the true severity about 90% of the time |
+| Conformal set | Split-conformal (LAC) set at alpha 0.10 | A label set that holds the true severity about 90% of the time on data like the calibration windows (exchangeable), less under a shift |
 | LLM adjudication | Chooses only between labels already in the set | The LLM cannot invent a severity the evidence rules out |
 | Policy | One label decides alone; otherwise the most severe label in the set, flagged for review | Over-triage beats under-triage when unsure |
 
@@ -287,8 +288,14 @@ Every section, with its method: [docs/evaluation.md](docs/evaluation.md).
 
 - **Real-log evidence covers one system.** The real-log evaluation is one HDFS sample and one
   kind of signal (units of work that stop partway), and its labels say whether a block failed,
-  not how severe the incident was. About half the labelled failures look exactly like healthy
-  blocks within the sample, so no reader of these lines could find them.
+  not how severe the incident was. The check's settings were chosen on this log with its labels
+  in view, each system needs its unit names in `config/flows.yaml`, and the other unit kinds
+  (task attempts, containers, VM instances) are untested. Every failure ARIA missed there takes
+  exactly the step counts of a common healthy pattern, so step counts alone cannot set it apart.
+- **The log scan opens runs on error bursts only.** It scores ERROR and FATAL lines, so a log
+  that fails silently, like the HDFS sample, does not open a run on its own: its broken units
+  are found when a run reads the window (from the console, the API, the CLI or a webhook). Making
+  a broken unit open a run, over a window long enough to judge it, is future work.
 - **The severity data is semi-synthetic.** Every split draws on the same public 2,000-line samples, so
   test windows reuse messages and templates seen in training, and templates repeat more than in
   a real fleet. Labels come from the BGL alert-tag rubric and from a scenario policy written for

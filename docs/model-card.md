@@ -15,11 +15,11 @@ It follows the spirit of [Model Cards for Model Reporting](https://arxiv.org/abs
 | | |
 |---|---|
 | Name | `severity_log` |
-| Committed version | `severity-log-20261029-f3351920`: the `version` field of [`models/severity_log.json`](../models/severity_log.json) |
+| Committed version | `severity-log-20261029-a362d541`: the `version` field of [`models/severity_log.json`](../models/severity_log.json) |
 | Task | Rate one window of log lines, plus any firing alerts, from SEV1 to SEV4 |
 | Type | Multinomial logistic regression on standardised features, with temperature scaling and split-conformal prediction sets |
 | Output | A calibrated probability for each of the four classes, and a prediction set that targets 90% coverage (alpha 0.1) |
-| Rules version | `2026.10.1` ([`config/severity_rules.yaml`](../config/severity_rules.yaml)), recorded in the model's metadata |
+| Rules version | `2026.10.2` ([`config/severity_rules.yaml`](../config/severity_rules.yaml)), recorded in the model's metadata |
 | Format | JSON (`aria.linear_model.v1`): coefficients, scaler statistics, temperature, conformal threshold and metadata. Inference is plain numpy, and loading a model file cannot run code. |
 | Code | [`src/aria/severity/`](../src/aria/severity/): `model.py`, `training.py`, `policy.py`, `engine.py` and `recalibration.py` |
 | Training data | **Semi-synthetic** windows built from real Loghub lines ([data card](data-card.md)) |
@@ -250,8 +250,9 @@ What each row measures:
 - **Rules only.** The rules' own severity.
 - **Keyword categories only.** The most severe keyword category with at least 3 matching lines.
 - **TF-IDF + logistic regression.** A bag of words over the raw window text, trained on the
-  training seeds. Raw BGL lines carry the sysadmin alert tag as their first field, so on BGL
-  windows this baseline can read the signal that defines the labels. ARIA's features never do.
+  training seeds, with a fixed regularisation strength. It strips the sysadmin alert tag that
+  raw BGL lines open with (the tag defines the BGL labels), as ARIA's features never read it.
+  Its tokens are words of three or more letters, so it cannot count hosts.
 - **Majority class.** The most common training label.
 
 Severity inside complete runs, with an LLM and without, is reported in the
@@ -286,6 +287,23 @@ regression.
 - **The data.** Training and test data are semi-synthetic, and every split draws from the same
   pools of real lines. The published numbers are not production accuracy; see the
   [data card](data-card.md#known-biases-and-gaps).
+- **Features that mirror the generator.** The lexicon's categories and the service catalog's
+  criticalities were written for the failure modes the scenario builder composes, and the policy
+  labels follow each window's true node count and peak rate, which the features estimate. The
+  held-out seeds hold out only each window's composition, so the severity benchmark largely
+  measures how well ARIA recovers the generator's own inputs. Test windows that use messages
+  training never saw are harder, for ARIA and for the text baseline alike.
+- **No untouched test set.** The test seeds (41 and 42) were evaluated during development: the
+  parser, features, investigator and label policy changed after runs on them, and CI's smoke gate
+  runs on seed 41. Read the severity numbers as development-set results. Their intervals resample
+  windows as if they were independent, but windows of one failure mode share a few source
+  messages, so the true uncertainty is wider.
+- **Prediction sets.** Almost every set holds one label, so coverage sits close to top-1
+  accuracy and an LLM adjudicates rarely. The 90% target holds on windows exchangeable with the
+  calibration windows; coverage differs by class and falls under a shift.
+- **Retrieval scores.** Retrieval filters by system first, and most systems have a single failure
+  mode in memory, so many queries cannot miss. Recall@3 here is a hit rate at three, close to what
+  a random pick within the system would score.
 - **Uneven accuracy.** Accuracy varies by system (see the per-system table above), and the
   conservative fallback over-triages rather than under-triages when the model is unsure.
 - **Calibration and coverage.** They hold on the semi-synthetic distribution. On a deployment

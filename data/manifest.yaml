@@ -38,7 +38,7 @@ sources:
       - data/HDFS/anomaly_label.csv
     license: Loghub license (loglizer code is MIT)
     citation: "W. Xu, L. Huang, A. Fox, D. Patterson, M. I. Jordan. Detecting Large-Scale System Problems by Mining Console Logs. SOSP 2009."
-    description: The first ~105k contiguous HDFS_v1 lines with expert block-level anomaly labels. The real-log evaluation replays it (src/aria/evals/real.py); no model trains on it.
+    description: The first 100,000 HDFS_v1 lines plus the later lines of the blocks they start, with expert block-level anomaly labels. The real-log evaluation replays it offline (src/aria/evals/real.py); no model trains on it.
 
   loghub-bgl:
     kind: zenodo

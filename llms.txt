@@ -2,7 +2,7 @@
 
 > ARIA does the first pass of incident triage. It reads an alert or a burst of log lines, scores severity with rules, a calibrated model and a conformal prediction set, and finds the most similar past incidents. It then drafts an incident report in which every claim cites evidence, and waits for a human to approve it. It is open source (MIT), runs offline with no keys, and can use NVIDIA NIM, Azure OpenAI or any OpenAI-compatible model.
 
-One evaluation uses real logs with expert labels: a real Hadoop cluster's log, replayed as written and scored against the label Hadoop experts gave every storage block. The other results come from semi-synthetic incidents (real Loghub log lines composed into incidents) and are not accuracy on production incidents. The API is REST with server-sent events. ARIA also speaks MCP (read-only tools), A2A (an agent card plus JSON-RPC tasks) and AG-UI.
+One evaluation uses real logs with expert labels: a real Hadoop cluster's log, replayed offline window by window and scored against the label Hadoop experts gave every storage block. The other results come from semi-synthetic incidents (real Loghub log lines composed into incidents) and are not accuracy on production incidents. The API is REST with server-sent events. ARIA also speaks MCP (read-only tools), A2A (an agent card plus JSON-RPC tasks) and AG-UI.
 
 ## Docs
 

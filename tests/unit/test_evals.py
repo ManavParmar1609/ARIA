@@ -412,10 +412,18 @@ def test_real_suite_judges_the_committed_hdfs_cut_against_the_experts() -> None:
     assert result["anomalous_blocks"] == 37
     assert result["judged"] > 250
     assert result["lifecycle"]["precision"] >= 0.9
-    assert result["visible"]["caught"] == result["visible"]["anomalous"] > 0
+    # Recall over every labelled failure counts the blocks no window judged, so it is lower.
+    assert result["recall_all"] <= result["lifecycle"]["recall"]
+    assert 0 < result["coverage"] <= 1
+    steps = result["steps"]
+    assert steps["distinct"]["caught"] == steps["distinct"]["failures"] > 0
+    assert steps["missed"]["failures"] == result["lifecycle"]["fn"]
     # A keyword rule pages on nearly every healthy block; ARIA's engine alone sees few failures.
     assert result["baselines"]["keyword_per_block"]["false_alarm_rate"] > 0.9
     assert result["baselines"]["engine_per_block"]["recall"] < result["lifecycle"]["recall"]
+    assert {"rare_steps", "count_pairs", "pca", "isolation_forest"} <= set(result["baselines"])
+    assert [w["window_min"] for w in result["window_lengths"]] == list(real.WINDOW_LENGTHS)
+    assert result["contiguous"] is None  # the committed cut has no tail to leave out
     assert {(s["min_support"], s["settle_quantile"]) for s in result["sensitivity"]} == {
         (support, q) for support in real.SUPPORTS for q in real.SETTLE_QUANTILES
     }
@@ -423,9 +431,19 @@ def test_real_suite_judges_the_committed_hdfs_cut_against_the_experts() -> None:
     text = "\n".join(report._real({"hdfs": result}))
     assert "## Real logs, expert labels" in text
     assert "small committed HDFS cut" in text
-    assert "| ARIA lifecycle check |" in text
+    assert "| ARIA lifecycle check, one window at a time |" in text
+    assert "not of the deployed log scan" in text
     summary = "\n".join(report._real_summary({"hdfs": result}))
     assert "from the small committed cut" in summary
+
+
+def test_exact_intervals_never_claim_more_certainty_than_a_count_holds() -> None:
+    assert m.exact_interval(56, 56) == (0.9362, 1.0)  # not 100-100%
+    assert m.exact_interval(148, 151) == (0.943, 0.9959)
+    low, high = m.exact_interval(0, 10)
+    assert low == 0.0
+    assert high > 0.25
+    assert m.exact_interval(0, 0) == (0.0, 0.0)
 
 
 def test_real_suite_says_when_the_hdfs_sample_is_missing(

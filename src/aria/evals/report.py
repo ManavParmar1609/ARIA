@@ -214,31 +214,49 @@ def _real(section: Mapping[str, Any]) -> list[str]:
             ),
             "",
         ]
-    rp, life, vis = hdfs["replay"], hdfs["lifecycle"], hdfs["visible"]
-    base = hdfs["baselines"]
+    rp, life, steps = hdfs["replay"], hdfs["lifecycle"], hdfs["steps"]
+    base, head = hdfs["baselines"], hdfs.get("contiguous")
+    failures, unjudged = (
+        hdfs["anomalous_blocks"],
+        hdfs["anomalous_blocks"] - hdfs["judged_anomalous"],
+    )
+    extent = (
+        f"the first {head['lines']:,} lines ({head['minutes']} minutes) of the log of a Hadoop "
+        f"cluster of more than 200 nodes, plus {head['tail_lines']:,} later lines of the blocks "
+        f"those lines started ({hdfs['lines']:,} lines over {hdfs['minutes']} minutes; no block "
+        "starts in that tail)"
+        if head
+        else f"{hdfs['lines']:,} lines ({hdfs['minutes']} minutes) of the log of a Hadoop cluster "
+        "of more than 200 nodes"
+    )
     lines += [
         (
-            f"Real lines that no scenario builder touched: the first {hdfs['lines']:,} lines "
-            f"({hdfs['minutes']} minutes) of the log of a Hadoop cluster of more than 200 nodes, and "
-            f"the label Hadoop experts gave each of its {hdfs['blocks']:,} storage blocks "
-            f"({hdfs['anomalous_blocks']} failed). Source: {hdfs['source']}; {hdfs['citation']}"
+            f"Real lines that no scenario builder touched: {extent}, and the label Hadoop experts "
+            f"gave each of its {hdfs['blocks']:,} storage blocks ({failures} failed). Source: "
+            f"{hdfs['source']}; {hdfs['citation']}"
         ),
         "",
         (
-            f"ARIA replayed the log the way its periodic log scan would: {rp['windows']} "
-            f"overlapping {rp['window_min']:g}-minute windows, one every {rp['step_min']:g} minutes, "
-            "each parsed by the production parser. The parser learns from each window which steps "
-            "of a block's life come in equal numbers, and flags blocks that break them. It never "
-            "sees a label. Each block was judged in the first window that saw it from start to "
-            f"finish: {hdfs['judged']:,} blocks, {hdfs['judged_anomalous']} of them failures. The "
-            f"cluster logged up to {hdfs['peak_lines_per_min']:,} lines a minute, so the replay "
-            f"raises the per-run line cap from {rp['default_max_lines']:,} to "
-            f"{rp['max_lines']:,}."
+            "This is an offline replay of ARIA's lifecycle check, not of the deployed log scan: "
+            f"{rp['windows']} overlapping {rp['window_min']:g}-minute windows, one every "
+            f"{rp['step_min']:g} minutes, each parsed by the production parser. The parser learns "
+            "from each window which steps of a block's life come in equal numbers, and flags "
+            "blocks that break them. It never sees a label. Each block was judged in the first "
+            f"window that saw it from start to finish: {hdfs['judged']:,} of the "
+            f"{hdfs['blocks']:,} blocks ({_pct(hdfs['coverage'])}), {hdfs['judged_anomalous']} of "
+            f"them failures. The cluster logged up to {hdfs['peak_lines_per_min']:,} lines a "
+            f"minute, so the replay raises the per-run line cap from {rp['default_max_lines']:,} to "
+            f"{rp['max_lines']:,}. The deployed scan opens a run on a burst of ERROR or FATAL "
+            "lines, and this log has none, so on its own it would not open a run here."
         ),
         "",
-        "| Method, per block | Precision (95% CI) | Recall (95% CI) | F1 | False alarms |",
+        "| Method, per judged block | Precision (95% CI) | Recall (95% CI) | F1 | False alarms |",
         "|---|---|---|---|---|",
-        _detection_row("ARIA lifecycle check", life),
+        _detection_row("ARIA lifecycle check, one window at a time", life),
+        _detection_row("Rare step counts (shared by fewer than 1% of blocks)", base["rare_steps"]),
+        _detection_row("Count-equality pairs mined over the whole sample", base["count_pairs"]),
+        _detection_row("PCA on event counts (Xu et al. 2009)", base["pca"]),
+        _detection_row("Isolation forest on event counts", base["isolation_forest"]),
         _detection_row(
             "ARIA severity engine, each block on its own (no lifecycle check)",
             base["engine_per_block"],
@@ -246,29 +264,43 @@ def _real(section: Mapping[str, Any]) -> list[str]:
         _detection_row("Keyword categories, each block on its own", base["keyword_per_block"]),
         "",
         (
-            f"- **Failures with a visible trace.** {vis['anomalous']} of the "
-            f"{hdfs['judged_anomalous']} judged failures differ from every healthy block in the "
-            f"sample; ARIA flagged {vis['caught']} of them ({_pct(vis['recall'])}). The other "
-            f"{vis['look_healthy']} take the same steps, the same number of times, as a healthy "
-            "block here (their trouble shows later in the full log), so nothing that reads only "
-            "these lines can tell them apart."
+            "Intervals are exact (Clopper-Pearson). No baseline uses a label. The four standard "
+            "detectors read the experts' event templates and fit on the whole sample at once; "
+            "ARIA parses each window itself and sees one window at a time."
+        ),
+        "",
+        (
+            f"- **Recall over every labelled failure**: {life['tp']} of {failures} "
+            f"({_pct(hdfs['recall_all'])}, {_ci(hdfs['recall_all_ci95'])}). The {unjudged} "
+            "failures in blocks that no window saw from start to finish were never judged."
         ),
         (
-            "- **How the flagged failures broke**: "
-            + "; ".join(f"{p['pattern']} ({p['blocks']})" for p in hdfs["top_patterns"])
-            + "."
+            f"- **What the misses look like**: ARIA flagged all {steps['distinct']['caught']} "
+            "failures whose step counts no healthy block shares, and "
+            f"{steps['look_alike']['caught']} of the {steps['look_alike']['failures']} whose "
+            f"counts some healthy blocks share. Each of the {steps['missed']['failures']} it "
+            "missed takes exactly the steps, the same number of times, of one of "
+            f"{steps['missed']['patterns']} common healthy patterns, each shared by at least "
+            f"{steps['missed']['healthy_twins_min']:,} healthy blocks, so step counts alone "
+            "cannot set them apart."
         ),
     ]
+    if head:
+        lines.append(
+            f"- **The log as written, without the tail**: on the first {head['lines']:,} lines "
+            f"alone, ARIA judged {head['judged']:,} blocks and flagged {head['tp'] + head['fp']}, "
+            f"{_pct(head['precision'])} of them real failures: {_pct(head['recall_all'])} of all "
+            f"{failures} labelled failures. The tail completes blocks the head cuts off."
+        )
+    lines.append(
+        "- **How the flagged failures broke**: "
+        + "; ".join(f"{p['pattern']} ({p['blocks']})" for p in hdfs["top_patterns"])
+        + "."
+    )
     if hdfs["false_alarms"]:
         lines.append(
             "- **False alarms**: "
             + "; ".join(f"{f['block']}: {f['reason']}" for f in hdfs["false_alarms"])
-            + "."
-        )
-    if hdfs["missed_visible"]:
-        lines.append(
-            "- **Visible failures missed**: "
-            + "; ".join(f"{f['block']} ({', '.join(f['steps'])})" for f in hdfs["missed_visible"])
             + "."
         )
     severities = Counter(w.get("severity") for w in hdfs["windows"] if w.get("severity"))
@@ -288,10 +320,25 @@ def _real(section: Mapping[str, Any]) -> list[str]:
     lines += [
         "",
         (
-            "How much the result depends on two settings: the share of a window's blocks on which "
-            "a step pair must hold, and how long ARIA waits before judging a block (the quantile "
-            f"of complete blocks' durations). ARIA uses {rp['min_support']:g} and "
-            f"{rp['settle_quantile']:g}."
+            "How much the result depends on the window length, the setting that matters most: a "
+            "block can only be judged in a window that holds its whole life. ARIA uses "
+            f"{rp['window_min']:g} minutes."
+        ),
+        "",
+        "| Window | Judged | Precision | Recall, judged | Recall, all failures | False alarms |",
+        "|---|---|---|---|---|---|",
+        *(
+            f"| {r['window_min']:g} min | {r['judged']:,} | {_pct(r['precision'])} | "
+            f"{_pct(r['recall'])} | {_pct(r['recall_all'])} | {r['fp']} |"
+            for r in hdfs["window_lengths"]
+        ),
+        "",
+        (
+            "And on two settings of the check: the share of a window's blocks on which a step pair "
+            "must hold, and how long ARIA waits before judging a block (the quantile of complete "
+            f"blocks' durations). ARIA uses {rp['min_support']:g} and {rp['settle_quantile']:g}. "
+            "These were chosen on this log, with its labels in view; no other system has been "
+            "measured."
         ),
         "",
         "| Pair support | Settle quantile | Judged | Precision | Recall | F1 | False alarms |",
@@ -521,21 +568,35 @@ def _real_summary(section: Mapping[str, Any]) -> list[str]:
     hdfs = section.get("hdfs") or {}
     if "lifecycle" not in hdfs:
         return []
-    life, vis = hdfs["lifecycle"], hdfs["visible"]
-    keyword = hdfs["baselines"]["keyword_per_block"]
+    life, base = hdfs["lifecycle"], hdfs["baselines"]
+    standard = {
+        "PCA (Xu et al. 2009)": base["pca"],
+        "an isolation forest": base["isolation_forest"],
+    }
+    detectors = [base["rare_steps"], base["count_pairs"], *standard.values()]
     flagged = life["tp"] + life["fp"]
     note = " (from the small committed cut, not the full sample)" if hdfs.get("fixture") else ""
+    lead = (
+        "matches or beats each standard detector on the same blocks"
+        if all(life["f1"] >= d["f1"] for d in detectors)
+        else "compares with standard detectors on the same blocks"
+    )
     return [
         (
-            f"**Real logs, expert labels**{note}: on {hdfs['judged']:,} storage blocks from a real "
-            "Hadoop cluster of more than 200 nodes, labelled by Hadoop experts, ARIA's lifecycle "
-            "check flagged "
-            f"{flagged} blocks, {_pct(life['precision'])} of them real failures "
-            f"({life['fp']} false alarms among {life['fp'] + life['tn']:,} healthy blocks). It "
-            f"caught {vis['caught']} of the {vis['anomalous']} failures that leave a visible trace "
-            f"in the log, {_pct(life['recall'])} of all labelled failures: the rest take exactly "
-            "the steps a healthy block takes within the sample. A keyword rule flags "
-            f"{_pct(keyword['false_alarm_rate'])} of healthy blocks."
+            f"**Real logs, expert labels**{note}: on a real Hadoop cluster's log (more than 200 "
+            "nodes, every storage block labelled by Hadoop experts), ARIA's lifecycle check "
+            f"flagged {flagged} of the {hdfs['judged']:,} blocks it judged, "
+            f"{_pct(life['precision'])} of them real failures ({life['fp']} false alarms among "
+            f"{life['fp'] + life['tn']:,} healthy blocks): {_pct(life['recall'])} of the "
+            f"{hdfs['judged_anomalous']} failures it judged, {_pct(hdfs['recall_all'])} of all "
+            f"{hdfs['anomalous_blocks']} in the sample. It {lead}, though they see the whole "
+            "sample at once: "
+            + ", ".join(
+                f"{name} finds {_pct(d['recall'])} with {d['fp']} false alarms"
+                for name, d in standard.items()
+            )
+            + ", and a rule that flags rare step counts ties it. An offline replay of the "
+            "check, not of the deployed log scan."
         ),
         "",
     ]

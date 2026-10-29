@@ -6,8 +6,8 @@ labelled log windows, and what that means for the published results. It follows 
 [Data Cards](https://arxiv.org/abs/2204.01075).
 
 The short version: one section of [evaluation.md](evaluation.md) uses **real logs with expert
-labels**: a real Hadoop cluster's log, replayed as it was written, against the label Hadoop
-experts gave each storage block ([below](#real-logs-with-expert-labels)). Every other number
+labels**: a real Hadoop cluster's log, replayed offline window by window, against the label
+Hadoop experts gave each storage block ([below](#real-logs-with-expert-labels)). Every other number
 comes from **semi-synthetic** incident windows. Their log lines are real lines from the public
 Loghub samples, but ARIA's scenario builder composes them into incidents: it chooses which lines
 appear, on which nodes and at what times. Those results show how ARIA behaves on that
@@ -17,7 +17,7 @@ distribution. They are not a measurement of accuracy on production incidents.
 |---|---|
 | Log lines | Real lines from the Loghub 2k samples: 2,000 lines from each of 16 systems |
 | Training and evaluation windows | **Semi-synthetic**: real lines, synthetic composition, 13 systems |
-| Real-log evaluation | **Real**: 104,815 contiguous HDFS lines and the experts' label for each of 7,940 blocks. Nothing trains on it |
+| Real-log evaluation | **Real**: 104,815 HDFS lines (the log's first 100,000, then later lines of the same blocks) and the experts' label for each of 7,940 blocks. Nothing trains on it |
 | Labels | BGL windows: the sysadmin alert tags, through a written rubric. Other systems: a documented scenario policy |
 | Splits | Separate scenario seeds per split; the held-out test seeds are used only by `make eval` |
 | Ticket data | The UCI incident log could not be downloaded in the build environment, so the ticket model is untrained |
@@ -31,9 +31,9 @@ its integrity (see [What is in git](#what-is-in-git-and-what-is-not)).
 
 | Manifest key | What it is | Used for | Status in this build |
 |---|---|---|---|
-| `loghub-2k` | The Loghub 2k samples ([logpai/loghub](https://github.com/logpai/loghub) at commit `dd61d095`): 2,000 structured lines from each of Android, Apache, BGL, Hadoop, HDFS, HealthApp, HPC, Linux, Mac, OpenSSH, OpenStack, Proxifier, Spark, Thunderbird, Windows and Zookeeper, with hand-labelled event templates. BGL and Thunderbird lines carry sysadmin alert tags. | The scenario builder (13 of the 16 systems), the parsing evaluation (all 16) and the test fixtures | Downloaded |
+| `loghub-2k` | The Loghub 2k samples ([logpai/loghub](https://github.com/logpai/loghub) at commit `dd61d095`): 2,000 structured lines from each of Android, Apache, BGL, Hadoop, HDFS, HealthApp, HPC, Linux, Mac, OpenSSH, OpenStack, Proxifier, Spark, Thunderbird, Windows and Zookeeper, with hand-labelled event templates. BGL and Thunderbird lines open with a sysadmin alert-tag field; in these samples only BGL's lines hold alerts. | The scenario builder (13 of the 16 systems), the parsing evaluation (all 16) and the test fixtures | Downloaded |
 | `loghub2-corrected` | Corrected templates for the 2k samples from Loghub-2.0 (Jiang et al., ISSTA 2024), commit `ac4aad2e` | Nothing yet. The parsing evaluation scores against the templates that ship with `loghub-2k`. | Downloaded |
-| `hdfs-100k` | The first ~105k contiguous HDFS_v1 lines with expert block-level anomaly labels (Xu et al., SOSP 2009), from the loglizer repository at commit `ac67f972` | The real-log evaluation ([below](#real-logs-with-expert-labels)) and a small committed cut for tests and the console's real incident. `aria data ingest` also loads it. No model trains on it. | Downloaded |
+| `hdfs-100k` | The first 100,000 HDFS_v1 lines plus the later lines of the blocks they start, with expert block-level anomaly labels (Xu et al., SOSP 2009), from the loglizer repository at commit `ac67f972` | The real-log evaluation ([below](#real-logs-with-expert-labels)) and a small committed cut for tests and the console's real incident. `aria data ingest` also loads it. No model trains on it. | Downloaded |
 | `loghub-bgl` | The full BlueGene/L log (~4.75M lines) with sysadmin alert tags (Oliner and Stearley, DSN 2007), Zenodo record [8196385](https://zenodo.org/records/8196385) | Contiguous, real BGL windows ([below](#contiguous-bgl-windows)) | Could not be downloaded in the build environment, so no results on contiguous BGL are reported |
 | `loghub-hadoop` | Hadoop application logs with injected failures (Lin et al., ICSE 2016), same Zenodo record | Nothing yet: no ingest step reads it | Not downloaded |
 | `uci-incidents` | The UCI "Incident management process enriched event log" (dataset 498): a ServiceNow audit trail of 141,712 events for 24,918 incidents, with anonymised categorical codes and no free text | Ticket priority and SLA-breach models, and the outcome statistics of similar tickets | Could not be downloaded in the build environment. The ticket model is untrained, and `POST /api/v1/tickets/assess` answers 503 until it is. |
@@ -110,21 +110,25 @@ There is no ticket model file (`models/severity_ticket.json`) in this build.
 
 ## Real logs with expert labels
 
-`hdfs-100k` is the first 104,815 lines, about 26 minutes, of the log a Hadoop cluster of more
-than 200 Amazon EC2 nodes wrote on 9 November 2008 (HDFS_v1 in Loghub). Hadoop experts labelled
-each of its storage blocks Normal or Anomaly, from the whole 38-hour log (Xu et al., SOSP 2009).
-The real-log evaluation ([`src/aria/evals/real.py`](../src/aria/evals/real.py)) replays the
-lines in order, as ARIA's periodic log scan would, and compares ARIA's verdict on each block with
-the experts'.
+`hdfs-100k` is loglizer's HDFS_100k sample of the log a Hadoop cluster of more than 200 Amazon
+EC2 nodes wrote on 9 November 2008 (HDFS_v1 in Loghub): the log's first 100,000 lines, about 13
+minutes, then the later lines of the blocks those lines started. No block starts after line
+100,000, so the last stretch holds only those blocks. Hadoop experts labelled each storage block
+Normal or Anomaly, from the whole 38-hour log (Xu et al., SOSP 2009). The real-log evaluation
+([`src/aria/evals/real.py`](../src/aria/evals/real.py)) replays the lines offline in overlapping
+windows through the production parser's lifecycle check, and compares ARIA's verdict on each
+block with the experts'. It reports the result with and without the last stretch. It is not a
+run of the deployed log scan, which opens runs on bursts of ERROR or FATAL lines; this log has
+none.
 
-- **Nothing is composed.** The lines are read as the cluster wrote them; only the replay's
-  windows are chosen.
+- **Nothing is composed.** The lines are the cluster's own; the sample keeps every line of the
+  blocks it holds, and the replay chooses only the windows.
 - **Nothing trains on it.** The lifecycle check learns from each window as it reads it, without
-  labels. The labels are used only to score the result, and to count the failures that look
-  exactly like a healthy block within the sample.
+  labels. The labels are used only to score the result and to describe the misses by their
+  step counts. The check's settings were chosen on this log, with its labels in view.
 - **What the labels mean.** A label says a block had a problem somewhere in the 38 hours, not
   how severe an incident it was, so this measures detection, not severity. Some labelled
-  failures show nothing unusual in the first 26 minutes; the report counts them separately.
+  failures take exactly the step counts of common healthy blocks here; the report counts them.
 - **Overlap.** A handful of these lines also appear in the Loghub HDFS 2k sample that the
   scenario builder draws on; the report gives the count.
 
@@ -255,7 +259,7 @@ Each split uses its own scenario seeds, so no window appears in two splits.
 | Test | 41, 42 | `make eval` only |
 | Memory | 51, 52 | Seeded incident memory for retrieval (`aria seed` builds 3 windows per failure mode for each seed and leaves out quiet windows) |
 
-Window counts and labels for the committed model (version `severity-log-20261029-f3351920`).
+Window counts and labels for the committed model (version `severity-log-20261029-a362d541`).
 These come from its training report,
 [`models/severity_log.report.json`](../models/severity_log.report.json):
 
@@ -399,9 +403,10 @@ them. The [threat model](threat-model.md) covers what these controls do and do n
 - **Policy labels.** They encode this project's judgement, and they track scope and rate
   closely.
 - **The raw-text baseline.** Raw BGL lines carry the alert tag as their first field, as in the
-  public dataset. The TF-IDF baseline in [evaluation.md](evaluation.md#severity) reads raw
-  window text, so on BGL windows it can see the tags that define the labels. ARIA's features
-  never read them. This favours the baseline.
+  public dataset. The TF-IDF baseline in [evaluation.md](evaluation.md#severity) strips that
+  field before it reads a window's text, and ARIA's features never read it, so neither sees the
+  tags that define the BGL labels. The baseline's tokens are words of three or more letters, so
+  it cannot count hosts, which the policy labels depend on.
 - **Coverage.**
   - The scenarios cover 13 systems; HealthApp, Spark and Windows appear only in the parsing
     evaluation.

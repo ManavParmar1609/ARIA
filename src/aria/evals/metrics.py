@@ -13,6 +13,7 @@ from itertools import pairwise
 from typing import Any
 
 import numpy as np
+from scipy.stats import beta
 from sklearn.metrics import cohen_kappa_score
 
 from aria.contracts.base import SEVERITY_ORDER
@@ -208,6 +209,20 @@ def bootstrap(
         samples.append(metric([truth[i] for i in idx], [pred[i] for i in idx]))
     low, high = np.percentile(samples, [2.5, 97.5])
     return round(float(low), 4), round(float(high), 4)
+
+
+def exact_interval(hits: int, n: int, level: float = 0.95) -> tuple[float, float]:
+    """The Clopper-Pearson interval for a proportion ``hits / n``.
+
+    Exact for a count, so it never claims more certainty than the data hold: 56 of 56 is
+    93.6-100%, not 100-100% as resampling would say.
+    """
+    if n <= 0:
+        return 0.0, 0.0
+    tail = (1 - level) / 2
+    low = 0.0 if hits == 0 else float(beta.ppf(tail, hits, n - hits + 1))
+    high = 1.0 if hits == n else float(beta.ppf(1 - tail, hits + 1, n - hits))
+    return round(low, 4), round(high, 4)
 
 
 def classification_report(truth: Sequence[str], pred: Sequence[str]) -> dict[str, Any]:
