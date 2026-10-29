@@ -17,6 +17,13 @@ import {
  * scene is aria-hidden and carries no title.
  */
 
+const HERO_VIEWBOX = "0 0 1200 600";
+
+/** The hero scene's empty frame, the same size as the scene, to hold its place while it loads. */
+export function HeroSceneFrame({ className }: { className?: string }) {
+  return <svg viewBox={HERO_VIEWBOX} className={className} aria-hidden focusable="false" />;
+}
+
 /** The on-call crew riding a long sheet of log lines: one reads, one looks closer, one points on. */
 export function HeroScene({ className, t }: { className?: string; t?: number }) {
   // `t` (seconds) is for the video: the sheet bobs and the loose pages drift. The site leaves it
@@ -27,7 +34,7 @@ export function HeroScene({ className, t }: { className?: string; t?: number }) 
     // On narrow screens the page gives the scene a fixed height and it crops to the crew in the
     // middle (slice), rather than shrinking the whole width down to a strip.
     <svg
-      viewBox="0 0 1200 600"
+      viewBox={HERO_VIEWBOX}
       preserveAspectRatio="xMidYMax slice"
       className={className}
       aria-hidden

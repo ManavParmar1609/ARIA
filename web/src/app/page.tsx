@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
 
 import { Term } from "@/components/aria/term";
-import { HeroScene } from "@/components/illustrations/scenes";
+import { HeroScene, HeroSceneFrame } from "@/components/illustrations/scenes";
 import { RealProof } from "@/components/site/real-proof";
 import { Results } from "@/components/site/results";
 import { RunGraph, type GraphStep } from "@/components/site/run-graph";
@@ -196,6 +196,8 @@ function Scribble({ children }: { children: ReactNode }) {
   );
 }
 
+const HERO_SCENE = "mx-auto mt-6 block h-[19rem] w-full max-w-[72rem] sm:h-auto sm:px-2";
+
 function Hero() {
   return (
     <section
@@ -231,9 +233,11 @@ function Hero() {
         </div>
       </div>
       {/* Each illustration is its own Suspense boundary, so React hydrates it as a separate short
-          task instead of one long one (they hold most of the page's elements). */}
-      <Suspense>
-        <HeroScene className="mx-auto mt-6 block h-[19rem] w-full max-w-[72rem] sm:h-auto sm:px-2" />
+          task instead of one long one (they hold most of the page's elements). React sends a
+          scene this large after the rest of the page, so the fallback holds its exact box:
+          without it, everything below jumps down when the scene arrives. */}
+      <Suspense fallback={<HeroSceneFrame className={HERO_SCENE} />}>
+        <HeroScene className={HERO_SCENE} />
       </Suspense>
     </section>
   );
