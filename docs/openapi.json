@@ -726,7 +726,7 @@
           "runs"
         ],
         "summary": "Resend Action",
-        "description": "Send an approved message again after its delivery failed. Nothing else is ever resent.",
+        "description": "Send an approved message again after it did not go out: its delivery failed, or the\nprocess sending it stopped before it heard back. Nothing else is ever resent.",
         "operationId": "resend_action_api_v1_runs__run_id__actions__action_id__resend_post",
         "parameters": [
           {

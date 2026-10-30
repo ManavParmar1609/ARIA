@@ -418,7 +418,8 @@ export type paths = {
         put?: never;
         /**
          * Resend Action
-         * @description Send an approved message again after its delivery failed. Nothing else is ever resent.
+         * @description Send an approved message again after it did not go out: its delivery failed, or the
+         *     process sending it stopped before it heard back. Nothing else is ever resent.
          */
         post: operations["resend_action_api_v1_runs__run_id__actions__action_id__resend_post"];
         delete?: never;

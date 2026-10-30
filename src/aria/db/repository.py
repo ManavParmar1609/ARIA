@@ -6,6 +6,8 @@ resumed: running a node twice must not duplicate a report, an action or an audit
 
 from __future__ import annotations
 
+import contextlib
+import secrets
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 from typing import Any
@@ -26,6 +28,7 @@ from aria.db.models import (
     ReportRow,
     RunEventRow,
     RunRow,
+    StoreItemRow,
     ToolCallRow,
 )
 
@@ -298,19 +301,37 @@ def claim_action(engine: Engine, run_id: str, action: OutboundAction) -> bool:
     return True
 
 
-def claim_failed_action(engine: Engine, action_id: str) -> bool:
-    """Take a message whose delivery failed for one more attempt: true for exactly one caller.
+def claim_for_resend(engine: Engine, action_id: str) -> bool:
+    """Take an approved message that did not go out for one more attempt.
 
-    Only a failed message qualifies, so this never sends one a reviewer did not approve, and
-    never repeats one that went out.
+    It qualifies when its delivery failed, or when it is still marked approved (being sent) but
+    the process sending it stopped. The caller holds the run's claim, so no drive is sending it
+    meanwhile. A message a reviewer did not approve, or one that went out, never qualifies.
     """
     with session_scope(engine) as session:
         taken = session.execute(
             update(ActionRow)
-            .where(ActionRow.id == action_id, ActionRow.status == "failed")
+            .where(ActionRow.id == action_id, ActionRow.status.in_(("failed", "approved")))
             .values(status="approved")
         )
         return bool(taken.rowcount == 1)  # type: ignore[attr-defined]
+
+
+def shared_secret(engine: Engine, name: str) -> bytes:
+    """A random secret that every process sharing this database agrees on, made on first use."""
+    item = ("aria\x1fsecrets", name)  # the store's ("aria", "secrets") namespace
+    for _ in range(2):
+        with session_scope(engine) as session:
+            row = session.get(StoreItemRow, item)
+            if row is not None:
+                return bytes.fromhex(str(row.value["hex"]))
+        with contextlib.suppress(IntegrityError), session_scope(engine) as session:
+            # Two processes may race to make it: the loser's insert fails and it reads the winner's.
+            session.add(
+                StoreItemRow(namespace=item[0], key=name, value={"hex": secrets.token_hex(32)})
+            )
+    msg = f"could not keep the shared secret {name}"
+    raise RuntimeError(msg)
 
 
 def run_actions(engine: Engine, run_id: str) -> list[dict[str, Any]]:
@@ -423,8 +444,10 @@ def mark_feedback_used(engine: Engine, ids: Sequence[int]) -> None:
 # --- the external worker's queue -----------------------------------------------------------------
 
 
-# A claim goes stale after this long without renewal; holders renew every CLAIM_RENEW_S.
-CLAIM_STALE_S = 600.0
+# A claim goes stale after this long without renewal; holders renew every CLAIM_RENEW_S. Five
+# missed renewals: long enough for a slow database, short enough that a crashed process's runs
+# resume within minutes.
+CLAIM_STALE_S = 300.0
 CLAIM_RENEW_S = 60.0
 
 

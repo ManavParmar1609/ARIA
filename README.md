@@ -241,8 +241,8 @@ details.
   anything else.
 - **PII and secrets.** The parser redacts them before analysis, tool storage or any model call.
   IP and e-mail addresses are pseudonymised with a per-run keyed hash, so one host keeps one
-  name within a run but cannot be linked across runs. `ARIA_PSEUDONYM_KEY` keeps the key stable
-  across restarts.
+  name within a run but cannot be linked across runs. Set the key with `ARIA_PSEUDONYM_KEY`;
+  without it, ARIA keeps a random key in its database.
 - **Tools.** MCP tools are read-only and allowlisted. Each run has a tool budget, and every call
   is audited.
 - **Outbound actions.** Every post or ticket draft waits for human approval.

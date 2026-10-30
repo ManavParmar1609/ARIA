@@ -97,8 +97,9 @@ class Worker:
                 break
             try:
                 await asyncio.to_thread(self.runner.renew_held)
-                if recover:
-                    await self.recover(limit=max(1, self._capacity - self.active))
+                # A process with no free slot takes nothing: the runs are left to the others.
+                if recover and (free := self._capacity - self.active) > 0:
+                    await self.recover(limit=free)
                 # Incidents another process published or deleted reach this one's memory.
                 await self.runner.services.memory.refresh_if_changed()
             except Exception:  # a database blip: try again on the next round

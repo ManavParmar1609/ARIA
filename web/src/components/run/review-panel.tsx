@@ -28,6 +28,7 @@ import {
   SEVERITIES,
   type IncidentReport,
   type OutboundAction,
+  type ReportEdits,
   type ReviewPrompt,
   type Severity,
 } from "@/lib/api/types";
@@ -104,6 +105,38 @@ function ActionChoice({
   );
 }
 
+/** The non-blank lines of a text box, trimmed. */
+const lines = (text: string) =>
+  text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+export type EditForm = {
+  title: string;
+  severity: Severity;
+  summary: string;
+  addActions: string;
+  note: string;
+};
+
+/** What the reviewer changed in the edit form, and nothing else: a field sent back unchanged
+ * would count as an edit, and an unchanged summary would lose the evidence its lines cite. */
+export function changedEdits(
+  edit: EditForm,
+  original: { title: string; severity: Severity; summary: string[] },
+): ReportEdits {
+  const title = edit.title.trim();
+  const summary = lines(edit.summary);
+  return {
+    title: title && title !== original.title ? title : undefined,
+    severity: edit.severity !== original.severity ? edit.severity : undefined,
+    summary: summary.join("\n") !== original.summary.join("\n") ? summary : undefined,
+    add_actions: lines(edit.addActions),
+    note: edit.note.trim() || undefined,
+  };
+}
+
 /** The decision ARIA is waiting for: approve, edit or reject, and which messages may go out. */
 export function ReviewPanel({
   runId,
@@ -123,10 +156,15 @@ export function ReviewPanel({
   const [comment, setComment] = useState("");
   const [editing, setEditing] = useState(false);
   const [rejecting, setRejecting] = useState(false);
-  const [edit, setEdit] = useState({
+  const original = {
     title: stripSeverity(report?.title ?? prompt.title),
     severity: prompt.severity,
-    summary: (report?.summary ?? []).map((c) => c.text).join("\n"),
+    summary: (report?.summary ?? []).map((c) => c.text),
+  };
+  const [edit, setEdit] = useState<EditForm>({
+    title: original.title,
+    severity: original.severity,
+    summary: original.summary.join("\n"),
     addActions: "",
     note: "",
   });
@@ -134,22 +172,7 @@ export function ReviewPanel({
   const proposed = actions.filter((a) => a.status === "proposed" || a.status === undefined);
 
   const decide = (decision: "approve" | "edit" | "reject") => {
-    const edits =
-      decision === "edit"
-        ? {
-            title: edit.title.trim() || undefined,
-            severity: edit.severity,
-            summary: edit.summary
-              .split("\n")
-              .map((l) => l.trim())
-              .filter(Boolean),
-            add_actions: edit.addActions
-              .split("\n")
-              .map((l) => l.trim())
-              .filter(Boolean),
-            note: edit.note.trim() || undefined,
-          }
-        : undefined;
+    const edits = decision === "edit" ? changedEdits(edit, original) : undefined;
     review.mutate(
       {
         decision,

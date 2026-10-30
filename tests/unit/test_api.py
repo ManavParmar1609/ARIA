@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import socket
 import threading
@@ -10,6 +11,7 @@ import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 
 import httpx
@@ -29,7 +31,7 @@ from aria.data.scenarios import LinePools, ScenarioBuilder
 from aria.db import repository as repo
 from aria.db.engine import dispose_engines, get_engine, init_db
 from aria.db.models import RunRow
-from aria.graph.runner import TriageRunner
+from aria.graph.runner import RunBusyError, TriageRunner
 from aria.mcp.client import remote_target
 from aria.mcp.server import TOOL_NAMES
 from aria.retrieval.memory import IncidentMemory
@@ -1179,6 +1181,67 @@ async def test_runs_an_agui_or_a2a_stream_executes_are_never_handed_to_a_worker(
         await first
     finally:
         await services.aclose()
+
+
+async def test_a_stream_cancelled_before_its_run_starts_gives_the_run_up() -> None:
+    """A2A claims a run when it submits it. If the request is cancelled while it waits for a
+    slot, the claim is let go, so the next worker round runs it instead of nobody ever."""
+    reset_caches()
+    init_db(get_engine())
+    services = await Services.create()
+    try:
+        runner = TriageRunner(services)
+        assert TriageRunner(services).owner != runner.owner  # each runner claims under its own name
+        run_id = runner.submit(TriageRequest(system="bgl", logs=["x"]), trigger="a2a", claim=True)
+        assert repo.claim_runs(services.engine, "worker") == []
+        with pytest.raises(RunBusyError):  # a resend never takes the claim from under it
+            await runner.resend(run_id, "act-nope", by="ben")
+        assert repo.claim_runs(services.engine, "worker") == []
+        await runner.let_go(run_id)
+        assert run_id not in runner.held
+        assert repo.claim_runs(services.engine, "worker") == [run_id]
+        await runner.let_go(run_id)  # nothing left to give up
+    finally:
+        await services.aclose()
+
+
+async def test_a_worker_with_no_free_slot_leaves_abandoned_runs_to_the_others(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    init_db(get_engine())
+    engine = get_engine()
+    request = TriageRequest(system="bgl", logs=["x"]).model_dump(mode="json")
+    repo.create_run(engine, "run-left", request=request, system="bgl")
+    monkeypatch.setattr(repo, "CLAIM_RENEW_S", 0.01)
+
+    async def nothing(*_: Any) -> bool:
+        return False
+
+    runner = SimpleNamespace(
+        engine=engine,
+        owner="w-full",
+        held=set(),
+        renew_held=lambda: None,
+        execute=nothing,
+        services=SimpleNamespace(memory=SimpleNamespace(refresh_if_changed=nothing)),
+    )
+    worker = Worker(cast("TriageRunner", runner), concurrency=1)
+
+    async def rounds() -> None:
+        stop = asyncio.Event()
+        task = asyncio.create_task(worker.keep_claims(stop, recover=True))
+        await asyncio.sleep(0.1)
+        stop.set()
+        await task
+
+    busy = worker.spawn("run-busy", lambda: asyncio.sleep(30))
+    await rounds()
+    assert (repo.get_run(engine, "run-left") or {})["claimed_by"] is None  # its one slot is busy
+    busy.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await busy
+    await rounds()
+    assert (repo.get_run(engine, "run-left") or {})["claimed_by"] == "w-full"
 
 
 async def test_the_worker_answers_liveness_probes_from_its_heartbeat(tmp_path: Path) -> None:

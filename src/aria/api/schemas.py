@@ -83,7 +83,8 @@ class Delivery(BaseModel):
     kind: str
     audience: str
     title: str
-    status: Literal["approved", "sent", "failed", "skipped"]  # approved: being sent now
+    # approved: being sent, or, once the run has ended, sent by a process that stopped first
+    status: Literal["approved", "sent", "failed", "skipped"]
     approved_by: str | None = None
     sent_at: datetime | None = None
     problem: str | None = None  # why it failed, or why it was skipped

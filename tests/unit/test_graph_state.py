@@ -154,3 +154,18 @@ def test_reviewer_may_go_below_the_floor_as_an_accountable_human_decision() -> N
     assert out.summary[0].text == "Reviewer raj assigned SEV4; ARIA's assessment was SEV2."
     assert out.summary[1:] == report.summary
     assert out.open_questions == ["Reviewer note: test env"]
+
+
+def test_a_summary_line_the_reviewer_kept_still_cites_its_evidence() -> None:
+    store = EvidenceStore()
+    report, assessment = _report_and_assessment(store)
+    decision = ReviewDecision.model_validate(
+        {
+            "decision": "edit",
+            "reviewer": "ana",
+            "edits": {"summary": ["40 errors in the window.", "Only two DataNodes failed."]},
+        }
+    )
+    out, _ = apply_review(report, assessment, decision, store)
+    assert out.summary[0] == report.summary[0]  # kept: still cites the parser's evidence
+    assert out.summary[1].evidence_ids == [out.evidence[-1].id]  # new: cites the review

@@ -140,7 +140,7 @@ class IncidentMemory:
         self.index = HybridIndex([], rrf_k=rrf_k)
         self._lock = asyncio.Lock()
         self._groups: dict[tuple[str, str], list[MemoryIncident]] = {}
-        self._seen: tuple[int, str | None] | None = None  # what the last refresh loaded
+        self._seen: tuple[int, datetime | None] | None = None  # what the last refresh loaded
 
     @property
     def embedding_model(self) -> str | None:
@@ -153,7 +153,8 @@ class IncidentMemory:
                 rows = list(session.scalars(select(IncidentRow).order_by(IncidentRow.id)))
                 incidents = [MemoryIncident.from_row(r) for r in rows]
                 stored = {r.id: (r.embedding, r.embedding_model) for r in rows}
-                self._seen = (len(rows), rows[-1].id if rows else None)
+                newest = max((r.updated_at for r in rows), default=None)
+                self._seen = (len(rows), newest)
             vectors = await self._vectors(incidents, stored)
             self.incidents = {i.id: i for i in incidents}
             self.index = HybridIndex(
@@ -167,15 +168,20 @@ class IncidentMemory:
                 groups[(incident.system, incident.failure_mode)].append(incident)
             self._groups = dict(groups)
 
-    def _signature(self) -> tuple[int, str | None]:
+    def _signature(self) -> tuple[int, datetime | None]:
+        # Any insert or edit moves the newest update time, and a delete lowers the count, so
+        # together they see every change: a count and the highest ID miss an edit, or a delete
+        # and an insert that land between two checks.
         with session_scope(self.engine) as session:
-            count, newest = session.execute(select(func.count(), func.max(IncidentRow.id))).one()
+            count, newest = session.execute(
+                select(func.count(), func.max(IncidentRow.updated_at))
+            ).one()
         return int(count), newest
 
     async def refresh_if_changed(self) -> bool:
-        """Reload when another process added or removed incidents: the API publishes a run a
-        worker will search, or deletes one it must stop serving. A count and the newest ID are
-        cheap to read, so this can run every minute."""
+        """Reload when another process added, changed or removed incidents: the API publishes a
+        run a worker will search, or deletes one it must stop serving. A count and the newest
+        update time are cheap to read, so this can run every minute."""
         if await asyncio.to_thread(self._signature) == self._seen:
             return False
         await self.refresh()

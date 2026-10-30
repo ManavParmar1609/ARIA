@@ -67,7 +67,9 @@ def apply_review(
         update["title"] = f"{final} · {headline(edits.title or report.title)}"[:140]
     summary = list(report.summary)
     if edits.summary:
-        summary = [Claim(text=text, evidence_ids=[eid]) for text in edits.summary]
+        # A line the reviewer kept keeps the evidence it cites; a new or reworded one cites the review.
+        kept = {claim.text: claim for claim in report.summary}
+        summary = [kept.get(text) or Claim(text=text, evidence_ids=[eid]) for text in edits.summary]
     new_severity = severity
     if edits.severity and edits.severity != report.severity:
         # Worded so it does not read like an instruction to a model ("set the severity to ...").

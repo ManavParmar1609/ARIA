@@ -17,7 +17,7 @@ const CHANNEL: Record<string, string> = {
 };
 
 // Words, not colours: the label is the state (DESIGN.md).
-function outcome(d: Delivery): string {
+function outcome(d: Delivery, ended: boolean): string {
   const channel = CHANNEL[d.kind] ?? d.kind;
   switch (d.status) {
     case "sent":
@@ -27,12 +27,30 @@ function outcome(d: Delivery): string {
     case "skipped":
       return `Not sent${d.problem ? `: ${d.problem}` : "."}`;
     default:
-      return "Sending now.";
+      // Still approved after the run ended: whatever was sending it stopped before it heard back.
+      return ended
+        ? "Delivery not confirmed: ARIA stopped before it heard back, so this may already have gone out."
+        : "Sending now.";
   }
 }
 
-/** The messages a reviewer approved, what happened to each, and a way to resend a failed one. */
-export function Deliveries({ runId, deliveries }: { runId: string; deliveries: Delivery[] }) {
+/** Whether a message can be sent again: it failed, or the run ended before its delivery was
+ * confirmed. The server sends it with the same idempotency key, so a receiver that keeps those
+ * does not post it twice. */
+export function canSendAgain(d: Delivery, ended: boolean): boolean {
+  return d.status === "failed" || (ended && d.status === "approved");
+}
+
+/** The messages a reviewer approved, what happened to each, and a way to send one again. */
+export function Deliveries({
+  runId,
+  deliveries,
+  ended,
+}: {
+  runId: string;
+  deliveries: Delivery[];
+  ended: boolean;
+}) {
   const resend = useResend(runId);
   if (!deliveries.length) return null;
   const sendAgain = (d: Delivery) =>
@@ -60,9 +78,9 @@ export function Deliveries({ runId, deliveries }: { runId: string; deliveries: D
           >
             <div className="grid min-w-0 gap-0.5">
               <p className="truncate font-medium">{d.title}</p>
-              <p className="text-sm text-muted-foreground">{outcome(d)}</p>
+              <p className="text-sm text-muted-foreground">{outcome(d, ended)}</p>
             </div>
-            {d.status === "failed" ? (
+            {canSendAgain(d, ended) ? (
               <Button
                 size="sm"
                 variant="secondary"

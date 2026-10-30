@@ -19,19 +19,29 @@ export const test = base.extend<{ consoleErrors: string[] }>({
 
 export { expect };
 
-/** WCAG 2.2 A and AA checks with axe-core. */
+/** WCAG 2.2 A and AA checks with axe-core, on the page as it looks once still. Motion is reduced
+ * while axe reads the page, so nothing is measured halfway through a fade: a toast that is
+ * leaving would read as low-contrast text. The page's own setting comes back afterwards. */
 export async function expectAccessible(page: Page, context?: string) {
-  const results = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
-    .analyze();
-  const summary = results.violations.map(
-    (v) =>
-      `${v.id} (${v.impact}): ${v.nodes
-        .map((n) => n.target.join(" "))
-        .slice(0, 3)
-        .join(", ")}`,
+  const reduced = await page.evaluate(
+    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
-  expect(summary, `axe violations${context ? ` on ${context}` : ""}`).toEqual([]);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  try {
+    const results = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+      .analyze();
+    const summary = results.violations.map(
+      (v) =>
+        `${v.id} (${v.impact}): ${v.nodes
+          .map((n) => n.target.join(" "))
+          .slice(0, 3)
+          .join(", ")}`,
+    );
+    expect(summary, `axe violations${context ? ` on ${context}` : ""}`).toEqual([]);
+  } finally {
+    if (!reduced) await page.emulateMedia({ reducedMotion: null });
+  }
 }
 
 /** WCAG 1.4.10 reflow: the page must not scroll sideways at its current width. */

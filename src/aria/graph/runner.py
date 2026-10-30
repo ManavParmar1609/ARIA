@@ -100,8 +100,10 @@ def new_run_id() -> str:
 
 
 def process_owner() -> str:
-    """How this process names itself when it claims a run: one per process, even on one host."""
-    return f"{socket.gethostname()}:{os.getpid()}"
+    """The name a runner claims runs under: a new one for each runner, even in one process. A
+    restarted container keeps its host name and often its pid (1), so a random part keeps the new
+    process from taking its dead predecessor's claims for its own."""
+    return f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:6]}"
 
 
 def _jsonable(value: Any) -> Any:
@@ -354,7 +356,9 @@ class TriageRunner:
         state endpoint can show) never hold a raw secret or instruction. The plan step cleans
         them again, which changes nothing."""
         cleaned, _ = clean_request(
-            request, self.services.config.guardrails, run_salt(self.services.settings, run_id)
+            request,
+            self.services.config.guardrails,
+            run_salt(self.services.settings, run_id, self.engine),
         )
         return cleaned
 
@@ -393,6 +397,17 @@ class TriageRunner:
     def renew_held(self) -> None:
         """Keep this process's claims fresh: on runs it drives and on runs it has yet to start."""
         repo.renew_claims(self.engine, self.owner, sorted(self.held))
+
+    async def let_go(self, run_id: str) -> None:
+        """Give up a claim taken when the run was submitted, if no drive ever started: its
+        request was cancelled while it waited for a slot. Without this the claim would be renewed
+        for good and no other process could run it. A drive releases its own claim when it ends,
+        so after one this does nothing."""
+        lock = self._locks.get(run_id)
+        if run_id not in self.held or (lock is not None and lock.locked()):
+            return
+        self.held.discard(run_id)
+        await asyncio.to_thread(repo.release_run, self.engine, run_id, self.owner)
 
     async def _renew(self, run_id: str) -> None:
         while True:
@@ -630,48 +645,65 @@ class TriageRunner:
         return await self._drive(new_id, None, config=forked)
 
     async def resend(self, run_id: str, action_id: str, *, by: str) -> OutboundAction:
-        """Send an approved message again after its delivery failed (a webhook was down).
+        """Send an approved message again after it did not go out.
 
-        Only a failed message can go again: one a reviewer never approved has no path here, and
-        one that went out is never repeated. The claim makes the attempt happen once.
+        That is a message whose delivery failed (a webhook was down), or one still marked as
+        being sent although no process is sending it (the one that was stopped part way). It
+        holds the run as a drive would, so it never races a publish. A message a reviewer never
+        approved has no path here, and one that went out is never repeated.
         """
         async with self._holding(run_id):
-            rows = await asyncio.to_thread(repo.run_actions, self.engine, run_id)
-            row = next((r for r in rows if r["id"] == action_id), None)
-            if row is None:
-                msg = f"run {run_id} has no message {action_id}"
-                raise RunNotFoundError(msg)
-            if row["status"] != "failed":
-                msg = (
-                    f"only a message whose delivery failed can be sent again; it is {row['status']}"
-                )
-                raise RunStateError(msg)
-            if not await asyncio.to_thread(repo.claim_failed_action, self.engine, action_id):
-                msg = f"message {action_id} is being sent again already"
+            if run_id in self.held:  # claimed here for a drive that has yet to start: keep it
+                msg = f"run {run_id} is waiting to run; send the message again once it has run"
                 raise RunBusyError(msg)
-            payload = dict(row["payload"] or {})
-            action = OutboundAction(
-                action_id=action_id,
-                kind=row["kind"],
-                audience=payload.pop("audience", "responders"),
-                evidence_ids=payload.pop("evidence_ids", []),
-                title=row["title"],
-                body=row["body"],
-                payload=payload,
-                status="approved",
+            if not await asyncio.to_thread(
+                repo.claim_run, self.engine, run_id, self.owner, status=None
+            ):
+                msg = f"run {run_id} is running in another process"
+                raise RunBusyError(msg)
+            try:
+                return await self._resend(run_id, action_id, by=by)
+            finally:
+                await asyncio.to_thread(repo.release_run, self.engine, run_id, self.owner)
+
+    async def _resend(self, run_id: str, action_id: str, *, by: str) -> OutboundAction:
+        rows = await asyncio.to_thread(repo.run_actions, self.engine, run_id)
+        row = next((r for r in rows if r["id"] == action_id), None)
+        if row is None:
+            msg = f"run {run_id} has no message {action_id}"
+            raise RunNotFoundError(msg)
+        if row["status"] not in ("failed", "approved"):
+            msg = (
+                "only an approved message that did not go out can be sent again; "
+                f"it is {row['status']}"
             )
-            settings = self.services.settings
-            sent = await send_action(
-                action, self.services.config.comms, run_url=run_link(settings, run_id)
-            )
-            await asyncio.to_thread(repo.save_actions, self.engine, run_id, [sent])
-            await self._event(
-                run_id,
-                "action",
-                node="publish",
-                payload={"action_id": action_id, "status": sent.status, "resent_by": by},
-            )
-            return sent
+            raise RunStateError(msg)
+        if not await asyncio.to_thread(repo.claim_for_resend, self.engine, action_id):
+            msg = f"message {action_id} is being sent again already"
+            raise RunBusyError(msg)
+        payload = dict(row["payload"] or {})
+        action = OutboundAction(
+            action_id=action_id,
+            kind=row["kind"],
+            audience=payload.pop("audience", "responders"),
+            evidence_ids=payload.pop("evidence_ids", []),
+            title=row["title"],
+            body=row["body"],
+            payload=payload,
+            status="approved",
+        )
+        settings = self.services.settings
+        sent = await send_action(
+            action, self.services.config.comms, run_url=run_link(settings, run_id)
+        )
+        await asyncio.to_thread(repo.save_actions, self.engine, run_id, [sent])
+        await self._event(
+            run_id,
+            "action",
+            node="publish",
+            payload={"action_id": action_id, "status": sent.status, "resent_by": by},
+        )
+        return sent
 
     async def delete(self, run_id: str) -> None:
         """Remove a run everywhere: checkpoints, lines, events, report, actions, audit, memory.

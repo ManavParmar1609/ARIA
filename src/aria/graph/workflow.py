@@ -29,7 +29,7 @@ import asyncio
 import hashlib
 import hmac
 import math
-import secrets
+import weakref
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, TypedDict
@@ -103,7 +103,8 @@ MAX_SHARDS = 8
 PARALLEL_BLOCK = 1_000  # evidence ids reserved for each branch that runs alongside another
 MAX_ALERT_EVIDENCE = 20
 FEEDBACK_REVIEW_THRESHOLD = 2  # corrections that make ARIA ask for a second look
-_PROCESS_KEY = secrets.token_bytes(32)
+# Without ARIA_PSEUDONYM_KEY: the random key the processes sharing a database keep in it.
+_SHARED_KEYS: weakref.WeakKeyDictionary[Engine, bytes] = weakref.WeakKeyDictionary()
 TRANSIENT = RetryPolicy(
     max_attempts=3,
     initial_interval=0.25,
@@ -144,10 +145,19 @@ class ShardTask(TypedDict):
     dropped: int
 
 
-def run_salt(settings: Settings, run_id: str) -> bytes:
-    """The run's pseudonym key: stable across retries and resumes, never stored in state."""
-    key = settings.pseudonym_key.get_secret_value().encode() if settings.pseudonym_key else None
-    return hmac.new(key or _PROCESS_KEY, run_id.encode(), hashlib.sha256).digest()
+def run_salt(settings: Settings, run_id: str, engine: Engine) -> bytes:
+    """The run's pseudonym key: stable across retries, resumes and processes, never in state.
+
+    Without ARIA_PSEUDONYM_KEY, every process sharing the database uses one random key kept in
+    it, so the API cleaning an alert and the worker parsing the logs name a host the same way.
+    """
+    if settings.pseudonym_key:
+        key = settings.pseudonym_key.get_secret_value().encode()
+    else:
+        if engine not in _SHARED_KEYS:
+            _SHARED_KEYS[engine] = repo.shared_secret(engine, "pseudonym")
+        key = _SHARED_KEYS[engine]
+    return hmac.new(key, run_id.encode(), hashlib.sha256).digest()
 
 
 def run_link(settings: Settings, run_id: str) -> str:
@@ -315,9 +325,8 @@ async def plan(state: TriageState, runtime: Runtime[TriageContext]) -> Command[A
         lines = await _db(load_window_lines, services.engine, request.window_id, request.system)
     guard_cfg = services.config.guardrails
     # Alert fields and the title are untrusted too: clean them once, for every node after this.
-    request, withheld = clean_request(
-        request, guard_cfg, run_salt(services.settings, state["run_id"])
-    )
+    salt = await _db(run_salt, services.settings, state["run_id"], services.engine)
+    request, withheld = clean_request(request, guard_cfg, salt)
     capped = lines[: guard_cfg.max_lines]
     dropped = max(0, len(lines) - guard_cfg.max_lines)
     shards = 1
@@ -370,7 +379,7 @@ def parse_shard(task: ShardTask, runtime: Runtime[TriageContext]) -> Json:
         system=task["system"],
         offset=task["offset"],
         guard=services.config.guardrails,
-        salt=run_salt(services.settings, task["run_id"]),
+        salt=run_salt(services.settings, task["run_id"], services.engine),
         dropped=task["dropped"],
     )
     return {"shards": [shard_to_payload(result)]}

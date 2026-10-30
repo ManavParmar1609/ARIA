@@ -333,7 +333,7 @@ export function RunView({ runId }: { runId: string }) {
               />
             ) : null}
             {detail.deliveries?.length && !viewing ? (
-              <Deliveries runId={detail.id} deliveries={detail.deliveries} />
+              <Deliveries runId={detail.id} deliveries={detail.deliveries} ended={terminal} />
             ) : null}
             {report ? (
               <ReportView

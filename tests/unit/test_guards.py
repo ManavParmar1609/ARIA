@@ -290,3 +290,9 @@ def test_a_long_run_of_address_characters_is_redacted_in_linear_time() -> None:
     Redactor(salt=b"k").redact(hostile)
     assert time.perf_counter() - started < 0.5  # the old pattern took seconds
     assert Redactor(salt=b"k").redact("mail ana+ops@example.com now").startswith("mail email-")
+    # A local part longer than RFC 5321's 64 characters is still an address, and still redacted.
+    long_local = "build-notifications.release-pipeline.payments-team.eu-west-1.prod"
+    assert len(long_local) > 64
+    text = Redactor(salt=b"k").redact(f"sent to {long_local}@example.com")
+    assert "example.com" not in text
+    assert "payments-team" not in text

@@ -69,10 +69,12 @@ _KEY_HEADER = re.compile(r"(?i)^\s*(?:proc-type|dek-info|version|comment|hash)\s
 # issuer prefix (3-6) and the Luhn check this avoids eating IDs, timestamps and counters in logs.
 _CARD = re.compile(r"(?<![\w.:-])(?:\d{4}(?:[ -]\d{4}){2}[ -]\d{1,7}|\d{13,19})(?![\w.:-])")
 # An address starts where a run of address characters starts (the look-behind), and its parts
-# are bounded as RFC 5321 bounds them, so a long run of "a.a.a..." with no valid address in it
-# costs one bounded attempt, not one attempt per character (which made redaction quadratic).
+# are bounded, so a long run of "a.a.a..." with no valid address in it costs one bounded attempt,
+# not one attempt per character (which made redaction quadratic). The local part's bound is
+# generous: logs carry local parts longer than RFC 5321's 64 characters, and a missed address
+# is a leak.
 _EMAIL = re.compile(
-    r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,24}\b"
+    r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]{1,256}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,24}\b"
 )
 _IPV4 = re.compile(
     r"(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?![\d.])"

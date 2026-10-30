@@ -151,7 +151,7 @@ Both are read when a process starts, so restart after a change. `GET /api/v1/set
 | `ARIA_PUBLIC_BASE_URL` | The API's public URL: an allowed host for `/mcp`, the address the A2A agent card advertises (`<url>/a2a`), and where messages link when `ARIA_CONSOLE_URL` is unset |
 | `ARIA_CONSOLE_URL` | Where people open a run (the web console). Messages link to `<url>/console/runs/<run id>` when it is set. |
 | `ARIA_WORKER_HEALTH_PORT` | A port where `aria worker` answers HTTP liveness probes from its heartbeat (Container Apps ignores the image's health check). Unset: no endpoint. |
-| `ARIA_PSEUDONYM_KEY` | Keys the per-run pseudonyms for IP and e-mail addresses. Set the same value on every process. Without it, each process picks its own random key at start, so a run that is retried or forked in another process gets different pseudonyms. |
+| `ARIA_PSEUDONYM_KEY` | Keys the per-run pseudonyms for IP and e-mail addresses. Set the same value on every process. Without it, the processes sharing a database make one random key and keep it in that database, so they still agree, but anyone with a copy of the database can recompute the pseudonyms: set it from Key Vault in production. |
 | `ARIA_LOG_LEVEL`, `ARIA_LOG_FORMAT` | Log level, and `json` or `console` output |
 | `ARIA_OTEL_EXPORTER`, `ARIA_OTLP_ENDPOINT` | Trace export: `none`, `console`, `otlp` (to `ARIA_OTLP_ENDPOINT`) or `azure` |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Where the `azure` exporter sends traces |
@@ -301,7 +301,7 @@ Changing the embedding provider changes the vector space. Memory re-embeds stale
 - **More workers.** Run more `aria worker` processes against the same database; a claim is a conditional update, so two workers never take the same run. In compose, run `docker compose up -d --scale worker=3`. On Azure, raise the worker app's `minReplicas` (the template allows up to three).
 - **Concurrency.** Set `ARIA_WORKER_CONCURRENCY`, or override it per worker with `aria worker --concurrency N`.
 - **The database.** SQLite serialises writes. For more than a couple of workers, use Azure SQL.
-- **Abandoned runs.** Every process that drives a run, a worker or the API applying a review, claims it first and renews the claim every minute; it lets go when the run pauses or ends. A run whose holder went quiet for 10 minutes is reclaimed by another worker (or, in process, by the API). Two processes never drive one run at once, and each approved message is marked as being sent before it goes out, so it goes out once.
+- **Abandoned runs.** Every process that drives a run, a worker or the API applying a review, claims it first and renews the claim every minute; it lets go when the run pauses or ends. A run whose holder went quiet for 5 minutes is reclaimed by another worker (or, in process, by the API), and a process with every slot busy leaves it to the others. Two processes never drive one run at once, and each approved message is marked as being sent before it goes out, so it goes out once.
 - **Periodic jobs.** Each worker runs the recalibration job against the shared model file; repeating it is harmless, because the same reviews give the same threshold. Configure the log scan on one worker only, or replicas tailing the same files can open duplicate runs.
 - **More API replicas.** Run migrations as a separate step (`aria db upgrade`), and set `ARIA_MIGRATE_ON_START=false`. The rate limiter and the A2A task store live in each process's memory, so each replica keeps its own.
 
@@ -508,6 +508,11 @@ or a network error), then records the failure; it never retries on its own.
 whose delivery failed can be sent again, and only once at a time: a message that went out is never
 repeated (409). The run's events record who resent it. For a skipped message, set its channel's
 variable ([Configuration](#configuration)); a skipped message is not resent.
+
+A message whose process stopped while sending it stays marked as being sent. Once the run has
+ended, the card says "Delivery not confirmed" and offers **Send again** too. It may already have
+gone out: the resend carries the same idempotency key, so a receiver that keeps those drops the
+repeat. Check the receiver first if it does not.
 
 ### The scan opens no runs
 

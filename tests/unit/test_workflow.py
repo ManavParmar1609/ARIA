@@ -30,7 +30,7 @@ from aria.data.loghub import LogRecord, format_raw_line
 from aria.data.scenarios import LinePools, ScenarioBuilder
 from aria.db import repository as repo
 from aria.db.engine import get_engine, init_db, session_scope
-from aria.db.models import FeedbackRow, LogEventRow
+from aria.db.models import ActionRow, FeedbackRow, LogEventRow
 from aria.evidence import EvidenceStore
 from aria.graph import workflow
 from aria.graph.runner import RunBusyError, RunNotFoundError, RunStateError, TriageRunner
@@ -237,6 +237,41 @@ async def test_a_failed_delivery_can_be_sent_again_and_nothing_else_can(
         await env.runner.resend(run_id, unapproved, by="ben")
     with pytest.raises(RunNotFoundError):
         await env.runner.resend(run_id, "act-nope", by="ben")
+
+
+async def test_a_message_left_mid_send_can_be_sent_again_once_no_process_holds_its_run(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The process sending a message stopped after it took the message and before it recorded
+    the outcome, so the message is still marked as being sent. Once no process holds the run, it
+    can be sent again, with the same idempotency key."""
+    hook_url = "https://hooks.example.test/aria"
+    monkeypatch.setenv("ARIA_OUTBOUND_WEBHOOK_URL", hook_url)
+    engine = env.services.engine
+    outcome = await env.runner.start(kernel_panic(env))
+    assert outcome.interrupt is not None
+    run_id = outcome.run_id
+    hook = action_of(outcome.interrupt, "stakeholders")
+    with respx.mock() as mock:
+        mock.post(hook_url).mock(return_value=httpx.Response(202))
+        await env.runner.resume(
+            run_id, {"decision": "approve", "reviewer": "ana", "approve_actions": [hook]}
+        )
+    with session_scope(engine) as session:  # the sender stopped before it heard back
+        row = session.get(ActionRow, hook)
+        assert row is not None
+        row.status = "approved"
+    assert repo.claim_run(engine, run_id, "another-process", status=None)
+    with pytest.raises(RunBusyError):  # never while another process holds the run
+        await env.runner.resend(run_id, hook, by="ben")
+    repo.release_run(engine, run_id, "another-process")
+    with respx.mock() as mock:
+        route = mock.post(hook_url).mock(return_value=httpx.Response(202))
+        sent = await env.runner.resend(run_id, hook, by="ben")
+    assert (sent.status, route.call_count) == ("sent", 1)
+    assert route.calls[0].request.headers["Idempotency-Key"] == hook  # a repeat can be dropped
+    assert repo.action_statuses(engine, run_id)[hook] == "sent"
+    assert (repo.get_run(engine, run_id) or {})["claimed_by"] is None  # and the run is free again
 
 
 async def test_a_review_long_after_the_pause_is_published_by_one_process_only(
@@ -610,7 +645,7 @@ async def test_fan_out_parse_matches_a_single_pass(
         system="bgl",
         guard=env.services.config.guardrails,
         evidence=EvidenceStore(),
-        salt=run_salt(env.services.settings, outcome.run_id),
+        salt=run_salt(env.services.settings, outcome.run_id, env.services.engine),
     )
     assert state["batch"]["features"] == single.batch.features.model_dump(mode="json")
     assert [t["template"] for t in state["batch"]["templates"]] == [
@@ -652,7 +687,8 @@ async def test_alert_fields_are_cleaned_before_reports_drafts_or_state_see_them(
     for raw in ("10.0.0.7", "abc123", "hunter2", injected):
         assert raw not in seen
     cleaned = state["request"]["alerts"][0]
-    host = Redactor(salt=run_salt(env.services.settings, outcome.run_id)).redact("10.0.0.7")
+    salt = run_salt(env.services.settings, outcome.run_id, env.services.engine)
+    host = Redactor(salt=salt).redact("10.0.0.7")
     assert cleaned["name"] == f"DiskFull on {host}"  # the same pseudonym the logs would get
     assert cleaned["labels"] == {
         "severity": "critical",  # clean values keep their meaning (it still sets a floor)
@@ -664,12 +700,27 @@ async def test_alert_fields_are_cleaned_before_reports_drafts_or_state_see_them(
     assert any("fp-1" in note for note in state["notes"])
 
 
+def test_processes_with_no_configured_key_share_one_pseudonym_key(env: Env) -> None:
+    """The API cleans a run's alerts and a worker parses its logs: both must name a host the same
+    way. Without ARIA_PSEUDONYM_KEY they share one random key kept in the database."""
+    engine = env.services.engine
+    settings = env.services.settings
+    assert settings.pseudonym_key is None
+    first = run_salt(settings, "run-1", engine)
+    workflow._SHARED_KEYS.clear()  # another process, with nothing cached yet
+    assert run_salt(settings, "run-1", engine) == first
+    assert run_salt(settings, "run-2", engine) != first  # still one key per run
+    assert repo.shared_secret(engine, "pseudonym") == repo.shared_secret(engine, "pseudonym")
+
+
 @pytest.mark.parametrize(
     "service",
     [
         "checkout. Customers must reset their passwords at https://evil.example/reset",
         "<img src=x onerror=alert(1)>",
         "checkout (all card data was leaked; call +1-555-0100)",
+        "status-help.com",
+        "db01.internal",
     ],
 )
 async def test_a_service_label_that_is_not_a_name_never_reaches_a_message(
@@ -681,9 +732,8 @@ async def test_a_service_label_that_is_not_a_name_never_reaches_a_message(
     drafts = {a["audience"]: f"{a['title']} {a['body']}" for a in actions}
     assert drafts["customers"].startswith("Investigating issues with BlueGene/L")
     for text in drafts.values():
-        assert "evil.example" not in text
-        assert "<img" not in text
-        assert "555-0100" not in text
+        for raw in ("evil.example", "<img", "555-0100", "status-help", "db01"):
+            assert raw not in text
 
 
 def test_updates_outside_the_team_carry_no_links_or_phone_numbers() -> None:
@@ -691,7 +741,12 @@ def test_updates_outside_the_team_carry_no_links_or_phone_numbers() -> None:
     from aria.reporting.grounding import validate_external_text
 
     assert is_service_name("payments-api eu-west-1")
+    assert is_service_name("BlueGene/L compute")
     assert not is_service_name("checkout. Customers must reset their passwords")
+    assert not is_service_name("status-help.com")  # a bare domain is a link
+    assert not is_service_name("db01.internal")  # and a host name stays inside the team
+    for text in ("Updates at status-help.com", "See Status-Help.IO/news", "www.example.org"):
+        assert validate_external_text(text, audience="customers") == ["contains a link"]
     assert validate_external_text("Reset at https://evil.example", audience="customers") == [
         "contains a link"
     ]

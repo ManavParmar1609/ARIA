@@ -46,11 +46,15 @@ _MAX_SERVICE_CHARS = 48
 
 
 def is_service_name(text: str) -> bool:
-    """Whether ``text`` reads as a service name, not a sentence someone slipped into a label."""
+    """Whether ``text`` reads as a service name, not a sentence someone slipped into a label.
+
+    Every audience's message uses the same name, so it must also be fit to leave the team: a
+    domain, a host name or another internal identifier is not."""
     return (
         len(text) <= _MAX_SERVICE_CHARS
         and _SERVICE_NAME.fullmatch(text) is not None
-        and re.search(r"\.(?:\s|$)|://|\bwww\.", text) is None
+        and re.search(r"\.(?:\s|$)", text) is None
+        and not validate_external_text(text, audience="customers")
     )
 
 

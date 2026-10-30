@@ -244,8 +244,12 @@ _INTERNAL_IDS: dict[str, re.Pattern[str]] = {
 }
 _SPECULATION = re.compile(r"\b(root cause (?:is|was)|caused by|because of|due to)\b", re.IGNORECASE)
 # Updates outside the team point to nothing: a link or a phone number in one is how a label or a
-# model could send customers somewhere else.
-_LINK = re.compile(r"https?://|\bwww\.|\b[\w-]+\.(?:com|net|org|io|co|example)\b/", re.IGNORECASE)
+# model could send customers somewhere else. A link is a URL, "www." or a bare domain such as
+# status-help.com.
+_LINK = re.compile(
+    r"https?://|\bwww\.|\b[\w-]+(?:\.[\w-]+)*\.(?:com|net|org|io|co|dev|app|info|biz|me|ly|example)\b",
+    re.IGNORECASE,
+)
 _NUMBER_RUN = re.compile(r"\+?\(?\d[\d ().-]{6,}\d")
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}(?: \d{2})?")
 

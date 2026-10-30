@@ -200,6 +200,14 @@ async def test_memory_in_another_process_follows_publishes_and_deletes(
     await memory.remember(published)  # the API publishes a run
     assert await other.refresh_if_changed()  # a worker sees it within a round
     assert other.get("run-elsewhere") is not None
+    with session_scope(memory.engine) as session:  # the API edits it in place
+        row = session.get(IncidentRow, "run-elsewhere")
+        assert row is not None
+        row.title = "ZooKeeper quorum lost after a switch failed"
+    assert await other.refresh_if_changed()  # the same count, but a newer update
+    edited = other.get("run-elsewhere")
+    assert edited is not None
+    assert edited.title == "ZooKeeper quorum lost after a switch failed"
     with session_scope(memory.engine) as session:  # the API deletes the run
         session.delete(session.get(IncidentRow, "run-elsewhere"))
     assert await other.refresh_if_changed()

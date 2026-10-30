@@ -243,7 +243,8 @@ async def review(run_id: RunId, body: ReviewRequest, state: State, caller: Calle
 
 @router.post("/{run_id}/actions/{action_id}/resend", response_model=RunDetail)
 async def resend_action(run_id: RunId, action_id: RunId, state: State, caller: Caller) -> RunDetail:
-    """Send an approved message again after its delivery failed. Nothing else is ever resent."""
+    """Send an approved message again after it did not go out: its delivery failed, or the
+    process sending it stopped before it heard back. Nothing else is ever resent."""
     await _run_or_404(state, run_id)
     try:
         await state.runner.resend(run_id, action_id, by=caller.name)

@@ -222,7 +222,10 @@ class AriaExecutor(AgentExecutor):
             await asyncio.to_thread(
                 self.runner.submit, request, run_id=run_id, trigger="a2a", claim=True
             )
-            outcome = await self._gate(self.runner.execute(run_id))
+            try:
+                outcome = await self._gate(self.runner.execute(run_id))
+            finally:  # cancelled while waiting for a slot: another process may run it
+                await self.runner.let_go(run_id)
         await self._finish(updater, outcome)
 
     async def _attach_report(self, updater: TaskUpdater, run_id: str) -> None:
