@@ -1,7 +1,7 @@
 {
   "suite": "all",
-  "created_at": "2026-10-30T09:47:04+00:00",
-  "git_sha": "92df50e",
+  "created_at": "2026-10-30T10:36:48+00:00",
+  "git_sha": "4a55629",
   "llm": false,
   "data": {
     "synthetic": true,
@@ -172,7 +172,158 @@
     "lines": 32000,
     "mean_grouping_accuracy": 0.8675,
     "line_weighted_grouping_accuracy": 0.8675,
-    "real_lines_flagged_as_injection": 0
+    "real_lines_flagged_as_injection": 0,
+    "gaia": {
+      "source": "GAIA's companion log-parsing data",
+      "citation": "CloudWise. GAIA (Generic AIOps Atlas), Companion Data: log parsing. github.com/CloudWise-OpenSource/GAIA-DataSet, 2021.",
+      "systems": {
+        "apache": {
+          "lines": 10000,
+          "events": 29,
+          "templates": 26,
+          "grouping_accuracy": 0.9445,
+          "commonest_event_share": 0.4285,
+          "flagged_as_injection": 0,
+          "aria_system": "apache"
+        },
+        "arangodb": {
+          "lines": 10000,
+          "events": 4,
+          "templates": 4,
+          "grouping_accuracy": 1.0,
+          "commonest_event_share": 0.9791,
+          "flagged_as_injection": 0,
+          "aria_system": null
+        },
+        "clickhouse": {
+          "lines": 10000,
+          "events": 10,
+          "templates": 22,
+          "grouping_accuracy": 0.0177,
+          "commonest_event_share": 0.9512,
+          "flagged_as_injection": 0,
+          "aria_system": null
+        },
+        "hadoop": {
+          "lines": 10000,
+          "events": 206,
+          "templates": 201,
+          "grouping_accuracy": 0.9048,
+          "commonest_event_share": 0.2848,
+          "flagged_as_injection": 0,
+          "aria_system": "hadoop"
+        },
+        "kafka": {
+          "lines": 10000,
+          "events": 59,
+          "templates": 43,
+          "grouping_accuracy": 0.9885,
+          "commonest_event_share": 0.4735,
+          "flagged_as_injection": 0,
+          "aria_system": null
+        },
+        "linux": {
+          "lines": 10000,
+          "events": 78,
+          "templates": 78,
+          "grouping_accuracy": 0.6391,
+          "commonest_event_share": 0.0784,
+          "flagged_as_injection": 0,
+          "aria_system": "linux"
+        },
+        "mac": {
+          "lines": 10000,
+          "events": 351,
+          "templates": 1041,
+          "grouping_accuracy": 0.8273,
+          "commonest_event_share": 0.1443,
+          "flagged_as_injection": 0,
+          "aria_system": "mac"
+        },
+        "openstack": {
+          "lines": 10000,
+          "events": 46,
+          "templates": 42,
+          "grouping_accuracy": 0.4463,
+          "commonest_event_share": 0.4559,
+          "flagged_as_injection": 0,
+          "aria_system": "openstack"
+        },
+        "proxifier": {
+          "lines": 10000,
+          "events": 6,
+          "templates": 34,
+          "grouping_accuracy": 0.5144,
+          "commonest_event_share": 0.4856,
+          "flagged_as_injection": 0,
+          "aria_system": "proxifier"
+        },
+        "redis": {
+          "lines": 10000,
+          "events": 15,
+          "templates": 15,
+          "grouping_accuracy": 1.0,
+          "commonest_event_share": 0.1922,
+          "flagged_as_injection": 0,
+          "aria_system": null
+        },
+        "spark": {
+          "lines": 10000,
+          "events": 38,
+          "templates": 37,
+          "grouping_accuracy": 0.9651,
+          "commonest_event_share": 0.2641,
+          "flagged_as_injection": 0,
+          "aria_system": "spark"
+        },
+        "ssh": {
+          "lines": 10000,
+          "events": 26,
+          "templates": 25,
+          "grouping_accuracy": 0.4632,
+          "commonest_event_share": 0.2745,
+          "flagged_as_injection": 0,
+          "aria_system": "openssh"
+        },
+        "tengine": {
+          "lines": 10000,
+          "events": 7,
+          "templates": 7,
+          "grouping_accuracy": 1.0,
+          "commonest_event_share": 0.9806,
+          "flagged_as_injection": 0,
+          "aria_system": null
+        },
+        "zookeeper": {
+          "lines": 10000,
+          "events": 3,
+          "templates": 3,
+          "grouping_accuracy": 1.0,
+          "commonest_event_share": 0.3334,
+          "flagged_as_injection": 0,
+          "aria_system": "zookeeper"
+        }
+      },
+      "n_systems": 14,
+      "lines": 140000,
+      "mean_grouping_accuracy": 0.7651,
+      "known": {
+        "n_systems": 9,
+        "mean_grouping_accuracy": 0.745
+      },
+      "new": {
+        "n_systems": 5,
+        "mean_grouping_accuracy": 0.8012,
+        "systems": [
+          "arangodb",
+          "clickhouse",
+          "kafka",
+          "redis",
+          "tengine"
+        ]
+      },
+      "real_lines_flagged_as_injection": 0
+    }
   },
   "edge": {
     "n": 2000,
@@ -3452,31 +3603,31 @@
       "false_alarms": 0.0
     },
     "latency": {
-      "time_to_review_p50_s": 0.346,
-      "time_to_review_p95_s": 0.761,
+      "time_to_review_p50_s": 0.358,
+      "time_to_review_p95_s": 0.783,
       "stage_p50_ms": {
-        "assess": 5.2,
-        "comms": 6.3,
-        "investigate": 61.9,
-        "merge": 38.5,
-        "parse_shard": 65.8,
+        "assess": 5.8,
+        "comms": 7.1,
+        "investigate": 61.7,
+        "merge": 42.4,
+        "parse_shard": 63.5,
         "plan": 5.7,
-        "recall": 12.1,
+        "recall": 11.6,
         "report": 9.6,
-        "review": 4.0,
-        "severity": 16.4
+        "review": 3.3,
+        "severity": 17.2
       },
       "stage_p95_ms": {
-        "assess": 11.2,
-        "comms": 13.9,
-        "investigate": 211.4,
-        "merge": 86.6,
-        "parse_shard": 234.7,
-        "plan": 14.5,
-        "recall": 18.9,
-        "report": 15.1,
-        "review": 11.7,
-        "severity": 31.5
+        "assess": 10.4,
+        "comms": 14.3,
+        "investigate": 194.9,
+        "merge": 87.9,
+        "parse_shard": 233.0,
+        "plan": 13.7,
+        "recall": 21.3,
+        "report": 13.5,
+        "review": 6.8,
+        "severity": 30.7
       },
       "llm_call_p50_ms": 0.0,
       "llm_call_p95_ms": 0.0
