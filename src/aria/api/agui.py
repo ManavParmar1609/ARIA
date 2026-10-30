@@ -48,6 +48,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 
+from aria.api.keys import VisitorKeyDep
 from aria.api.schemas import ReviewRequest, links_for
 from aria.api.security import Principal
 from aria.api.state import AppState, app_state, current_principal
@@ -57,6 +58,7 @@ from aria.contracts.report import ReviewDecision
 from aria.contracts.run import RunEvent, RunStatus
 from aria.db import repository as repo
 from aria.graph.runner import RunOutcome, TriageRunner
+from aria.llm.visitor import VisitorKey
 
 router = APIRouter(tags=["ag-ui"])
 # A thread id that is a valid run id names its run; "." or ".." would be a path the console
@@ -223,7 +225,11 @@ class Translator:
 
 
 async def _stream(
-    state: AppState, run_input: RunAgentInput, caller: Principal, encoder: EventEncoder
+    state: AppState,
+    run_input: RunAgentInput,
+    caller: Principal,
+    encoder: EventEncoder,
+    visitor: VisitorKey | None = None,
 ) -> AsyncIterator[str]:
     runner = state.runner
     run_id = run_id_for(run_input.thread_id)
@@ -271,6 +277,8 @@ async def _stream(
             await asyncio.to_thread(
                 runner.submit, request, run_id=run_id, trigger="agui", claim=True
             )
+            if visitor is not None:
+                runner.keys.hold(run_id, visitor)
             job = runner.execute(run_id)
         elif RunStatus(existing["status"]).terminal and _follows_up(run_input):
             # One thread is one triage: new logs on a finished thread would be silently dropped.
@@ -336,6 +344,7 @@ async def agui(
     request: Request,
     state: Annotated[AppState, Depends(app_state)],
     caller: Annotated[Principal, Depends(current_principal)],
+    visitor: VisitorKeyDep,
 ) -> StreamingResponse:
     """Run (or resume) ARIA as an AG-UI agent."""
     try:
@@ -346,7 +355,7 @@ async def agui(
         ) from exc
     encoder = EventEncoder(accept=request.headers.get("accept", "text/event-stream"))
     return StreamingResponse(
-        _stream(state, run_input, caller, encoder),
+        _stream(state, run_input, caller, encoder, visitor),
         media_type=encoder.get_content_type(),
         headers={"cache-control": "no-cache", "x-accel-buffering": "no"},
     )

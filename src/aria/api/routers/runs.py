@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from fastapi.responses import PlainTextResponse
 from sse_starlette.sse import EventSourceResponse
 
+from aria.api.keys import VisitorKeyDep
 from aria.api.schemas import (
     Checkpoint,
     Delivery,
@@ -60,10 +61,13 @@ def _public_state(values: dict[str, Any]) -> dict[str, Any]:
 
 
 @router.post("", status_code=status.HTTP_202_ACCEPTED, response_model=RunAccepted)
-async def create_run(request: TriageRequest, state: State, caller: Caller) -> RunAccepted:
+async def create_run(
+    request: TriageRequest, state: State, caller: Caller, visitor: VisitorKeyDep
+) -> RunAccepted:
     """Start triage. The run continues in the background; follow it on ``links.stream``."""
     wanted, llm = request.options.provider, state.services.router
-    if wanted is not None and not llm.can_chat(wanted):
+    keyed = visitor is not None and wanted in llm.config.visitor_keys.providers[visitor.provider]
+    if wanted is not None and not keyed and not llm.can_chat(wanted):
         known = llm.config.providers
         if wanted not in known:
             detail = f"unknown provider {wanted!r}; this server knows {', '.join(known)}"
@@ -84,6 +88,8 @@ async def create_run(request: TriageRequest, state: State, caller: Caller) -> Ru
             )
     trigger = "api" if caller.authenticated else "manual"
     run_id = await asyncio.to_thread(state.runner.submit, request, trigger=trigger)
+    if visitor is not None:
+        state.runner.keys.hold(run_id, visitor)
     if state.inprocess:
         state.worker.execute(run_id)
     return RunAccepted(run_id=run_id, status=str(RunStatus.QUEUED), links=links_for(run_id))
@@ -278,7 +284,9 @@ async def history(
 
 
 @router.post("/{run_id}/fork", status_code=status.HTTP_202_ACCEPTED, response_model=RunAccepted)
-async def fork(run_id: RunId, body: ForkRequest, state: State) -> RunAccepted:
+async def fork(
+    run_id: RunId, body: ForkRequest, state: State, visitor: VisitorKeyDep
+) -> RunAccepted:
     """Branch a new run from a checkpoint, optionally with different run options."""
     await _run_or_404(state, run_id)
     try:
@@ -293,6 +301,8 @@ async def fork(run_id: RunId, body: ForkRequest, state: State) -> RunAccepted:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "no such checkpoint") from exc
     except RunStateError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    if visitor is not None:
+        state.runner.keys.hold(outcome.run_id, visitor)
     if state.inprocess:
         state.worker.execute(outcome.run_id)
     return RunAccepted(

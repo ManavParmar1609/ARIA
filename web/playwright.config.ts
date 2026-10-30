@@ -50,6 +50,8 @@ export default defineConfig({
         gemini_api_key: "",
         AZURE_OPENAI_API_KEY: "",
         OPENAI_API_KEY: "",
+        OPENAI_COMPAT_BASE_URL: "",
+        ANTHROPIC_API_KEY: "",
         NIM_LOCAL_BASE_URL: "",
       },
     },

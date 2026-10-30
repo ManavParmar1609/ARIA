@@ -290,6 +290,17 @@ class SettingsOut(BaseModel):
     safety: list[str]
     # Per message kind: whether its webhook URL is set. True or false only, never the URL.
     channels: dict[str, bool] = Field(default_factory=dict)
+    # The kinds of model key visitors may bring (X-Model-Provider); none while that is off.
+    visitor_keys: list[str] = Field(default_factory=list)
+
+
+class ModelKeyCheck(BaseModel):
+    """What a provider said about a visitor's own key. The key itself is not kept."""
+
+    provider: str
+    accepted: bool
+    model: str
+    detail: str
 
 
 class ReviewOut(BaseModel):

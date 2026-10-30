@@ -254,6 +254,29 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/model-key/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Model Key
+         * @description Check a visitor's own key before it is used, and keep nothing.
+         *
+         *     The provider lists its models for the key, which costs nothing. Where that list answers
+         *     anyone (NVIDIA's), one tiny request checks the key instead.
+         */
+        post: operations["check_model_key_api_v1_model_key_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/providers": {
         parameters: {
             query?: never;
@@ -1215,6 +1238,20 @@ export type components = {
             task_id?: string;
         };
         /**
+         * ModelKeyCheck
+         * @description What a provider said about a visitor's own key. The key itself is not kept.
+         */
+        ModelKeyCheck: {
+            /** Accepted */
+            accepted: boolean;
+            /** Detail */
+            detail: string;
+            /** Model */
+            model: string;
+            /** Provider */
+            provider: string;
+        };
+        /**
          * @example {
          *       "text": ""
          *     }
@@ -1660,6 +1697,8 @@ export type components = {
             severity: {
                 [key: string]: unknown;
             };
+            /** Visitor Keys */
+            visitor_keys?: string[];
             /** Worker Mode */
             worker_mode: string;
         };
@@ -1962,7 +2001,12 @@ export interface operations {
     agui_agui_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true. */
+                "X-Model-Key"?: string | null;
+                /** @description The kind of key in X-Model-Key: claude, gemini, openai or nvidia. */
+                "X-Model-Provider"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1975,6 +2019,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -2085,7 +2138,12 @@ export interface operations {
     ask_api_v1_ask_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true. */
+                "X-Model-Key"?: string | null;
+                /** @description The kind of key in X-Model-Key: claude, gemini, openai or nvidia. */
+                "X-Model-Provider"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2252,6 +2310,40 @@ export interface operations {
             };
         };
     };
+    check_model_key_api_v1_model_key_check_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true. */
+                "X-Model-Key"?: string | null;
+                /** @description The kind of key in X-Model-Key: claude, gemini, openai or nvidia. */
+                "X-Model-Provider"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelKeyCheck"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     providers_api_v1_providers_get: {
         parameters: {
             query?: never;
@@ -2295,7 +2387,12 @@ export interface operations {
     replay_real_incident_api_v1_real_incidents__incident_id__replay_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true. */
+                "X-Model-Key"?: string | null;
+                /** @description The kind of key in X-Model-Key: claude, gemini, openai or nvidia. */
+                "X-Model-Provider"?: string | null;
+            };
             path: {
                 incident_id: string;
             };
@@ -2456,7 +2553,12 @@ export interface operations {
     create_run_api_v1_runs_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true. */
+                "X-Model-Key"?: string | null;
+                /** @description The kind of key in X-Model-Key: claude, gemini, openai or nvidia. */
+                "X-Model-Provider"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2646,7 +2748,12 @@ export interface operations {
     fork_api_v1_runs__run_id__fork_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true. */
+                "X-Model-Key"?: string | null;
+                /** @description The kind of key in X-Model-Key: claude, gemini, openai or nvidia. */
+                "X-Model-Provider"?: string | null;
+            };
             path: {
                 run_id: string;
             };

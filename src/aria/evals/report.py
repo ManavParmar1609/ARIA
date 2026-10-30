@@ -973,6 +973,8 @@ _PROVIDER_NAMES = {
     "nim": "NVIDIA NIM",
     "nim-fallback": "NVIDIA NIM",
     "nim-local": "a self-hosted NIM",
+    "claude": "Anthropic Claude",
+    "openai": "OpenAI",
     "azure": "Azure OpenAI",
     "openai_compat": "an OpenAI-compatible endpoint",
 }

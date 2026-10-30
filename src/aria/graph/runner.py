@@ -43,6 +43,7 @@ from aria.graph.workflow import (
     run_link,
     run_salt,
 )
+from aria.llm.visitor import VisitorKeys
 from aria.mcp.client import Target
 from aria.notify import send_action
 from aria.observability.logging import get_logger
@@ -223,6 +224,8 @@ class TriageRunner:
         # Runs this process has claimed: a run it is driving, or one it took and has yet to start.
         self.owner = process_owner()
         self.held: set[str] = set()
+        # Visitors' own model keys, held in memory until the runs they came with start.
+        self.keys = VisitorKeys()
 
     @staticmethod
     def config(run_id: str, checkpoint_id: str | None = None) -> RunnableConfig:
@@ -500,11 +503,15 @@ class TriageRunner:
     async def _stream(
         self, run_id: str, graph_input: Any, config: RunnableConfig | None
     ) -> RunOutcome:
+        # A run started with a visitor's key gets a router of its own, closed when it stops.
+        visitor = self.keys.take(run_id)
+        own = self.services.router.with_key(visitor) if visitor is not None else None
+        context = self.context.with_router(own) if own is not None else self.context
         try:
             async for part in self.graph.astream(
                 graph_input,
                 config or self.config(run_id),
-                context=self.context,
+                context=context,
                 stream_mode=STREAM_MODES,
                 version="v2",
             ):
@@ -518,6 +525,9 @@ class TriageRunner:
             await self._event(run_id, "error", payload={"error": message})
             await self._event(run_id, "run_finished", payload={"status": str(RunStatus.FAILED)})
             return RunOutcome(run_id, RunStatus.FAILED, error=message)
+        finally:
+            if own is not None:
+                await own.aclose()
         return await self._settle(run_id)
 
     async def _settle(self, run_id: str) -> RunOutcome:
@@ -766,6 +776,7 @@ class TriageRunner:
                 msg = f"run {run_id} is running in another process"
                 raise RunBusyError(msg)
             await self._purge(run_id)
+        self.keys.drop(run_id)
         self._locks.pop(run_id, None)
 
     async def _purge(self, run_id: str) -> None:

@@ -17,6 +17,7 @@ from aria.evidence import EvidenceStore
 from aria.llm.base import BudgetExceededError, LLMError
 from aria.llm.budget import BudgetGuard
 from aria.llm.prompts import build_messages
+from aria.llm.router import LLMRouter
 from aria.llm.schemas import AnswerOutput, ClaimOut
 from aria.reporting.grounding import ungrounded_numbers
 from aria.services import Services
@@ -125,11 +126,13 @@ async def answer(
     evidence: Sequence[Evidence],
     *,
     use_llm: bool = True,
+    router: LLMRouter | None = None,
 ) -> tuple[AnswerOutput, list[Evidence], str | None]:
-    """The answer, the evidence it may cite, and the model that wrote it (None: retrieval)."""
+    """The answer, the evidence it may cite, and the model that wrote it (None: retrieval).
+    ``router``, when given, answers instead of the services' own (a visitor's key)."""
     ranked = rank(question, evidence)
     known = {item.id: item for item in ranked}
-    router = services.router
+    router = router or services.router
     if use_llm and router.has_real_llm("ask") and ranked:
         facts = {"evidence_count": len(evidence)}
         # Evidence titles quote log templates and alert names, so they travel fenced.

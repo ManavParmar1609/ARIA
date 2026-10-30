@@ -17,11 +17,12 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any, Literal, TypeVar
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, SecretStr, ValidationError
 
 from aria.config import (
     Environment,
     LLMConfig,
+    ProviderConfig,
     ProviderKind,
     get_app_config,
     get_settings,
@@ -38,11 +39,13 @@ from aria.llm.base import (
     estimate_tokens,
 )
 from aria.llm.budget import BudgetGuard
+from aria.llm.claude import ClaudeProvider
 from aria.llm.fake import FakeProvider
 from aria.llm.jsonschema import extract_json, strict_schema
 from aria.llm.local_embed import LocalEmbeddingProvider
 from aria.llm.openai_compat import OpenAICompatibleProvider
 from aria.llm.prompts import repair_message
+from aria.llm.visitor import VisitorKey
 from aria.observability.logging import get_logger
 from aria.observability.tracing import capture_content, genai_span, mark_error
 
@@ -158,20 +161,29 @@ class LLMRouter:
         self._breakers: dict[str, CircuitBreaker] = {}
         self._clock = clock
         self._breaker_args = (breaker_threshold, breaker_cooldown_s)
+        # Set only on a view made by with_key: a visitor's key, the providers it stands in for,
+        # and the clients and breakers the view made for them.
+        self._key: SecretStr | None = None
+        self._keyed: tuple[str, ...] = ()
+        self._own: dict[str, Any] = {}
+        self._own_breakers: dict[str, CircuitBreaker] = {}
 
     # --- providers -----------------------------------------------------------------------------
 
     def breaker(self, name: str) -> CircuitBreaker:
-        if name not in self._breakers:
+        breakers = self._own_breakers if name in self._keyed else self._breakers
+        if name not in breakers:
             threshold, cooldown = self._breaker_args
-            self._breakers[name] = CircuitBreaker(
+            breakers[name] = CircuitBreaker(
                 threshold=threshold, cooldown_s=cooldown, clock=self._clock
             )
-        return self._breakers[name]
+        return breakers[name]
 
     def is_set_up(self, name: str) -> bool:
         """Known, with its endpoint and credential, and allowed here (the offline stand-in only
         where it may answer), whether or not its breaker has it resting for now."""
+        if name in self._keyed:
+            return True  # the visitor's key is its credential
         cfg = self.config.providers.get(name)
         if name in self._providers:
             injected_kind = getattr(self._providers[name], "kind", None)
@@ -196,6 +208,10 @@ class LLMRouter:
         return self.is_set_up(name) and self.breaker(name).allow()
 
     def provider(self, name: str) -> Any:
+        if name in self._keyed:
+            if name not in self._own:
+                self._own[name] = _remote(name, self.config.providers[name], self._key)
+            return self._own[name]
         if name not in self._providers:
             cfg = self.config.providers[name]
             if cfg.kind is ProviderKind.FAKE:
@@ -204,7 +220,7 @@ class LLMRouter:
                 path = (self._models_dir / "embed_local.npz") if self._models_dir else None
                 self._providers[name] = LocalEmbeddingProvider(name, model_path=path)
             else:
-                self._providers[name] = OpenAICompatibleProvider(name, cfg)
+                self._providers[name] = _remote(name, cfg, None)
         return self._providers[name]
 
     def chain(self, role: str) -> list[str]:
@@ -226,6 +242,25 @@ class LLMRouter:
         }
         view = copy.copy(self)
         view.config = self.config.model_copy(update={"routing": routing})
+        return view
+
+    def with_key(self, visitor: VisitorKey) -> LLMRouter:
+        """A view in which a visitor's own key stands in for this server's key in the providers
+        ``visitor_keys`` lists for its kind, which then lead every chain they are in.
+
+        The view makes its own clients and circuit breakers for those providers, so the key
+        answers only the work the view was made for, and its failures never rest or label this
+        server's providers. Close the view with ``aclose``: it closes only what it made.
+        """
+        names = tuple(self.config.visitor_keys.providers.get(visitor.provider, ()))
+        routing = {
+            role: [*(n for n in names if n in chain), *(n for n in chain if n not in names)]
+            for role, chain in self.config.routing.items()
+        }
+        view = copy.copy(self)
+        view.config = self.config.model_copy(update={"routing": routing})
+        view._key, view._keyed = visitor.key, names
+        view._own, view._own_breakers = {}, {}
         return view
 
     def has_real_llm(self, role: str) -> bool:
@@ -490,10 +525,21 @@ class LLMRouter:
         return out
 
     async def aclose(self) -> None:
-        for provider in self._providers.values():
+        """Close the clients this router made. A view with a visitor's key closes only its own:
+        the rest belong to the router it was made from."""
+        made = self._own if self._key is not None else self._providers
+        for provider in list(made.values()):
             close = getattr(provider, "aclose", None)
             if close is not None:
                 await close()
+
+
+def _remote(name: str, cfg: ProviderConfig, key: SecretStr | None) -> Any:
+    """The client for a hosted provider: Claude's own, or the OpenAI-compatible one. ``key``
+    replaces the key the config names (a visitor's)."""
+    if cfg.kind is ProviderKind.ANTHROPIC:
+        return ClaudeProvider(name, cfg, api_key=key)
+    return OpenAICompatibleProvider(name, cfg, api_key=key)
 
 
 def _add(a: Usage, b: Usage) -> Usage:

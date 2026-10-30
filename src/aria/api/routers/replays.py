@@ -7,6 +7,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from aria.api.keys import VisitorKeyDep
 from aria.api.schemas import (
     ExpertCheckOut,
     FlaggedUnit,
@@ -56,7 +57,7 @@ async def list_real_incidents() -> list[RealIncidentOut]:
     "/{incident_id}/replay", status_code=status.HTTP_202_ACCEPTED, response_model=RunAccepted
 )
 async def replay_real_incident(
-    incident_id: str, state: State, body: ReplayRequest | None = None
+    incident_id: str, state: State, visitor: VisitorKeyDep, body: ReplayRequest | None = None
 ) -> RunAccepted:
     """Triage a real incident's logs as a normal run; follow it on ``links.stream``."""
     incident = real_incident(incident_id)
@@ -70,6 +71,8 @@ async def replay_real_incident(
         replay_of=incident.id,
     )
     run_id = await asyncio.to_thread(state.runner.submit, request, trigger="replay")
+    if visitor is not None:
+        state.runner.keys.hold(run_id, visitor)
     if state.inprocess:
         state.worker.execute(run_id)
     return RunAccepted(run_id=run_id, status=str(RunStatus.QUEUED), links=links_for(run_id))

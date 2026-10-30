@@ -40,6 +40,7 @@ class ProviderKind(StrEnum):
     NVIDIA_NIM = "nvidia_nim"
     AZURE_OPENAI = "azure_openai"
     OPENAI_COMPATIBLE = "openai_compatible"
+    ANTHROPIC = "anthropic"  # Claude, through Anthropic's own SDK
     FAKE = "fake"
     LOCAL = "local"
 
@@ -78,7 +79,16 @@ class ProviderConfig(_Strict):
     stream_always: bool = False
     stall_timeout_s: float | None = Field(default=None, gt=0)
     reasoning_effort: str | None = None  # sent only when set: low | medium | high
+    # Reasoning models (OpenAI's GPT-5 and later) take max_completion_tokens instead of
+    # max_tokens and refuse temperature; their reasoning counts against the reply's limit, so
+    # reasoning_tokens is added to it.
+    max_tokens_field: Literal["max_tokens", "max_completion_tokens"] = "max_tokens"
+    sampling: bool = True
+    reasoning_tokens: int = Field(default=0, ge=0, le=64_000)
     extra_body: dict[str, Any] = Field(default_factory=dict)
+    extra_headers: dict[str, str] = Field(default_factory=dict)
+    # The model list answers anyone, so checking a key needs one tiny request instead (NVIDIA's).
+    public_catalog: bool = False
     timeout_s: float = Field(default=60.0, gt=0)
     max_retries: int = Field(default=2, ge=0, le=6)
     price_input_per_mtok: float | None = Field(default=None, ge=0)
@@ -123,12 +133,30 @@ class ProviderConfig(_Strict):
         return self.allow_no_key or self.azure_ad or self.api_key() is not None
 
 
+class VisitorKeysConfig(_Strict):
+    """Whether a caller may send its own model key, and which providers each kind of key fills.
+
+    ``providers`` maps the name a caller picks (``claude``, ``gemini``, ...) to the providers in
+    this file that its key stands in for. The key arrives with a request (``X-Model-Provider`` and
+    ``X-Model-Key``) and answers only the run or question it came with. Endpoints and models
+    still come from this file, never from the caller.
+    """
+
+    enabled: bool = False
+    providers: dict[str, list[str]] = Field(default_factory=dict)
+
+    def accepted(self) -> list[str]:
+        """The kinds of key a caller may send, or none while the feature is off."""
+        return list(self.providers) if self.enabled else []
+
+
 class LLMConfig(_Strict):
     providers: dict[str, ProviderConfig]
     routing: dict[str, list[str]] = Field(default_factory=dict)
     embeddings: list[str] = Field(default_factory=lambda: ["local"])
     rerank: list[str] = Field(default_factory=list)
     safety: list[str] = Field(default_factory=list)
+    visitor_keys: VisitorKeysConfig = Field(default_factory=VisitorKeysConfig)
 
     @model_validator(mode="after")
     def _chains_reference_known_providers(self) -> LLMConfig:
@@ -140,6 +168,24 @@ class LLMConfig(_Strict):
         if unknown:
             msg = f"routing references unknown providers: {', '.join(unknown)}"
             raise ValueError(msg)
+        for kind, names in self.visitor_keys.providers.items():
+            if not re.fullmatch(r"[a-z][a-z0-9-]{0,23}", kind) or not names:
+                msg = f"visitor_keys: {kind!r} needs a short lower-case name and its providers"
+                raise ValueError(msg)
+            for name in names:
+                # A visitor's key may only replace a key: the endpoint and model stay this file's.
+                cfg = self.providers.get(name)
+                keyed = cfg is not None and cfg.kind in (
+                    ProviderKind.OPENAI_COMPATIBLE,
+                    ProviderKind.NVIDIA_NIM,
+                    ProviderKind.ANTHROPIC,
+                )
+                if not (keyed and cfg and cfg.api_key_names() and cfg.base_url and cfg.chat_model):
+                    msg = (
+                        f"visitor_keys names {name!r}: it must be a provider with an endpoint, "
+                        "a chat model and an API key setting"
+                    )
+                    raise ValueError(msg)
         return self
 
     def chain(self, role: str) -> list[str]:

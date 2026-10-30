@@ -1,4 +1,4 @@
-# ARIA's API as a public demo: open, offline and seeded, for a free container host.
+# ARIA's API as a public demo: open, offline unless a visitor brings a model key, and seeded.
 #
 # Built from the repository root, so the image matches the commit being deployed:
 #   docker build -f deploy/demo/Dockerfile -t aria-demo .
@@ -34,17 +34,20 @@ RUN --mount=type=secret,id=ca,required=false \
 FROM ${PYTHON_IMAGE}
 # User 1000, which some hosts insist on.
 RUN useradd --create-home --uid 1000 aria
-# A public demo: no API key (anyone may try it), no model provider keys (every step runs on the
-# offline provider, so nothing a visitor sends leaves the server) and no Slack, Teams or webhook
-# targets. The rate limit is shared, since every console visitor arrives through one proxy, and a
-# request may carry at most 8 MB, as through the console. Runs go one at a time, so a few large
-# ones arriving together stay inside a free plan's 512 MB.
+# A public demo: no API key (anyone may try it), no model provider keys of its own (every step runs
+# on the offline provider unless a visitor brings a key) and no Slack, Teams or webhook targets.
+# Visitors may paste their own Claude, Gemini, OpenAI or NVIDIA key in the console's Settings: it
+# answers only their own runs and questions, sending them to that provider, and is held in memory
+# while they run, never stored. The rate limit is shared, since every console visitor arrives
+# through one proxy, and a request may carry at most 8 MB, as through the console. Runs go one at a
+# time, so a few large ones arriving together stay inside a free plan's 512 MB.
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:${PATH}" \
     ARIA_ENV=dev \
     ARIA_LOG_FORMAT=json \
     ARIA_WORKER_MODE=inprocess \
+    ARIA_VISITOR_KEYS=true \
     ARIA_WORKER_CONCURRENCY=1 \
     ARIA_RATE_LIMIT_PER_MINUTE=600 \
     ARIA_MAX_BODY_BYTES=8388608 \

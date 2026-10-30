@@ -9,6 +9,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, status
 
 from aria.api import alerts as intake
 from aria.api.ask import answer, memory_evidence
+from aria.api.keys import VisitorKeyDep
 from aria.api.schemas import AlertAccepted, AskRequest, AskResponse
 from aria.api.state import AppState, app_state
 from aria.contracts.base import Evidence
@@ -114,7 +115,7 @@ async def alerts(signals: list[AlertSignal], state: State) -> AlertAccepted:
 
 
 @router.post("/ask", response_model=AskResponse)
-async def ask(body: AskRequest, state: State) -> AskResponse:
+async def ask(body: AskRequest, state: State, visitor: VisitorKeyDep) -> AskResponse:
     """Ask about a run (its evidence) or about incident history (memory search)."""
     services = state.services
     evidence: list[Evidence]
@@ -133,7 +134,14 @@ async def ask(body: AskRequest, state: State) -> AskResponse:
     else:
         evidence = await memory_evidence(services, body.question)
     use_llm = not (run and run.get("request", {}).get("options", {}).get("use_llm") is False)
-    output, cited, model = await answer(services, body.question, evidence, use_llm=use_llm)
+    own = services.router.with_key(visitor) if visitor is not None else None
+    try:
+        output, cited, model = await answer(
+            services, body.question, evidence, use_llm=use_llm, router=own
+        )
+    finally:
+        if own is not None:
+            await own.aclose()
     referenced = {eid for claim in output.answer for eid in claim.evidence_ids}
     return AskResponse(
         answer=output.answer,

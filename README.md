@@ -228,7 +228,9 @@ path rather than failing it.
 | NVIDIA NIM, second model (`nim-fallback`) | chat `minimaxai/minimax-m3.1-flash` | Verified with live calls on 2026-10-29 |
 | NVIDIA NIM, self-hosted (`nim-local`) | Whatever your NIM container serves | Not verified (needs a GPU) |
 | Azure OpenAI (`azure`) | Deployments `gpt-5.1` and `text-embedding-3-small`; Entra ID or key | Not verified against a live resource |
-| OpenAI-compatible (`openai_compat`) | Your choice: OpenAI, vLLM, Ollama, LM Studio | Not verified |
+| Anthropic Claude (`claude`) | chat `claude-opus-5-5`, effort low, through Anthropic's own SDK | Not verified with a live call |
+| OpenAI (`openai`) | chat `gpt-6.1-sol`, reasoning low | Not verified with a live call |
+| Other OpenAI-compatible endpoints (`openai_compat`) | Your choice: vLLM, Ollama, LM Studio (`OPENAI_COMPAT_*`) | Not verified |
 | Offline (`fake`, `local`) | Deterministic text; TF-IDF + SVD embeddings | Used by tests, evals and the demo |
 
 Reranking with NIM is off until `NVIDIA_NIM_RERANK_MODEL` and `NVIDIA_NIM_RERANK_URL` are set. The

@@ -16,6 +16,7 @@ from collections.abc import Sequence
 from typing import Any, Literal
 
 import httpx
+from pydantic import SecretStr
 from tenacity import (
     AsyncRetrying,
     retry_if_exception,
@@ -62,7 +63,12 @@ def _retry_after(response: httpx.Response, body: str) -> float | None:
 
 class OpenAICompatibleProvider:
     def __init__(
-        self, name: str, config: ProviderConfig, client: httpx.AsyncClient | None = None
+        self,
+        name: str,
+        config: ProviderConfig,
+        client: httpx.AsyncClient | None = None,
+        *,
+        api_key: SecretStr | None = None,
     ) -> None:
         if not config.base_url:
             msg = f"provider {name} has no base_url"
@@ -76,6 +82,17 @@ class OpenAICompatibleProvider:
             timeout=httpx.Timeout(config.timeout_s, connect=15.0)
         )
         self._credential: Any = None
+        # A key given here (a visitor's own) replaces the one the config names; never both.
+        self._api_key = api_key
+
+    def _key(self) -> SecretStr | None:
+        return self._api_key if self._api_key is not None else self.config.api_key()
+
+    def _scrub(self, text: str) -> str:
+        """``text`` without the key, should a provider ever echo it back in an error."""
+        key = self._key()
+        secret = key.get_secret_value() if key is not None else ""
+        return text.replace(secret, "[key]") if secret else text
 
     # --- endpoints and auth --------------------------------------------------------------------
 
@@ -93,7 +110,11 @@ class OpenAICompatibleProvider:
 
     async def _headers(self, *, stream: bool = False) -> dict[str, str]:
         accept = "text/event-stream" if stream else "application/json"
-        headers = {"Content-Type": "application/json", "Accept": accept}
+        headers = {
+            **self.config.extra_headers,
+            "Content-Type": "application/json",
+            "Accept": accept,
+        }
         if self.kind is ProviderKind.AZURE_OPENAI and self.config.azure_ad:
             if self._credential is None:
                 from azure.identity.aio import DefaultAzureCredential  # noqa: PLC0415 - optional extra
@@ -102,7 +123,7 @@ class OpenAICompatibleProvider:
             token = await self._credential.get_token(_AZURE_SCOPE)
             headers["Authorization"] = f"Bearer {token.token}"
             return headers
-        key = self.config.api_key()
+        key = self._key()
         if key is not None:
             if self.kind is ProviderKind.AZURE_OPENAI:
                 headers["api-key"] = key.get_secret_value()
@@ -136,14 +157,14 @@ class OpenAICompatibleProvider:
             # A provider that is too slow now will likely stay slow for the next attempt too,
             # so the router fails over at once instead of retrying here.
             raise ProviderError(
-                f"{self.name}: {type(exc).__name__}: {exc}", timed_out=True
+                self._scrub(f"{self.name}: {type(exc).__name__}: {exc}"), timed_out=True
             ) from exc
         except httpx.TransportError as exc:
             raise ProviderError(
-                f"{self.name}: {type(exc).__name__}: {exc}", retryable=True
+                self._scrub(f"{self.name}: {type(exc).__name__}: {exc}"), retryable=True
             ) from exc
         if response.status_code >= 400:
-            raw = (await response.aread()).decode(errors="replace")
+            raw = self._scrub((await response.aread()).decode(errors="replace"))
             await response.aclose()
             wait = _retry_after(response, raw)
             retryable = response.status_code in (408, 409, 429) or response.status_code >= 500
@@ -175,10 +196,11 @@ class OpenAICompatibleProvider:
         payload: dict[str, Any] = {
             "model": model,
             "messages": msgs,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
+            self.config.max_tokens_field: max_tokens + self.config.reasoning_tokens,
             "stream": stream,
         }
+        if self.config.sampling:
+            payload["temperature"] = temperature
         if stream:
             payload["stream_options"] = {"include_usage": True}
         if self.config.reasoning_effort:

@@ -124,6 +124,76 @@
         }
       }
     },
+    "/api/v1/model-key/check": {
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Check Model Key",
+        "description": "Check a visitor's own key before it is used, and keep nothing.\n\nThe provider lists its models for the key, which costs nothing. Where that list answers\nanyone (NVIDIA's), one tiny request checks the key instead.",
+        "operationId": "check_model_key_api_v1_model_key_check_post",
+        "parameters": [
+          {
+            "name": "X-Model-Provider",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia.",
+              "title": "X-Model-Provider"
+            },
+            "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia."
+          },
+          {
+            "name": "X-Model-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true.",
+              "title": "X-Model-Key"
+            },
+            "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelKeyCheck"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/runs": {
       "post": {
         "tags": [
@@ -132,6 +202,44 @@
         "summary": "Create Run",
         "description": "Start triage. The run continues in the background; follow it on ``links.stream``.",
         "operationId": "create_run_api_v1_runs_post",
+        "parameters": [
+          {
+            "name": "X-Model-Provider",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia.",
+              "title": "X-Model-Provider"
+            },
+            "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia."
+          },
+          {
+            "name": "X-Model-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true.",
+              "title": "X-Model-Key"
+            },
+            "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -852,6 +960,42 @@
               "pattern": "^[A-Za-z0-9._:-]{1,64}$",
               "title": "Run Id"
             }
+          },
+          {
+            "name": "X-Model-Provider",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia.",
+              "title": "X-Model-Provider"
+            },
+            "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia."
+          },
+          {
+            "name": "X-Model-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true.",
+              "title": "X-Model-Key"
+            },
+            "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true."
           }
         ],
         "requestBody": {
@@ -1294,15 +1438,53 @@
         "summary": "Ask",
         "description": "Ask about a run (its evidence) or about incident history (memory search).",
         "operationId": "ask_api_v1_ask_post",
+        "parameters": [
+          {
+            "name": "X-Model-Provider",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia.",
+              "title": "X-Model-Provider"
+            },
+            "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia."
+          },
+          {
+            "name": "X-Model-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true.",
+              "title": "X-Model-Key"
+            },
+            "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true."
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/AskRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -1483,6 +1665,42 @@
               "type": "string",
               "title": "Incident Id"
             }
+          },
+          {
+            "name": "X-Model-Provider",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia.",
+              "title": "X-Model-Provider"
+            },
+            "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia."
+          },
+          {
+            "name": "X-Model-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true.",
+              "title": "X-Model-Key"
+            },
+            "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true."
           }
         ],
         "requestBody": {
@@ -1578,12 +1796,60 @@
         "summary": "Agui",
         "description": "Run (or resume) ARIA as an AG-UI agent.",
         "operationId": "agui_agui_post",
+        "parameters": [
+          {
+            "name": "X-Model-Provider",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia.",
+              "title": "X-Model-Provider"
+            },
+            "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia."
+          },
+          {
+            "name": "X-Model-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true.",
+              "title": "X-Model-Key"
+            },
+            "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true."
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -2823,6 +3089,35 @@
         "title": "Me",
         "description": "Who is calling. With no API keys configured the API is open and nobody signs in."
       },
+      "ModelKeyCheck": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "accepted": {
+            "type": "boolean",
+            "title": "Accepted"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "accepted",
+          "model",
+          "detail"
+        ],
+        "title": "ModelKeyCheck",
+        "description": "What a provider said about a visitor's own key. The key itself is not kept."
+      },
       "ProviderOut": {
         "properties": {
           "name": {
@@ -3968,6 +4263,13 @@
             },
             "type": "object",
             "title": "Channels"
+          },
+          "visitor_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Visitor Keys"
           }
         },
         "type": "object",
