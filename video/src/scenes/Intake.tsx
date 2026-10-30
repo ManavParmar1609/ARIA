@@ -42,17 +42,16 @@ export const Intake = () => {
               whiteSpace: "nowrap",
               padding: "4px 12px",
               borderRadius: radius.small,
-              outline: row.planted ? `3px solid oklch(0.8 0.13 18 / ${flagged})` : "none",
-              backgroundColor: row.planted
-                ? `oklch(0.8 0.13 18 / ${0.14 * flagged})`
-                : "transparent",
+              // Terracotta, the SEV1 fill, rings the planted line once ARIA flags it.
+              outline: row.planted ? `3px solid rgb(233 130 110 / ${flagged})` : "none",
+              backgroundColor: row.planted ? `rgb(233 130 110 / ${0.16 * flagged})` : "transparent",
               ...enter(frame, 18 + i * ROW_EVERY, 12),
             }}
           >
             <span style={{ color: color.faint }}>{row.time}</span>
             <span
               style={{
-                color: row.level === "WARN" ? "oklch(0.5 0.12 55)" : color.faint,
+                color: row.level === "WARN" ? "#8a4a0c" : color.faint,
                 width: 64,
               }}
             >
@@ -74,7 +73,7 @@ export const Intake = () => {
         <span
           style={{
             backgroundColor: color.danger,
-            color: "#ffffff",
+            color: color.onForest,
             fontWeight: 500,
             fontSize: 30,
             padding: "8px 18px",

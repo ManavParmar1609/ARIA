@@ -3,7 +3,7 @@ import { useCurrentFrame } from "remotion";
 import { Heading, Stage } from "../components";
 import { measured, publicAttacks, realLogs } from "../data";
 import { enter } from "../motion";
-import { color, size } from "../theme";
+import { color, serif, size } from "../theme";
 
 const Row = ({
   start,
@@ -29,12 +29,12 @@ const Row = ({
     >
       <span
         style={{
-          fontSize: 88,
-          fontWeight: 500,
-          letterSpacing: "-0.046em",
+          ...serif,
+          fontSize: 96,
+          letterSpacing: "-0.02em",
           lineHeight: 1,
-          fontVariantNumeric: "tabular-nums",
-          color: color.stat,
+          fontVariantNumeric: "lining-nums tabular-nums",
+          color: color.heading,
         }}
       >
         {figure}

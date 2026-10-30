@@ -52,8 +52,8 @@ export const Report = () => {
           <Panel
             style={{
               flex: 1,
-              backgroundColor: color.sunken,
-              outline: `4px solid ${color.ink}`,
+              backgroundColor: color.keylime,
+              outline: `4px solid ${color.heading}`,
               outlineOffset: -3,
               display: "flex",
               flexDirection: "column",
@@ -65,8 +65,8 @@ export const Report = () => {
             <span
               style={{
                 fontSize: 26,
-                color: color.ink,
-                backgroundColor: color.grass,
+                color: color.heading,
+                backgroundColor: color.highlight,
                 alignSelf: "flex-start",
                 padding: "4px 12px",
                 borderRadius: radius.small,
@@ -92,7 +92,7 @@ export const Report = () => {
           </Panel>
         ) : null}
       </div>
-      <div style={{ fontSize: size.lead, color: color.ok, opacity: validated }}>
+      <div style={{ fontSize: size.lead, color: color.heading, opacity: validated }}>
         Validated: {cited.checked} claims checked, {cited.coverage} cited.
       </div>
       <Rail active="Report" />

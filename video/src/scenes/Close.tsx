@@ -1,49 +1,46 @@
 import { AbsoluteFill, useCurrentFrame } from "remotion";
 
-import { ApproveScene } from "../../../web/src/components/illustrations/scenes";
 import { Label, Lead } from "../components";
 import { REPO } from "../data";
-import { enter, progress } from "../motion";
-import { SAFE, SANS, color, mono, radius, size } from "../theme";
+import { Converge } from "../line-art";
+import { enter } from "../motion";
+import { SAFE, SANS, color, mono, radius, serif, size } from "../theme";
 
-/** Where to get it: the promise again, a thumbs-up, and the message flying once approved. */
+/** Where to get it: the closing panel from the landing page, its lines running into one. */
 export const Close = () => {
   const frame = useCurrentFrame();
   return (
-    <AbsoluteFill
-      style={{ backgroundColor: color.background, color: color.foreground, fontFamily: SANS }}
-    >
-      <div style={{ position: "absolute", right: 60, top: 150, width: 860, ...enter(frame, 4) }}>
-        <ApproveScene planeAt={progress(frame, 40, 70)} />
-      </div>
+    <AbsoluteFill style={{ backgroundColor: color.background, fontFamily: SANS, padding: 48 }}>
       <div
         style={{
-          position: "absolute",
-          inset: 0,
-          padding: `${SAFE.y}px ${SAFE.x}px`,
+          position: "relative",
+          height: "100%",
+          backgroundColor: color.sage,
+          borderRadius: radius.panel,
+          padding: `${SAFE.y - 30}px ${SAFE.x - 40}px`,
           display: "flex",
           flexDirection: "column",
-          justifyContent: "center",
-          gap: 40,
+          gap: 36,
+          overflow: "hidden",
         }}
       >
-        <Label style={enter(frame, 0)}>Try it</Label>
+        <Label style={{ backgroundColor: color.raised, ...enter(frame, 0) }}>Try it</Label>
         <div
           style={{
+            ...serif,
             fontSize: size.display,
-            fontWeight: 500,
-            letterSpacing: "-0.06em",
-            lineHeight: 0.95,
+            letterSpacing: "-0.03em",
+            lineHeight: 1,
             color: color.heading,
-            maxWidth: 980,
+            maxWidth: 1300,
             ...enter(frame, 6),
           }}
         >
-          Open source, and offline by default.
+          Let ARIA take the first look.
         </div>
-        <Lead style={{ maxWidth: 900, ...enter(frame, 18) }}>
-          Add an NVIDIA NIM key and the agents write with open models; Azure OpenAI and any
-          OpenAI-compatible server are a config change away.
+        <Lead style={{ color: color.heading, maxWidth: 1100, ...enter(frame, 18) }}>
+          It runs offline with no API key, and switches to Gemini, NVIDIA NIM, Azure OpenAI or any
+          OpenAI-compatible model when you add one.
         </Lead>
         <div
           style={{
@@ -51,31 +48,31 @@ export const Close = () => {
             display: "flex",
             alignItems: "center",
             gap: 22,
-            backgroundColor: color.grass,
-            color: color.ink,
+            backgroundColor: color.heading,
+            color: color.onForest,
             borderRadius: radius.small,
             padding: "14px 14px 14px 30px",
-            fontSize: 38,
+            fontSize: 36,
             ...mono,
             ...enter(frame, 32),
           }}
         >
           {REPO}
-          <span
-            style={{
-              width: 56,
-              height: 56,
-              borderRadius: 28,
-              backgroundColor: "#ffffff",
-              display: "grid",
-              placeItems: "center",
-              fontFamily: SANS,
-              fontSize: 34,
-            }}
-          >
-            ›
-          </span>
+          <svg width={52} height={52} viewBox="0 0 24 24" fill="none">
+            <path
+              d="M5 12h14M13 6l6 6-6 6"
+              stroke={color.onForest}
+              strokeWidth={1.75}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </div>
+        <Converge
+          start={20}
+          stroke={color.heading}
+          style={{ position: "absolute", right: 60, bottom: 50, width: 1000, height: "auto" }}
+        />
       </div>
     </AbsoluteFill>
   );

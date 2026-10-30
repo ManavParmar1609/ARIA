@@ -9,6 +9,7 @@ import {
   color,
   labelStyle,
   radius,
+  serif,
   sevColor,
   size,
   type Severity,
@@ -31,17 +32,17 @@ export const Stage = ({ children }: { children: ReactNode }) => (
   </AbsoluteFill>
 );
 
-/** The scene's one sentence, entering first. */
+/** The scene's one sentence in the light serif, entering first. */
 export const Heading = ({ children }: { children: ReactNode }) => {
   const frame = useCurrentFrame();
   return (
     <h1
       style={{
         margin: 0,
+        ...serif,
         fontSize: size.title,
-        fontWeight: 500,
-        letterSpacing: "-0.04em",
-        lineHeight: 1.02,
+        letterSpacing: "-0.02em",
+        lineHeight: 1.04,
         color: color.heading,
         maxWidth: 1640,
         // A scene starts while the last one is still fading out; its title waits for most of
@@ -61,11 +62,12 @@ export const Lead = ({ children, style }: { children: ReactNode; style?: CSSProp
   </p>
 );
 
-/** A white card on the cream page: depth from the paper stack, never a border or a shadow. */
+/** A cream card on the cream page, marked by a hairline: depth from layers, never a shadow. */
 export const Panel = ({ children, style }: { children: ReactNode; style?: CSSProperties }) => (
   <div
     style={{
       backgroundColor: color.raised,
+      border: `2px solid ${color.rule}`,
       borderRadius: radius.card,
       padding: 36,
       ...style,
@@ -75,28 +77,19 @@ export const Panel = ({ children, style }: { children: ReactNode; style?: CSSPro
   </div>
 );
 
-/** A small sentence-case label with a grass dot; it names what follows. */
+/** A small sentence-case tag on slate; it names what follows. */
 export const Label = ({ children, style }: { children: ReactNode; style?: CSSProperties }) => (
   <div
     style={{
       ...labelStyle,
-      color: color.muted,
-      display: "flex",
-      alignItems: "center",
-      gap: 14,
+      alignSelf: "flex-start",
+      color: color.heading,
+      backgroundColor: color.slate,
+      borderRadius: 8,
+      padding: "4px 14px",
       ...style,
     }}
   >
-    <span
-      style={{
-        width: 16,
-        height: 16,
-        borderRadius: 8,
-        backgroundColor: color.grass,
-        boxSizing: "border-box",
-        border: `2px solid ${color.ink}`,
-      }}
-    />
     {children}
   </div>
 );
@@ -107,7 +100,7 @@ export const SevBadge = ({ severity, scale = 1 }: { severity: Severity; scale?: 
     style={{
       display: "inline-block",
       backgroundColor: sevColor[severity],
-      color: color.ink,
+      color: color.foreground,
       fontWeight: 500,
       fontSize: 34 * scale,
       padding: `${6 * scale}px ${16 * scale}px`,
@@ -129,9 +122,9 @@ export const Chip = ({ id, lit = false }: { id: string; lit?: boolean }) => (
       padding: "2px 10px",
       marginLeft: 10,
       borderRadius: radius.small,
-      border: `2px solid ${lit ? color.ink : color.faint}`,
-      backgroundColor: lit ? color.highlight : "transparent",
-      color: lit ? color.foreground : color.muted,
+      border: `2px solid ${lit ? color.heading : color.rule}`,
+      backgroundColor: lit ? color.highlight : color.keylime,
+      color: lit ? color.heading : color.muted,
       verticalAlign: "middle",
     }}
   >
@@ -154,7 +147,7 @@ export const Rail = ({ active }: { active: Step }) => {
             key={step}
             style={{
               flex: 1,
-              borderTop: `4px solid ${on ? color.accent : i < at ? color.teal : color.rule}`,
+              borderTop: `4px solid ${on ? color.heading : i < at ? color.sage : color.rule}`,
               paddingTop: 16,
               ...labelStyle,
               color: on ? color.heading : color.faint,

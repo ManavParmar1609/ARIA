@@ -35,8 +35,8 @@ export const Parse = () => {
                   <span
                     style={{
                       fontSize: 26,
-                      color: color.ink,
-                      backgroundColor: color.grass,
+                      color: color.heading,
+                      backgroundColor: color.keylime,
                       padding: "4px 12px",
                       borderRadius: radius.small,
                       fontWeight: 500,
@@ -51,7 +51,7 @@ export const Parse = () => {
                   style={{
                     height: 18,
                     width: `${(t.count / most) * 70 * grown}%`,
-                    backgroundColor: t.novel ? color.grass : color.sunken,
+                    backgroundColor: t.novel ? color.heading : color.sage,
                     borderRadius: radius.small,
                   }}
                 />

@@ -6,8 +6,7 @@ because it shows a real site. For example, the reference describes uppercase eye
 but the recording shows small sentence-case tags, so ARIA uses those.
 
 This file adapts the reference to an incident-triage product. It is the source of truth for
-every page in `web/`. The explainer video in `video/` still uses the earlier storybook look
-until it is restyled and rendered again.
+every page in `web/`, and the explainer video in `video/` follows it too (`video/src/theme.ts`).
 
 ## Idea: a greenhouse on cream paper
 

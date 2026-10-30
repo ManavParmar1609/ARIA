@@ -29,7 +29,7 @@ export const Review = () => {
               marginLeft: "auto",
               fontSize: 34,
               fontWeight: 500,
-              color: approved > 0.5 ? color.ok : color.ink,
+              color: color.heading,
             }}
           >
             {approved > 0.5 ? "Published" : "Waiting for a person to approve"}
@@ -61,8 +61,9 @@ export const Review = () => {
             fontWeight: 500,
             padding: "18px 40px",
             borderRadius: radius.small,
-            backgroundColor: approved > 0.5 ? color.ok : color.grass,
-            color: approved > 0.5 ? "#ffffff" : color.ink,
+            // The main action is forest, as on the web; once approved it rests on sage.
+            backgroundColor: approved > 0.5 ? color.sage : color.heading,
+            color: approved > 0.5 ? color.heading : color.onForest,
             scale: `${1 - 0.06 * Math.sin(Math.PI * approved)}`,
             ...enter(frame, 90),
           }}

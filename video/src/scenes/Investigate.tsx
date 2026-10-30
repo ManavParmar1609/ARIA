@@ -26,7 +26,7 @@ export const Investigate = () => {
                 ...enter(frame, 16 + i * 16),
               }}
             >
-              <span style={{ color: color.ok, fontFamily: "inherit" }}>ok</span>
+              <span style={{ color: color.heading, fontFamily: "inherit" }}>ok</span>
               <span>{tool}</span>
             </div>
           ))}
@@ -39,7 +39,7 @@ export const Investigate = () => {
                 key={h.name}
                 style={{
                   padding: 32,
-                  outline: lead ? `4px solid ${color.ink}` : "none",
+                  outline: lead ? `4px solid ${color.heading}` : "none",
                   outlineOffset: -3,
                   display: "flex",
                   justifyContent: "space-between",
@@ -90,7 +90,7 @@ export const Investigate = () => {
             </Panel>
           ))}
         </div>
-        <span style={{ ...mono, fontSize: size.detail, color: color.ink }}>
+        <span style={{ ...mono, fontSize: size.detail, color: color.heading }}>
           runbook: {investigate.runbook}
         </span>
       </div>

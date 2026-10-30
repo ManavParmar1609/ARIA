@@ -40,9 +40,9 @@ The scenes follow the pipeline in order:
 6. human review;
 7. the measured results, with their caveat.
 
-The look follows [web/DESIGN.md](../web/DESIGN.md), the cream-paper style reference: cream
-paper, white cards, ink text, Inter, and grass green for panels and highlights. The film opens on
-the landing page's green hero, with its illustrated crew riding in, and closes on the approval
-scene, where the message flies only after the thumbs-up. Both illustrations are imported from
-`web/src/components/illustrations`, so the site and the film never drift apart. Each scene has
-one moving thing.
+The look follows [web/DESIGN.md](../web/DESIGN.md), "a greenhouse on cream paper": cream paper,
+forest ink, keylime, mint, sage and slate panels with no shadows, headlines in Newsreader at weight
+300, Inter for everything else and Geist Mono for log lines. The film opens on the landing page's
+hero, the promise on sage beside three cards from the recorded run rising on slate, and closes on
+the landing page's last panel, its loose lines running together into one. Each scene has one
+moving thing.
