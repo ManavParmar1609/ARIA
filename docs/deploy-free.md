@@ -54,13 +54,23 @@ visitor ──▶ Vercel: landing page, console, /api/* proxy ──▶ Render: 
 2. Import the ARIA repository.
 3. Set **Root Directory** to `web`. Vercel detects Next.js; leave the build and install commands
    as they are.
+   - [web/vercel.json](../web/vercel.json) installs and builds with pnpm 10.28.0, the version the
+     lockfile was made with. Without it, Vercel can fall back to pnpm 6, which fails on current
+     Node.js with `ERR_INVALID_THIS`.
+   - Beside the `web` folder, Vercel may say "No services detected". That is expected: the folder
+     holds one app, so there is nothing to combine into services. Keep the framework on Next.js.
+   - If you leave the root directory at the repository root instead, the root
+     [vercel.json](../vercel.json) points Vercel at `web/` as its one service. Without it, Vercel
+     would find the Python API and `render.yaml` there and stop.
+   - Fixing a project you already imported: change its root directory in **Settings**, then
+     deploy the newest commit on `main`. **Redeploy** on an older deployment rebuilds that
+     deployment's commit.
 4. Add these environment variables:
 
    | Name | Value | Why |
    |---|---|---|
    | `ARIA_API_URL` | Your Render address, such as `https://aria-api.onrender.com` | Where the console's server finds the API |
    | `ARIA_PUBLIC_DEMO` | `1` | Tells visitors, beside the log box, that other visitors can see their runs |
-   | `ENABLE_EXPERIMENTAL_COREPACK` | `1` | Installs with the pnpm version the lockfile was made with |
 
 5. Choose **Deploy**. When it finishes, open the address Vercel gives you, such as
    `https://aria.vercel.app`.
@@ -114,7 +124,7 @@ custom domain later, set `ARIA_WEB_URL` to it and redeploy.
 |---|---|
 | The Render build fails | Open the deploy's log. If it names a missing branch or file, check that the Blueprint points at the branch you merged into. |
 | The console says "ARIA's API is not answering" | Check that Render shows the service as Live, and that `ARIA_API_URL` starts with `https://` and has no path after the address. Vercel applies changed variables to new deployments only, so redeploy after a change. |
-| The Vercel install fails with a pnpm or lockfile error | Check that `ENABLE_EXPERIMENTAL_COREPACK` is `1`, then redeploy. |
+| The Vercel install fails with `ERR_INVALID_THIS` or a lockfile error | Vercel used its own pnpm instead of `web/vercel.json`'s. Check that the project's root directory is `web` and that no install command override is set, then deploy the newest commit on `main`. |
 | Visitors see "rate limit exceeded" | Raise `ARIA_RATE_LIMIT_PER_MINUTE` on Render. |
 | Link previews show no image | Set `ARIA_WEB_URL` to your site's address and redeploy. |
 
