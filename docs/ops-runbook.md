@@ -494,6 +494,21 @@ It answers 409 while the run is queued or running. Nothing deletes old runs auto
 - **Grafana.** Give the webhook contact point an `Authorization` header of `Bearer <key>`, and point it at `/api/v1/alerts/grafana`.
 - **Rate limits.** Give each alert source its own key name, so it gets its own bucket, or raise `ARIA_RATE_LIMIT_PER_MINUTE`.
 
+### An approved message was not delivered
+
+**Symptom.** The run page's **Messages** card says "Not delivered", and the logs show
+`notify.failed`. A message ARIA skipped says why, for example that its channel's webhook URL is
+not set.
+
+**Cause.** The receiver was down or refused the message. ARIA tries twice (once more after a 5xx
+or a network error), then records the failure; it never retries on its own.
+
+**Fix.** Once the receiver is back, choose **Send again** on the run page, or call
+`POST /api/v1/runs/{run_id}/actions/{action_id}/resend`. Only a message a reviewer approved and
+whose delivery failed can be sent again, and only once at a time: a message that went out is never
+repeated (409). The run's events record who resent it. For a skipped message, set its channel's
+variable ([Configuration](#configuration)); a skipped message is not resent.
+
 ### The scan opens no runs
 
 **Likely cause.**

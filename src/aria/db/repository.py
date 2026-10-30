@@ -298,6 +298,30 @@ def claim_action(engine: Engine, run_id: str, action: OutboundAction) -> bool:
     return True
 
 
+def claim_failed_action(engine: Engine, action_id: str) -> bool:
+    """Take a message whose delivery failed for one more attempt: true for exactly one caller.
+
+    Only a failed message qualifies, so this never sends one a reviewer did not approve, and
+    never repeats one that went out.
+    """
+    with session_scope(engine) as session:
+        taken = session.execute(
+            update(ActionRow)
+            .where(ActionRow.id == action_id, ActionRow.status == "failed")
+            .values(status="approved")
+        )
+        return bool(taken.rowcount == 1)  # type: ignore[attr-defined]
+
+
+def run_actions(engine: Engine, run_id: str) -> list[dict[str, Any]]:
+    """A run's stored messages, oldest first, with what happened when each was sent."""
+    with session_scope(engine) as session:
+        rows = session.scalars(
+            select(ActionRow).where(ActionRow.run_id == run_id).order_by(ActionRow.created_at)
+        )
+        return [{c.name: getattr(row, c.name) for c in ActionRow.__table__.columns} for row in rows]
+
+
 def action_statuses(engine: Engine, run_id: str) -> dict[str, str]:
     with session_scope(engine) as session:
         rows = session.execute(

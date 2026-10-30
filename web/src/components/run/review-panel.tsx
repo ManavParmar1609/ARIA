@@ -158,15 +158,24 @@ export function ReviewPanel({
               : detail.status === "rejected"
                 ? "Rejected"
                 : "Saved";
-          const sent = decision === "reject" ? 0 : send.size;
-          toast.success(label, {
-            description:
-              decision === "reject"
-                ? "The report was rejected; nothing was sent."
-                : sent > 0
-                  ? `${sent} ${sent === 1 ? "message was" : "messages were"} sent.`
-                  : "No messages were sent.",
-          });
+          if (decision === "reject") {
+            toast.success(label, { description: "The report was rejected; nothing was sent." });
+            return;
+          }
+          // What was delivered, not what was ticked: a receiver can be down or not configured.
+          const deliveries = detail.deliveries ?? [];
+          const sent = deliveries.filter((d) => d.status === "sent").length;
+          const missed = deliveries.length - sent;
+          const said = sent
+            ? `${sent} ${sent === 1 ? "message was" : "messages were"} sent.`
+            : "No messages were sent.";
+          if (missed) {
+            toast.warning(label, {
+              description: `${said} ${missed} could not be delivered: see Messages on this page.`,
+            });
+          } else {
+            toast.success(label, { description: said });
+          }
         },
       },
     );

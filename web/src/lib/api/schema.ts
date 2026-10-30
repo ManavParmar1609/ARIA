@@ -407,6 +407,26 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runs/{run_id}/actions/{action_id}/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resend Action
+         * @description Send an approved message again after its delivery failed. Nothing else is ever resent.
+         */
+        post: operations["resend_action_api_v1_runs__run_id__actions__action_id__resend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs/{run_id}/events": {
         parameters: {
             query?: never;
@@ -869,6 +889,31 @@ export type components = {
             task_id?: string;
             /** @example  */
             tenant?: string;
+        };
+        /**
+         * Delivery
+         * @description A message a reviewer approved, and what happened when ARIA sent it.
+         */
+        Delivery: {
+            /** Action Id */
+            action_id: string;
+            /** Approved By */
+            approved_by?: string | null;
+            /** Audience */
+            audience: string;
+            /** Kind */
+            kind: string;
+            /** Problem */
+            problem?: string | null;
+            /** Sent At */
+            sent_at?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "approved" | "sent" | "failed" | "skipped";
+            /** Title */
+            title: string;
         };
         /**
          * Evidence
@@ -1370,6 +1415,8 @@ export type components = {
             created_at: string;
             /** Decided By */
             decided_by?: string | null;
+            /** Deliveries */
+            deliveries?: components["schemas"]["Delivery"][];
             /** Error */
             error?: string | null;
             /** Errors */
@@ -2482,6 +2529,38 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resend_action_api_v1_runs__run_id__actions__action_id__resend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                action_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunDetail"];
+                };
             };
             /** @description Validation Error */
             422: {

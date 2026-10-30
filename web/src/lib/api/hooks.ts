@@ -258,6 +258,18 @@ export function useReview(id: string) {
   });
 }
 
+export function useResend(id: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (actionId: string) =>
+      postJson<RunDetail>(runPath(id, `/actions/${encodeURIComponent(actionId)}/resend`), {}),
+    onSuccess: async (detail) => {
+      client.setQueryData(keys.run(id), detail);
+      await client.invalidateQueries({ queryKey: ["run", id] });
+    },
+  });
+}
+
 export function useFork(id: string) {
   const client = useQueryClient();
   return useMutation({

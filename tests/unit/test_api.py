@@ -14,6 +14,7 @@ from typing import Any, cast
 
 import httpx
 import pytest
+import respx
 import uvicorn
 from asgi_lifespan import LifespanManager
 from fastapi import FastAPI
@@ -468,6 +469,33 @@ async def test_an_untitled_run_takes_its_report_title(api: Api) -> None:
     assert edited.status_code == 200, edited.text
     # Like every report heading, the edited one leads with the severity.
     assert edited.json()["title"] == f"{report['severity']} · Kernel panics on rack R02"
+
+
+async def test_a_message_whose_delivery_failed_can_be_sent_again(
+    api: Api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hook_url = "https://hooks.example.test/aria"
+    monkeypatch.setenv("ARIA_OUTBOUND_WEBHOOK_URL", hook_url)
+    detail = await start(api)
+    run_id = detail["id"]
+    hook = next(a["action_id"] for a in detail["review"]["actions"] if a["kind"] == "webhook")
+    with respx.mock() as mock:
+        mock.post(hook_url).mock(return_value=httpx.Response(503))
+        published = await api.client.post(
+            f"/api/v1/runs/{run_id}/review", json={"decision": "approve", "approve_actions": [hook]}
+        )
+    failed = next(d for d in published.json()["deliveries"] if d["action_id"] == hook)
+    assert (failed["status"], failed["problem"]) == ("failed", "HTTP 503")
+    with respx.mock() as mock:
+        mock.post(hook_url).mock(return_value=httpx.Response(202))
+        resent = await api.client.post(f"/api/v1/runs/{run_id}/actions/{hook}/resend")
+    assert resent.status_code == 200, resent.text
+    sent = next(d for d in resent.json()["deliveries"] if d["action_id"] == hook)
+    assert (sent["status"], sent["problem"]) == ("sent", None)
+    again = await api.client.post(f"/api/v1/runs/{run_id}/actions/{hook}/resend")
+    assert again.status_code == 409  # it went out; it is never sent twice
+    missing = await api.client.post(f"/api/v1/runs/{run_id}/actions/act-nope/resend")
+    assert missing.status_code == 404
 
 
 async def test_a_reviewers_new_title_replaces_the_one_the_run_started_with(api: Api) -> None:

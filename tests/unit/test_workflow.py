@@ -207,6 +207,38 @@ async def test_approved_webhook_action_is_signed_and_sent_once(
     assert repo.action_statuses(env.services.engine, outcome.run_id)[hook] == "sent"
 
 
+async def test_a_failed_delivery_can_be_sent_again_and_nothing_else_can(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hook_url = "https://hooks.example.test/aria"
+    monkeypatch.setenv("ARIA_OUTBOUND_WEBHOOK_URL", hook_url)
+    engine = env.services.engine
+    outcome = await env.runner.start(kernel_panic(env))
+    assert outcome.interrupt is not None
+    run_id = outcome.run_id
+    hook = action_of(outcome.interrupt, "stakeholders")
+    unapproved = action_of(outcome.interrupt, "responders")
+    with respx.mock() as mock:
+        mock.post(hook_url).mock(return_value=httpx.Response(503))  # the receiver is down
+        await env.runner.resume(
+            run_id, {"decision": "approve", "reviewer": "ana", "approve_actions": [hook]}
+        )
+    assert repo.action_statuses(engine, run_id)[hook] == "failed"
+    with respx.mock() as mock:
+        route = mock.post(hook_url).mock(return_value=httpx.Response(202))
+        sent = await env.runner.resend(run_id, hook, by="ben")
+    assert (sent.status, route.call_count) == ("sent", 1)
+    assert repo.action_statuses(engine, run_id)[hook] == "sent"
+    events = repo.list_events(engine, run_id)
+    assert events[-1].payload == {"action_id": hook, "status": "sent", "resent_by": "ben"}
+    with pytest.raises(RunStateError, match="it is sent"):  # one that went out never repeats
+        await env.runner.resend(run_id, hook, by="ben")
+    with pytest.raises(RunStateError, match="it is rejected"):  # nor goes one nobody approved
+        await env.runner.resend(run_id, unapproved, by="ben")
+    with pytest.raises(RunNotFoundError):
+        await env.runner.resend(run_id, "act-nope", by="ben")
+
+
 async def test_a_review_long_after_the_pause_is_published_by_one_process_only(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ) -> None:

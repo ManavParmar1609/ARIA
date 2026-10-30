@@ -76,8 +76,22 @@ class RunSummary(BaseModel):
     updated_at: datetime
 
 
+class Delivery(BaseModel):
+    """A message a reviewer approved, and what happened when ARIA sent it."""
+
+    action_id: str
+    kind: str
+    audience: str
+    title: str
+    status: Literal["approved", "sent", "failed", "skipped"]  # approved: being sent now
+    approved_by: str | None = None
+    sent_at: datetime | None = None
+    problem: str | None = None  # why it failed, or why it was skipped
+
+
 class RunDetail(RunSummary):
     links: Links
+    deliveries: list[Delivery] = Field(default_factory=list)
     review: dict[str, Any] | None = None
     plan: dict[str, Any] | None = None
     budget: dict[str, Any] | None = None

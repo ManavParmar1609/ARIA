@@ -8,6 +8,7 @@ type Schemas = components["schemas"];
 
 export type RunSummary = Schemas["RunSummary"];
 export type RunDetail = Schemas["RunDetail"];
+export type Delivery = Schemas["Delivery"];
 export type RunPage = Schemas["RunPage"];
 export type RunAccepted = Schemas["RunAccepted"];
 export type RunEvent = Schemas["RunEvent"];

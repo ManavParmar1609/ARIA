@@ -720,6 +720,60 @@
         }
       }
     },
+    "/api/v1/runs/{run_id}/actions/{action_id}/resend": {
+      "post": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Resend Action",
+        "description": "Send an approved message again after its delivery failed. Nothing else is ever resent.",
+        "operationId": "resend_action_api_v1_runs__run_id__actions__action_id__resend_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "action_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+              "title": "Action Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/runs/{run_id}/history": {
       "get": {
         "tags": [
@@ -2083,6 +2137,80 @@
         ],
         "title": "ClaimOut"
       },
+      "Delivery": {
+        "properties": {
+          "action_id": {
+            "type": "string",
+            "title": "Action Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "audience": {
+            "type": "string",
+            "title": "Audience"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "sent",
+              "failed",
+              "skipped"
+            ],
+            "title": "Status"
+          },
+          "approved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved By"
+          },
+          "sent_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sent At"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem"
+          }
+        },
+        "type": "object",
+        "required": [
+          "action_id",
+          "kind",
+          "audience",
+          "title",
+          "status"
+        ],
+        "title": "Delivery",
+        "description": "A message a reviewer approved, and what happened when ARIA sent it."
+      },
       "Evidence": {
         "properties": {
           "id": {
@@ -3256,6 +3384,13 @@
           },
           "links": {
             "$ref": "#/components/schemas/Links"
+          },
+          "deliveries": {
+            "items": {
+              "$ref": "#/components/schemas/Delivery"
+            },
+            "type": "array",
+            "title": "Deliveries"
           },
           "review": {
             "anyOf": [

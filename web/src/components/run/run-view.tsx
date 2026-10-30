@@ -32,6 +32,7 @@ import { absoluteTime, duration, relativeTime, stripSeverity } from "@/lib/forma
 import { systemName, triggerLabel } from "@/lib/systems";
 
 import { Activity, GraphProgress } from "./activity";
+import { Deliveries } from "./deliveries";
 import { EvidencePanel, EvidenceProvider } from "./evidence";
 import { ExpertCheck } from "./expert-check";
 import { History } from "./history";
@@ -328,6 +329,9 @@ export function RunView({ runId }: { runId: string }) {
                 actions={values?.actions ?? []}
                 report={report}
               />
+            ) : null}
+            {detail.deliveries?.length && !viewing ? (
+              <Deliveries runId={detail.id} deliveries={detail.deliveries} />
             ) : null}
             {report ? (
               <ReportView

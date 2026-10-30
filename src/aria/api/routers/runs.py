@@ -13,6 +13,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from aria.api.schemas import (
     Checkpoint,
+    Delivery,
     ForkRequest,
     ReportOut,
     ReviewRequest,
@@ -94,10 +95,28 @@ async def list_runs(
     return RunPage(runs=runs, next_before=runs[-1].created_at if len(runs) == limit else None)
 
 
+def _deliveries(rows: list[dict[str, Any]]) -> list[Delivery]:
+    return [
+        Delivery(
+            action_id=row["id"],
+            kind=row["kind"],
+            audience=str((row["payload"] or {}).get("audience") or "responders"),
+            title=row["title"],
+            status=row["status"],
+            approved_by=row["approved_by"],
+            sent_at=row["executed_at"],
+            problem=(row["result"] or {}).get("error") or (row["result"] or {}).get("reason"),
+        )
+        for row in rows
+        if row["status"] in ("approved", "sent", "failed", "skipped")
+    ]
+
+
 @router.get("/{run_id}", response_model=RunDetail)
 async def get_run(run_id: RunId, state: State) -> RunDetail:
     run = await _run_or_404(state, run_id)
-    detail: dict[str, Any] = {**run, "links": links_for(run_id)}
+    rows = await asyncio.to_thread(repo.run_actions, state.services.engine, run_id)
+    detail: dict[str, Any] = {**run, "links": links_for(run_id), "deliveries": _deliveries(rows)}
     try:
         snapshot = await state.runner.snapshot(run_id)
     except RunNotFoundError:
@@ -219,6 +238,19 @@ async def review(run_id: RunId, body: ReviewRequest, state: State, caller: Calle
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     if outcome.interrupt and outcome.interrupt.get("error"):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, outcome.interrupt["error"])
+    return await get_run(run_id, state)
+
+
+@router.post("/{run_id}/actions/{action_id}/resend", response_model=RunDetail)
+async def resend_action(run_id: RunId, action_id: RunId, state: State, caller: Caller) -> RunDetail:
+    """Send an approved message again after its delivery failed. Nothing else is ever resent."""
+    await _run_or_404(state, run_id)
+    try:
+        await state.runner.resend(run_id, action_id, by=caller.name)
+    except RunNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc.args[0])) from exc
+    except (RunStateError, RunBusyError) as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     return await get_run(run_id, state)
 
 

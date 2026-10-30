@@ -36,8 +36,15 @@ from aria.db.models import FeedbackRow, IncidentRow, LogEventRow, RunRow, ToolCa
 from aria.graph.checkpoint import SqlCheckpointSaver
 from aria.graph.state import Json
 from aria.graph.store import SqlStore
-from aria.graph.workflow import TriageContext, build_graph, rekey_for_fork, run_salt
+from aria.graph.workflow import (
+    TriageContext,
+    build_graph,
+    rekey_for_fork,
+    run_link,
+    run_salt,
+)
 from aria.mcp.client import Target
+from aria.notify import send_action
 from aria.observability.logging import get_logger
 from aria.reporting.markdown import render_markdown
 from aria.retrieval import runlog
@@ -621,6 +628,50 @@ class TriageRunner:
         if not execute:
             return RunOutcome(new_id, RunStatus.QUEUED)
         return await self._drive(new_id, None, config=forked)
+
+    async def resend(self, run_id: str, action_id: str, *, by: str) -> OutboundAction:
+        """Send an approved message again after its delivery failed (a webhook was down).
+
+        Only a failed message can go again: one a reviewer never approved has no path here, and
+        one that went out is never repeated. The claim makes the attempt happen once.
+        """
+        async with self._holding(run_id):
+            rows = await asyncio.to_thread(repo.run_actions, self.engine, run_id)
+            row = next((r for r in rows if r["id"] == action_id), None)
+            if row is None:
+                msg = f"run {run_id} has no message {action_id}"
+                raise RunNotFoundError(msg)
+            if row["status"] != "failed":
+                msg = (
+                    f"only a message whose delivery failed can be sent again; it is {row['status']}"
+                )
+                raise RunStateError(msg)
+            if not await asyncio.to_thread(repo.claim_failed_action, self.engine, action_id):
+                msg = f"message {action_id} is being sent again already"
+                raise RunBusyError(msg)
+            payload = dict(row["payload"] or {})
+            action = OutboundAction(
+                action_id=action_id,
+                kind=row["kind"],
+                audience=payload.pop("audience", "responders"),
+                evidence_ids=payload.pop("evidence_ids", []),
+                title=row["title"],
+                body=row["body"],
+                payload=payload,
+                status="approved",
+            )
+            settings = self.services.settings
+            sent = await send_action(
+                action, self.services.config.comms, run_url=run_link(settings, run_id)
+            )
+            await asyncio.to_thread(repo.save_actions, self.engine, run_id, [sent])
+            await self._event(
+                run_id,
+                "action",
+                node="publish",
+                payload={"action_id": action_id, "status": sent.status, "resent_by": by},
+            )
+            return sent
 
     async def delete(self, run_id: str) -> None:
         """Remove a run everywhere: checkpoints, lines, events, report, actions, audit, memory.
