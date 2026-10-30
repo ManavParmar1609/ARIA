@@ -168,7 +168,6 @@ class GuardrailConfig(_Strict):
 class SeverityConfig(_Strict):
     alpha: float = Field(default=0.10, gt=0, lt=0.5)
     rules_file: Path = Path("config/severity_rules.yaml")
-    service_catalog_file: Path = Path("config/service_catalog.yaml")
     log_model_file: Path = Path("models/severity_log.json")
     ticket_model_file: Path = Path("models/severity_ticket.json")
     # Active learning: recalibrate the conformal threshold on reviewed incidents once this many
@@ -277,7 +276,6 @@ class Settings(BaseSettings):
     # Where people open a run (the web console). Messages link there; without it they link to
     # the run in the API.
     console_url: str | None = None
-    web_dist_dir: Path | None = None
     # Keys each run's pseudonym salt as HMAC(key, run id), so pseudonyms stay stable when a run
     # retries or resumes and no salt is stored in graph state. When unset, a random key is made
     # at process start.

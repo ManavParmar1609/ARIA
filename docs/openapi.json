@@ -4531,7 +4531,7 @@
           },
           "system": {
             "type": "string",
-            "maxLength": 64,
+            "maxLength": 48,
             "minLength": 1,
             "pattern": "^[A-Za-z0-9_-]+$",
             "title": "System",

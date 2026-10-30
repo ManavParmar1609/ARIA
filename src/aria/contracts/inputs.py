@@ -81,9 +81,10 @@ class TriageRequest(Contract):
     """Input to a triage run. At least one of logs, window_id, alerts or ticket is required."""
 
     title: Annotated[str, StringConstraints(max_length=200)] | None = None
-    # A system names a log format and a memory namespace: letters, digits, "_" and "-" only.
+    # A system names a log format and a memory namespace: letters, digits, "_" and "-" only, and
+    # no longer than the database columns that store it.
     system: Annotated[
-        str, StringConstraints(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+        str, StringConstraints(min_length=1, max_length=48, pattern=r"^[A-Za-z0-9_-]+$")
     ] = "generic"
     service: Annotated[str, StringConstraints(max_length=120)] | None = None
     environment: Annotated[str, StringConstraints(max_length=64)] | None = None
@@ -100,7 +101,8 @@ class TriageRequest(Contract):
 
     @model_validator(mode="after")
     def _has_something_to_triage(self) -> TriageRequest:
-        if not (self.logs or self.window_id or self.alerts or self.ticket):
-            msg = "provide logs, a window_id, alerts or a ticket"
+        lines = any(line.strip() for line in self.logs)
+        if not (lines or self.window_id or self.alerts or self.ticket):
+            msg = "provide logs (at least one non-blank line), a window_id, alerts or a ticket"
             raise ValueError(msg)
         return self

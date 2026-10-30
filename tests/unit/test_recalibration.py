@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import os
 import shutil
+import time
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 import pytest
 
+from aria.config import SeverityConfig
 from aria.contracts.inputs import TriageRequest
 from aria.contracts.run import RunStatus
 from aria.data.scenarios import LinePools, ScenarioBuilder
@@ -84,6 +88,34 @@ def test_recalibration_narrows_sets_when_reviewers_agree() -> None:
     assert result.threshold_after < 0.95
     assert result.mean_set_after < result.mean_set_before
     assert result.coverage_after >= 0.9
+
+
+def test_an_upgrade_ignores_a_recalibration_of_the_previous_model(tmp_path: Path) -> None:
+    """The shared volume kept the last release's recalibrated model, so a retrained model shipped
+    in a new release was never used."""
+    shipped, shared = tmp_path / "app", tmp_path / "volume"
+    shipped.mkdir()
+    shared.mkdir()
+    trained_file = shipped / "severity_log.json"
+    live = live_model_path(trained_file, shared)
+    previous = tiny_model(conformal_q=0.2)
+    recalibrate(previous, examples(previous, 40, disagree=0.4, seed=1), alpha=0.1).model.save(live)
+    retrained = replace(tiny_model(conformal_q=0.5), version="tiny-2")
+    retrained.save(trained_file)
+    config = SeverityConfig(log_model_file=trained_file)
+
+    engine = SeverityEngine.load(config, models_dir=shared)
+    assert engine.model is not None
+    assert engine.model.version == "tiny-2"  # not "tiny-1-recal40"
+    # A recalibration of this release's model is used, by new and running engines alike.
+    current = recalibrate(retrained, examples(retrained, 40, disagree=0.4, seed=2), alpha=0.1)
+    current.model.save(live)
+    os.utime(live, ns=(time.time_ns(), time.time_ns() + 1_000_000))
+    assert engine.refresh()
+    assert engine.model.version == "tiny-2-recal40"
+    reloaded = SeverityEngine.load(config, models_dir=shared).model
+    assert reloaded is not None
+    assert reloaded.version == "tiny-2-recal40"
 
 
 @pytest.fixture

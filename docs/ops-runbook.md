@@ -161,7 +161,6 @@ Both are read when a process starts, so restart after a change. `GET /api/v1/set
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Where the `azure` exporter sends traces |
 | `ARIA_OTEL_CAPTURE_CONTENT` | Record prompt and completion text in traces. Off by default, because that text holds log data. |
 | `ARIA_CONFIG_FILE`, `ARIA_DATA_DIR`, `ARIA_MODELS_DIR`, `ARIA_RUNBOOKS_DIR` | Where the config file, data, offline embeddings and runbooks live |
-| `ARIA_WEB_DIST_DIR` | Serve a static web build from the API (optional) |
 | `ARIA_MCP_URL`, `ARIA_MCP_TOKEN` | Have the investigator call tools on a remote MCP endpoint instead of in-process |
 | `GEMINI_API_KEY` (or `gemini_api_key`) | Enables Gemini for every role, ahead of hosted NIM |
 | `GEMINI_CHAT_MODEL`, `GEMINI_LITE_MODEL`, `GEMINI_REASONING_EFFORT`, `GEMINI_BASE_URL` | Override the Gemini models, the reasoning effort (minimal by default) and the endpoint |

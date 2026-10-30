@@ -45,6 +45,16 @@ Query = Annotated[
 ]
 RunId = Annotated[str, Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._:-]+$")]
 Identifier = Annotated[str, Field(min_length=1, max_length=160)]
+# A log format's name goes into a prompt's instructions, so it may hold nothing that reads as one.
+SystemName = Annotated[
+    str,
+    Field(
+        min_length=1,
+        max_length=48,
+        pattern=r"^[A-Za-z0-9_-]+$",
+        description="A log format, such as bgl, hdfs or openssh.",
+    ),
+]
 Symptoms = Annotated[
     str, Field(min_length=2, max_length=4_000, description="What responders see, or log lines.")
 ]
@@ -398,7 +408,7 @@ def build_server(
         title="Investigate an incident",
         description="Find matching past incidents and runbooks with ARIA's read-only tools.",
     )
-    def investigate_incident(system: Identifier, symptoms: Symptoms) -> str:
+    def investigate_incident(system: SystemName, symptoms: Symptoms) -> str:
         return (
             f"Investigate an incident on the {system} system with ARIA's read-only tools.\n"
             "1. Call search_incidents with the most specific error text from the symptoms.\n"

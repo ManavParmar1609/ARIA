@@ -260,7 +260,13 @@ def save_actions(
             }
             row.status = action.status
             row.result = dict(action.result)
-            if approved_by is not None and action.status in ("approved", "sent", "failed"):
+            # Skipped means approved with no receiver configured: the approver still counts.
+            if approved_by is not None and action.status in (
+                "approved",
+                "sent",
+                "failed",
+                "skipped",
+            ):
                 row.approved_by = approved_by
             if action.status == "sent" and row.executed_at is None:
                 row.executed_at = utcnow()

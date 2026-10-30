@@ -950,7 +950,8 @@ async def test_reviews_calibration_evaluation_and_tickets(
     severity = api.state.services.severity
     assert severity.model is not None
     live = tmp_path / "severity_log.json"
-    replace(severity.model, version="worker-recal", metadata={"recalibrated_from": "x"}).save(live)
+    base = {"recalibrated_from": "x", "trained_version": severity.model.version}
+    replace(severity.model, version="worker-recal", metadata=base).save(live)
     severity.model_path = live
     after = (await api.client.get("/api/v1/feedback")).json()["calibration"]
     assert (after["model_version"], after["recalibrated"]) == ("worker-recal", True)
@@ -1635,3 +1636,19 @@ async def test_a_run_that_names_a_provider_this_server_lacks_is_refused(api: Api
     assert "not set up" in keyless.json()["detail"]
     offline = await api.client.post("/api/v1/runs", json={**body, "options": {"provider": "fake"}})
     assert offline.status_code == 202
+
+
+async def test_logs_with_only_blank_lines_are_refused_like_no_logs(api: Api) -> None:
+    """Blank lines started a run with nothing to read, while an empty list was refused."""
+    blank = await api.client.post("/api/v1/runs", json={"logs": ["", "   "]})
+    assert blank.status_code == 422
+    assert "non-blank" in json.dumps(blank.json())
+
+
+def test_a_thread_id_the_console_cannot_open_gets_a_run_id_it_can() -> None:
+    """A thread called ".." became a run whose page the console could not open."""
+    from aria.api.agui import run_id_for
+
+    assert run_id_for("chat-abc123") == "chat-abc123"
+    for thread in ("..", ".", ".hidden", "a/b"):
+        assert run_id_for(thread).startswith("agui-")

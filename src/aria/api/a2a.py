@@ -83,7 +83,10 @@ def agent_card(settings: Settings, *, secured: bool) -> AgentCard:
         provider=AgentProvider(
             organization="ARIA (open source)", url="https://github.com/ManavParmar1609/ARIA"
         ),
-        documentation_url=f"{base}/docs",
+        # Production serves no API docs, so its card points at the project's own.
+        documentation_url=(
+            "https://github.com/ManavParmar1609/ARIA#readme" if settings.is_prod else f"{base}/docs"
+        ),
         capabilities=AgentCapabilities(streaming=True, push_notifications=False),
         default_input_modes=["text/plain", "application/json"],
         default_output_modes=["application/json", "text/markdown"],

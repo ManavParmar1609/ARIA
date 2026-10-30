@@ -338,6 +338,11 @@ def serve(
 
     from aria.config import get_settings
 
+    # Links ARIA hands out (its A2A agent card, messages) name the address it serves on, unless
+    # ARIA_PUBLIC_BASE_URL says where it is reached from.
+    shown = "localhost" if host in ("127.0.0.1", "0.0.0.0", "::") else host  # noqa: S104
+    os.environ.setdefault("ARIA_PUBLIC_BASE_URL", f"http://{shown}:{port}")
+
     # Started before `aria db upgrade`, the API would stop on its first query with a traceback.
     if not get_settings().migrate_on_start:
         _require_database()

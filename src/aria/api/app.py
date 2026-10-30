@@ -6,7 +6,7 @@
 * ``/mcp``: ARIA's read-only MCP tools over streamable HTTP (stateless);
 * ``/a2a`` and ``/.well-known/agent-card.json``: the A2A agent;
 * ``/agui``: the AG-UI agent endpoint for CopilotKit-style frontends;
-* ``/healthz``, ``/readyz``, ``/metrics``; and the web dashboard when ``ARIA_WEB_DIST_DIR`` is set.
+* ``/healthz``, ``/readyz`` and ``/metrics``. The web console is its own Next.js server (web/).
 """
 
 from __future__ import annotations
@@ -14,14 +14,12 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator, Awaitable
 from contextlib import asynccontextmanager
-from pathlib import Path
 from urllib.parse import urlsplit
 
 from a2a.server.routes import add_a2a_routes_to_fastapi
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -227,8 +225,6 @@ def create_app(
     async def busy(_: Request, exc: RunBusyError) -> JSONResponse:
         return JSONResponse({"detail": str(exc)}, 409)
 
-    if settings.web_dist_dir and Path(settings.web_dist_dir).is_dir():
-        app.mount("/", StaticFiles(directory=settings.web_dist_dir, html=True), name="web")
     return app
 
 

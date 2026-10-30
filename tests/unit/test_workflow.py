@@ -161,6 +161,10 @@ async def test_run_pauses_for_review_then_publishes_a_cited_report(env: Env) -> 
 
     statuses = repo.action_statuses(engine, run_id)
     assert statuses[responders] == "skipped"  # approved, but no Slack webhook is configured
+    with session_scope(engine) as session:
+        skipped = session.get(ActionRow, responders)
+        assert skipped is not None
+        assert skipped.approved_by is not None  # the audit trail keeps who approved it
     assert sorted(s for a, s in statuses.items() if a != responders) == ["rejected", "rejected"]
     remembered = env.services.memory.get(run_incident_id(run_id))
     assert remembered is not None

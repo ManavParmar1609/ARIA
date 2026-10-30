@@ -47,10 +47,13 @@ class SeverityEngine:
         *,
         alpha: float,
         model_path: Path | None = None,
+        trained_version: str | None = None,
     ) -> None:
         self.rules = rules
         self.default_alpha = alpha
         self.model_path = model_path
+        # The version this release trained: a recalibration of any other is stale.
+        self.trained_version = trained_version
         self._model_mtime = _mtime(model_path)
         self._set_model(model)
 
@@ -74,11 +77,19 @@ class SeverityEngine:
         rules = load_rules(config.rules_file)
         trained = Path(config.log_model_file)
         live = live_model_path(trained, models_dir) if models_dir is not None else trained
-        path = live if live.exists() else trained
-        model = LinearModel.load(path) if path.exists() else None
+        model = LinearModel.load(trained) if trained.exists() else None
+        version = model.version if model is not None else None
+        if live != trained and live.exists():
+            recalibrated = LinearModel.load(live)
+            if version is None or _base_version(recalibrated) == version:
+                model = recalibrated
+            else:  # an upgrade shipped a retrained model: the old one's recalibration is stale
+                log.warning(
+                    "severity.live_model_outdated", live=recalibrated.version, trained=version
+                )
         if model is None:
-            log.warning("severity.model_missing", path=str(path))
-        return cls(rules, model, alpha=config.alpha, model_path=live)
+            log.warning("severity.model_missing", path=str(trained))
+        return cls(rules, model, alpha=config.alpha, model_path=live, trained_version=version)
 
     def refresh(self) -> bool:
         """Reload the model when its file changed (a recalibration in this or another process)."""
@@ -90,8 +101,12 @@ class SeverityEngine:
         except (OSError, ValueError):  # caught mid-write; the next call retries
             log.warning("severity.model_reload_failed", path=str(self.model_path))
             return False
-        self._set_model(model)
         self._model_mtime = mtime
+        if self.trained_version is not None and _base_version(model) != self.trained_version:
+            # Written by a process still on the previous release, mid-upgrade.
+            log.warning("severity.live_model_outdated", live=model.version)
+            return False
+        self._set_model(model)
         log.info("severity.model_reloaded", version=model.version)
         return True
 
@@ -254,6 +269,11 @@ class SeverityEngine:
             llm_unavailable_reason=result.reason,
         )
         return SeverityResult(assessment, pre, result)
+
+
+def _base_version(model: LinearModel) -> str:
+    """The trained model a model came from: itself, or the one a recalibration started from."""
+    return str(model.metadata.get("trained_version", model.version))
 
 
 def _mtime(path: Path | None) -> int | None:

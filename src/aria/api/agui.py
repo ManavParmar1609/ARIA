@@ -59,7 +59,9 @@ from aria.db import repository as repo
 from aria.graph.runner import RunOutcome, TriageRunner
 
 router = APIRouter(tags=["ag-ui"])
-_RUN_ID = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
+# A thread id that is a valid run id names its run; "." or ".." would be a path the console
+# cannot open, so an id must start with a letter or digit.
+_RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")
 _CHUNK = 400
 
 
