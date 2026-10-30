@@ -12,10 +12,11 @@ import { systemName } from "@/lib/systems";
 import { cn } from "@/lib/utils";
 import { useDocumentTitle } from "@/lib/document-title";
 
+// Risk keeps to ink and the danger red: the severity hues mean severity only.
 const RISK: Record<string, string> = {
   low: "border-rule text-muted-foreground",
-  medium: "border-sev2-fg/60 text-sev2-fg",
-  high: "border-sev1-fg/60 text-sev1-fg",
+  medium: "border-control text-foreground",
+  high: "border-danger/60 text-danger",
 };
 
 function Risk({ risk }: { risk: string }) {

@@ -155,8 +155,8 @@ export function RiskCoverageChart({
         aria-label={`Risk against coverage. At ${pct(operating.coverage)} coverage, ARIA's policy errs on ${pct(opRisk)} of the windows it decides alone; deciding all of them would raise that to ${pct(points.at(-1)?.risk ?? 0)}.`}
       >
         {/* The drawing scales with its width, so labels are sized per breakpoint to stay
-            readable on a phone (about 11 px there) without growing large on a desktop. */}
-        <g className="text-[15px] sm:text-[10px]">
+            readable on a phone (12 px there) without growing large on a desktop. */}
+        <g className="text-[16px] sm:text-[10px]">
           {[0, 0.025, 0.05, 0.075, 0.1].map((r) => (
             <g key={r}>
               <line x1={pad.l} x2={W - pad.r} y1={y(r)} y2={y(r)} className="stroke-rule" />
@@ -198,7 +198,7 @@ export function RiskCoverageChart({
           x={x(operating.coverage) - 8}
           y={y(opRisk) - 10}
           textAnchor="end"
-          className="fill-foreground text-[15px] font-medium sm:text-[11px]"
+          className="fill-foreground text-[16px] font-medium sm:text-[11px]"
         >
           ARIA today
         </text>

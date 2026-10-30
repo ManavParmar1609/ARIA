@@ -35,9 +35,9 @@ const STANDARDS = [
     href: `${REPO_URL}/blob/main/docs/ops-runbook.md`,
   },
   {
-    name: "Open-weight models",
+    name: "Any model provider",
     short: "models",
-    why: "Why open-weight models",
+    why: "Why any provider",
     what: "Gemini, NVIDIA NIM, Azure OpenAI or any OpenAI-compatible server. Switching provider is a configuration change; without one, ARIA runs deterministically.",
     href: `${ADR}/0005-route-model-calls-through-provider-chains.md`,
   },
@@ -76,30 +76,6 @@ export function Standards() {
             <span>{"why" in s ? s.why : <>Why ARIA uses {whole(s.short)}</>}</span>
             <ArrowCircle size="md" />
           </a>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-const LIMITS = [
-  "Severity labels for most windows come from the scenario generator, not from people. Only BlueGene/L uses real alert tags.",
-  "Incident memory ships synthetic. Retrieval looks perfect on it and will not on your own history.",
-  "With a hosted model a run takes minutes. The fast numbers above are the offline path.",
-  "The injection guard matches patterns. It is a first line of defence, not a proof: anything it misses reaches a model only as fenced, untrusted evidence.",
-  "ARIA triages and drafts. It does not remediate, and it sends nothing without approval.",
-];
-
-export function Limitations() {
-  return (
-    <ul className="grid max-w-4xl rounded-lg bg-sunken px-6 py-2 sm:px-9">
-      {LIMITS.map((item) => (
-        <li
-          key={item}
-          className="grid grid-cols-[1.25rem_1fr] gap-3 border-b border-rule py-5 text-muted-foreground last:border-b-0"
-        >
-          <span aria-hidden className="mt-2 block size-2.5 rounded-full bg-sev2" />
-          <span>{item}</span>
         </li>
       ))}
     </ul>

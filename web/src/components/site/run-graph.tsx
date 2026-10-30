@@ -27,7 +27,7 @@ const NODES: NodeSpec[] = [
   { id: "assess", label: "assess", x: 180, y: 436 },
   { id: "report", label: "report", x: 180, y: 516 },
   { id: "comms", label: "comms", x: 180, y: 596 },
-  { id: "review", label: "review", x: 180, y: 676, kind: "person" },
+  { id: "review", label: "review", x: 180, y: 676, w: 128, kind: "person" },
   { id: "publish", label: "publish", x: 180, y: 756 },
 ];
 const BY_ID = Object.fromEntries(NODES.map((n) => [n.id, n]));
@@ -198,7 +198,12 @@ export function RunGraph({ steps }: { steps: GraphStep[] }) {
                 className={cx(lit.has("assess") ? "stroke-primary" : "stroke-control/60")}
               />
             </g>
-            <text x="324" y="400" className="fill-muted-foreground text-[11px]" textAnchor="middle">
+            <text
+              x="324"
+              y="400"
+              className="fill-muted-foreground text-[14px] sm:text-[11px]"
+              textAnchor="middle"
+            >
               widen
             </text>
             {NODES.map((node) => {
@@ -221,12 +226,14 @@ export function RunGraph({ steps }: { steps: GraphStep[] }) {
                     )}
                     strokeWidth={isCurrent ? 2 : 1}
                   />
+                  {/* The drawing shrinks on a phone, so its labels start larger there. */}
                   <text
                     x={w / 2}
-                    y={H / 2 + 4.5}
+                    y={H / 2}
                     textAnchor="middle"
+                    dominantBaseline="central"
                     className={cx(
-                      "font-mono text-[12px]",
+                      "font-mono text-[14px] sm:text-[12px]",
                       isLit ? "fill-foreground" : "fill-muted-foreground",
                     )}
                   >

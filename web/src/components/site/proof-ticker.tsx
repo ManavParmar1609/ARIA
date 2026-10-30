@@ -53,7 +53,6 @@ export function ProofTicker({ items, seconds = 36 }: { items: string[]; seconds?
       <button
         type="button"
         onClick={() => setPaused((p) => !p)}
-        aria-pressed={paused}
         className="absolute right-3 bottom-3 flex h-8 items-center gap-1.5 rounded-sm bg-raised px-2.5 text-xs font-medium text-heading transition-colors duration-(--duration-quick) hover:bg-sunken motion-reduce:hidden"
       >
         {paused ? (

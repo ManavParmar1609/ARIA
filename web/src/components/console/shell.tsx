@@ -34,7 +34,6 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogTitle, DialogTrigger, SheetContent } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { useHealth, useRuns, useSession, useSignOut } from "@/lib/api/hooks";
 import { cn } from "@/lib/utils";
 
@@ -123,7 +122,7 @@ function ReviewCount() {
   const n = data?.runs.length ?? 0;
   if (n === 0) return null;
   return (
-    <span className="tabular ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-foreground px-1.5 text-xs font-medium text-background">
+    <span className="tabular ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-medium text-primary-foreground">
       <span className="sr-only">, </span>
       {n >= 50 ? "50+" : n}
       <span className="sr-only"> waiting for review</span>
@@ -169,7 +168,7 @@ function Nav({ onNavigate }: { onNavigate?: () => void }) {
       <span
         ref={pill}
         aria-hidden
-        className="absolute top-0 left-0 rounded-sm bg-panel-keylime opacity-0 transition-[transform,opacity] duration-(--duration-slow) ease-(--ease-out)"
+        className="absolute top-0 left-0 rounded-sm bg-panel-keylime opacity-0 transition-[transform,opacity] duration-(--duration-slow) ease-(--ease-out) dark:bg-highlight"
       />
       {NAV.map((group) => (
         <div key={group.label} role="group" aria-labelledby={`nav-${group.label}`}>
@@ -189,7 +188,7 @@ function Nav({ onNavigate }: { onNavigate?: () => void }) {
                   className={cn(
                     "relative flex h-10 items-center gap-3 rounded-sm px-3 text-sm transition-colors duration-(--duration-quick)",
                     active
-                      ? "bg-panel-keylime font-medium text-heading group-data-[pill=on]/nav:bg-transparent"
+                      ? "bg-panel-keylime font-medium text-heading group-data-[pill=on]/nav:bg-transparent dark:bg-highlight"
                       : "text-foreground hover:bg-foreground/6",
                   )}
                 >
@@ -346,67 +345,65 @@ function Gate({ children }: { children: ReactNode }) {
 export function ConsoleShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
-    <TooltipProvider delayDuration={300}>
-      <ConsoleCommands>
-        <a
-          href="#console-main"
-          className="sr-only z-50 rounded-sm bg-primary px-4 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:px-3 focus:py-2"
-        >
-          Skip to content
-        </a>
-        <div className="min-h-dvh bg-app lg:grid lg:grid-cols-[17.5rem_minmax(0,1fr)]">
-          {/* A floating white panel on the cream page, like the site's navigation bars. */}
-          <aside className="hidden p-3 lg:block">
-            <div className="sticky top-3 flex h-[calc(100dvh-1.5rem)] flex-col gap-4 rounded-card border border-rule bg-raised px-3 py-5">
-              <Link href="/" className="rounded-sm px-3" aria-label="ARIA home">
+    <ConsoleCommands>
+      <a
+        href="#console-main"
+        className="sr-only z-50 rounded-sm bg-primary px-4 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:px-3 focus:py-2"
+      >
+        Skip to content
+      </a>
+      <div className="min-h-dvh bg-app lg:grid lg:grid-cols-[17.5rem_minmax(0,1fr)]">
+        {/* A floating white panel on the cream page, like the site's navigation bars. */}
+        <aside className="hidden p-3 lg:block">
+          <div className="sticky top-3 flex h-[calc(100dvh-1.5rem)] flex-col gap-4 rounded-card border border-rule bg-raised px-3 py-5">
+            <Link href="/" className="rounded-sm px-3" aria-label="ARIA home">
+              <Wordmark />
+            </Link>
+            <PaletteButton />
+            {/* the padding keeps the links' focus rings inside the scrolling box */}
+            <div className="-mx-1 flex-1 overflow-y-auto px-1 py-1">
+              <Nav />
+            </div>
+            <SessionFooter />
+          </div>
+        </aside>
+        <div className="flex min-w-0 flex-col">
+          <header className="sticky top-0 z-30 bg-app px-3 pt-3 lg:hidden">
+            <div className="flex h-14 items-center justify-between gap-3 rounded-card border border-rule bg-raised px-2">
+              <Dialog open={open} onOpenChange={setOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="ghost" size="icon-sm" aria-label="Open navigation">
+                    <MenuIcon aria-hidden />
+                  </Button>
+                </DialogTrigger>
+                <SheetContent side="left" closeLabel="Close navigation">
+                  <DialogTitle className="sr-only">Navigation</DialogTitle>
+                  <Link href="/" className="rounded-sm px-1.5" onClick={() => setOpen(false)}>
+                    <Wordmark />
+                  </Link>
+                  <div className="flex-1 overflow-y-auto">
+                    <Nav onNavigate={() => setOpen(false)} />
+                  </div>
+                  <SessionFooter />
+                </SheetContent>
+              </Dialog>
+              <Link href="/console" className="rounded-sm" aria-label="ARIA console overview">
                 <Wordmark />
               </Link>
-              <PaletteButton />
-              {/* the padding keeps the links' focus rings inside the scrolling box */}
-              <div className="-mx-1 flex-1 overflow-y-auto px-1 py-1">
-                <Nav />
+              <div className="flex items-center">
+                <PaletteIconButton />
+                <ThemeToggle />
               </div>
-              <SessionFooter />
             </div>
-          </aside>
-          <div className="flex min-w-0 flex-col">
-            <header className="sticky top-0 z-30 bg-app px-3 pt-3 lg:hidden">
-              <div className="flex h-14 items-center justify-between gap-3 rounded-card border border-rule bg-raised px-2">
-                <Dialog open={open} onOpenChange={setOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="ghost" size="icon-sm" aria-label="Open navigation">
-                      <MenuIcon aria-hidden />
-                    </Button>
-                  </DialogTrigger>
-                  <SheetContent side="left" closeLabel="Close navigation">
-                    <DialogTitle className="sr-only">Navigation</DialogTitle>
-                    <Link href="/" className="rounded-sm px-1.5" onClick={() => setOpen(false)}>
-                      <Wordmark />
-                    </Link>
-                    <div className="flex-1 overflow-y-auto">
-                      <Nav onNavigate={() => setOpen(false)} />
-                    </div>
-                    <SessionFooter />
-                  </SheetContent>
-                </Dialog>
-                <Link href="/console" className="rounded-sm" aria-label="ARIA console overview">
-                  <Wordmark />
-                </Link>
-                <div className="flex items-center">
-                  <PaletteIconButton />
-                  <ThemeToggle />
-                </div>
-              </div>
-            </header>
-            <main
-              id="console-main"
-              className="mx-auto w-full max-w-[90rem] flex-1 px-4 py-8 sm:px-6 lg:px-8 lg:py-12"
-            >
-              <Gate>{children}</Gate>
-            </main>
-          </div>
+          </header>
+          <main
+            id="console-main"
+            className="mx-auto w-full max-w-[90rem] flex-1 px-4 py-8 sm:px-6 lg:px-8 lg:py-12"
+          >
+            <Gate>{children}</Gate>
+          </main>
         </div>
-      </ConsoleCommands>
-    </TooltipProvider>
+      </div>
+    </ConsoleCommands>
   );
 }

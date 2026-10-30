@@ -42,7 +42,6 @@ import { runTitle } from "@/components/console/run-row";
 import { STATUS_LABEL } from "@/components/console/status";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import samples from "@/data/samples.json";
 import { useCreateRun, useRuns, useSession, useSignOut } from "@/lib/api/hooks";
 import { isSeverity } from "@/lib/api/types";
 import { GLOSSARY } from "@/lib/glossary";
@@ -50,6 +49,7 @@ import { GO_KEYS, isTypingTarget, setShortcutsEnabled, useShortcutsEnabled } fro
 import { systemName } from "@/lib/systems";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
+import type sampleData from "@/data/samples.json";
 
 interface Commands {
   openPalette: () => void;
@@ -172,6 +172,8 @@ function score(item: Item, words: string[]): number {
   return words.every((w) => label.includes(w)) ? 2 : 1;
 }
 
+type Samples = typeof sampleData;
+
 function Palette({ onClose, onHelp }: { onClose: () => void; onHelp: () => void }) {
   const router = useRouter();
   const runs = useRuns("all", 30);
@@ -181,6 +183,17 @@ function Palette({ onClose, onHelp }: { onClose: () => void; onHelp: () => void 
   const { setTheme } = useTheme();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
+  // The samples carry whole log files, so they load when the palette opens, not with each page.
+  const [samples, setSamples] = useState<Samples>([]);
+  useEffect(() => {
+    let live = true;
+    void import("@/data/samples.json").then((loaded) => {
+      if (live) setSamples(loaded.default);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
   const listId = useId();
   const list = useRef<HTMLDivElement>(null);
 
@@ -316,7 +329,7 @@ function Palette({ onClose, onHelp }: { onClose: () => void; onHelp: () => void 
       });
     }
     return all;
-  }, [runs.data, session.data, go, create, router, onClose, onHelp, setTheme, signOut]);
+  }, [runs.data, samples, session.data, go, create, router, onClose, onHelp, setTheme, signOut]);
 
   const shown = useMemo(() => {
     const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -433,7 +446,9 @@ function Palette({ onClose, onHelp }: { onClose: () => void; onHelp: () => void 
                       onClick={() => item.run()}
                       className={cn(
                         "flex cursor-pointer items-center gap-3 rounded-md px-3 py-2.5",
-                        selected ? "bg-panel-keylime text-heading" : "text-foreground",
+                        selected
+                          ? "bg-panel-keylime text-heading dark:bg-highlight"
+                          : "text-foreground",
                       )}
                     >
                       <Icon aria-hidden className="size-4 shrink-0" strokeWidth={1.75} />

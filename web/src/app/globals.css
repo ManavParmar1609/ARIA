@@ -61,7 +61,6 @@
   --sev1-fg: #a3361f; /* 6.7:1 on cream */
   --sev2-fg: #8a4a0c;
   --sev3-fg: #6a560c;
-  --sev4-fg: #2c5a68;
   --sev-edge: rgb(15 62 23 / 0.18);
 
   --danger: #a3361f;
@@ -105,7 +104,7 @@
   --highlight: #2a4a32;
   --highlight-foreground: #ffffff;
 
-  --panel-keylime: #18291c;
+  --panel-keylime: #22392a; /* a step above the cards, so chips and icon wells show */
   --panel-mint: #1c3022;
   --panel-sage: #24402c;
   --panel-slate: #1e2f35;
@@ -113,7 +112,6 @@
   --sev1-fg: #f4a594;
   --sev2-fg: #f5c08f;
   --sev3-fg: #efdd98;
-  --sev4-fg: #bcd6de;
   --sev-edge: rgb(0 0 0 / 0);
 
   --danger: #f4a594;
@@ -148,7 +146,6 @@
   --color-sev1-fg: var(--sev1-fg);
   --color-sev2-fg: var(--sev2-fg);
   --color-sev3-fg: var(--sev3-fg);
-  --color-sev4-fg: var(--sev4-fg);
   --color-sev-edge: var(--sev-edge);
   --color-danger: var(--danger);
   --color-ok: var(--ok);

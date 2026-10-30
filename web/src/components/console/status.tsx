@@ -14,8 +14,9 @@ const STATUS: Record<string, { label: string; className: string; icon: typeof Ci
   running: { label: "Running", className: "text-foreground", icon: LoaderCircleIcon },
   awaiting_review: {
     label: "Needs review",
-    // ink, like the sidebar's count: the state that needs a person must not read as done (green)
-    className: "bg-foreground text-background border-foreground",
+    // The main action's forest pill, like the sidebar's count: the one state that waits on a
+    // person, set apart from the plain green text of a published run.
+    className: "rounded-full border-primary bg-primary px-2 text-primary-foreground",
     icon: UserRoundCheckIcon,
   },
   published: { label: "Published", className: "text-ok", icon: CircleCheckIcon },

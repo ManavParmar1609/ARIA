@@ -38,10 +38,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+// Risk keeps to ink and the danger red: the severity hues mean severity only.
 const RISK: Record<string, string> = {
   low: "text-muted-foreground",
-  medium: "text-sev2-fg",
-  high: "text-sev1-fg",
+  medium: "text-foreground",
+  high: "text-danger",
 };
 
 /** The cited report. Each claim carries its citations; nothing in it is uncited. */

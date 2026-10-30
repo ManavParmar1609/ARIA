@@ -20,6 +20,7 @@ import { Switch } from "@/components/ui/switch";
 import samples from "@/data/samples.json";
 import { ApiError } from "@/lib/api/client";
 import { useCreateRun, useSettingsView } from "@/lib/api/hooks";
+import { MAX_BODY_BYTES } from "@/lib/limits";
 import { SYSTEM_NAMES } from "@/lib/systems";
 
 const MAX_LINES = 20_000;
@@ -92,12 +93,20 @@ export function NewRun() {
   const approvalRequired = useSettingsView().data?.require_approval ?? true;
 
   const lines = useMemo(() => text.split(/\r?\n/).filter((l) => l.trim()), [text]);
+  // The lines' size as sent (UTF-8 JSON, with room for the other fields), so a paste the
+  // console would refuse is caught before it is sent.
+  const bytes = useMemo(
+    () => new TextEncoder().encode(JSON.stringify(lines)).length + 2048,
+    [lines],
+  );
   const problem =
     lines.length === 0
       ? "Paste at least one log line, or load a sample."
       : lines.length > MAX_LINES
         ? `ARIA reads at most ${MAX_LINES.toLocaleString("en")} lines per run; this has ${lines.length.toLocaleString("en")}.`
-        : null;
+        : bytes > MAX_BODY_BYTES
+          ? `These lines come to ${(bytes / 1024 / 1024).toFixed(1)} MB; the console sends at most ${MAX_BODY_BYTES / 1024 / 1024} MB per run. Send fewer lines, or use the API or the CLI.`
+          : null;
   const apiError = create.error instanceof ApiError ? create.error.detail : create.error?.message;
 
   const loadSample = (sampleId: string) => {

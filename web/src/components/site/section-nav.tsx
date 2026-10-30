@@ -92,7 +92,7 @@ export function SectionNav({ links }: { links: NavLink[] }) {
       <span
         ref={pill}
         aria-hidden
-        className="absolute top-0 left-0 origin-left rounded-sm bg-panel-keylime opacity-0 transition-[transform,opacity] duration-(--duration-slow) ease-(--ease-out)"
+        className="absolute top-0 left-0 origin-left rounded-sm bg-panel-keylime opacity-0 transition-[transform,opacity] duration-(--duration-slow) ease-(--ease-out) dark:bg-highlight"
       />
       {links.map((link) => (
         <a

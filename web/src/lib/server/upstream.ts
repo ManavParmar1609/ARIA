@@ -2,6 +2,8 @@ import "server-only";
 
 import { type NextRequest } from "next/server";
 
+import { MAX_BODY_BYTES } from "@/lib/limits";
+
 /** Where the ARIA API listens, as seen from this server (never from the browser). */
 export function apiBase(): string {
   return (process.env.ARIA_API_URL ?? "http://127.0.0.1:8000").replace(/\/+$/, "");
@@ -13,7 +15,6 @@ const KEY_MAX_AGE_S = 12 * 60 * 60;
 
 const FORWARD_REQUEST_HEADERS = ["accept", "content-type", "last-event-id"];
 const FORWARD_RESPONSE_HEADERS = ["content-type", "retry-after", "cache-control", "x-request-id"];
-const MAX_BODY_BYTES = 8 * 1024 * 1024;
 
 /** The ARIA API path for this server's /api/v1/<segments>, or null if a segment is unsafe. */
 export function upstreamPath(segments: string[]): string | null {
