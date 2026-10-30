@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -110,6 +111,61 @@ def test_a_bgl_line_with_no_message_keeps_its_time_node_and_level() -> None:
     assert record.message == ""
     # A separator other than spaces still needs its message: "Component:" alone is not a line.
     assert format_to_regex("<Component>: <Content>").match("kernel:") is None
+
+
+def test_a_long_line_that_misses_its_format_is_rejected_at_once() -> None:
+    # An indented dump or a wrapped warning in an OpenStack log has no header. With every field
+    # free to hold spaces, matching tried each way of sharing its spaces among six fields, and
+    # one such line took minutes.
+    lines = [
+        " " * 50 + "u'Network': u'1.0', " * 30,
+        "limitations in Nova prior to the use of the Placement API. Now scheduling will " * 4,
+    ]
+    for line in lines:
+        started = time.perf_counter()
+        record = parse_raw_line("openstack", line)
+        assert time.perf_counter() - started < 1.0
+        assert record.message == line.strip()
+
+
+@pytest.mark.parametrize(
+    ("system", "line", "field", "value"),
+    [
+        (  # Fields between brackets or before another separator still hold spaces.
+            "proxifier",
+            "[10.30 16:51:56] svchost.exe *64 - proxy.cse.cuhk.edu.hk:5070 close, 303 bytes sent",
+            "Program",
+            "svchost.exe *64",
+        ),
+        (
+            "hadoop",
+            (
+                "2015-10-18 18:05:54,325 INFO [IPC Server handler 5 on 62270] "
+                "org.apache.hadoop.mapred.TaskAttemptListenerImpl: Ping from attempt_1"
+            ),
+            "Process",
+            "IPC Server handler 5 on 62270",
+        ),
+        (
+            "openstack",
+            (
+                "nova-api.log.1.2017-05-16_13:53:08 2017-05-16 00:00:00.008 25746 INFO "
+                "nova.osapi_compute.wsgi.server [req-38101a0b-2096-447d-96ea-a692162415ae "
+                "113d3a99c3da401fbd62cc2caa5b96d2 54fadb412c4e40cdbaed9335e4c35a9e - - -] "
+                '10.11.10.1 "GET /v2/servers/detail HTTP/1.1" status: 200'
+            ),
+            "ADDR",
+            (
+                "req-38101a0b-2096-447d-96ea-a692162415ae 113d3a99c3da401fbd62cc2caa5b96d2 "
+                "54fadb412c4e40cdbaed9335e4c35a9e - - -"
+            ),
+        ),
+    ],
+)
+def test_fields_that_hold_spaces_keep_them(system: str, line: str, field: str, value: str) -> None:
+    match = SYSTEMS[system].regex.match(line)
+    assert match is not None
+    assert match[field] == value
 
 
 def test_unknown_system_falls_back_to_generic_parsing() -> None:

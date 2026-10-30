@@ -65,10 +65,20 @@ class SystemSpec:
 def format_to_regex(log_format: str) -> re.Pattern[str]:
     """Turn '<Date> <Time> <Level> <Component>: <Content>' into a named-group regex.
 
+    A field that only spaces part from the next field is one token. Were it free to hold spaces,
+    a line that does not match (a wrapped warning, an indented dump) would try every way of
+    sharing its spaces among those fields: minutes for one long OpenStack line, against the same
+    fields on every line of the Loghub samples and the full BGL log.
+
     A message after plain spaces may be missing altogether: 0.7% of the full BGL log are
     lines such as "... RAS KERNEL FATAL" that end at the level.
     """
     parts = re.split(r"(<[^<>]+>)", log_format)
+    single = {
+        i
+        for i in range(1, len(parts) - 2, 2)
+        if (parts[i - 1].endswith(" ") or (i == 1 and not parts[0])) and parts[i + 1].isspace()
+    }
     if len(parts) >= 3 and parts[-2:] == ["<Content>", ""] and parts[-3] and not parts[-3].strip():
         parts[-3:] = ["", "<OptionalContent>", ""]  # the spaces move inside the optional group
     pattern = ""
@@ -79,8 +89,10 @@ def format_to_regex(log_format: str) -> re.Pattern[str]:
             name = part.strip("<>")
             if name == "OptionalContent":
                 pattern += r"(?:\s+(?P<Content>.*))?"
+            elif name == "Content":
+                pattern += f"(?P<{name}>.*)"
             else:
-                pattern += f"(?P<{name}>.*)" if name == "Content" else f"(?P<{name}>.*?)"
+                pattern += f"(?P<{name}>\\S+)" if i in single else f"(?P<{name}>.*?)"
     return re.compile(f"^{pattern}$")
 
 
