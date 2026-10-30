@@ -7,8 +7,20 @@ from aria.contracts.report import IncidentReport
 from aria.reporting.writer import cited_evidence
 
 # Report text quotes log lines, which anyone can write. The exports are pasted into other tools,
-# so HTML, links, images and chat mentions (<!channel>) in that text must stay inert text.
-_INERT = str.maketrans({"&": "&amp;", "<": "&lt;", ">": "&gt;", "[": "\\[", "]": "\\]"})
+# so HTML, links, images and chat mentions (<!channel>) in that text must stay inert text, and so
+# must emphasis and code marks: a template's "<*>" must not turn the text after it italic.
+_INERT = str.maketrans(
+    {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "[": "\\[",
+        "]": "\\]",
+        "*": "\\*",
+        "_": "\\_",
+        "`": "\\`",
+    }
+)
 
 
 def _safe(text: str) -> str:

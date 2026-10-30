@@ -394,6 +394,17 @@ async def test_markdown_and_postmortem_render_with_citations(builder: ScenarioBu
         assert "<!channel>" not in out
         assert "&lt;script&gt;" in out  # still readable, as text
 
+    # Two templates on one line: their "<*>" must not italicise the text between them.
+    marks = report.model_copy(
+        update={
+            "summary": [
+                report.summary[0].model_copy(update={"text": "reason <*> then <*> in `rts_panic`"})
+            ]
+        }
+    )
+    line = next(x for x in render_markdown(marks).splitlines() if "rts" in x)
+    assert "&lt;\\*&gt; then &lt;\\*&gt; in \\`rts\\_panic\\`" in line
+
 
 # --- comms -------------------------------------------------------------------------------------
 

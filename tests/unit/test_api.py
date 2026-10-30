@@ -740,6 +740,8 @@ async def test_ask_cites_run_evidence(api: Api, monkeypatch: pytest.MonkeyPatch)
     ).json()
     assert memory["evidence"]
     assert any("openssh" in e["title"] for e in memory["evidence"])
+    # Without a model the answer still reads as one: the incident and how it was fixed.
+    assert "was resolved this way" in memory["answer"][0]["text"]
     nothing = (await api.client.post("/api/v1/ask", json={"question": "zzzqqq wwwxxx"})).json()
     assert nothing["insufficient_evidence"] is True
     missing = await api.client.post("/api/v1/ask", json={"question": "why?", "run_id": "run-nope"})

@@ -66,6 +66,8 @@ async def memory_evidence(services: Services, question: str, *, limit: int = 6) 
             f"Summary: {incident.summary}",
             data={
                 "incident_id": incident.id,
+                "title": incident.title,
+                "resolution": incident.resolution,
                 "failure_mode": incident.failure_mode,
                 "runbook": incident.runbook_slug,
                 "score": round(hit.score, 4),
@@ -83,11 +85,18 @@ def _fallback(ranked: Sequence[Evidence]) -> AnswerOutput:
             insufficient_evidence=True,
             follow_ups=["Name a run, or ask about a system, component or failure mode."],
         )
-    claims = [
-        ClaimOut(text=f"Relevant: {item.title}"[:400], evidence_ids=[item.id])
-        for item in ranked[:3]
-    ]
+    claims = [ClaimOut(text=_plain(item)[:400], evidence_ids=[item.id]) for item in ranked[:3]]
     return AnswerOutput(answer=claims, insufficient_evidence=False, follow_ups=[])
+
+
+def _plain(item: Evidence) -> str:
+    """An answer line without a model: what the evidence says, in words a responder can act on."""
+    data = item.data or {}
+    if item.kind is EvidenceKind.INCIDENT and data.get("title") and data.get("resolution"):
+        return (
+            f"A similar past incident, {data['title']}, was resolved this way: {data['resolution']}"
+        )
+    return item.title
 
 
 def check_answer(output: AnswerOutput, known: dict[str, Evidence]) -> list[str]:
