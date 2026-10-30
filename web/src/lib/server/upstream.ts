@@ -61,6 +61,39 @@ export function problem(status: number, detail: string): Response {
 }
 
 /**
+ * The request body, or a 413 once it passes `limit` bytes. A declared length over the limit is
+ * refused before anything is read, and the bytes are counted as they arrive, so an oversized
+ * body never sits in memory whole.
+ */
+export async function readBody(
+  request: NextRequest,
+  limit = MAX_BODY_BYTES,
+): Promise<Uint8Array<ArrayBuffer> | Response> {
+  const largest = limit >= 1024 * 1024 ? `${limit / 1024 / 1024} MB` : `${limit / 1024} KB`;
+  const tooLarge = () => problem(413, `The request is larger than ${largest}.`);
+  const declared = Number(request.headers.get("content-length") ?? 0);
+  if (declared > limit) return tooLarge();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  const reader = request.body?.getReader();
+  for (let part = await reader?.read(); part && !part.done; part = await reader?.read()) {
+    size += part.value.byteLength;
+    if (size > limit) {
+      await reader?.cancel();
+      return tooLarge();
+    }
+    chunks.push(part.value);
+  }
+  const body = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
+}
+
+/**
  * Forward a request to the ARIA API with the signed-in key, streaming the answer back
  * (server-sent events included). Only known-safe headers cross in either direction.
  */
@@ -84,10 +117,11 @@ export async function forward(
   const key = init.key ?? keyFrom(request);
   if (key) headers.set("x-api-key", key);
 
-  let body: string | undefined;
+  let body: Uint8Array<ArrayBuffer> | undefined;
   if (method !== "GET" && method !== "HEAD") {
-    body = await request.text();
-    if (body.length > MAX_BODY_BYTES) return problem(413, "The request is larger than 8 MB.");
+    const read = await readBody(request);
+    if (read instanceof Response) return read;
+    body = read;
   }
 
   let upstream: Response;

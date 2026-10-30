@@ -8,6 +8,7 @@ import {
   isSameOrigin,
   keyFrom,
   problem,
+  readBody,
 } from "@/lib/server/upstream";
 
 // Signing in stores an API key in an HttpOnly, SameSite=Strict cookie scoped to /api. The key is
@@ -57,8 +58,11 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   if (!isSameOrigin(request)) return problem(403, "Cross-site requests are not allowed.");
   let key = "";
+  // A key is at most 512 characters, so a sign-in body never needs more than a few kilobytes.
+  const raw = await readBody(request, 4 * 1024);
+  if (raw instanceof Response) return raw;
   try {
-    const body = (await request.json()) as { key?: unknown };
+    const body = JSON.parse(new TextDecoder().decode(raw)) as { key?: unknown };
     key = typeof body.key === "string" ? body.key.trim() : "";
   } catch {
     return problem(400, 'Send the API key as JSON: {"key": "..."}.');

@@ -3,7 +3,7 @@
 import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { cookieOptions, forward, isSameOrigin, upstreamPath } from "./upstream";
+import { cookieOptions, forward, isSameOrigin, readBody, upstreamPath } from "./upstream";
 
 const req = (
   path: string,
@@ -118,6 +118,41 @@ describe("forward", () => {
     expect(down.status).toBe(502);
     expect(await down.json()).toEqual({
       detail: "The ARIA API is not reachable. Check that it is running.",
+    });
+  });
+});
+
+describe("readBody", () => {
+  const streamed = (chunks: number, size: number) =>
+    new NextRequest("http://localhost:3000/api/v1/runs", {
+      method: "POST",
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (let i = 0; i < chunks; i++) controller.enqueue(new Uint8Array(size));
+          controller.close();
+        },
+      }),
+      duplex: "half", // Node needs this for a streamed request body
+    });
+
+  it("returns the bytes of a body within the limit", async () => {
+    const body = await readBody(req("/x", { method: "POST", body: "héllo" }));
+    expect(body).toBeInstanceOf(Uint8Array);
+    expect(new TextDecoder().decode(body as Uint8Array)).toBe("héllo");
+  });
+
+  it("refuses a declared length over the limit before reading anything", async () => {
+    const response = await readBody(
+      req("/x", { method: "POST", body: "{}", headers: { "content-length": "999999999" } }),
+    );
+    expect((response as Response).status).toBe(413);
+  });
+
+  it("stops reading a body that grows past the limit", async () => {
+    const response = await readBody(streamed(5, 1024), 4 * 1024);
+    expect((response as Response).status).toBe(413);
+    expect(await (response as Response).json()).toEqual({
+      detail: "The request is larger than 4 KB.",
     });
   });
 });
