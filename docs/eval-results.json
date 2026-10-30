@@ -1,7 +1,7 @@
 {
   "suite": "all",
-  "created_at": "2026-10-30T10:36:48+00:00",
-  "git_sha": "4a55629",
+  "created_at": "2026-10-30T20:42:08+00:00",
+  "git_sha": "e7bfb7b",
   "llm": false,
   "data": {
     "synthetic": true,
@@ -2557,7 +2557,7 @@
         "failed": {
           "image_cache_missing": 477,
           "none": 2,
-          "component_unavailable": 1
+          "component_errors": 1
         },
         "healthy": {
           "image_cache_missing": 430,
@@ -3603,31 +3603,31 @@
       "false_alarms": 0.0
     },
     "latency": {
-      "time_to_review_p50_s": 0.358,
-      "time_to_review_p95_s": 0.783,
+      "time_to_review_p50_s": 0.635,
+      "time_to_review_p95_s": 1.404,
       "stage_p50_ms": {
-        "assess": 5.8,
-        "comms": 7.1,
-        "investigate": 61.7,
-        "merge": 42.4,
-        "parse_shard": 63.5,
-        "plan": 5.7,
-        "recall": 11.6,
-        "report": 9.6,
-        "review": 3.3,
-        "severity": 17.2
+        "assess": 6.2,
+        "comms": 14.6,
+        "investigate": 128.1,
+        "merge": 75.0,
+        "parse_shard": 119.7,
+        "plan": 11.6,
+        "recall": 20.7,
+        "report": 18.6,
+        "review": 7.0,
+        "severity": 28.8
       },
       "stage_p95_ms": {
-        "assess": 10.4,
-        "comms": 14.3,
-        "investigate": 194.9,
-        "merge": 87.9,
-        "parse_shard": 233.0,
-        "plan": 13.7,
-        "recall": 21.3,
-        "report": 13.5,
-        "review": 6.8,
-        "severity": 30.7
+        "assess": 15.9,
+        "comms": 25.9,
+        "investigate": 220.7,
+        "merge": 197.6,
+        "parse_shard": 435.9,
+        "plan": 19.5,
+        "recall": 31.5,
+        "report": 31.3,
+        "review": 16.1,
+        "severity": 65.2
       },
       "llm_call_p50_ms": 0.0,
       "llm_call_p95_ms": 0.0
@@ -3638,7 +3638,7 @@
       "runs_over_token_limit": 0,
       "runs_with_exhausted_budget": 0,
       "mean_llm_calls": 0.0,
-      "mean_tool_calls": 3.48
+      "mean_tool_calls": 3.45
     },
     "providers": {}
   },
