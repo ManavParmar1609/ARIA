@@ -47,7 +47,7 @@ same way: switching is a config change.
 7. **Learn.** Approved reports join incident memory. Reviewer corrections go to a feedback
    queue, and once enough gather, the severity model's prediction sets are recalibrated on them.
 
-![A recorded run on the landing page: the HDFS log on the left, with the two lines behind evidence E2 lit up, and the triage tag on the right, whose claims each cite evidence IDs.](docs/images/replay.webp)
+![A recorded run on the landing page: the HDFS log on the left, with evidence E2 pinned and the two lines in view that carry it lit up, and the triage tag on the right, whose claims each cite evidence IDs.](docs/images/replay.webp)
 
 *One recorded run. Pointing at a citation on the tag lights up the log lines behind it.*
 
@@ -279,7 +279,7 @@ The full analysis, with the code and test for each control, is in the
 
 ## Measured results
 
-![The landing page's Real logs section: four headline results on the real Hadoop log, how ARIA catches a failure nobody logged, and bars comparing the precision and recall of ARIA, its severity engine and a keyword rule.](docs/images/real.webp)
+![The landing page's Real logs section: three headline results on the real Hadoop log, how ARIA catches a failure nobody logged, and the chart "ARIA beside standard detectors", whose bars compare the precision and recall of ARIA with rare step counts, count pairs, an isolation forest and PCA.](docs/images/real.webp)
 
 *The landing page's proof on real logs. Every number on it comes from `docs/eval-results.json`.*
 
