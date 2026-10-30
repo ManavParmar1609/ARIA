@@ -117,10 +117,6 @@ export const measured = {
   rules: pct(methods.rules_only.accuracy),
   runs: evals.pipeline.n,
   cited: pct(evals.pipeline.groundedness.every_claim_cited, 0),
-  attacks: evals.edge.attacks.toLocaleString("en-US"),
-  benign: evals.edge.benign.toLocaleString("en-US"),
-  quarantined: pct(evals.edge.attack_recall),
-  falsePositives: pct(evals.edge.benign_false_positive_rate),
 };
 
 // Real HDFS logs with the experts' labels (docs/evaluation.md, "Real logs").
@@ -129,6 +125,17 @@ export const realLogs = {
   precision: pct(hdfs.lifecycle.precision),
   recall: pct(hdfs.lifecycle.recall),
   recallAll: pct(hdfs.recall_all),
+};
+
+// Public prompt-injection benchmarks the detector was never tuned on ("Prompt injection, public
+// benchmarks"): the independent measure, where the edge-case corpus is an upper bound.
+const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+const bench = evals.injection_benchmarks;
+const benchmarks = Object.keys(bench.by_source).length;
+export const publicAttacks = {
+  caught: pct(bench.attacks.rate),
+  attacks: bench.attacks.n.toLocaleString("en-US"),
+  benchmarks: WORDS[benchmarks] ?? String(benchmarks),
 };
 
 export const REPO = "github.com/ManavParmar1609/ARIA";

@@ -14,6 +14,8 @@ labels its owners gave it**:
   ([below](#contiguous-bgl-windows));
 - 55 Hadoop jobs, each labelled healthy or with the failure injected into it;
 - a ServiceNow service desk's tickets, with their final priorities and SLA outcomes;
+- GitLab.com's public production incidents, with the service and root cause their responders
+  labelled ([below](#gitlabcoms-production-incidents));
 - six public prompt-injection benchmarks, and a benchmark of benign look-alikes.
 
 The other numbers come from **semi-synthetic** incident windows. Their log lines are real lines
@@ -25,7 +27,7 @@ behaves on that distribution. They are not a measurement of accuracy on producti
 |---|---|
 | Log lines | Real lines from the Loghub 2k samples: 2,000 lines from each of 16 systems |
 | Training and evaluation windows | **Semi-synthetic**: real lines, synthetic composition, 13 systems |
-| Real-data evaluation | **Real**: 104,815 HDFS lines and the experts' label for each of 7,940 blocks; the full BGL log (4,747,963 lines) and its alert tags; the container logs of 55 Hadoop jobs and their failure labels; 24,918 ServiceNow tickets; 2,654 public prompt-injection attacks and 339 benign look-alikes. Only the ticket model trains on any of it, on the oldest tickets |
+| Real-data evaluation | **Real**: 104,815 HDFS lines and the experts' label for each of 7,940 blocks; the full BGL log (4,747,963 lines) and its alert tags; the container logs of 55 Hadoop jobs and their failure labels; 24,918 ServiceNow tickets; GitLab.com's public production incidents and their responders' labels; 2,654 public prompt-injection attacks and 339 benign look-alikes. Only the ticket model trains on any of it, on the oldest tickets |
 | Labels | BGL windows: the sysadmin alert tags, through a written rubric. Other systems: a documented scenario policy |
 | Splits | Separate scenario seeds per split; the held-out test seeds are used only by `make eval` |
 | Ticket data | The UCI ServiceNow log, fetched from checksum-pinned copies because the UCI host is blocked here. The ticket model trains on its oldest 70% of tickets |
@@ -72,6 +74,11 @@ BIPIA, CyberSecEval 2 (its `CybersecurityBenchmarks` folder), NotInject, Giskard
 and the jailbreak prompts are MIT-licensed. InjecAgent and Tensor Trust state no licence in
 their repositories; ARIA reads them only to evaluate the detector and never redistributes them.
 The manifest lists the paper to cite for each.
+
+GitLab.com's production incidents are public issues in
+[gitlab-com/gl-infra/production](https://gitlab.com/gitlab-com/gl-infra/production/-/issues),
+with no licence stated. ARIA reads them through GitLab's issues API only to evaluate incident
+memory, keeps them under `data/raw/`, and never redistributes them.
 
 ARIA's code is MIT-licensed, but the data terms still apply to everything derived from the data.
 That includes the committed severity model and the seeded incident memory, which are built from
@@ -162,6 +169,26 @@ none.
   failures take exactly the step counts of common healthy blocks here; the report counts them.
 - **Overlap.** A handful of these lines also appear in the Loghub HDFS 2k sample that the
   scenario builder draws on; the report gives the count.
+
+## GitLab.com's production incidents
+
+GitLab runs GitLab.com in the open: each production incident is a public issue, labelled by the
+responders with the service that failed (`Service::`) and, after review, its root cause
+(`RootCause::`). The download asks GitLab's issues API for every issue labelled `incident`
+created before October 2026, with fixed parameters, and keeps each issue's title, description,
+labels, state and dates. The evaluation
+([`src/aria/evals/gitlab.py`](../src/aria/evals/gitlab.py)) puts the incidents opened before
+2023 into ARIA's retrieval index, from their titles and descriptions, and asks for similar past
+incidents from each later incident's title alone.
+
+- **Nothing is composed and nothing trains on it.** The labels only score the results; they never
+  enter the index or the queries.
+- **What the labels mean.** A service or root-cause label says what the responders concluded,
+  sometimes long after the incident. Labels that say the field is unknown (`Needed`,
+  `Indeterminate`, `NotNeeded`) count as no label, and incidents without one are neither queries
+  nor answers.
+- **A live source.** Issues can be edited or relabelled after the download, so the download
+  records its snapshot's sha256 and date, and [evaluation.md](evaluation.md) quotes them.
 
 ## How semi-synthetic windows are built
 
@@ -452,6 +479,9 @@ them. The [threat model](threat-model.md) covers what these controls do and do n
 - **One company's tickets.** The UCI log's fields are anonymised codes with no free text, from
   one service desk over one year. ARIA never links it to Loghub, and fixes come from the
   project's runbooks instead.
+- **One company's incidents.** GitLab.com's incidents come from one SaaS platform's own
+  responders, in their own vocabulary, and their titles are often written before the cause is
+  known. Its labels name GitLab's services, not the systems the log scenarios cover.
 - **Mirrors.** Where a source's home host is blocked (Zenodo, UCI), the copy comes from a public
   repository. A file copy must match the sha256 pinned in the manifest; a repository copy is
   pinned to a commit. The BGL and UCI copies were also compared with independent copies, but

@@ -392,6 +392,30 @@ def test_report_states_provenance_results_and_limitations() -> None:
     assert "test fixtures" not in text
     flagged = report.render({**results, "data": {**results["data"], "fixtures": True}})
     assert "test fixtures" in flagged
+    # With no real data measured, the opening says every number is semi-synthetic.
+    assert "**Data.** Every number comes from semi-synthetic" in text
+
+
+def test_the_data_paragraph_names_only_the_real_sources_measured() -> None:
+    results: dict[str, Any] = {
+        "data": {"test_seeds": [41, 42]},
+        "real": {
+            "hdfs": {"precision": 0.98},
+            "bgl": {"missing": "download it"},
+            "gitlab": {"incidents": 3},
+        },
+        "injection_benchmarks": {"attacks": {"n": 5}},
+    }
+    text = report._data_paragraph(results)
+    assert "a Hadoop cluster's log" in text
+    assert "GitLab.com's production incidents" in text
+    assert "BlueGene/L" not in text  # not downloaded, so not claimed
+    assert "real attacks, written by others" in text
+    assert "Every other number comes from semi-synthetic" in text
+    [unmeasured] = report._unmeasured(results["real"])
+    assert unmeasured.startswith(
+        "- No results on contiguous BGL windows, the Hadoop jobs or the UCI incident log are "
+    )
 
 
 @pytest.mark.slow

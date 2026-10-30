@@ -215,10 +215,10 @@ scrape_configs:
 | Metric | Meaning |
 |---|---|
 | `aria_runs{status}` | Runs in each state, read from the database at scrape time. States: `queued`, `running`, `awaiting_review`, `published`, `rejected`, `failed`. |
-| `aria_run_events{kind}` | Run events by kind |
-| `aria_runs_finished{status}` | Runs that reached a final state |
-| `aria_tool_calls{tool}` | Investigator tool calls |
-| `aria_reviews{decision}` | Review decisions |
+| `aria_run_events_total{kind}` | Run events by kind |
+| `aria_runs_finished_total{status}` | Runs that reached a final state |
+| `aria_tool_calls_total{tool}` | Investigator tool calls |
+| `aria_reviews_total{decision}` | Review decisions |
 | `aria_time_to_review_seconds` | From the start of a run until its report is ready for review |
 | `aria_info{version}` | The running version |
 

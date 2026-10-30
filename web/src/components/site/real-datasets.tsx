@@ -17,7 +17,8 @@ interface Card {
 }
 
 function cards(data: RealData): Card[] {
-  const { bgl, hadoop, tickets, injection } = data;
+  const { bgl, hadoop, tickets, gitlab, injection } = data;
+  const memory = gitlab.service;
   const failedJobs = hadoop.jobs - (hadoop.byLabel.normal ?? 0);
   const rulesWin = bgl.rules.macroF1 > bgl.aria.macroF1;
   return [
@@ -57,6 +58,19 @@ function cards(data: RealData): Card[] {
       anchor: "real-tickets-a-servicenow-service-desk",
     },
     {
+      key: "gitlab",
+      name: `${n(gitlab.incidents)} GitLab.com incidents`,
+      what: `GitLab runs GitLab.com in the open. Incident memory holds the ${n(gitlab.memory)} opened before ${gitlab.cutoff.slice(0, 4)}; each of the ${n(gitlab.later)} later ones asks for similar past incidents from its title alone.`,
+      stat: pct(memory.aria.hit3),
+      statLabel: `Same service among the first ${count(gitlab.top)}`,
+      compare: `Past incidents picked at random: ${pct(memory.random.hit3)}. BM25 alone: ${pct(memory.bm25.hit3)}.`,
+      caveat:
+        memory.bm25.hit3 > memory.aria.hit3
+          ? "Here BM25 alone did better: the offline embeddings fused in cost recall."
+          : "The embeddings are the offline ones, fitted on these incidents' own words.",
+      anchor: "real-incidents-similar-past-incidents",
+    },
+    {
       key: "injection",
       name: `${n(injection.attacks)} prompt-injection attacks`,
       what: `From ${count(injection.sources.length)} public benchmarks the detector was never tuned on, each hidden in a log line.`,
@@ -69,22 +83,33 @@ function cards(data: RealData): Card[] {
   ];
 }
 
-/** Four more real datasets, each with the headline beside its baseline and its caveat. */
+// Three across and then two on wide screens; two across on tablets, an odd last card spanning
+// both, so no card sits alone in half a row.
+function span(i: number, total: number) {
+  const wide = i < 3 ? "lg:col-span-2" : "lg:col-span-3";
+  return total % 2 === 1 && i === total - 1 ? `md:col-span-2 ${wide}` : wide;
+}
+
+/** More real datasets, each with the headline beside its baseline and its caveat. */
 export function RealDatasets({ data }: { data: RealData }) {
+  const all = cards(data);
   return (
     <div className="grid gap-8">
       <div className="grid max-w-3xl gap-3">
         <h3 className="text-2xl leading-tight tracking-heading sm:text-3xl">
-          And on four more real datasets
+          And on {count(all.length)} more real datasets
         </h3>
         <p className="text-muted-foreground">
           Each with labels its owners gave it, and each scored against a simple baseline. Some of
           the results are good, some are not; all of them come from the same <code>make eval</code>.
         </p>
       </div>
-      <ul className="grid gap-4 md:grid-cols-2">
-        {cards(data).map((card) => (
-          <li key={card.key} className="grid content-start gap-4 rounded-lg bg-raised p-5 sm:p-7">
+      <ul className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
+        {all.map((card, i) => (
+          <li
+            key={card.key}
+            className={`grid content-start gap-4 rounded-lg bg-raised p-5 sm:p-7 ${span(i, all.length)}`}
+          >
             <div className="grid gap-1.5">
               <h4 className="text-lg leading-snug tracking-heading">{card.name}</h4>
               <p className="text-sm text-muted-foreground">{card.what}</p>

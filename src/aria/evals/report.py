@@ -859,6 +859,48 @@ def _robustness(section: Mapping[str, Any]) -> list[str]:
     ]
 
 
+# What each real-data section measures on, in the order the report shows them.
+_REAL_SOURCES = {
+    "hdfs": "a Hadoop cluster's log, with its experts' label for each storage block",
+    "bgl": "the whole BlueGene/L log, with its administrators' alert tags",
+    "hadoop": "Hadoop jobs, with the failure injected into each",
+    "uci_tickets": "a ServiceNow service desk's tickets, with their outcomes",
+    "gitlab": "GitLab.com's production incidents, with their responders' labels",
+}
+
+
+def _measured(section: Any) -> bool:
+    return isinstance(section, Mapping) and bool(section) and "missing" not in section
+
+
+def _join(items: list[str]) -> str:
+    return items[0] if len(items) == 1 else f"{'; '.join(items[:-1])}; and {items[-1]}"
+
+
+def _data_paragraph(results: Mapping[str, Any]) -> str:
+    real = results.get("real") or {}
+    sources = [text for key, text in _REAL_SOURCES.items() if _measured(real.get(key))]
+    lead = (
+        f"**Data.** The first sections use real data, with labels its owners gave it: "
+        f"{_join(sources)}. "
+        if sources
+        else "**Data.** "
+    )
+    if _measured(results.get("injection_benchmarks")):
+        lead += "The public prompt-injection benchmarks are real attacks, written by others. "
+    rest = "Every other number" if sources else "Every number"
+    return (
+        f"{lead}{rest} comes from semi-synthetic incident windows: real lines from the public "
+        "Loghub samples, composed into incidents by ARIA's scenario builder. Severity labels "
+        "come from the BGL alert-tag rubric for BGL windows and from the documented scenario "
+        "policy elsewhere. The windows use held-out seeds "
+        f"{', '.join(map(str, results['data']['test_seeds']))}, which no model was trained, "
+        "calibrated or seeded on (incident memory uses seeds 51-52). These results show how ARIA "
+        "behaves on that distribution; they are not a measurement of accuracy on production "
+        "incidents."
+    )
+
+
 def render(results: Mapping[str, Any], live: Mapping[str, Any] | None = None) -> str:
     lines = [
         "# Evaluation",
@@ -869,17 +911,7 @@ def render(results: Mapping[str, Any], live: Mapping[str, Any] | None = None) ->
             "Do not edit by hand."
         ),
         "",
-        (
-            "**Data.** The first section uses real logs with labels from the system's experts. "
-            "Every other number comes from semi-synthetic incident windows: real lines from "
-            "the public Loghub samples, composed into incidents by ARIA's scenario builder. Severity "
-            "labels come from the BGL alert-tag rubric for BGL windows and from the documented "
-            "scenario policy elsewhere. The windows use held-out seeds "
-            f"{', '.join(map(str, results['data']['test_seeds']))}, which no model was trained, "
-            "calibrated or seeded on "
-            "(incident memory uses seeds 51-52). These results show how ARIA behaves on that "
-            "distribution; they are not a measurement of accuracy on production incidents."
-        ),
+        _data_paragraph(results),
         "",
     ]
     if results["data"].get("fixtures"):
@@ -970,7 +1002,12 @@ def render(results: Mapping[str, Any], live: Mapping[str, Any] | None = None) ->
 
 def _unmeasured(real: Mapping[str, Any]) -> list[str]:
     """A limitation line for each real source that produced no results this time."""
-    names = {"bgl": "contiguous BGL windows", "uci_tickets": "the UCI incident log"}
+    names = {
+        "bgl": "contiguous BGL windows",
+        "hadoop": "the Hadoop jobs",
+        "uci_tickets": "the UCI incident log",
+        "gitlab": "GitLab.com's incidents",
+    }
     missing = [
         label for key, label in names.items() if "missing" in (real.get(key) or {"missing": 1})
     ]
@@ -978,7 +1015,8 @@ def _unmeasured(real: Mapping[str, Any]) -> list[str]:
         return []
     return [
         (
-            f"- No results on {' or '.join(missing)} are reported: the data was not downloaded "
+            f"- No results on {', '.join(missing[:-1]) + ' or ' if missing[1:] else ''}"
+            f"{missing[-1]} are reported: the data was not downloaded "
             "(or the model not trained) when this report was generated."
         )
     ]

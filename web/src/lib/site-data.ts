@@ -420,12 +420,29 @@ const flagged = (d: Flagged) => ({
 
 /**
  * The other real-data evaluations, each against labels its owners gave it: a supercomputer's
- * alert tags, a Hadoop cluster's injected failures, a service desk's ticket outcomes and public
- * prompt-injection benchmarks. Every number comes from docs/eval-results.json.
+ * alert tags, a Hadoop cluster's injected failures, a service desk's ticket outcomes, GitLab.com's
+ * incident labels and public prompt-injection benchmarks. Every number comes from
+ * docs/eval-results.json.
  */
 export function realData() {
-  const { bgl, hadoop, uci_tickets: tickets } = evals.real;
+  const { bgl, hadoop, uci_tickets: tickets, gitlab } = evals.real;
   const injection = evals.injection_benchmarks;
+  const retrieval = (m: (typeof gitlab.by.service.methods)["aria"]) => ({
+    queries: m.queries,
+    hit1: m.recall_at_1,
+    hit3: m.recall_at_3,
+    hit3Ci: m.recall_at_3_ci95,
+    mrr: m.mrr_at_10,
+  });
+  const memory = (b: typeof gitlab.by.service) => ({
+    labels: b.labels,
+    labelled: b.memory_labelled,
+    aria: retrieval(b.methods.aria),
+    bm25: retrieval(b.methods.bm25),
+    embeddings: retrieval(b.methods.embeddings),
+    random: retrieval(b.methods.random),
+    commonest: retrieval(b.methods.commonest_label),
+  });
   const severity = (m: (typeof bgl.methods)["aria_policy"]) => ({
     accuracy: m.accuracy,
     accuracyCi: m.accuracy_ci95,
@@ -505,6 +522,17 @@ export function realData() {
           ...Object.values(tickets.sla.baselines_auroc as Record<string, number>),
         ),
       },
+    },
+    gitlab: {
+      citation: gitlab.citation,
+      incidents: gitlab.incidents,
+      memory: gitlab.memory,
+      later: gitlab.later,
+      cutoff: gitlab.cutoff,
+      top: gitlab.top,
+      snapshot: gitlab.snapshot.downloaded_at.slice(0, 10),
+      service: memory(gitlab.by.service),
+      cause: memory(gitlab.by.cause),
     },
     injection: {
       attacks: injection.attacks.n,

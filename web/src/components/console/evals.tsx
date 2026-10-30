@@ -33,13 +33,34 @@ function Section({
   return (
     <section aria-labelledby={id} className="grid gap-5 border-t border-rule pt-8">
       <div className="grid max-w-3xl gap-2">
-        <h2 id={id} className="text-xl tracking-heading">
+        {/* Clear of the sticky phone header when "On this page" jumps here. */}
+        <h2 id={id} className="scroll-mt-24 text-xl tracking-heading lg:scroll-mt-8">
           {title}
         </h2>
         {intro ? <p className="text-muted-foreground">{intro}</p> : null}
       </div>
       {children}
     </section>
+  );
+}
+
+/** Links to every section: the page is long, real data first, then the semi-synthetic suites. */
+function Contents({ items }: { items: [id: string, label: string][] }) {
+  return (
+    <nav aria-label="On this page">
+      <ul className="flex flex-wrap gap-2">
+        {items.map(([id, label]) => (
+          <li key={id}>
+            <a
+              href={`#${id}`}
+              className="inline-flex min-h-9 items-center rounded-md bg-raised px-3 text-sm text-foreground transition-colors hover:bg-sunken"
+            >
+              {label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }
 
@@ -360,9 +381,12 @@ function MethodTable({
   );
 }
 
-/** The other real-data evaluations: BGL windows, Hadoop jobs, tickets and injection benchmarks. */
+/**
+ * The other real-data evaluations: BGL windows, Hadoop jobs, tickets, GitLab.com's incidents and
+ * injection benchmarks.
+ */
 function MoreRealSections({ more }: { more: RealData }) {
-  const { bgl, hadoop, tickets, injection } = more;
+  const { bgl, hadoop, tickets, gitlab, injection } = more;
   const n = (x: number) => x.toLocaleString("en");
   const sev = (m: typeof bgl.aria) => [
     pct(m.accuracy),
@@ -380,6 +404,10 @@ function MoreRealSections({ more }: { more: RealData }) {
     `${m.severeMissed} of ${tickets.severe}`,
   ];
   const labelOrder = Object.keys(LABELS).filter((k) => k in hadoop.byLabel);
+  type Memory = typeof gitlab.service;
+  const recall = (pick: (m: Memory) => Memory["aria"]) =>
+    [gitlab.service, gitlab.cause].flatMap((by) => [pct(pick(by).hit3), pct(pick(by).hit1)]);
+  const fusedLoses = gitlab.service.bm25.hit3 > gitlab.service.aria.hit3;
   return (
     <>
       <Section
@@ -518,6 +546,52 @@ function MoreRealSections({ more }: { more: RealData }) {
       </Section>
 
       <Section
+        id="ev-gitlab"
+        title="Similar past incidents, on GitLab.com's own"
+        intro={
+          <>
+            GitLab runs GitLab.com in the open: its {n(gitlab.incidents)} production incidents are
+            public, labelled by the responders with the service that failed and, after review, the
+            root cause. Incident memory holds the {n(gitlab.memory)} opened before{" "}
+            {gitlab.cutoff.slice(0, 4)}, from their titles and descriptions. Each of the{" "}
+            {n(gitlab.later)} later incidents asks for similar past ones from its title alone; a hit
+            is a past incident with the same label among the first {count(gitlab.top)}. Labels never
+            enter the index or the query.
+          </>
+        }
+      >
+        <MethodTable
+          label="Similar past GitLab.com incidents, by method"
+          head={[
+            "Method",
+            `Same service, first ${gitlab.top}`,
+            "Same service, first",
+            `Same root cause, first ${gitlab.top}`,
+            "Same root cause, first",
+          ]}
+          rows={[
+            {
+              name: "ARIA (BM25 and embeddings, fused by rank)",
+              cells: recall((m) => m.aria),
+              strong: true,
+            },
+            { name: "BM25 alone", cells: recall((m) => m.bm25) },
+            { name: "The embeddings alone", cells: recall((m) => m.embeddings) },
+            { name: "Past incidents picked at random", cells: recall((m) => m.random) },
+            { name: "Always the commonest label", cells: recall((m) => m.commonest) },
+          ]}
+        />
+        <p className="max-w-prose text-sm text-muted-foreground">
+          {n(gitlab.service.aria.queries)} later incidents name a service and{" "}
+          {n(gitlab.cause.aria.queries)} a root cause.{" "}
+          {fusedLoses
+            ? "BM25 alone did better than the fused index: the embeddings here are the offline ones, fitted on these incidents' own words, and they cost recall. "
+            : "The embeddings here are the offline ones, fitted on these incidents' own words. "}
+          The issues are a live source; this is the snapshot of {gitlab.snapshot}.
+        </p>
+      </Section>
+
+      <Section
         id="ev-injection"
         title="Prompt injection, public benchmarks"
         intro={
@@ -570,6 +644,24 @@ export function Evals({
   const p = data.pipeline;
   const r = data.robustness;
   const live = data.live;
+  const contents: [string, string][] = [
+    ...(real ? [["ev-real", "HDFS, expert labels"] as [string, string]] : []),
+    ...(more
+      ? ([
+          ["ev-bgl", "BlueGene/L alert tags"],
+          ["ev-hadoop", "Hadoop jobs"],
+          ["ev-tickets", "ServiceNow tickets"],
+          ["ev-gitlab", "GitLab.com incidents"],
+          ["ev-injection", "Injection benchmarks"],
+        ] as [string, string][])
+      : []),
+    ["ev-severity", "Severity"],
+    ["ev-calibration", "Calibration"],
+    ["ev-systems", "By system"],
+    ["ev-pipeline", "End to end"],
+    ["ev-robustness", "Parsing and injection"],
+    ["ev-live", "Live model"],
+  ];
   const stages = Object.entries(p.stageP50)
     .map(([step, ms]) => [NODE_LABEL[step] ?? step, ms] as [string, number])
     .sort((a, b) => b[1] - a[1]);
@@ -580,8 +672,8 @@ export function Evals({
         description={
           <>
             Severity, end-to-end and robustness results are measured on {data.dataDescription}; the
-            real-data sections on real logs, jobs, tickets and attacks, with the labels their owners
-            gave them. Results from commit <code>{data.gitSha}</code>, run{" "}
+            real-data sections on real logs, jobs, tickets, incidents and attacks, with the labels
+            their owners gave them. Results from commit <code>{data.gitSha}</code>, run{" "}
             {data.createdAt.slice(0, 10)}; <code>make eval</code> reproduces them, and CI&rsquo;s
             smoke gate fails on a regression in severity, parsing, retrieval or reporting.{" "}
             <a
@@ -593,7 +685,9 @@ export function Evals({
             .
           </>
         }
-      />
+      >
+        <Contents items={contents} />
+      </PageHeader>
 
       {real ? <RealSection real={real} /> : null}
       {more ? <MoreRealSections more={more} /> : null}

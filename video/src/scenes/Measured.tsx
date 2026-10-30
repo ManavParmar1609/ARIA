@@ -1,7 +1,7 @@
 import { useCurrentFrame } from "remotion";
 
 import { Heading, Stage } from "../components";
-import { measured, realLogs } from "../data";
+import { measured, publicAttacks, realLogs } from "../data";
 import { enter } from "../motion";
 import { color, size } from "../theme";
 
@@ -68,15 +68,15 @@ export const Measured = () => {
         />
         <Row
           start={140}
-          figure={measured.quarantined}
-          label={`of ${measured.attacks} prompt-injection attempts quarantined`}
-          note={`${measured.falsePositives} of ${measured.benign} benign look-alikes. An upper bound: the detector was tuned on this corpus.`}
-        />
-        <Row
-          start={200}
           figure={realLogs.precision}
           label="of its flags on real HDFS logs were real failures"
           note={`By the experts' labels. It caught ${realLogs.recall} of the failures it could judge, ${realLogs.recallAll} of all.`}
+        />
+        <Row
+          start={200}
+          figure={publicAttacks.caught}
+          label={`of ${publicAttacks.attacks} public prompt-injection attacks caught`}
+          note={`From ${publicAttacks.benchmarks} benchmarks it was never tuned on. Fencing and approval do not rely on it.`}
         />
       </div>
       <p
@@ -88,9 +88,9 @@ export const Measured = () => {
           ...enter(frame, 10),
         }}
       >
-        The first three use semi-synthetic incidents built from real Loghub lines, so they are not
-        accuracy on production incidents; the last is one real log from one system. Method and every
-        number: docs/evaluation.md ({measured.commit}).
+        The first two use semi-synthetic incidents built from real Loghub lines, so they are not
+        accuracy on production incidents; the last two are one real log and attacks written by
+        others. Method and every number: docs/evaluation.md ({measured.commit}).
       </p>
     </Stage>
   );

@@ -107,6 +107,17 @@ test.describe("console", () => {
       await page.goto(path);
       await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
       await expectAccessible(page, path);
+      if (path === "/console/evals") {
+        // The long evaluation page opens with a link to each section.
+        await page
+          .getByRole("navigation", { name: "On this page" })
+          .getByRole("link", { name: "GitLab.com incidents" })
+          .click();
+        await expect(page).toHaveURL(/#ev-gitlab$/);
+        await expect(
+          page.getByRole("heading", { level: 2, name: /Similar past incidents/ }),
+        ).toBeInViewport();
+      }
     }
     // Reviews from the earlier tests feed the recalibration queue.
     await expect(page.getByRole("table", { name: "Recent reviews" })).toContainText("Approved");

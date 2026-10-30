@@ -1,7 +1,7 @@
 {
   "suite": "all",
-  "created_at": "2026-10-30T02:55:57+00:00",
-  "git_sha": "3434ec7",
+  "created_at": "2026-10-30T03:34:51+00:00",
+  "git_sha": "f4e6824",
   "llm": false,
   "data": {
     "synthetic": true,
@@ -669,15 +669,6 @@
             0.0625
           ]
         },
-        "three trigger words": {
-          "n": 113,
-          "flagged": 6,
-          "rate": 0.0531,
-          "ci95": [
-            0.0197,
-            0.112
-          ]
-        },
         "two trigger words": {
           "n": 113,
           "flagged": 4,
@@ -685,6 +676,15 @@
           "ci95": [
             0.0097,
             0.0882
+          ]
+        },
+        "three trigger words": {
+          "n": 113,
+          "flagged": 6,
+          "rate": 0.0531,
+          "ci95": [
+            0.0197,
+            0.112
           ]
         }
       },
@@ -2095,6 +2095,145 @@
           "keyword": "SEV2"
         }
       ]
+    },
+    "gitlab": {
+      "source": "GitLab.com production incidents (gitlab-com/gl-infra/production)",
+      "citation": "GitLab Inc., GitLab.com production incident tracker (public issues).",
+      "snapshot": {
+        "url": "https://gitlab.com/api/v4/projects/7444821/issues",
+        "params": {
+          "labels": "incident",
+          "scope": "all",
+          "state": "all",
+          "created_before": "2026-10-01T00:00:00Z",
+          "order_by": "created_at",
+          "sort": "asc"
+        },
+        "issues": 7454,
+        "sha256": "564701d99392217e6e43167c6e360297729452f88eaea2281ddffc9084cf2a30",
+        "downloaded_at": "2026-10-30T03:13:29+00:00"
+      },
+      "incidents": 7454,
+      "cutoff": "2023-01-01",
+      "memory": 3727,
+      "later": 3727,
+      "top": 3,
+      "by": {
+        "service": {
+          "labels": 66,
+          "memory_labelled": 2918,
+          "commonest": "Gitaly",
+          "methods": {
+            "aria": {
+              "queries": 1508,
+              "recall_at_1": 0.3004,
+              "recall_at_3": 0.4092,
+              "recall_at_3_ci95": [
+                0.3842,
+                0.4345
+              ],
+              "mrr_at_10": 0.3653
+            },
+            "bm25": {
+              "queries": 1508,
+              "recall_at_1": 0.321,
+              "recall_at_3": 0.441,
+              "recall_at_3_ci95": [
+                0.4157,
+                0.4665
+              ],
+              "mrr_at_10": 0.3936
+            },
+            "embeddings": {
+              "queries": 1508,
+              "recall_at_1": 0.2732,
+              "recall_at_3": 0.3442,
+              "recall_at_3_ci95": [
+                0.3202,
+                0.3688
+              ],
+              "mrr_at_10": 0.3267
+            },
+            "random": {
+              "queries": 1508,
+              "recall_at_1": 0.0371,
+              "recall_at_3": 0.1068,
+              "recall_at_3_ci95": [
+                0.0916,
+                0.1235
+              ],
+              "mrr_at_10": 0.0885
+            },
+            "commonest_label": {
+              "queries": 1508,
+              "recall_at_1": 0.12,
+              "recall_at_3": 0.12,
+              "recall_at_3_ci95": [
+                0.104,
+                0.1375
+              ],
+              "mrr_at_10": 0.12
+            }
+          }
+        },
+        "cause": {
+          "labels": 17,
+          "memory_labelled": 1500,
+          "commonest": "Saturation",
+          "methods": {
+            "aria": {
+              "queries": 1122,
+              "recall_at_1": 0.2665,
+              "recall_at_3": 0.4848,
+              "recall_at_3_ci95": [
+                0.4552,
+                0.5145
+              ],
+              "mrr_at_10": 0.4062
+            },
+            "bm25": {
+              "queries": 1122,
+              "recall_at_1": 0.295,
+              "recall_at_3": 0.5116,
+              "recall_at_3_ci95": [
+                0.4819,
+                0.5412
+              ],
+              "mrr_at_10": 0.432
+            },
+            "embeddings": {
+              "queries": 1122,
+              "recall_at_1": 0.2504,
+              "recall_at_3": 0.4733,
+              "recall_at_3_ci95": [
+                0.4437,
+                0.503
+              ],
+              "mrr_at_10": 0.3905
+            },
+            "random": {
+              "queries": 1122,
+              "recall_at_1": 0.1417,
+              "recall_at_3": 0.3422,
+              "recall_at_3_ci95": [
+                0.3145,
+                0.3708
+              ],
+              "mrr_at_10": 0.2796
+            },
+            "commonest_label": {
+              "queries": 1122,
+              "recall_at_1": 0.1898,
+              "recall_at_3": 0.1898,
+              "recall_at_3_ci95": [
+                0.1673,
+                0.214
+              ],
+              "mrr_at_10": 0.1898
+            }
+          }
+        }
+      }
     }
   },
   "severity": {
@@ -2821,31 +2960,31 @@
       "false_alarms": 0.0
     },
     "latency": {
-      "time_to_review_p50_s": 0.697,
-      "time_to_review_p95_s": 1.351,
+      "time_to_review_p50_s": 0.569,
+      "time_to_review_p95_s": 1.206,
       "stage_p50_ms": {
-        "assess": 8.8,
-        "comms": 12.7,
-        "investigate": 111.2,
-        "merge": 81.0,
-        "parse_shard": 131.2,
-        "plan": 11.4,
-        "recall": 24.4,
-        "report": 18.4,
-        "review": 6.6,
-        "severity": 33.1
+        "assess": 7.4,
+        "comms": 11.6,
+        "investigate": 98.2,
+        "merge": 77.3,
+        "parse_shard": 123.4,
+        "plan": 10.0,
+        "recall": 20.4,
+        "report": 16.6,
+        "review": 5.5,
+        "severity": 29.1
       },
       "stage_p95_ms": {
-        "assess": 18.2,
-        "comms": 29.4,
-        "investigate": 239.7,
-        "merge": 209.7,
-        "parse_shard": 585.7,
-        "plan": 23.4,
-        "recall": 46.1,
-        "report": 31.5,
-        "review": 14.9,
-        "severity": 53.3
+        "assess": 15.1,
+        "comms": 26.8,
+        "investigate": 203.0,
+        "merge": 249.2,
+        "parse_shard": 464.6,
+        "plan": 18.4,
+        "recall": 29.5,
+        "report": 26.2,
+        "review": 12.4,
+        "severity": 48.4
       },
       "llm_call_p50_ms": 0.0,
       "llm_call_p95_ms": 0.0
