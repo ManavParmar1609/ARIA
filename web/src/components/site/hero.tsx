@@ -11,10 +11,10 @@ const SEVERITIES = ["SEV1", "SEV2", "SEV3", "SEV4"] as const;
 function Card({ name, delay, children }: { name: string; delay: number; children: ReactNode }) {
   return (
     <div
-      className="hero-rise grid content-start justify-items-center gap-3"
+      className="hero-rise grid grid-rows-[1fr_auto] justify-items-center gap-3"
       style={{ "--d": `${delay}ms` } as CSSProperties}
     >
-      <div className="grid w-full content-start gap-3 rounded-[12px] bg-raised p-4 sm:min-h-[15.5rem] lg:p-5">
+      <div className="grid h-full w-full content-start gap-3 rounded-[12px] bg-raised p-4 sm:min-h-[15.5rem] lg:p-5">
         {children}
       </div>
       <span className="rounded-full bg-raised px-3 py-0.5 text-xs font-medium text-heading">
@@ -123,14 +123,14 @@ export function Hero({ data }: { data: Replay }) {
   return (
     <section
       aria-labelledby="hero-title"
-      className="mx-auto grid max-w-[75rem] gap-3 px-3 pt-20 sm:px-6 sm:pt-24 lg:grid-cols-[minmax(0,11fr)_minmax(0,13fr)]"
+      className="mx-auto grid max-w-[75rem] gap-3 px-3 pt-20 sm:px-6 sm:pt-24 xl:grid-cols-[minmax(0,11fr)_minmax(0,13fr)]"
     >
       <div className="grid grid-rows-[1fr_auto] gap-3">
         <div className="flex flex-col rounded-card bg-panel-sage p-7 sm:p-10">
           <h1 id="hero-title" className="text-hero max-w-[12ch]">
             Incident triage that shows its work.
           </h1>
-          <p className="mt-10 max-w-[44ch] text-[0.9375rem] leading-relaxed text-heading lg:mt-auto lg:pt-16">
+          <p className="mt-10 max-w-[44ch] text-[0.9375rem] leading-relaxed text-heading xl:mt-auto xl:pt-16">
             ARIA reads the alert and its logs, rates severity with calibrated confidence and drafts
             a report in which every claim cites its evidence. Nothing is sent until a person
             approves.
