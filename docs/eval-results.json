@@ -1,7 +1,7 @@
 {
   "suite": "all",
-  "created_at": "2026-10-30T05:40:15+00:00",
-  "git_sha": "ed91fce",
+  "created_at": "2026-10-30T09:47:04+00:00",
+  "git_sha": "92df50e",
   "llm": false,
   "data": {
     "synthetic": true,
@@ -2096,6 +2096,324 @@
         }
       ]
     },
+    "openstack": {
+      "source": "the dessertlab OpenStack fault-injection dataset",
+      "citation": "D. Cotroneo, L. De Simone, P. Liguori, R. Natella, N. Bidokhti. How Bad Can a Bug Get? An Empirical Analysis of Software Failures in the OpenStack Cloud Computing Platform. ESEC/FSE 2019.",
+      "experiments": 911,
+      "by_subsystem": {
+        "Cinder": 269,
+        "Neutron": 203,
+        "Nova": 439
+      },
+      "failed": 480,
+      "reported": 396,
+      "silent": 84,
+      "lines": 6027505,
+      "line_cap": 20000,
+      "capped": 1,
+      "overlap_with_training_sample": 0.0,
+      "aria": {
+        "failed_flagged": 479,
+        "failed": 480,
+        "recall": 0.9979,
+        "recall_ci95": [
+          0.9884,
+          0.9999
+        ],
+        "normal_flagged": 431,
+        "normal": 431,
+        "false_alarm_rate": 1.0,
+        "paged": {
+          "failed_flagged": 444,
+          "failed": 480,
+          "recall": 0.925,
+          "recall_ci95": [
+            0.8977,
+            0.9469
+          ],
+          "normal_flagged": 133,
+          "normal": 431,
+          "false_alarm_rate": 0.3086
+        },
+        "reported": {
+          "flagged": 395,
+          "of": 396,
+          "share": 0.9975,
+          "ci95": [
+            0.986,
+            0.9999
+          ]
+        },
+        "silent": {
+          "flagged": 84,
+          "of": 84,
+          "share": 1.0,
+          "ci95": [
+            0.957,
+            1.0
+          ]
+        },
+        "ranking": {
+          "all": {
+            "auroc": 0.7767,
+            "auroc_ci95": [
+              0.7464,
+              0.8058
+            ],
+            "n": 911
+          },
+          "silent": {
+            "auroc": 0.8196,
+            "auroc_ci95": [
+              0.767,
+              0.8668
+            ],
+            "n": 515
+          }
+        }
+      },
+      "review": {
+        "failed": {
+          "flagged": 434,
+          "of": 480,
+          "share": 0.9042,
+          "ci95": [
+            0.8742,
+            0.929
+          ]
+        },
+        "healthy": {
+          "flagged": 431,
+          "of": 431,
+          "share": 1.0,
+          "ci95": [
+            0.9915,
+            1.0
+          ]
+        },
+        "decided_by": {
+          "fallback": 865,
+          "model": 25,
+          "rules": 21
+        },
+        "decided": {
+          "failed_flagged": 45,
+          "failed": 46,
+          "recall": 0.9783,
+          "recall_ci95": [
+            0.8847,
+            0.9994
+          ],
+          "normal_flagged": 0,
+          "normal": 0,
+          "false_alarm_rate": 0.0
+        }
+      },
+      "baselines": {
+        "any_error_line": {
+          "failed_flagged": 439,
+          "failed": 480,
+          "recall": 0.9146,
+          "recall_ci95": [
+            0.8859,
+            0.938
+          ],
+          "normal_flagged": 113,
+          "normal": 431,
+          "false_alarm_rate": 0.2622,
+          "reported": {
+            "flagged": 369,
+            "of": 396,
+            "share": 0.9318,
+            "ci95": [
+              0.9023,
+              0.9546
+            ]
+          },
+          "silent": {
+            "flagged": 70,
+            "of": 84,
+            "share": 0.8333,
+            "ci95": [
+              0.7362,
+              0.9058
+            ]
+          },
+          "ranking": {
+            "all": {
+              "auroc": 0.8285,
+              "auroc_ci95": [
+                0.8002,
+                0.8563
+              ],
+              "n": 911
+            },
+            "silent": {
+              "auroc": 0.8242,
+              "auroc_ci95": [
+                0.7766,
+                0.8714
+              ],
+              "n": 515
+            }
+          }
+        },
+        "keyword": {
+          "failed_flagged": 480,
+          "failed": 480,
+          "recall": 1.0,
+          "recall_ci95": [
+            0.9923,
+            1.0
+          ],
+          "normal_flagged": 431,
+          "normal": 431,
+          "false_alarm_rate": 1.0
+        },
+        "rules_only": {
+          "failed_flagged": 441,
+          "failed": 480,
+          "recall": 0.9187,
+          "recall_ci95": [
+            0.8906,
+            0.9416
+          ],
+          "normal_flagged": 133,
+          "normal": 431,
+          "false_alarm_rate": 0.3086
+        }
+      },
+      "by_subsystem_detail": {
+        "Cinder": {
+          "failed_flagged": 125,
+          "failed": 125,
+          "recall": 1.0,
+          "recall_ci95": [
+            0.9709,
+            1.0
+          ],
+          "normal_flagged": 144,
+          "normal": 144,
+          "false_alarm_rate": 1.0
+        },
+        "Neutron": {
+          "failed_flagged": 124,
+          "failed": 124,
+          "recall": 1.0,
+          "recall_ci95": [
+            0.9707,
+            1.0
+          ],
+          "normal_flagged": 79,
+          "normal": 79,
+          "false_alarm_rate": 1.0
+        },
+        "Nova": {
+          "failed_flagged": 230,
+          "failed": 231,
+          "recall": 0.9957,
+          "recall_ci95": [
+            0.9761,
+            0.9999
+          ],
+          "normal_flagged": 208,
+          "normal": 208,
+          "false_alarm_rate": 1.0
+        }
+      },
+      "by_fault_type": {
+        "missing_function_call": {
+          "failed_flagged": 39,
+          "failed": 39,
+          "recall": 1.0,
+          "recall_ci95": [
+            0.9097,
+            1.0
+          ],
+          "normal_flagged": 143,
+          "normal": 143,
+          "false_alarm_rate": 1.0
+        },
+        "missing_parameters": {
+          "failed_flagged": 100,
+          "failed": 100,
+          "recall": 1.0,
+          "recall_ci95": [
+            0.9638,
+            1.0
+          ],
+          "normal_flagged": 30,
+          "normal": 30,
+          "false_alarm_rate": 1.0
+        },
+        "throw_exception": {
+          "failed_flagged": 103,
+          "failed": 104,
+          "recall": 0.9904,
+          "recall_ci95": [
+            0.9476,
+            0.9998
+          ],
+          "normal_flagged": 34,
+          "normal": 34,
+          "false_alarm_rate": 1.0
+        },
+        "wrong_parameters": {
+          "failed_flagged": 82,
+          "failed": 82,
+          "recall": 1.0,
+          "recall_ci95": [
+            0.956,
+            1.0
+          ],
+          "normal_flagged": 53,
+          "normal": 53,
+          "false_alarm_rate": 1.0
+        },
+        "wrong_return_value": {
+          "failed_flagged": 151,
+          "failed": 151,
+          "recall": 1.0,
+          "recall_ci95": [
+            0.9759,
+            1.0
+          ],
+          "normal_flagged": 153,
+          "normal": 153,
+          "false_alarm_rate": 1.0
+        }
+      },
+      "checks": {
+        "": 212,
+        "instance_active": 147,
+        "volume_created": 56,
+        "volume_attached": 42,
+        "ssh": 23
+      },
+      "severity_by_outcome": {
+        "failed": {
+          "SEV1": 19,
+          "SEV2": 425,
+          "SEV3": 35,
+          "SEV4": 1
+        },
+        "healthy": {
+          "SEV2": 133,
+          "SEV3": 298
+        }
+      },
+      "leading_mode_by_outcome": {
+        "failed": {
+          "image_cache_missing": 477,
+          "none": 2,
+          "component_unavailable": 1
+        },
+        "healthy": {
+          "image_cache_missing": 430,
+          "none": 1
+        }
+      }
+    },
     "gitlab": {
       "source": "GitLab.com production incidents (gitlab-com/gl-infra/production)",
       "citation": "GitLab Inc., GitLab.com production incident tracker (public issues).",
@@ -2230,6 +2548,180 @@
                 0.214
               ],
               "mrr_at_10": 0.1898
+            }
+          }
+        }
+      }
+    },
+    "postmortems": {
+      "source": "the Post-mortems-Analysis collection (IntelligentDDS)",
+      "citation": "X. Li et al. Going through the Life Cycle of Faults in Clouds: Guidelines on Fault Handling. ISSRE 2022.",
+      "postmortems": 355,
+      "by_cloud": {
+        "AWS": 14,
+        "Azure": 242,
+        "Google Cloud": 99
+      },
+      "first": "2011-04-29",
+      "last": "2021-12-16",
+      "cutoff": "2019-01-01",
+      "memory": 195,
+      "later": 160,
+      "top": 3,
+      "fix_kinds": [
+        "rollback",
+        "hotfix",
+        "configuration",
+        "load",
+        "traffic",
+        "restart",
+        "capacity",
+        "hardware",
+        "self_healed"
+      ],
+      "fix_labels": 663,
+      "fix_labels_sorted": 0.6471,
+      "by": {
+        "cause": {
+          "labels": 16,
+          "memory_labelled": 143,
+          "commonest": "config",
+          "label_counts": {
+            "config": 66,
+            "code change": 27,
+            "payload flood": 17,
+            "network": 14,
+            "power outage": 13,
+            "service capacity": 6,
+            "resource race": 5,
+            "exception handling": 5,
+            "disk": 3,
+            "space": 3,
+            "incompatibility": 3,
+            "cpu": 3,
+            "cooling system": 3,
+            "timing bug": 1,
+            "fire supression system": 1,
+            "logic": 1
+          },
+          "methods": {
+            "aria": {
+              "queries": 106,
+              "recall_at_1": 0.2736,
+              "recall_at_3": 0.566,
+              "recall_at_3_ci95": [
+                0.4663,
+                0.662
+              ],
+              "mrr_at_10": 0.4319
+            },
+            "bm25": {
+              "queries": 106,
+              "recall_at_1": 0.2736,
+              "recall_at_3": 0.6038,
+              "recall_at_3_ci95": [
+                0.5041,
+                0.6975
+              ],
+              "mrr_at_10": 0.425
+            },
+            "embeddings": {
+              "queries": 106,
+              "recall_at_1": 0.217,
+              "recall_at_3": 0.566,
+              "recall_at_3_ci95": [
+                0.4663,
+                0.662
+              ],
+              "mrr_at_10": 0.3966
+            },
+            "random": {
+              "queries": 106,
+              "recall_at_1": 0.3019,
+              "recall_at_3": 0.5377,
+              "recall_at_3_ci95": [
+                0.4382,
+                0.6351
+              ],
+              "mrr_at_10": 0.4368
+            },
+            "commonest_label": {
+              "queries": 106,
+              "recall_at_1": 0.4245,
+              "recall_at_3": 0.4245,
+              "recall_at_3_ci95": [
+                0.3291,
+                0.5243
+              ],
+              "mrr_at_10": 0.4245
+            }
+          }
+        },
+        "fix": {
+          "labels": 9,
+          "memory_labelled": 162,
+          "commonest": "rollback",
+          "label_counts": {
+            "rollback": 45,
+            "traffic": 34,
+            "configuration": 27,
+            "hotfix": 24,
+            "capacity": 22,
+            "load": 19,
+            "hardware": 18,
+            "restart": 18,
+            "self_healed": 14
+          },
+          "methods": {
+            "aria": {
+              "queries": 133,
+              "recall_at_1": 0.3083,
+              "recall_at_3": 0.5338,
+              "recall_at_3_ci95": [
+                0.4454,
+                0.6208
+              ],
+              "mrr_at_10": 0.4556
+            },
+            "bm25": {
+              "queries": 133,
+              "recall_at_1": 0.2707,
+              "recall_at_3": 0.5338,
+              "recall_at_3_ci95": [
+                0.4454,
+                0.6208
+              ],
+              "mrr_at_10": 0.4399
+            },
+            "embeddings": {
+              "queries": 133,
+              "recall_at_1": 0.3158,
+              "recall_at_3": 0.5263,
+              "recall_at_3_ci95": [
+                0.4379,
+                0.6135
+              ],
+              "mrr_at_10": 0.4504
+            },
+            "random": {
+              "queries": 133,
+              "recall_at_1": 0.2331,
+              "recall_at_3": 0.5263,
+              "recall_at_3_ci95": [
+                0.4379,
+                0.6135
+              ],
+              "mrr_at_10": 0.422
+            },
+            "commonest_label": {
+              "queries": 133,
+              "recall_at_1": 0.2406,
+              "recall_at_3": 0.2406,
+              "recall_at_3_ci95": [
+                0.1708,
+                0.3223
+              ],
+              "mrr_at_10": 0.2406
             }
           }
         }
@@ -2960,31 +3452,31 @@
       "false_alarms": 0.0
     },
     "latency": {
-      "time_to_review_p50_s": 0.455,
-      "time_to_review_p95_s": 0.969,
+      "time_to_review_p50_s": 0.346,
+      "time_to_review_p95_s": 0.761,
       "stage_p50_ms": {
-        "assess": 5.0,
-        "comms": 8.6,
-        "investigate": 72.2,
-        "merge": 57.0,
-        "parse_shard": 93.7,
-        "plan": 7.6,
-        "recall": 15.3,
-        "report": 13.0,
+        "assess": 5.2,
+        "comms": 6.3,
+        "investigate": 61.9,
+        "merge": 38.5,
+        "parse_shard": 65.8,
+        "plan": 5.7,
+        "recall": 12.1,
+        "report": 9.6,
         "review": 4.0,
-        "severity": 21.3
+        "severity": 16.4
       },
       "stage_p95_ms": {
-        "assess": 14.4,
-        "comms": 16.9,
-        "investigate": 149.1,
-        "merge": 115.9,
-        "parse_shard": 319.7,
-        "plan": 21.1,
-        "recall": 23.2,
-        "report": 21.0,
-        "review": 12.6,
-        "severity": 32.4
+        "assess": 11.2,
+        "comms": 13.9,
+        "investigate": 211.4,
+        "merge": 86.6,
+        "parse_shard": 234.7,
+        "plan": 14.5,
+        "recall": 18.9,
+        "report": 15.1,
+        "review": 11.7,
+        "severity": 31.5
       },
       "llm_call_p50_ms": 0.0,
       "llm_call_p95_ms": 0.0
