@@ -352,8 +352,10 @@ class Settings(BaseSettings):
 
 def _interpolate(value: Any) -> Any:
     if isinstance(value, str):
+        # As in the shell, ${NAME:-default} takes the default when NAME is unset or empty, so an
+        # empty passthrough (compose's `NAME: ${NAME:-}`) keeps the default written here.
         return _ENV_REF.sub(
-            lambda m: os.environ.get(m.group("name"), m.group("default") or ""), value
+            lambda m: os.environ.get(m.group("name")) or m.group("default") or "", value
         )
     if isinstance(value, dict):
         return {key: _interpolate(item) for key, item in value.items()}
