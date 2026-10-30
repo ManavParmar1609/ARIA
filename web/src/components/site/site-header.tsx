@@ -24,7 +24,7 @@ export const SECTIONS = [
 export function SiteHeader() {
   const links = [...SECTIONS, { href: REPO_URL, label: "GitHub" }];
   return (
-    <header className="fixed inset-x-0 top-0 z-40 bg-background">
+    <header data-fixed-header className="fixed inset-x-0 top-0 z-40 bg-background">
       <div className="mx-auto flex h-16 max-w-[75rem] items-center justify-between gap-3 px-3 sm:px-6">
         {/* No prefetch: on the home page it would fetch and decode the page already showing. */}
         <Link href="/" prefetch={false} className="rounded-sm" aria-label="ARIA home">

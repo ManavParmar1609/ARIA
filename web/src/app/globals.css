@@ -244,7 +244,10 @@
     color-scheme: light;
     -webkit-text-size-adjust: 100%;
     text-rendering: optimizeLegibility;
-    /* Anchors and keyboard focus land clear of the landing page's navigation. */
+  }
+  /* Anchors and keyboard focus land clear of a fixed header (the landing page's); console
+     headings set their own offsets with scroll-margin. */
+  html:has([data-fixed-header]) {
     scroll-padding-top: 6rem;
   }
   html.dark {

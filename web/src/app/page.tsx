@@ -154,7 +154,7 @@ function Section({
       id={id}
       aria-labelledby={`${id}-title`}
       className={cn(
-        "mx-auto max-w-[75rem] scroll-mt-20 px-3 sm:px-6",
+        "mx-auto max-w-[75rem] px-3 sm:px-6",
         deferred && "[contain-intrinsic-size:auto_1400px] [content-visibility:auto]",
       )}
     >
@@ -407,7 +407,7 @@ export default function Landing() {
         <section
           id="faq"
           aria-labelledby="faq-title"
-          className="mx-auto max-w-[75rem] scroll-mt-20 px-3 pb-16 sm:px-6 lg:pb-24"
+          className="mx-auto max-w-[75rem] px-3 pb-16 sm:px-6 lg:pb-24"
         >
           <Faq />
         </section>
