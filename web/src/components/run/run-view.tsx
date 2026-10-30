@@ -28,7 +28,7 @@ import { ApiError } from "@/lib/api/client";
 import { useDeleteRun, useRun, useRunState } from "@/lib/api/hooks";
 import { useRunTimeline } from "@/lib/api/stream";
 import { isSeverity, type ReviewPrompt, type RunDetail } from "@/lib/api/types";
-import { absoluteTime, duration, relativeTime } from "@/lib/format";
+import { absoluteTime, duration, relativeTime, stripSeverity } from "@/lib/format";
 import { systemName, triggerLabel } from "@/lib/systems";
 
 import { Activity, GraphProgress } from "./activity";
@@ -75,7 +75,6 @@ function Header({ run, severity }: { run: RunDetail; severity: string | null | u
           ) : null}
         </p>
         <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-faint">
-          <span className="font-mono">{run.id}</span>
           {run.latency_ms != null ? (
             <span>report ready after {duration(run.latency_ms)}</span>
           ) : null}
@@ -139,6 +138,23 @@ function DeleteRun({ runId }: { runId: string }) {
   );
 }
 
+/** Where the run sits: the incidents list, then this run's ID. */
+function Crumbs({ runId }: { runId: string }) {
+  return (
+    <nav aria-label="Breadcrumb" className="text-sm text-muted-foreground">
+      <Link href="/console/runs" className="hover:text-foreground">
+        Incidents
+      </Link>
+      <span aria-hidden className="px-2 text-faint">
+        /
+      </span>
+      <span aria-current="page" className="font-mono text-xs">
+        {runId}
+      </span>
+    </nav>
+  );
+}
+
 /** The run page's shape while it loads: header, progress rail, report and side panels. */
 function RunSkeleton() {
   return (
@@ -197,7 +213,21 @@ export function RunView({ runId }: { runId: string }) {
         </EmptyState>
       );
     }
-    return <ErrorState error={run.error} onRetry={() => void run.refetch()} />;
+    return (
+      <div className="grid gap-6">
+        <Crumbs runId={runId} />
+        <ErrorState
+          title="This run could not be loaded"
+          error={run.error}
+          onRetry={() => void run.refetch()}
+          action={
+            <Button asChild size="sm" variant="ghost">
+              <Link href="/console/runs">Back to incidents</Link>
+            </Button>
+          }
+        />
+      </div>
+    );
   }
 
   const detail = run.data;
@@ -213,17 +243,7 @@ export function RunView({ runId }: { runId: string }) {
     <EvidenceProvider evidence={evidence} events={events}>
       <div className="grid gap-6">
         <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-3 gap-y-1">
-          <nav aria-label="Breadcrumb" className="text-sm text-muted-foreground">
-            <Link href="/console/runs" className="hover:text-foreground">
-              Incidents
-            </Link>
-            <span aria-hidden className="px-2 text-faint">
-              /
-            </span>
-            <span aria-current="page" className="font-mono text-xs">
-              {detail.id}
-            </span>
-          </nav>
+          <Crumbs runId={detail.id} />
           <div className="flex flex-wrap gap-1.5">
             <Button asChild size="sm" variant="ghost">
               <Link href="/console/guide#read-a-run">
@@ -297,7 +317,10 @@ export function RunView({ runId }: { runId: string }) {
               />
             ) : null}
             {report ? (
-              <ReportView report={report} />
+              <ReportView
+                report={report}
+                titleHidden={stripSeverity(report.title) === runTitle(detail)}
+              />
             ) : liveText ? (
               <LiveDraft text={liveText} />
             ) : state.isPending && status !== "queued" ? (

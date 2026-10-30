@@ -16,10 +16,13 @@ export class ApiError extends Error {
   }
 }
 
+// The stock reason phrases servers send with a 5xx: they say nothing a person can act on.
+const STOCK = new Set(["Internal Server Error", "Bad Gateway", "Service Unavailable"]);
+
 function describe(status: number, body: unknown): string {
   if (body && typeof body === "object" && "detail" in body) {
     const detail = (body as { detail: unknown }).detail;
-    if (typeof detail === "string") return detail;
+    if (typeof detail === "string" && !STOCK.has(detail)) return detail;
     if (Array.isArray(detail) && detail.length > 0) {
       const first = detail[0] as { msg?: unknown; loc?: unknown };
       const where = Array.isArray(first.loc) ? first.loc.slice(1).join(".") : "";
@@ -30,6 +33,9 @@ function describe(status: number, body: unknown): string {
   if (status === 429) return "Too many requests. Wait a moment and try again.";
   if (status === 502 || status === 503 || status === 504) {
     return "The ARIA API is not reachable. Check that it is running.";
+  }
+  if (status >= 500) {
+    return "The ARIA API hit an unexpected error. Try again; if it keeps failing, its log says why.";
   }
   return `The request failed (HTTP ${status}).`;
 }

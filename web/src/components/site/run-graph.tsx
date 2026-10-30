@@ -107,7 +107,9 @@ export function RunGraph({ steps }: { steps: GraphStep[] }) {
 
   return (
     <div ref={root} className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:gap-16">
-      <ol data-steps className="grid gap-6 lg:gap-[22vh] lg:py-[12vh]">
+      {/* The tall gaps are scroll room for the scroll-driven version (WIDE_MOTION); without it,
+          the steps sit as a plain list. CSS decides, so the server and browser agree. */}
+      <ol data-steps className="grid gap-6 lg:motion-safe:gap-[22vh] lg:motion-safe:py-[12vh]">
         {steps.map((step, i) => (
           <li
             key={step.title}

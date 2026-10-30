@@ -45,7 +45,15 @@ const RISK: Record<string, string> = {
 };
 
 /** The cited report. Each claim carries its citations; nothing in it is uncited. */
-export function ReportView({ report }: { report: IncidentReport }) {
+/** The report as published. `titleHidden` keeps its heading for screen readers only, for a page
+ * whose own heading already says the same thing. */
+export function ReportView({
+  report,
+  titleHidden = false,
+}: {
+  report: IncidentReport;
+  titleHidden?: boolean;
+}) {
   const validation = report.validation;
   const ok = validation?.ok ?? false;
   return (
@@ -77,7 +85,10 @@ export function ReportView({ report }: { report: IncidentReport }) {
               : "Failed validation"}
           </span>
         </div>
-        <h2 id="report-title" className="text-2xl leading-tight tracking-heading">
+        <h2
+          id="report-title"
+          className={cn("text-2xl leading-tight tracking-heading", titleHidden && "sr-only")}
+        >
           {stripSeverity(report.title)}
         </h2>
         {!ok && validation?.issues?.length ? (

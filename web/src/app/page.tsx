@@ -273,12 +273,6 @@ function Intro() {
 // The README's offline quick start, without keys.
 const QUICKSTART = ["make install", "uv run aria db upgrade && uv run aria seed", "make dev"];
 
-const PROMISES = [
-  "Runs offline, with no API key",
-  "Every claim cites its evidence",
-  "Nothing is sent without approval",
-];
-
 function TryIt() {
   return (
     <section aria-labelledby="try-title" className="relative z-10">
@@ -330,11 +324,6 @@ function TryIt() {
               <a href={`${REPO_URL}#quickstart`}>Read the quick start</a>
             </Button>
           </div>
-          <ul className="mt-10 grid w-full gap-4 text-lg sm:grid-cols-3">
-            {PROMISES.map((promise) => (
-              <li key={promise}>{promise}</li>
-            ))}
-          </ul>
         </div>
       </div>
     </section>

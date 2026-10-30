@@ -22,11 +22,24 @@ const HOW: Record<string, string> = {
   human: "A reviewer set it.",
 };
 
+// The same paths when the model stepped aside: the set is what the rules leave open, not a
+// calibrated prediction set, so these never mention the model or a confidence.
+const HOW_RULES_ONLY: Record<string, string> = {
+  ...HOW,
+  rules: "Rules decided it: a safety floor fixed it, or the rule scores left one level open.",
+  llm: "The LLM chose it from the levels the rules leave open.",
+  fallback:
+    "ARIA was not sure enough to decide alone, so it took the most severe level the rules leave open and asked for review.",
+};
+
 /** Severity and why: the instrument, the decision path and the rule trace. */
 export function SeverityPanel({ assessment }: { assessment: SeverityAssessment }) {
   const [traceOpen, setTraceOpen] = useState(false);
   const reduceMotion = useReducedMotion();
   const coverage = Math.round((1 - assessment.alpha) * 100);
+  // A window unlike the ones the model learned from (or no model loaded): the probabilities are
+  // normalised rule scores, so nothing here may read them as a calibrated confidence.
+  const rulesOnly = assessment.model_version.startsWith("rules-only");
   // A floor that lifts the severity above what the model believed: say so plainly, with the
   // model's own view, instead of quoting a near-zero confidence for the class the floor chose.
   const floorHit = assessment.rule_hits.find(
@@ -41,9 +54,9 @@ export function SeverityPanel({ assessment }: { assessment: SeverityAssessment }
       : null;
   const how = lifted
     ? `A safety floor decided it: “${lifted.title}” holds it at ${assessment.floor} or above.`
-    : assessment.decided_by === "fallback" && assessment.set_empty
+    : assessment.decided_by === "fallback" && assessment.set_empty && !rulesOnly
       ? "ARIA was not sure enough to decide alone, so it took the most likely class and asked for review."
-      : (HOW[assessment.decided_by] ?? assessment.decided_by);
+      : ((rulesOnly ? HOW_RULES_ONLY : HOW)[assessment.decided_by] ?? assessment.decided_by);
   const maxScore = Math.max(1, ...SEVERITIES.map((s) => assessment.rule_scores[s] ?? 0));
   return (
     // overflow-clip: the stamp starts large, and a transform still counts as overflow; clipped to
@@ -69,20 +82,25 @@ export function SeverityPanel({ assessment }: { assessment: SeverityAssessment }
         floor={assessment.floor}
         alpha={assessment.alpha}
         setEmpty={assessment.set_empty ?? false}
+        rulesOnly={rulesOnly}
         drawBracket
       />
       <p className="text-sm leading-relaxed">
         {how}{" "}
         <span className="text-muted-foreground">
           {lifted
-            ? `On its own, the model put ${percent(assessment.probabilities[modelTop] ?? 0)} on ${modelTop}; the floor is there for cases the model has not learned.`
-            : assessment.set_empty
-              ? `No severity is likely enough for the ${coverage}% prediction set on its own; ${assessment.severity} is the most likely, at ${percent(assessment.confidence)}.`
-              : assessment.prediction_set.length === 1
-                ? `Confidence ${percent(assessment.confidence)}; only ${assessment.prediction_set[0]} is plausible at ${coverage}% confidence.`
-                : `Confidence ${percent(assessment.confidence)}; at ${coverage}% confidence it is one of ${assessment.prediction_set.join(", ")}.`}
+            ? rulesOnly
+              ? `On their own, the rule scores put ${percent(assessment.probabilities[modelTop] ?? 0)} on ${modelTop}; the floor is there for cases the scores miss.`
+              : `On its own, the model put ${percent(assessment.probabilities[modelTop] ?? 0)} on ${modelTop}; the floor is there for cases the model has not learned.`
+            : rulesOnly
+              ? "The calibrated model was not used for this window, so the bars are rule scores, not a calibrated confidence."
+              : assessment.set_empty
+                ? `No severity is likely enough for the ${coverage}% prediction set on its own; ${assessment.severity} is the most likely, at ${percent(assessment.confidence)}.`
+                : assessment.prediction_set.length === 1
+                  ? `Confidence ${percent(assessment.confidence)}; only ${assessment.prediction_set[0]} is plausible at ${coverage}% confidence.`
+                  : `Confidence ${percent(assessment.confidence)}; at ${coverage}% confidence it is one of ${assessment.prediction_set.join(", ")}.`}
           {assessment.auditable
-            ? " No LLM was involved, so the decision can be audited from rules and model alone."
+            ? ` No LLM was involved, so the decision can be audited from ${rulesOnly ? "the rules" : "rules and model"} alone.`
             : ""}
         </span>
       </p>
@@ -173,7 +191,11 @@ export function SeverityPanel({ assessment }: { assessment: SeverityAssessment }
       ) : (
         <p className="text-sm text-muted-foreground">No severity rule matched this window.</p>
       )}
-      <p className="text-[0.6875rem] text-faint">Model {assessment.model_version}</p>
+      <p className="text-[0.6875rem] text-faint">
+        {rulesOnly
+          ? `Rules ${assessment.model_version.slice("rules-only:".length)}, model not used`
+          : `Model ${assessment.model_version}`}
+      </p>
     </section>
   );
 }

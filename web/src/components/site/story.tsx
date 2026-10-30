@@ -59,7 +59,7 @@ export function Story() {
         focusable="false"
         viewBox="0 0 1200 2400"
         preserveAspectRatio="none"
-        className="pointer-events-none absolute inset-0 -z-10 hidden h-full w-full md:block"
+        className="pointer-events-none absolute inset-0 -z-10 hidden h-full w-full lg:block"
       >
         <path
           d="M930 -40C930 260 300 300 290 620C280 920 910 900 920 1220C930 1520 290 1500 290 1820C290 2080 600 2140 600 2440"
@@ -70,13 +70,13 @@ export function Story() {
           vectorEffect="non-scaling-stroke"
         />
       </svg>
-      <ol className="grid gap-16 md:gap-10">
+      <ol className="grid gap-16 lg:gap-10">
         {CHAPTERS.map((chapter, i) => {
           const flip = i % 2 === 1;
           return (
             <li
               key={chapter.title}
-              className="grid items-center gap-6 md:min-h-[34rem] md:grid-cols-2 md:gap-10"
+              className="grid items-center gap-6 lg:min-h-[34rem] lg:grid-cols-2 lg:gap-10"
             >
               {/* Decorative: the card beside it says the same thing. */}
               <Image
@@ -85,7 +85,7 @@ export function Story() {
                 width={520}
                 height={440}
                 unoptimized
-                className={cn("mx-auto h-auto w-full max-w-md md:max-w-none", flip && "md:order-2")}
+                className={cn("mx-auto h-auto w-full max-w-md lg:max-w-none", flip && "lg:order-2")}
               />
               <article className="grid min-w-0 content-start gap-5 rounded-lg bg-raised p-7 sm:p-10 lg:p-12">
                 <h3 className="text-3xl leading-[1.05] tracking-heading sm:text-4xl">

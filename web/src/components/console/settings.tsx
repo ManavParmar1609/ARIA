@@ -263,6 +263,26 @@ export function Settings() {
   const view = useSettingsView();
   const feedback = useFeedback();
   const { theme, setTheme } = useTheme();
+  // When the API is down every section fails the same way: say so once, in the first section
+  // that failed, and let that one "Try again" reload them all.
+  const failed = providers.isError
+    ? "providers"
+    : view.isError
+      ? "view"
+      : feedback.isError
+        ? "feedback"
+        : null;
+  const retryAll = () => {
+    if (providers.isError) void providers.refetch();
+    if (view.isError) void view.refetch();
+    if (feedback.isError) void feedback.refetch();
+  };
+  const failure = (key: string, title: string, error: unknown) =>
+    failed === key ? (
+      <ErrorState title={title} error={error} onRetry={retryAll} />
+    ) : (
+      <p className="text-sm text-muted-foreground">Not loaded: see the error above.</p>
+    );
 
   return (
     <div className="grid gap-8">
@@ -326,7 +346,7 @@ export function Settings() {
         {providers.isPending ? (
           <LoadingRows rows={3} label="Loading providers" />
         ) : providers.isError ? (
-          <ErrorState error={providers.error} onRetry={() => void providers.refetch()} />
+          failure("providers", "Providers could not be loaded", providers.error)
         ) : (
           <Table aria-label="Providers">
             <TableHeader>
@@ -378,7 +398,7 @@ export function Settings() {
       {view.isPending ? (
         <LoadingRows rows={4} label="Loading settings" />
       ) : view.isError ? (
-        <ErrorState error={view.error} onRetry={() => void view.refetch()} />
+        failure("view", "The configuration could not be loaded", view.error)
       ) : (
         <Configuration view={view.data} />
       )}
@@ -391,7 +411,7 @@ export function Settings() {
         {feedback.isPending ? (
           <LoadingRows rows={3} label="Loading reviews" />
         ) : feedback.isError ? (
-          <ErrorState error={feedback.error} onRetry={() => void feedback.refetch()} />
+          failure("feedback", "Reviews could not be loaded", feedback.error)
         ) : (
           <Learning view={feedback.data} />
         )}

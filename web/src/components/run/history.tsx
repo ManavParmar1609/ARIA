@@ -60,7 +60,13 @@ export function History({
 
   if (history.isPending) return <LoadingRows rows={4} label="Loading checkpoints" />;
   if (history.isError)
-    return <ErrorState error={history.error} onRetry={() => void history.refetch()} />;
+    return (
+      <ErrorState
+        title="Checkpoints could not be loaded"
+        error={history.error}
+        onRetry={() => void history.refetch()}
+      />
+    );
   const items = history.data.filter((cp) => cp.next.length > 0 || cp.step != null);
 
   const startFork = () => {

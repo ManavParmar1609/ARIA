@@ -63,16 +63,19 @@ export function EmptyState({
   );
 }
 
-/** What went wrong and what to do about it, never an apology. */
+/** What went wrong and what to do about it, never an apology. The title names what failed. */
 export function ErrorState({
   error,
-  title = "This could not be loaded",
+  title,
   onRetry,
+  action,
   className,
 }: {
   error: unknown;
-  title?: string;
+  title: string;
   onRetry?: () => void;
+  /** Another way forward beside "Try again", such as a link back. */
+  action?: ReactNode;
   className?: string;
 }) {
   const detail =
@@ -91,10 +94,15 @@ export function ErrorState({
         {title}
       </p>
       <p className="text-sm text-muted-foreground">{detail}</p>
-      {onRetry ? (
-        <Button size="sm" onClick={onRetry}>
-          Try again
-        </Button>
+      {onRetry || action ? (
+        <div className="flex flex-wrap gap-2">
+          {onRetry ? (
+            <Button size="sm" onClick={onRetry}>
+              Try again
+            </Button>
+          ) : null}
+          {action}
+        </div>
       ) : null}
     </div>
   );

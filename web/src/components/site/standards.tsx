@@ -37,10 +37,15 @@ const STANDARDS = [
   {
     name: "Open-weight models",
     short: "models",
+    why: "Why open-weight models",
     what: "NVIDIA NIM, any OpenAI-compatible server, or Azure OpenAI. Switching provider is a configuration change; without one, ARIA runs deterministically.",
     href: `${ADR}/0005-route-model-calls-through-provider-chains.md`,
   },
 ];
+
+/** A name that must not break at its hyphen ("AG-" then "UI" on the next line). */
+const whole = (text: string) =>
+  text.includes("-") ? <span className="whitespace-nowrap">{text}</span> : text;
 
 /** The standards ARIA speaks, each linked to the decision record that explains it. */
 export function Standards() {
@@ -49,16 +54,17 @@ export function Standards() {
       {STANDARDS.map((s) => (
         <li
           key={s.name}
-          className="group/button relative grid content-start gap-4 rounded-lg bg-raised p-7 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring sm:p-9"
+          className="group/button relative grid grid-rows-[auto_1fr_auto] gap-4 rounded-lg bg-raised p-7 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring sm:p-9"
         >
-          <h3 className="text-2xl leading-tight tracking-heading">{s.name}</h3>
+          {/* Rows: name, text, link; the text row stretches, so links line up across a row. */}
+          <h3 className="text-2xl leading-tight tracking-heading">{whole(s.name)}</h3>
           <p className="text-muted-foreground">{s.what}</p>
           {/* The whole card is the link's target; the words say where it goes. */}
           <a
             href={s.href}
             className="mt-1 inline-flex items-center gap-3 justify-self-start text-base font-medium text-heading outline-none after:absolute after:inset-0 after:rounded-lg after:content-['']"
           >
-            Why ARIA uses {s.short}
+            {"why" in s ? s.why : <>Why ARIA uses {whole(s.short)}</>}
             <ArrowCircle size="md" />
           </a>
         </li>

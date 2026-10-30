@@ -34,6 +34,23 @@ describe("severity components", () => {
     expect(screen.getByText(/Dashed bracket/)).toBeTruthy();
   });
 
+  it("never calls rule scores a calibrated probability", () => {
+    render(
+      <SeverityScale
+        probabilities={{ SEV1: 0.1, SEV2: 0.4, SEV3: 0.3, SEV4: 0.2 }}
+        predictionSet={["SEV2", "SEV3", "SEV4"]}
+        decided="SEV2"
+        rulesOnly
+      />,
+    );
+    const label = screen.getByRole("figure").getAttribute("aria-label") ?? "";
+    expect(label).toContain("Rule scores (the calibrated model was not used)");
+    expect(label).toContain("Levels the rules leave open: SEV2, SEV3, SEV4.");
+    expect(label).not.toContain("prediction set");
+    expect(screen.getByText(/^Bars: rule scores/)).toBeTruthy();
+    expect(screen.queryByText(/calibrated model probability/)).toBeNull();
+  });
+
   it("always writes the severity as text", () => {
     render(<SeverityBadge severity="SEV1" withMeaning />);
     expect(screen.getByText("SEV1")).toBeTruthy();

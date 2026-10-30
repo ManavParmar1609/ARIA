@@ -7,6 +7,7 @@ import { useDeferredValue, useId, useMemo, useState } from "react";
 import { SeverityBadge } from "@/components/aria/severity";
 import { EmptyState, ErrorState, LoadingRows, PageHeader } from "@/components/console/states";
 import { SearchSpot } from "@/components/illustrations/spots";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -16,15 +17,30 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useIncidents } from "@/lib/api/hooks";
-import { isSeverity } from "@/lib/api/types";
+import { isSeverity, type IncidentOut } from "@/lib/api/types";
 import { relativeTime, stripSeverity } from "@/lib/format";
 import { systemName } from "@/lib/systems";
+
+const PAGE = 20;
+
+/** "HDFS, seen 3 times, last 2 days ago"; a single sighting is not counted. */
+function seen(incident: IncidentOut): string {
+  const when = incident.last_seen ? relativeTime(incident.last_seen) : "";
+  const count =
+    incident.occurrences > 1
+      ? `seen ${incident.occurrences} times${when ? `, last ${when}` : ""}`
+      : when
+        ? `seen ${when}`
+        : "";
+  return [systemName(incident.system), count].filter(Boolean).join(", ");
+}
 
 /** What ARIA remembers: past incidents it searches when a new one comes in. */
 export function Memory() {
   const id = useId();
   const [query, setQuery] = useState("");
   const [system, setSystem] = useState("all");
+  const [limit, setLimit] = useState(PAGE);
   const deferred = useDeferredValue(query.trim());
   const searching = deferred.length >= 2;
   const incidents = useIncidents(
@@ -38,6 +54,18 @@ export function Memory() {
   );
   const shown = incidents.data ?? [];
   const synthetic = shown.filter((i) => i.synthetic).length;
+  // Tag the rarer kind, so a seeded memory does not repeat "synthetic" on nearly every row.
+  const tagRuns = synthetic > shown.length / 2;
+  const tag = (incident: IncidentOut) =>
+    tagRuns ? (incident.synthetic ? null : "from a run") : incident.synthetic ? "synthetic" : null;
+  const kinds =
+    synthetic === 0
+      ? ""
+      : synthetic === shown.length
+        ? "; all are synthetic seed incidents"
+        : tagRuns
+          ? `; ${shown.length - synthetic} came from published runs, tagged so, and the rest are synthetic seed incidents`
+          : `; ${synthetic} are synthetic seed incidents, tagged so`;
 
   return (
     <div className="grid gap-6">
@@ -61,7 +89,10 @@ export function Memory() {
                 className="pl-9"
                 placeholder="disk, quorum, brute force..."
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setLimit(PAGE);
+                }}
               />
             </div>
           </div>
@@ -69,7 +100,13 @@ export function Memory() {
             <label htmlFor={`${id}-system`} className="text-sm font-medium">
               System
             </label>
-            <Select value={system} onValueChange={setSystem}>
+            <Select
+              value={system}
+              onValueChange={(value) => {
+                setSystem(value);
+                setLimit(PAGE);
+              }}
+            >
               <SelectTrigger id={`${id}-system`}>
                 <SelectValue />
               </SelectTrigger>
@@ -89,7 +126,11 @@ export function Memory() {
       {incidents.isPending ? (
         <LoadingRows rows={6} label="Loading incident memory" />
       ) : incidents.isError ? (
-        <ErrorState error={incidents.error} onRetry={() => void incidents.refetch()} />
+        <ErrorState
+          title="Incident memory could not be searched"
+          error={incidents.error}
+          onRetry={() => void incidents.refetch()}
+        />
       ) : !searching && system === "all" && shown.length === 0 ? (
         <EmptyState icon={LibraryIcon} title="Incident memory is empty">
           Seed it with <code>aria seed</code>, or publish a report: every approved run is
@@ -101,7 +142,7 @@ export function Memory() {
             {searching
               ? `The ${shown.length} closest incidents to "${deferred}", by keyword and by meaning, closest first`
               : `The ${shown.length} most recent incidents`}
-            {synthetic > 0 ? `; ${synthetic} are synthetic seed incidents, labelled so` : ""}.
+            {kinds}.
           </p>
           {shown.length === 0 ? (
             <EmptyState
@@ -112,7 +153,7 @@ export function Memory() {
             </EmptyState>
           ) : (
             <ul className="grid gap-2">
-              {shown.map((incident) => (
+              {shown.slice(0, limit).map((incident) => (
                 <li key={incident.incident_id}>
                   <details className="group rounded-lg bg-raised">
                     <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 [&::-webkit-details-marker]:hidden">
@@ -123,14 +164,10 @@ export function Memory() {
                       <span className="min-w-0 flex-1 font-medium">
                         {stripSeverity(incident.title)}
                       </span>
-                      <span className="text-xs text-muted-foreground">
-                        {systemName(incident.system)}, seen {incident.occurrences}{" "}
-                        {incident.occurrences === 1 ? "time" : "times"}
-                        {incident.last_seen ? `, last ${relativeTime(incident.last_seen)}` : ""}
-                      </span>
-                      {incident.synthetic ? (
-                        <span className="rounded-xs border border-rule px-1.5 text-[0.6875rem] text-faint">
-                          synthetic
+                      <span className="text-xs text-muted-foreground">{seen(incident)}</span>
+                      {tag(incident) ? (
+                        <span className="rounded-xs border border-rule px-1.5 text-xs text-muted-foreground">
+                          {tag(incident)}
                         </span>
                       ) : null}
                     </summary>
@@ -161,6 +198,16 @@ export function Memory() {
               ))}
             </ul>
           )}
+          {shown.length > limit ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <Button size="sm" variant="secondary" onClick={() => setLimit(limit + PAGE)}>
+                Show {Math.min(PAGE, shown.length - limit)} more
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                {limit} of {shown.length} shown
+              </span>
+            </div>
+          ) : null}
         </>
       )}
     </div>

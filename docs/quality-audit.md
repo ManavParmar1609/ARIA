@@ -36,6 +36,8 @@ Fixed (287d817):
   window in the training or held-out scenarios is that far out, so the published scenario numbers
   do not move. Real HDFS traffic is far faster than the scenarios, so on real logs the model now
   steps aside and the rules decide, with review ([model card](model-card.md), decision step 4).
+  The run page says so too: when the model stepped aside, its severity chart calls the bars rule
+  scores and the bracket the levels the rules leave open, never a calibrated confidence.
 - **Considered and not adopted:** also refusing to auto-decide when the model and the rules are two
   or more levels apart. On the held-out scenarios the model was right in nearly every such case
   (mostly the rules over-calling), so the rule would have added reviews without catching errors.
@@ -127,6 +129,15 @@ longer overlap; hyphens in code and IDs are no longer spaced out; the sidebar ke
 and fits laptop heights; sample names keep their capitals; guide rows align; evaluation bars keep
 their width on phones; browser tabs name the incident or runbook.
 
+Then: the run page no longer repeats its title and ID; error messages name what failed and what
+to do (never a bare "Internal Server Error"), settings shows one error instead of three, and a run
+or runbook that fails to load keeps a way back; runbooks say "Any system", keep "mod_jk" whole and
+tag only the riskier steps; incident memory shows 20 incidents at a time, tags the rarer kind and
+drops "seen 1 time"; template rows and the guardrails line say what they count in words. On the
+landing page, the story cards stack below 1024 px, the standards links line up, "How it works"
+has no empty bands under reduced motion, the risk chart is centred, the median time appears once,
+and the closing promises that repeated the hero are gone.
+
 ### Animation
 
 Checked: each of the six chosen animations for distraction, legibility, layout shift, reduced motion
@@ -172,8 +183,8 @@ owner's decision. The [threat model](threat-model.md) lists the security residua
   prerendered pages; MCP log search scans without an index; images are pinned by tag, not digest.
 - **Smaller UI items:** what "incident" means in two places, raw identifiers in a few labels, chart
   text that is small on phones, the Ask page's suggestion chips, data-table row headers, run progress
-  chips and run rows on phones, landing log lines on phones, vague error states, the landing page
-  repeating itself, template counts, and a phone tap on a citation that jumps far down the page.
+  chips and run rows on phones, landing log lines on phones, and a phone tap on a citation that
+  jumps far down the page.
 - **For the owner:** rotate the NVIDIA key in the git-ignored `.env` (it notes it was shared in a
   chat); run the live LLM evaluation (`aria eval run --suite pipeline --llm`, which spends provider
   credits); and, with access to Zenodo, add more real labelled logs from pinned sources.

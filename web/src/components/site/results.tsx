@@ -100,17 +100,17 @@ export function Results({ data }: { data: Evaluation }) {
 
       <div className="grid gap-8">
         <h3 className="text-2xl tracking-heading">End to end, through the whole graph</h3>
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-6 md:grid-cols-3 lg:grid-cols-6">
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-6 md:grid-cols-3 lg:grid-cols-5">
           <Stat value={pct(p.valid, 0)}>of {p.n} reports passed validation</Stat>
           <Stat value={pct(p.cited, 0)}>had every claim cite existing evidence</Stat>
           <Stat value={pct(p.recallAt3, 0)}>found a matching past incident in the top 3</Stat>
           <Stat value={`${Math.round(p.falseAlarms * p.quietRuns)} of ${p.quietRuns}`}>
             quiet windows raised a false alarm
           </Stat>
-          <Stat value={`${p.p50s.toFixed(2)} s`}>
-            median time until a report is ready to review
+          {/* The median is a headline above; the tail is what this row adds. */}
+          <Stat value={`${p.p95s.toFixed(2)} s`}>
+            95th percentile time until a report is ready (median {p.p50s.toFixed(2)} s)
           </Stat>
-          <Stat value={`${p.p95s.toFixed(2)} s`}>95th percentile, offline</Stat>
         </dl>
         <p className="max-w-3xl text-sm text-muted-foreground">
           These runs use the deterministic offline path (no LLM). Past incidents in memory are

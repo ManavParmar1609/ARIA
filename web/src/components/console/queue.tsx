@@ -148,7 +148,11 @@ export function Queue() {
       {runs.isPending ? (
         <LoadingRows rows={6} label="Loading incidents" />
       ) : runs.isError ? (
-        <ErrorState error={runs.error} onRetry={() => void runs.refetch()} />
+        <ErrorState
+          title="Incidents could not be loaded"
+          error={runs.error}
+          onRetry={() => void runs.refetch()}
+        />
       ) : list.length === 0 ? (
         <EmptyState
           icon={InboxIcon}

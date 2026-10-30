@@ -64,6 +64,35 @@ export function EvidenceTable({ evidence, cited }: { evidence: Evidence[]; cited
   );
 }
 
+// What each redaction counted, as people say it ("91 IP addresses", not "91 ip").
+const REDACTED: Record<string, string> = {
+  ip: "IP address",
+  email: "email address",
+  payment_card: "card number",
+  assigned_secret: "secret setting",
+  private_key: "private key line",
+  jwt: "JWT",
+  aws_access_key: "AWS access key",
+  nvidia_key: "NVIDIA API key",
+  openai_key: "OpenAI key",
+  github_token: "GitHub token",
+  gitlab_token: "GitLab token",
+  slack_token: "Slack token",
+  slack_webhook: "Slack webhook",
+  google_api_key: "Google API key",
+  stripe_key: "Stripe key",
+  sendgrid_key: "SendGrid key",
+  bearer_token: "bearer token",
+  basic_auth: "Basic credential",
+  url_credentials: "URL credential",
+};
+
+function redacted(kind: string, n: number): string {
+  const name = REDACTED[kind] ?? kind.replaceAll("_", " ");
+  const plural = n === 1 ? name : name.endsWith("address") ? `${name}es` : `${name}s`;
+  return `${n.toLocaleString("en")} ${plural}`;
+}
+
 function Guard({ guard, raw }: { guard: GuardReport; raw: number }) {
   const redactions = Object.entries(guard.redactions?.counts ?? {});
   return (
@@ -72,7 +101,7 @@ function Guard({ guard, raw }: { guard: GuardReport; raw: number }) {
       <p className="text-muted-foreground">
         {raw.toLocaleString("en")} lines read.{" "}
         {redactions.length
-          ? `Redacted or pseudonymised: ${redactions.map(([k, n]) => `${n} ${k.replaceAll("_", " ")}`).join(", ")}.`
+          ? `Redacted or pseudonymised: ${redactions.map(([k, n]) => redacted(k, n)).join(", ")}.`
           : "Nothing needed redacting."}{" "}
         {guard.truncated_lines ? `${guard.truncated_lines} over-long lines were truncated. ` : ""}
         {guard.dropped_lines ? `${guard.dropped_lines} lines beyond the limit were dropped.` : ""}
@@ -133,7 +162,8 @@ export function Templates({ batch }: { batch: ParsedBatch }) {
               <span className="tabular font-medium text-foreground">
                 {t.count.toLocaleString("en")}x
               </span>
-              {Object.entries(t.levels).map(([level, n]) => (
+              {/* A per-level count only when the template mixes levels; one level is the total. */}
+              {Object.entries(t.levels).map(([level, n], _, levels) => (
                 <span
                   key={level}
                   className={
@@ -144,7 +174,7 @@ export function Templates({ batch }: { batch: ParsedBatch }) {
                         : undefined
                   }
                 >
-                  {level} {n}
+                  {levels.length > 1 ? `${level} ${n.toLocaleString("en")}` : level}
                 </span>
               ))}
               {t.nodes ? <span>{t.nodes} nodes</span> : null}

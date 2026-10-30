@@ -111,7 +111,9 @@ export function TagStrip({
 
 /**
  * The severity instrument: model probability per level, the conformal prediction set as a
- * bracket, the safety floor if one applied, and the decision filled in its colour.
+ * bracket, the safety floor if one applied, and the decision filled in its colour. When the
+ * model stepped aside (`rulesOnly`), the bars are rule scores and the bracket is not a
+ * calibrated set, so the words say that instead.
  */
 export function SeverityScale({
   probabilities,
@@ -120,6 +122,7 @@ export function SeverityScale({
   floor,
   alpha = 0.1,
   setEmpty = false,
+  rulesOnly = false,
   compact = false,
   drawBracket = false,
   className,
@@ -131,6 +134,8 @@ export function SeverityScale({
   alpha?: number;
   /** No class reached the conformal threshold: the bracket is drawn dashed, as a stand-in. */
   setEmpty?: boolean;
+  /** The calibrated model was not used: the bars are normalised rule scores. */
+  rulesOnly?: boolean;
   compact?: boolean;
   /** Draw the bracket across the bars when it appears (globals.css: .sev-bracket). */
   drawBracket?: boolean;
@@ -148,7 +153,7 @@ export function SeverityScale({
   return (
     <figure
       className={cx("grid gap-1", className)}
-      aria-label={`Model probabilities: ${described}. ${setEmpty ? `No class is likely enough for the ${coverage}% prediction set.` : `${coverage}% prediction set: ${predictionSet.join(", ")}.`} Decided: ${decided}.${floor ? ` Safety floor: ${floor}.` : ""}`}
+      aria-label={`${rulesOnly ? "Rule scores (the calibrated model was not used)" : "Model probabilities"}: ${described}. ${rulesOnly ? `Levels the rules leave open: ${predictionSet.join(", ")}.` : setEmpty ? `No class is likely enough for the ${coverage}% prediction set.` : `${coverage}% prediction set: ${predictionSet.join(", ")}.`} Decided: ${decided}.${floor ? ` Safety floor: ${floor}.` : ""}`}
     >
       <div className="relative grid grid-cols-4 gap-1.5" aria-hidden>
         {setIdx.length > 0 ? (
@@ -210,10 +215,11 @@ export function SeverityScale({
       </div>
       {!compact ? (
         <figcaption className="text-xs text-muted-foreground">
-          Bars: calibrated model probability.{" "}
-          {setEmpty
-            ? `Dashed bracket: no class is likely enough for the ${coverage}% prediction set, so it stands in with the most likely.`
-            : `Bracket: the ${coverage}% prediction set.`}
+          {rulesOnly
+            ? "Bars: rule scores, as shares. Bracket: the levels the rules leave open."
+            : setEmpty
+              ? `Bars: calibrated model probability. Dashed bracket: no class is likely enough for the ${coverage}% prediction set, so it stands in with the most likely.`
+              : `Bars: calibrated model probability. Bracket: the ${coverage}% prediction set.`}
         </figcaption>
       ) : null}
     </figure>

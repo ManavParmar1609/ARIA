@@ -131,7 +131,8 @@ export function RiskCoverageChart({
 }) {
   const W = 360;
   const Hh = 200;
-  const pad = { l: 40, r: 12, t: 12, b: 34 };
+  // r leaves room for half of the "100%" label, which is centred on the last tick.
+  const pad = { l: 40, r: 16, t: 12, b: 34 };
   const x = (c: number) => pad.l + ((c - 0.5) / 0.5) * (W - pad.l - pad.r);
   const y = (r: number) => pad.t + (1 - r / 0.1) * (Hh - pad.t - pad.b);
   const path = points
@@ -142,7 +143,7 @@ export function RiskCoverageChart({
     <figure className={cn("grid gap-2", className)}>
       <svg
         viewBox={`0 0 ${W} ${Hh}`}
-        className="h-auto w-full max-w-md"
+        className="mx-auto h-auto w-full max-w-lg"
         role="img"
         aria-label={`Risk against coverage. At ${pct(operating.coverage)} coverage, ARIA's policy errs on ${pct(opRisk)} of the windows it decides alone; deciding all of them would raise that to ${pct(points.at(-1)?.risk ?? 0)}.`}
       >

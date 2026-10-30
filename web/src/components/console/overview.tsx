@@ -158,7 +158,11 @@ export function Overview() {
       {runs.isPending ? (
         <LoadingRows rows={4} label="Loading runs" />
       ) : runs.isError ? (
-        <ErrorState error={runs.error} onRetry={() => void runs.refetch()} />
+        <ErrorState
+          title="Recent runs could not be loaded"
+          error={runs.error}
+          onRetry={() => void runs.refetch()}
+        />
       ) : (
         <>
           {stats.total < 5 ? <StartHere /> : null}

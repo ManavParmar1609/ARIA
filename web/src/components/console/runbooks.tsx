@@ -4,6 +4,7 @@ import { BookOpenIcon } from "lucide-react";
 import Link from "next/link";
 
 import { EmptyState, ErrorState, LoadingRows, PageHeader } from "@/components/console/states";
+import { Button } from "@/components/ui/button";
 import { useRunbook, useRunbooks } from "@/lib/api/hooks";
 import { ApiError } from "@/lib/api/client";
 import type { RunbookStep } from "@/lib/api/types";
@@ -30,6 +31,25 @@ function Risk({ risk }: { risk: string }) {
   );
 }
 
+// Failure modes as people write them; the rest read fine with spaces for underscores.
+const FAILURE_NAMES: Record<string, string> = {
+  dns_resolution: "DNS resolution",
+  hdfs_lease_renewal: "HDFS lease renewal",
+  mod_jk_worker_error: "mod_jk worker errors",
+  psu_failure: "PSU failure",
+  resourcemanager_unreachable: "ResourceManager unreachable",
+  unfinished_work: "work that stops partway",
+};
+
+/** What a runbook covers, in words: "HDFS, for block serve exceptions" or "Any system". */
+function covers(rb: { systems: string[]; failure_modes: string[] }): string {
+  const systems = rb.systems.includes("*") ? "Any system" : rb.systems.map(systemName).join(", ");
+  const modes = rb.failure_modes
+    .filter((f) => f !== "*")
+    .map((f) => FAILURE_NAMES[f] ?? f.replaceAll("_", " "));
+  return modes.length ? `${systems}, for ${modes.join(", ")}` : systems;
+}
+
 /** The runbooks ARIA can cite: steps come from these files, never from a model. */
 export function Runbooks() {
   const runbooks = useRunbooks();
@@ -42,7 +62,11 @@ export function Runbooks() {
       {runbooks.isPending ? (
         <LoadingRows rows={6} label="Loading runbooks" />
       ) : runbooks.isError ? (
-        <ErrorState error={runbooks.error} onRetry={() => void runbooks.refetch()} />
+        <ErrorState
+          title="Runbooks could not be loaded"
+          error={runbooks.error}
+          onRetry={() => void runbooks.refetch()}
+        />
       ) : runbooks.data.length === 0 ? (
         <EmptyState icon={BookOpenIcon} title="No runbooks are loaded">
           Add Markdown runbooks to the runbooks folder and run <code>aria seed</code>.
@@ -66,12 +90,7 @@ export function Runbooks() {
               <p className="line-clamp-2 text-sm text-muted-foreground">
                 <Text>{rb.when_to_use}</Text>
               </p>
-              <p className="text-xs text-faint">
-                {rb.systems.map(systemName).join(", ")}
-                {rb.failure_modes.length
-                  ? ` for ${rb.failure_modes.map((f) => f.replaceAll("_", " ")).join(", ")}`
-                  : ""}
-              </p>
+              <p className="text-xs text-faint">{covers(rb)}</p>
             </li>
           ))}
         </ul>
@@ -112,7 +131,8 @@ function Steps({ title, steps }: { title: string; steps: RunbookStep[] }) {
               <p className="leading-relaxed">
                 <Text>{step.text}</Text>
               </p>
-              <Risk risk={step.risk} />
+              {/* Most steps are low risk; only the ones to think twice about are tagged. */}
+              {step.risk !== "low" ? <Risk risk={step.risk} /> : null}
             </div>
           </li>
         ))}
@@ -135,7 +155,18 @@ export function RunbookDetail({ slug }: { slug: string }) {
         </EmptyState>
       );
     }
-    return <ErrorState error={runbook.error} onRetry={() => void runbook.refetch()} />;
+    return (
+      <ErrorState
+        title="This runbook could not be loaded"
+        error={runbook.error}
+        onRetry={() => void runbook.refetch()}
+        action={
+          <Button asChild size="sm" variant="ghost">
+            <Link href="/console/runbooks">See all runbooks</Link>
+          </Button>
+        }
+      />
+    );
   }
   const rb = runbook.data;
   return (
@@ -156,12 +187,7 @@ export function RunbookDetail({ slug }: { slug: string }) {
         description={<Text>{rb.when_to_use}</Text>}
         actions={<Risk risk={rb.risk} />}
       >
-        <p className="text-sm text-muted-foreground">
-          {rb.systems.map(systemName).join(", ")}
-          {rb.failure_modes.length
-            ? `, for ${rb.failure_modes.map((f) => f.replaceAll("_", " ")).join(", ")}`
-            : ""}
-        </p>
+        <p className="text-sm text-muted-foreground">{covers(rb)}</p>
       </PageHeader>
       <Steps title="Diagnose" steps={rb.diagnose} />
       <Steps title="Mitigate" steps={rb.mitigate} />
