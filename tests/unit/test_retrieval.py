@@ -214,6 +214,36 @@ async def test_memory_in_another_process_follows_publishes_and_deletes(
     assert other.get("run-elsewhere") is None
 
 
+async def test_memory_reloads_for_edits_whatever_the_clock_and_not_for_embeddings(
+    memory: IncidentMemory,
+) -> None:
+    other = IncidentMemory(memory.engine, LocalEmbeddingProvider(model_path=None))
+    await other.refresh()
+    added = MemoryIncident(
+        id="run-embedded",
+        title="Kafka consumers stalled on a rebalance",
+        system="kafka",
+        failure_mode="rebalance_storm",
+        severity=Severity.SEV3,
+        summary="Consumers stopped committing offsets.",
+        resolution="Raised the session timeout.",
+        source="run",
+    )
+    await memory.remember(added)  # stored, then embedded and written back
+    assert not await memory.refresh_if_changed()  # writing the embedding back is not an edit
+    assert await other.refresh_if_changed()
+    assert not await other.refresh_if_changed()
+    with session_scope(memory.engine) as session:  # a process whose clock is an hour behind
+        row = session.get(IncidentRow, "run-embedded")
+        assert row is not None
+        row.title = "Kafka consumers stalled on a slow rebalance"
+        row.updated_at = datetime.now(UTC) - timedelta(hours=1)
+    assert await other.refresh_if_changed()
+    edited = other.get("run-embedded")
+    assert edited is not None
+    assert edited.title == "Kafka consumers stalled on a slow rebalance"
+
+
 # --- ticket history ----------------------------------------------------------------------------
 
 

@@ -30,9 +30,9 @@ from sqlalchemy import delete, or_, select
 from sqlalchemy.engine import Engine
 
 from aria.db.engine import session_scope
-from aria.db.models import StoreItemRow
+from aria.db.models import STORE_SEP, StoreItemRow
 
-SEP = "\x1f"  # unit separator: cannot appear in normal namespace labels
+SEP = STORE_SEP  # unit separator: cannot appear in normal namespace labels
 _WORD = re.compile(r"[a-z0-9_]{2,}")
 _LIKE_SPECIAL = re.compile(r"[\\%_]")
 

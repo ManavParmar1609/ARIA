@@ -410,6 +410,10 @@ class CheckpointBlobRow(Base):
     blob: Mapped[bytes | None] = mapped_column(LargeBinary)
 
 
+# Joins a store namespace's labels into one key: the unit separator, which no label holds.
+STORE_SEP = "\x1f"
+
+
 class StoreItemRow(Base):
     """LangGraph Store items: long-term memory shared across runs (reviewer feedback, preferences)."""
 

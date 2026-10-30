@@ -13,15 +13,16 @@ embedding provider changes, stale vectors are recomputed, so an index never mixe
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import math
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal
 
 import numpy as np
-from sqlalchemy import func, select
+from sqlalchemy import select, update
 from sqlalchemy.engine import Engine
 
 from aria.contracts.base import Severity
@@ -140,7 +141,7 @@ class IncidentMemory:
         self.index = HybridIndex([], rrf_k=rrf_k)
         self._lock = asyncio.Lock()
         self._groups: dict[tuple[str, str], list[MemoryIncident]] = {}
-        self._seen: tuple[int, datetime | None] | None = None  # what the last refresh loaded
+        self._seen: str | None = None  # the fingerprint of what the last refresh loaded
 
     @property
     def embedding_model(self) -> str | None:
@@ -153,8 +154,7 @@ class IncidentMemory:
                 rows = list(session.scalars(select(IncidentRow).order_by(IncidentRow.id)))
                 incidents = [MemoryIncident.from_row(r) for r in rows]
                 stored = {r.id: (r.embedding, r.embedding_model) for r in rows}
-                newest = max((r.updated_at for r in rows), default=None)
-                self._seen = (len(rows), newest)
+                self._seen = _fingerprint((r.id, r.updated_at) for r in rows)
             vectors = await self._vectors(incidents, stored)
             self.incidents = {i.id: i for i in incidents}
             self.index = HybridIndex(
@@ -168,20 +168,17 @@ class IncidentMemory:
                 groups[(incident.system, incident.failure_mode)].append(incident)
             self._groups = dict(groups)
 
-    def _signature(self) -> tuple[int, datetime | None]:
-        # Any insert or edit moves the newest update time, and a delete lowers the count, so
-        # together they see every change: a count and the highest ID miss an edit, or a delete
-        # and an insert that land between two checks.
+    def _signature(self) -> str:
         with session_scope(self.engine) as session:
-            count, newest = session.execute(
-                select(func.count(), func.max(IncidentRow.updated_at))
-            ).one()
-        return int(count), newest
+            pairs = session.execute(
+                select(IncidentRow.id, IncidentRow.updated_at).order_by(IncidentRow.id)
+            )
+            return _fingerprint((row_id, updated) for row_id, updated in pairs)
 
     async def refresh_if_changed(self) -> bool:
         """Reload when another process added, changed or removed incidents: the API publishes a
-        run a worker will search, or deletes one it must stop serving. A count and the newest
-        update time are cheap to read, so this can run every minute."""
+        run a worker will search, or deletes one it must stop serving. Every incident's ID and
+        update time are read, two short columns, so this can run every minute."""
         if await asyncio.to_thread(self._signature) == self._seen:
             return False
         await self.refresh()
@@ -216,10 +213,18 @@ class IncidentMemory:
                 for i, vector in zip(missing, fresh, strict=True):
                     array = np.asarray(vector, dtype=np.float32)
                     vectors[i] = array
-                    row = session.get(IncidentRow, incidents[i].id)
-                    if row is not None:
-                        row.embedding = array.tobytes()
-                        row.embedding_model = model
+                    # A cached embedding is not an edit: the update time stays, so no process
+                    # reloads its memory for it (two processes on different models would
+                    # otherwise reload, and re-embed, every minute).
+                    session.execute(
+                        update(IncidentRow)
+                        .where(IncidentRow.id == incidents[i].id)
+                        .values(
+                            embedding=array.tobytes(),
+                            embedding_model=model,
+                            updated_at=IncidentRow.updated_at,
+                        )
+                    )
         dims = {len(v) for v in vectors if v is not None}
         if len(dims) != 1:
             return None
@@ -292,6 +297,15 @@ class IncidentMemory:
                 session.merge(IncidentRow(**incident.to_row()))
         await self.refresh()
         return len(incidents)
+
+
+def _fingerprint(rows: Iterable[tuple[str, datetime | None]]) -> str:
+    """What memory holds, as one value: every incident's ID and update time. Any insert, edit or
+    delete changes it, whichever process made it and however that process's clock is set."""
+    digest = hashlib.blake2b(digest_size=16)
+    for row_id, updated in rows:
+        digest.update(f"{row_id}\x1f{updated.isoformat() if updated else ''}\x1e".encode())
+    return digest.hexdigest()
 
 
 def recency_weight(

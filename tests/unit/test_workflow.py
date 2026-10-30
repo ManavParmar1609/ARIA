@@ -239,6 +239,23 @@ async def test_a_failed_delivery_can_be_sent_again_and_nothing_else_can(
         await env.runner.resend(run_id, "act-nope", by="ben")
 
 
+async def test_a_recovered_run_already_at_review_gives_its_claim_up(env: Env) -> None:
+    """A process stopped after the run reached review and before it recorded that. A worker
+    recovers the run, finds nothing to drive, records the pause and lets the run go, so a review
+    can be applied from any process."""
+    engine = env.services.engine
+    outcome = await env.runner.start(kernel_panic(env))
+    assert outcome.interrupt is not None
+    run_id = outcome.run_id
+    repo.update_run(engine, run_id, status=RunStatus.RUNNING)  # the pause was never recorded
+    assert repo.claim_runs(engine, env.runner.owner) == [run_id]
+    env.runner.held.add(run_id)  # as Worker.recover does
+    settled = await env.runner.execute(run_id)
+    assert settled.status is RunStatus.AWAITING_REVIEW
+    assert run_id not in env.runner.held
+    assert (repo.get_run(engine, run_id) or {})["claimed_by"] is None
+
+
 async def test_a_message_left_mid_send_can_be_sent_again_once_no_process_holds_its_run(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ) -> None:

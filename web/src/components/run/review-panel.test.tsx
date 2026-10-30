@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { changedEdits, type EditForm } from "./review-panel";
+import { changedEdits, hasChanges, type EditForm } from "./review-panel";
 
 const original = {
   title: "Block serve exceptions in HDFS",
@@ -64,5 +64,15 @@ describe("changedEdits", () => {
       add_actions: ["Replace the disks"],
       note: "Checked by hand",
     });
+  });
+});
+
+describe("hasChanges", () => {
+  it("counts only what the server counts as a change", () => {
+    expect(hasChanges(changedEdits(form(), original))).toBe(false);
+    expect(hasChanges(changedEdits(form({ summary: "" }), original))).toBe(false); // keeps it
+    expect(hasChanges(changedEdits(form({ severity: "SEV2" }), original))).toBe(true);
+    expect(hasChanges(changedEdits(form({ note: "Checked" }), original))).toBe(true);
+    expect(hasChanges(changedEdits(form({ addActions: "Page storage" }), original))).toBe(true);
   });
 });

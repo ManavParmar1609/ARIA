@@ -137,6 +137,18 @@ export function changedEdits(
   };
 }
 
+/** Whether the edits change anything, judged as the server judges them (an empty summary keeps
+ * the report's own). */
+export function hasChanges(edits: ReportEdits): boolean {
+  return Boolean(
+    edits.title ||
+    edits.severity ||
+    edits.summary?.length ||
+    edits.add_actions?.length ||
+    edits.note,
+  );
+}
+
 /** The decision ARIA is waiting for: approve, edit or reject, and which messages may go out. */
 export function ReviewPanel({
   runId,
@@ -155,6 +167,7 @@ export function ReviewPanel({
   const [send, setSend] = useState<Set<string>>(new Set());
   const [comment, setComment] = useState("");
   const [editing, setEditing] = useState(false);
+  const [unchanged, setUnchanged] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const original = {
     title: stripSeverity(report?.title ?? prompt.title),
@@ -168,6 +181,14 @@ export function ReviewPanel({
     addActions: "",
     note: "",
   });
+  const change = (patch: Partial<EditForm>) => {
+    setEdit({ ...edit, ...patch });
+    setUnchanged(false);
+  };
+  const publishEdits = () => {
+    if (hasChanges(changedEdits(edit, original))) decide("edit");
+    else setUnchanged(true);
+  };
   const error = review.error instanceof ApiError ? review.error.detail : review.error?.message;
   const proposed = actions.filter((a) => a.status === "proposed" || a.status === undefined);
 
@@ -321,14 +342,14 @@ export function ReviewPanel({
                   id={`${id}-edit-title`}
                   value={edit.title}
                   maxLength={200}
-                  onChange={(e) => setEdit({ ...edit, title: e.target.value })}
+                  onChange={(e) => change({ title: e.target.value })}
                 />
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor={`${id}-edit-sev`}>Severity</Label>
                 <Select
                   value={edit.severity}
-                  onValueChange={(v) => setEdit({ ...edit, severity: v as Severity })}
+                  onValueChange={(v) => change({ severity: v as Severity })}
                 >
                   <SelectTrigger id={`${id}-edit-sev`}>
                     <SelectValue />
@@ -349,7 +370,7 @@ export function ReviewPanel({
                 id={`${id}-edit-summary`}
                 rows={5}
                 value={edit.summary}
-                onChange={(e) => setEdit({ ...edit, summary: e.target.value })}
+                onChange={(e) => change({ summary: e.target.value })}
               />
             </div>
             <div className="grid gap-1.5">
@@ -358,7 +379,7 @@ export function ReviewPanel({
                 id={`${id}-edit-actions`}
                 rows={2}
                 value={edit.addActions}
-                onChange={(e) => setEdit({ ...edit, addActions: e.target.value })}
+                onChange={(e) => change({ addActions: e.target.value })}
               />
             </div>
             <div className="grid gap-1.5">
@@ -366,7 +387,7 @@ export function ReviewPanel({
               <Input
                 id={`${id}-edit-note`}
                 value={edit.note}
-                onChange={(e) => setEdit({ ...edit, note: e.target.value })}
+                onChange={(e) => change({ note: e.target.value })}
               />
             </div>
           </div>
@@ -375,9 +396,15 @@ export function ReviewPanel({
               {error}
             </p>
           ) : null}
+          {unchanged ? (
+            <p role="alert" className="text-sm text-muted-foreground">
+              Nothing has changed yet. Change the report above, or keep reviewing and approve it as
+              it is.
+            </p>
+          ) : null}
           <DialogFooter>
             <Button onClick={() => setEditing(false)}>Keep reviewing</Button>
-            <Button variant="primary" onClick={() => decide("edit")} disabled={review.isPending}>
+            <Button variant="primary" onClick={publishEdits} disabled={review.isPending}>
               {review.isPending ? "Publishing" : "Publish with my edits"}
             </Button>
           </DialogFooter>

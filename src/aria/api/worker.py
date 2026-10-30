@@ -35,10 +35,16 @@ class Worker:
         self._capacity = concurrency
         self._slots = asyncio.Semaphore(concurrency)
         self._tasks: dict[asyncio.Task[Any], str] = {}
+        self._streams = 0  # AG-UI and A2A runs in a slot, or waiting for one
 
     @property
     def active(self) -> int:
         return len(self._tasks)
+
+    @property
+    def busy(self) -> int:
+        """Slots taken or asked for: background jobs and streamed runs alike."""
+        return len(self._tasks) + self._streams
 
     @property
     def run_ids(self) -> list[str]:
@@ -72,8 +78,12 @@ class Worker:
         AG-UI and A2A run a triage inside the request that streams it; going through here means
         however many streams are open, no more runs execute at once than the worker allows.
         """
-        async with self._slots:
-            return await job
+        self._streams += 1
+        try:
+            async with self._slots:
+                return await job
+        finally:
+            self._streams -= 1
 
     async def recover(self, *, limit: int = 50) -> list[str]:
         """Claim and continue runs left queued, or held by a process that stopped renewing."""
@@ -98,7 +108,7 @@ class Worker:
             try:
                 await asyncio.to_thread(self.runner.renew_held)
                 # A process with no free slot takes nothing: the runs are left to the others.
-                if recover and (free := self._capacity - self.active) > 0:
+                if recover and (free := self._capacity - self.busy) > 0:
                     await self.recover(limit=free)
                 # Incidents another process published or deleted reach this one's memory.
                 await self.runner.services.memory.refresh_if_changed()

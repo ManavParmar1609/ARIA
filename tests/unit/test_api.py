@@ -1205,6 +1205,32 @@ async def test_a_stream_cancelled_before_its_run_starts_gives_the_run_up() -> No
         await services.aclose()
 
 
+async def test_giving_a_run_up_waits_for_whatever_holds_it_for_a_moment() -> None:
+    reset_caches()
+    init_db(get_engine())
+    services = await Services.create()
+    try:
+        runner = TriageRunner(services)
+        run_id = runner.submit(TriageRequest(system="bgl", logs=["x"]), trigger="a2a", claim=True)
+        lock = runner._locks[run_id]
+        await lock.acquire()  # a resend or a delete holds the run for a moment
+        asyncio.get_running_loop().call_later(0.1, lock.release)
+        await runner.let_go(run_id)
+        assert run_id not in runner.held
+        assert repo.claim_runs(services.engine, "worker") == [run_id]
+    finally:
+        await services.aclose()
+
+
+def test_a_runner_name_fits_the_claim_column(monkeypatch: pytest.MonkeyPatch) -> None:
+    from aria.graph.runner import process_owner
+
+    monkeypatch.setattr(socket, "gethostname", lambda: "aria-worker-" + "x" * 51)  # 63 characters
+    owner = process_owner()
+    assert len(owner) <= RunRow.__table__.c.claimed_by.type.length  # type: ignore[attr-defined]
+    assert owner.startswith("aria-worker-")
+
+
 async def test_a_worker_with_no_free_slot_leaves_abandoned_runs_to_the_others(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1240,6 +1266,12 @@ async def test_a_worker_with_no_free_slot_leaves_abandoned_runs_to_the_others(
     busy.cancel()
     with contextlib.suppress(asyncio.CancelledError):
         await busy
+    stream = asyncio.create_task(worker.gated(asyncio.sleep(30)))  # an AG-UI or A2A run
+    await rounds()
+    assert (repo.get_run(engine, "run-left") or {})["claimed_by"] is None  # still no free slot
+    stream.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await stream
     await rounds()
     assert (repo.get_run(engine, "run-left") or {})["claimed_by"] == "w-full"
 

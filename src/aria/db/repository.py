@@ -23,6 +23,7 @@ from aria.contracts.retrieval import ToolCallRecord
 from aria.contracts.run import EventKind, RunEvent, RunStatus
 from aria.db.engine import session_scope
 from aria.db.models import (
+    STORE_SEP,
     ActionRow,
     FeedbackRow,
     ReportRow,
@@ -301,6 +302,10 @@ def claim_action(engine: Engine, run_id: str, action: OutboundAction) -> bool:
     return True
 
 
+# A message that did not go out: its delivery failed, or the process sending it stopped.
+RESENDABLE = ("failed", "approved")
+
+
 def claim_for_resend(engine: Engine, action_id: str) -> bool:
     """Take an approved message that did not go out for one more attempt.
 
@@ -311,7 +316,7 @@ def claim_for_resend(engine: Engine, action_id: str) -> bool:
     with session_scope(engine) as session:
         taken = session.execute(
             update(ActionRow)
-            .where(ActionRow.id == action_id, ActionRow.status.in_(("failed", "approved")))
+            .where(ActionRow.id == action_id, ActionRow.status.in_(RESENDABLE))
             .values(status="approved")
         )
         return bool(taken.rowcount == 1)  # type: ignore[attr-defined]
@@ -319,7 +324,7 @@ def claim_for_resend(engine: Engine, action_id: str) -> bool:
 
 def shared_secret(engine: Engine, name: str) -> bytes:
     """A random secret that every process sharing this database agrees on, made on first use."""
-    item = ("aria\x1fsecrets", name)  # the store's ("aria", "secrets") namespace
+    item = (STORE_SEP.join(("aria", "secrets")), name)  # in the LangGraph store's table
     for _ in range(2):
         with session_scope(engine) as session:
             row = session.get(StoreItemRow, item)

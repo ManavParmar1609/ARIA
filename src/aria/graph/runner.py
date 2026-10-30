@@ -102,8 +102,9 @@ def new_run_id() -> str:
 def process_owner() -> str:
     """The name a runner claims runs under: a new one for each runner, even in one process. A
     restarted container keeps its host name and often its pid (1), so a random part keeps the new
-    process from taking its dead predecessor's claims for its own."""
-    return f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:6]}"
+    process from taking its dead predecessor's claims for its own. The host name is cut to fit
+    the claim column (64 characters) beside a pid and the random part."""
+    return f"{socket.gethostname()[:40]}:{os.getpid()}:{uuid.uuid4().hex[:6]}"
 
 
 def _jsonable(value: Any) -> Any:
@@ -369,10 +370,11 @@ class TriageRunner:
             raise RunNotFoundError(run_id)
         snapshot = await self.graph.aget_state(self.config(run_id))
         if snapshot.values:
-            if _interrupts(snapshot):
-                return await self._settle(run_id)
-            if not snapshot.next:
-                return await self._settle(run_id)
+            if _interrupts(snapshot) or not snapshot.next:
+                try:
+                    return await self._settle(run_id)
+                finally:  # nothing to drive: give up a claim taken to drive it (a recovery)
+                    await self.let_go(run_id)
             return await self._drive(run_id, None)  # crash recovery: continue from the checkpoint
         await self._event(run_id, "run_started", payload={"trigger": run.get("trigger")})
         return await self._drive(run_id, {"run_id": run_id, "request": run["request"]})
@@ -399,15 +401,19 @@ class TriageRunner:
         repo.renew_claims(self.engine, self.owner, sorted(self.held))
 
     async def let_go(self, run_id: str) -> None:
-        """Give up a claim taken when the run was submitted, if no drive ever started: its
-        request was cancelled while it waited for a slot. Without this the claim would be renewed
-        for good and no other process could run it. A drive releases its own claim when it ends,
-        so after one this does nothing."""
-        lock = self._locks.get(run_id)
-        if run_id not in self.held or (lock is not None and lock.locked()):
+        """Give up a claim this runner took to drive a run, when no drive started: the request
+        was cancelled while it waited for a slot, or the run had nothing left to drive. Without
+        this the claim would be renewed for good and no other process could take the run.
+
+        It waits briefly for whatever holds the run here (a resend or a delete). A drive
+        releases its own claim when it ends, so after one, or during one, this does nothing."""
+        if run_id not in self.held:
             return
-        self.held.discard(run_id)
-        await asyncio.to_thread(repo.release_run, self.engine, run_id, self.owner)
+        with contextlib.suppress(RunBusyError):  # a drive holds it: it lets go when it ends
+            async with self._holding(run_id):
+                if run_id in self.held:
+                    self.held.discard(run_id)
+                    await asyncio.to_thread(repo.release_run, self.engine, run_id, self.owner)
 
     async def _renew(self, run_id: str) -> None:
         while True:
@@ -672,7 +678,7 @@ class TriageRunner:
         if row is None:
             msg = f"run {run_id} has no message {action_id}"
             raise RunNotFoundError(msg)
-        if row["status"] not in ("failed", "approved"):
+        if row["status"] not in repo.RESENDABLE:
             msg = (
                 "only an approved message that did not go out can be sent again; "
                 f"it is {row['status']}"
