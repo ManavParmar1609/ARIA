@@ -7,14 +7,17 @@ regenerates ``docs/evaluation.md``. Results are written as JSON to ``reports/eva
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import random
 import subprocess
 import tempfile
 from collections.abc import Sequence
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+from multiprocessing import get_context
 from pathlib import Path
 from typing import Any
 
@@ -28,8 +31,10 @@ from aria.evals import edge as ed
 from aria.evals import gitlab as gl
 from aria.evals import hadoop as hd
 from aria.evals import injection as inj
+from aria.evals import openstack as osf
 from aria.evals import parsing as ps
 from aria.evals import pipeline as pl
+from aria.evals import postmortems as pmx
 from aria.evals import real as rl
 from aria.evals import severity as sv
 from aria.evals import tickets as tk
@@ -147,7 +152,9 @@ async def run(
         )
         results["real"]["uci_tickets"] = tk.summarize(Path(config.severity.ticket_model_file))
         results["real"]["hadoop"] = await _hadoop(builder, loghub_dir, size, workers)
+        results["real"]["openstack"] = await _openstack(builder, loghub_dir, size, workers)
         results["real"]["gitlab"] = gl.summarize()
+        results["real"]["postmortems"] = pmx.summarize()
     test = sv.held_out(
         builder,
         seeds=size.severity_seeds,
@@ -227,6 +234,79 @@ async def _hadoop(
                 env,
                 known=known_templates(builder, "hadoop"),
                 pool={r.message for r in iter_structured_csv("hadoop", sample)}
+                if sample.exists()
+                else None,
+            )
+        finally:
+            await env.aclose()
+
+
+async def _openstack(
+    builder: ScenarioBuilder,
+    loghub_dir: Path,
+    size: Size,
+    workers: int,
+    *,
+    limit: int | None = None,
+    root: Path = osf.OPENSTACK_DIR,
+) -> dict[str, Any]:
+    """The OpenStack fault-injection runs, each triaged end to end offline. Shared out over
+    ``workers`` processes, each with an environment of its own (runs are independent)."""
+    count = len(osf.read_labels(root))
+    if not count:
+        return dict(osf.MISSING)
+    picks = list(range(count))[:limit]
+    if workers > 1 and len(picks) > 2 * workers:
+        loop = asyncio.get_running_loop()
+        with ProcessPoolExecutor(max_workers=workers, mp_context=get_context("spawn")) as pool:
+            shares = await asyncio.gather(
+                *(
+                    loop.run_in_executor(
+                        pool,
+                        _openstack_share,
+                        str(loghub_dir),
+                        picks[i::workers],
+                        size.memory_per_mode,
+                        str(root),
+                    )
+                    for i in range(workers)
+                )
+            )
+        rows = sorted((row for share in shares for row in share), key=lambda r: r["index"])
+    else:
+        rows = await _openstack_rows(builder, loghub_dir, picks, size.memory_per_mode, root)
+    return osf.summarize(rows)
+
+
+def _openstack_share(
+    loghub_dir: str, picks: list[int], memory_per_mode: int, root: str
+) -> list[dict[str, Any]]:
+    """One process's share of the OpenStack runs."""
+    builder = ScenarioBuilder(LinePools.from_loghub(Path(loghub_dir)))
+    return asyncio.run(
+        _openstack_rows(builder, Path(loghub_dir), picks, memory_per_mode, Path(root))
+    )
+
+
+async def _openstack_rows(
+    builder: ScenarioBuilder,
+    loghub_dir: Path,
+    picks: Sequence[int],
+    memory_per_mode: int,
+    root: Path,
+) -> list[dict[str, Any]]:
+    sample = loghub_dir / "OpenStack" / "OpenStack_2k.log_structured.csv"
+    with tempfile.TemporaryDirectory(prefix="aria-eval-openstack-") as tmp:
+        env = await pl.EvalEnvironment.create(
+            builder, db_path=Path(tmp) / "openstack.db", memory_per_mode=memory_per_mode
+        )
+        try:
+            return await osf.triage(
+                env,
+                picks,
+                root,
+                known=known_templates(builder, "openstack"),
+                pool={r.message for r in iter_structured_csv("openstack", sample)}
                 if sample.exists()
                 else None,
             )

@@ -66,7 +66,7 @@ def _hits(ranked: Sequence[str | None], want: str) -> dict[str, float]:
     }
 
 
-def _score(rows: Sequence[dict[str, float]]) -> dict[str, Any]:
+def score(rows: Sequence[dict[str, float]]) -> dict[str, Any]:
     n = len(rows)
     hits = int(sum(r["hit3"] for r in rows))
     return {
@@ -131,7 +131,7 @@ def evaluate(
             "labels": len({d.meta[key] for d in labelled}),
             "memory_labelled": len(labelled),
             "commonest": common,
-            "methods": {method: _score(r) for method, r in rows.items()},
+            "methods": {method: score(r) for method, r in rows.items()},
         }
     return {
         "source": "GitLab.com production incidents (gitlab-com/gl-infra/production)",

@@ -414,7 +414,8 @@ def test_the_data_paragraph_names_only_the_real_sources_measured() -> None:
     assert "Every other number comes from semi-synthetic" in text
     [unmeasured] = report._unmeasured(results["real"])
     assert unmeasured.startswith(
-        "- No results on contiguous BGL windows, the Hadoop jobs or the UCI incident log are "
+        "- No results on contiguous BGL windows, the Hadoop jobs, the OpenStack fault-injection "
+        "runs, the UCI incident log or the cloud post-mortems are "
     )
 
 
@@ -641,6 +642,223 @@ async def test_hadoop_jobs_are_merged_in_time_order_and_triaged_against_their_la
     assert "## Real failures, a Hadoop cluster's jobs" in text
     assert "| Network disconnection | 1 |" in text
     assert "missing" in await hadoop.evaluate(env, tmp_path / "nothing")
+
+
+def _openstack_dataset(root: Path) -> None:
+    """Three Nova experiments (silent failure, reported failure, healthy) and one with no logs."""
+    import gzip
+
+    header = "TEST\tFAULT_TYPE\tCOMPONENT\tROUND_1\tASSERTION_R1\tAPI_R1\n"
+    (root / "nova.tsv").write_text(
+        header
+        + "Test_1\tOPENSTACK_MISSING_FUNCTION_CALL-VOLUME\tx\tFAILURE\tFAILURE_VOLUME_ATTACHED\t\n"
+        + "Test_2\tOPENSTACK_WRONG_RETURN_VALUE-NETWORK\tx\tFAILURE\t\t openstack server create \n"
+        + "Test_3\tOPENSTACK_THROW_EXCEPTION-VOLUME\tx\tNO_FAILURE\t\t\n"
+        + "Test_4\tOPENSTACK_THROW_EXCEPTION-VOLUME\tx\tNO_FAILURE\t\t\n"
+    )
+    line = (
+        "2018-06-12 10:{m:02d}:{s:02d}.000 1234 {level} nova.compute.manager [req-1 - - -] {text}"
+    )
+    for test, extra in (
+        ("Test_1", []),
+        ("Test_2", [(0, 30, "ERROR", "Instance failed to spawn")]),
+        ("Test_3", []),
+    ):
+        logs = root / "Nova" / test / "logs" / "round_1"
+        (logs / "nova").mkdir(parents=True)
+        (logs / "cinder").mkdir()
+        compute = [(0, s, "INFO", f"Took {s} seconds to build instance") for s in range(0, 60, 4)]
+        with gzip.open(logs / "nova" / "nova-compute.log.bzip2.out.gz", "wt") as handle:
+            for m, s, level, text in sorted(compute + extra):
+                handle.write(line.format(m=m, s=s, level=level, text=text) + "\n")
+                if level == "ERROR":
+                    handle.write("Traceback (most recent call last):\n")
+        (logs / "cinder" / "cinder-volume.log.bzip2.out").write_text(
+            line.format(m=0, s=1, level="WARNING", text="Volume is slow").replace(
+                "nova.compute.manager", "cinder.volume.manager"
+            )
+            + "\n    indented continuation of the warning\n"
+        )
+    (root / "Nova" / "Test_4").mkdir(parents=True)
+
+
+async def test_openstack_runs_are_merged_in_time_order_and_scored_against_their_labels(
+    tmp_path: Path, builder: ScenarioBuilder
+) -> None:
+    import tempfile
+
+    from aria.db import repository
+    from aria.evals import openstack
+
+    _openstack_dataset(tmp_path)
+    labels = openstack.read_labels(tmp_path)
+    assert [(e.test, e.failed, e.reported, e.check) for e in labels] == [
+        ("Test_1", True, False, "volume_attached"),
+        ("Test_2", True, True, ""),
+        ("Test_3", False, False, ""),
+        ("Test_4", False, False, ""),
+    ]
+    assert labels[0].fault_type == "missing_function_call"
+
+    merged = openstack.experiment_lines(tmp_path / "Nova" / "Test_2")
+    stamps = [line.split()[2] for line in merged if " 2018-" in line]
+    assert stamps == sorted(stamps)  # one timeline across the gzipped and plain files
+    assert merged[0].startswith("nova-compute.log 2018-06-12 10:00:00.000")
+    assert merged[1].startswith("cinder-volume.log 2018-06-12 10:00:01.000")
+    assert merged[2] == "    indented continuation of the warning"  # kept under its line
+    error = next(i for i, x in enumerate(merged) if "Instance failed to spawn" in x)
+    assert merged[error + 1] == "Traceback (most recent call last):"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        env = await pl.EvalEnvironment.create(builder, db_path=Path(tmp) / "e.db")
+        try:
+            rows = await openstack.triage(env, root=tmp_path)
+            result = openstack.summarize(rows)
+            # Each run is deleted once scored, so 911 of them never pile up in the database.
+            assert not repository.list_runs(env.services.engine)
+            assert "missing" in await openstack.evaluate(env, tmp_path / "nothing")
+        finally:
+            await env.aclose()
+    assert [r["test"] for r in rows] == ["Test_1", "Test_2", "Test_3"]  # Test_4 has no logs
+    assert {r["decided_by"] for r in rows} <= {"rules", "model", "fallback"}
+    assert all(r["needs_review"] == (r["decided_by"] == "fallback") for r in rows)
+    assert (result["experiments"], result["failed"], result["reported"], result["silent"]) == (
+        3,
+        2,
+        1,
+        1,
+    )
+    errors = result["baselines"]["any_error_line"]
+    assert (errors["reported"]["flagged"], errors["silent"]["flagged"]) == (1, 0)
+    assert (errors["failed_flagged"], errors["normal_flagged"]) == (1, 0)
+    assert errors["ranking"]["all"]["auroc"] == 0.75  # the reported failure ranks first
+    assert result["aria"]["ranking"]["silent"]["n"] == 2
+    assert sum(result["review"]["decided_by"].values()) == 3
+
+    text = "\n".join(report._openstack(result))
+    assert "## Real failures, bugs injected into OpenStack" in text
+    assert "| ARIA's rules alone |" in text
+    assert "| ARIA, paging only (SEV1-2) |" in text
+    assert "No run holds more than the per-run line cap" in text
+    assert "| Silent: no API error |" in text
+    assert "sent the run to a reviewer" in text
+    summary = " ".join(report._openstack_summary(result))
+    assert "**Real injected bugs**: of 2 OpenStack runs" in summary
+    assert "Paging only at SEV1-2" in summary
+    assert "for counting ERROR lines" in summary
+    assert result["aria"]["paged"]["failed"] == 2
+    assert report._openstack({"missing": "download it"})[-2] == "No results: download it."
+
+
+@pytest.mark.slow
+async def test_openstack_runs_shared_over_processes_score_as_one_process_does(
+    tmp_path: Path, builder: ScenarioBuilder
+) -> None:
+    import shutil
+
+    _openstack_dataset(tmp_path)
+    with (tmp_path / "nova.tsv").open("a") as tsv:
+        for n, source in ((5, 1), (6, 2), (7, 3), (8, 1), (9, 3)):
+            shutil.copytree(tmp_path / "Nova" / f"Test_{source}", tmp_path / "Nova" / f"Test_{n}")
+            tsv.write(f"Test_{n}\tOPENSTACK_WRONG_PARAMETERS-VOLUME\tx\tNO_FAILURE\t\t\n")
+    size = ev.SIZES["smoke"]
+    alone = await ev._openstack(builder, FIXTURES, size, 1, root=tmp_path)
+    shared = await ev._openstack(builder, FIXTURES, size, 2, root=tmp_path)
+    assert alone["experiments"] == 8
+    assert shared == alone
+
+
+def _postmortem(title: str, when: str, summary: str, cause: str, fix: str) -> dict[str, str]:
+    """One post-mortem as the collection writes it: its labels are Python literals in strings."""
+    return {
+        "title": title,
+        "time": when,
+        "summary": summary,
+        "details": f"{summary} The root cause was a {cause}. Engineers chose to {fix}.",
+        "root cause": str({"label": [{"layer-1": "internal causes", "layer-3": cause}]}),
+        "mitigation": str({"label": [fix], "details": ""}),
+    }
+
+
+def test_cloud_postmortems_are_matched_by_cause_and_kind_of_fix(tmp_path: Path) -> None:
+    from aria.evals import postmortems
+
+    assert postmortems.fix_kind("roll back configuration change") == "rollback"
+    assert postmortems.fix_kind("Reroute network traffic") == "traffic"
+    assert postmortems.fix_kind("reduce traffic") == "load"
+    assert postmortems.fix_kind("deploy a platform hotfix") == "hotfix"
+    assert postmortems.fix_kind("manual intervention") is None
+
+    azure = tmp_path / "anomaly_collection" / "Azure"
+    google = tmp_path / "anomaly_collection" / "Google"
+    azure.mkdir(parents=True)
+    google.mkdir()
+    storage = "Storage accounts returned errors after a configuration update in West Europe"
+    network = "Virtual machines lost network connectivity during a router upgrade"
+    (azure / "a.json").write_text(
+        json.dumps(
+            {
+                "a-1": _postmortem(
+                    "Storage errors", "03/02/2017", storage, "config", "revert change"
+                ),
+                "a-2": _postmortem("Network loss", "05/09/2017", network, "code change", "fix bug"),
+                "a-3": _postmortem("Storage errors", "03/02/2017", storage, "config", "rollback"),
+                "a-4": _postmortem("Broken date", "2017-13-45", network, "config", "rollback"),
+                "a-5": _postmortem(
+                    "Slow databases",
+                    "07/01/2018",
+                    "Queries timed out",
+                    "payload flood",
+                    "add capacity",
+                ),
+            }
+        )
+    )
+    (google / "g.json").write_text(
+        json.dumps(
+            {
+                "g-1": _postmortem(
+                    "Cloud Storage errors", "08/04/2019", storage, "config", "roll back deployment"
+                ),
+                "g-2": _postmortem(
+                    "Power", "09/10/2019", "A data centre lost power", "others", "x"
+                ),
+            }
+        )
+    )
+    loaded = postmortems.load(tmp_path)
+    # The same write-up filed twice counts once; an unreadable date is skipped.
+    assert [p.id for p in loaded] == [
+        "Azure/a-1",
+        "Azure/a-2",
+        "Azure/a-5",
+        "Google/g-1",
+        "Google/g-2",
+    ]
+    assert loaded[0].causes == {"config"}
+    assert loaded[0].fixes == {"rollback"}
+    assert loaded[4].causes == frozenset()  # "others" names no cause
+    assert loaded[4].fixes == frozenset()  # and "x" no kind of fix
+
+    result = postmortems.evaluate(loaded, cutoff="2019-01-01")
+    assert (result["memory"], result["later"]) == (3, 2)
+    assert result["by_cloud"] == {"Azure": 3, "Google Cloud": 2}
+    cause = result["by"]["cause"]["methods"]
+    assert cause["aria"]["queries"] == 1  # the power outage's cause was left open
+    assert cause["aria"]["recall_at_1"] == 1.0  # the storage incident finds its own past one
+    assert cause["commonest_label"]["recall_at_3"] == 1.0  # every cause ties; config came first
+    assert result["fix_labels"] == 5
+    assert result["fix_labels_sorted"] == 0.8
+
+    text = "\n".join(report._postmortems(result))
+    assert "## Real incidents, three clouds' post-mortems" in text
+    assert "a rollback" in text
+    assert "| BM25 alone |" in text
+    summary = " ".join(report._postmortems_summary(result))
+    assert summary.startswith("**Real post-mortems**: from its title and summary of impact")
+    assert "missing" in postmortems.summarize(tmp_path / "nothing")
+    assert report._postmortems({"missing": "x"})[-2] == "No results: x."
+    assert "too few" in postmortems.evaluate(loaded, cutoff="2017-04-01")["missing"]
 
 
 def test_public_injection_benchmarks_load_hide_and_score_each_source(tmp_path: Path) -> None:

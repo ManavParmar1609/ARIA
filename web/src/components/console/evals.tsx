@@ -393,11 +393,11 @@ function MethodTable({
 }
 
 /**
- * The other real-data evaluations: BGL windows, Hadoop jobs, tickets, GitLab.com's incidents and
- * injection benchmarks.
+ * The other real-data evaluations: BGL windows, Hadoop jobs, OpenStack runs, tickets, GitLab.com's
+ * incidents, cloud post-mortems and injection benchmarks.
  */
 function MoreRealSections({ more }: { more: RealData }) {
-  const { bgl, hadoop, tickets, gitlab, injection } = more;
+  const { bgl, hadoop, openstack, tickets, gitlab, postmortems, injection } = more;
   const n = (x: number) => x.toLocaleString("en");
   const sev = (m: typeof bgl.aria) => [
     pct(m.accuracy),
@@ -415,10 +415,19 @@ function MoreRealSections({ more }: { more: RealData }) {
     `${m.severeMissed} of ${tickets.severe}`,
   ];
   const labelOrder = Object.keys(LABELS).filter((k) => k in hadoop.byLabel);
+  const caught = (d: typeof openstack.ariaSilent) =>
+    `${n(d.caught)} of ${n(d.of)} (${pct(d.share, 0)})`;
+  const rank = (d: typeof openstack.ranking.aria) =>
+    `${d.value.toFixed(3)} (${(d.ci[0] ?? 0).toFixed(2)}–${(d.ci[1] ?? 0).toFixed(2)})`;
   type Memory = typeof gitlab.service;
   const recall = (pick: (m: Memory) => Memory["aria"]) =>
     [gitlab.service, gitlab.cause].flatMap((by) => [pct(pick(by).hit3), pct(pick(by).hit1)]);
   const fusedLoses = gitlab.service.bm25.hit3 > gitlab.service.aria.hit3;
+  const recalled = (pick: (m: Memory) => Memory["aria"]) =>
+    [postmortems.cause, postmortems.fix].flatMap((by) => [pct(pick(by).hit3), pct(pick(by).hit1)]);
+  const clouds = Object.entries(postmortems.byCloud)
+    .map(([cloud, k]) => `${n(k)} from ${cloud}`)
+    .join(", ");
   return (
     <>
       <Section
@@ -506,6 +515,69 @@ function MoreRealSections({ more }: { more: RealData }) {
         <p className="max-w-prose text-sm text-muted-foreground">
           ARIA&apos;s catalog has a failure mode for tasks that cannot reach the ResourceManager and
           one for HDFS lease renewal, but none for a full disk.
+        </p>
+      </Section>
+
+      <Section
+        id="ev-openstack"
+        title="Bugs injected into OpenStack"
+        intro={
+          <>
+            {n(openstack.experiments)} runs of an OpenStack cloud ({n(openstack.lines)} lines of
+            service logs), each with one bug injected into Nova, Cinder or Neutron while a workload
+            created and used VMs, volumes and networks. {n(openstack.failed)} runs failed,{" "}
+            {n(openstack.silent)} of them with no API error to tell the user. Each run was triaged
+            offline from start to finish; a run counts as flagged when ARIA rates it SEV1 to SEV3,
+            and as paged at SEV1 or SEV2.
+          </>
+        }
+      >
+        <MethodTable
+          label="Failed and healthy OpenStack runs flagged, by method"
+          head={["Method", "Failed runs flagged", "Healthy runs flagged"]}
+          rows={[
+            { name: "ARIA, end to end", cells: job(openstack.aria), strong: true },
+            { name: "ARIA, paging only (SEV1-2)", cells: job(openstack.paged) },
+            { name: "ARIA's rules alone", cells: job(openstack.rules) },
+            { name: "Any ERROR or CRITICAL line", cells: job(openstack.anyError) },
+            { name: "Keyword categories", cells: job(openstack.keyword) },
+          ]}
+        />
+        <MethodTable
+          label="Failed OpenStack runs flagged, by whether an API error reported them"
+          head={["Failed runs", "ARIA", "Any ERROR or CRITICAL line"]}
+          rows={[
+            {
+              name: "Reported by an API error",
+              cells: [caught(openstack.ariaReported), caught(openstack.errorReported)],
+            },
+            {
+              name: "Silent: no API error",
+              cells: [caught(openstack.ariaSilent), caught(openstack.errorSilent)],
+            },
+          ]}
+        />
+        <MethodTable
+          label="How well each score ranks failed OpenStack runs above healthy ones (AUROC)"
+          head={["Score", "Every run", "Silent failures against healthy runs"]}
+          rows={[
+            {
+              name: "ARIA's probability of SEV1-2",
+              cells: [rank(openstack.ranking.aria), rank(openstack.ranking.ariaSilent)],
+              strong: true,
+            },
+            {
+              name: "ERROR and CRITICAL lines, counted",
+              cells: [rank(openstack.ranking.errors), rank(openstack.ranking.errorsSilent)],
+            },
+          ]}
+        />
+        <p className="max-w-prose text-sm text-muted-foreground">
+          ARIA was unsure of {n(openstack.unsure)} of the {n(openstack.experiments)} runs and sent
+          them to a reviewer at the most severe label in their prediction set. An AUROC of 0.5 is
+          chance. ARIA&apos;s only OpenStack failure mode, from a 2,000-line sample of another
+          deployment, is a missing image-cache file, and its model learned from semi-synthetic
+          windows rather than from runs like these.
         </p>
       </Section>
 
@@ -603,6 +675,50 @@ function MoreRealSections({ more }: { more: RealData }) {
       </Section>
 
       <Section
+        id="ev-postmortems"
+        title="Similar past incidents, in three clouds' post-mortems"
+        intro={
+          <>
+            {n(postmortems.postmortems)} public post-mortems ({clouds}), each structured by
+            researchers with its root cause and the fixes that ended it. Incident memory holds the{" "}
+            {n(postmortems.memory)} post-mortems of incidents before{" "}
+            {postmortems.cutoff.slice(0, 4)}, from their whole write-ups. Each of the{" "}
+            {n(postmortems.later)} later ones asks for similar past incidents from its title and
+            summary of impact; a hit is a past incident among the first {count(postmortems.top)}{" "}
+            with the same specific root cause, or fixed the same way.
+          </>
+        }
+      >
+        <MethodTable
+          label="Similar past cloud incidents, by method"
+          head={[
+            "Method",
+            `Same cause, first ${postmortems.top}`,
+            "Same cause, first",
+            `Same fix, first ${postmortems.top}`,
+            "Same fix, first",
+          ]}
+          rows={[
+            {
+              name: "ARIA (BM25 and embeddings, fused by rank)",
+              cells: recalled((m) => m.aria),
+              strong: true,
+            },
+            { name: "BM25 alone", cells: recalled((m) => m.bm25) },
+            { name: "The embeddings alone", cells: recalled((m) => m.embeddings) },
+            { name: "Past incidents picked at random", cells: recalled((m) => m.random) },
+            { name: "Always the commonest label", cells: recalled((m) => m.commonest) },
+          ]}
+        />
+        <p className="max-w-prose text-sm text-muted-foreground">
+          A summary of impact says what customers saw, which seldom says what broke, and a few
+          causes and fixes cover most incidents, so past incidents at random already share a label
+          with many. The fixes are sorted into kinds by the words the researchers used;{" "}
+          {pct(postmortems.fixLabelsSorted, 0)} of them fall into one.
+        </p>
+      </Section>
+
+      <Section
         id="ev-injection"
         title="Prompt injection, public benchmarks"
         intro={
@@ -664,8 +780,10 @@ export function Evals({
           ? ([
               ["ev-bgl", "BlueGene/L alert tags"],
               ["ev-hadoop", "Hadoop jobs"],
+              ["ev-openstack", "OpenStack runs"],
               ["ev-tickets", "ServiceNow tickets"],
               ["ev-gitlab", "GitLab.com incidents"],
+              ["ev-postmortems", "Cloud post-mortems"],
               ["ev-injection", "Injection benchmarks"],
             ] as [string, string][])
           : []),

@@ -14,13 +14,13 @@ is a config change.
 ![ARIA's landing page: the headline "Incident triage that shows its work." on a green panel, above an illustration of three people riding a long sheet of log lines.](docs/images/hero.webp)
 
 > [!IMPORTANT]
-> Several results use **real data with the labels its owners gave it**: a Hadoop cluster's log
-> (the experts' label for every storage block), the whole BlueGene/L log (its administrators'
-> alert tags), Hadoop jobs with injected failures, a ServiceNow service desk's tickets,
-> GitLab.com's production incidents (its responders' labels) and public prompt-injection
-> benchmarks. The rest come from **semi-synthetic** incidents: real log lines from the public
-> Loghub samples, composed into incidents by ARIA's scenario builder, which show how ARIA behaves
-> on that data, not how accurate it is on your production incidents. See
+> Several results use **real data with the labels its owners gave it**: a Hadoop cluster's log (the
+> experts' label for every storage block), the whole BlueGene/L log (its administrators' alert
+> tags), Hadoop jobs with injected failures, OpenStack runs with an injected bug (how each run
+> ended), a ServiceNow service desk's tickets, GitLab.com's production incidents (its responders'
+> labels) and public prompt-injection benchmarks. The rest come from **semi-synthetic** incidents:
+> real log lines from the public Loghub samples, composed into incidents by ARIA's scenario builder,
+> which show how ARIA behaves on that data, not how accurate it is on your production incidents. See
 > [Limitations](#limitations) and the [data card](docs/data-card.md).
 
 ## What happens to an incident
@@ -322,6 +322,17 @@ Every section, with its method: [docs/evaluation.md](docs/evaluation.md).
   alone did better than the rules and model together
   ([evaluation](docs/evaluation.md#real-logs-a-supercomputers-alert-tags)). A deployment should
   recalibrate on its own reviewed incidents (`aria train recalibrate`).
+- **ARIA knows few failure modes outside its samples.** On OpenStack runs with an injected bug,
+  its one OpenStack failure mode is a missing image-cache file, from a 2,000-line sample of
+  another deployment. It was unsure of most runs and sent them to a reviewer at the most severe
+  label in their prediction set, so at SEV1-3 it flags nearly every run, failed or not. Ranked by
+  its probability of SEV1-2, it tells failed from healthy runs a little less well than counting
+  ERROR lines does ([evaluation](docs/evaluation.md#real-failures-bugs-injected-into-openstack)).
+  A deployment needs failure modes and reviewed incidents of its own.
+- **Memory needs more than a summary of impact.** On three clouds' public post-mortems, no
+  method finds a past incident with the same root cause or fix from an incident's title and
+  impact summary much more often than picking past incidents at random does
+  ([evaluation](docs/evaluation.md#real-incidents-three-clouds-post-mortems)).
 - **Some sources and suites are missing.** Zenodo, Hugging Face, figshare and UCI's own site were
   unreachable when these results were produced. ARIA fetches the BGL, Hadoop and UCI data from
   copies pinned by checksum or commit, but the full Thunderbird, Spirit, Liberty and HDFS_v2 logs

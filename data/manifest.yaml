@@ -68,6 +68,39 @@ sources:
     citation: "Q. Lin et al. Log Clustering based Problem Identification for Online Service Systems. ICSE 2016."
     description: Every container log of 55 Hadoop MapReduce jobs (WordCount and PageRank), each labelled normal or with the failure injected into it (machine down, network disconnection, disk full). The real-log evaluation triages each job and compares ARIA's verdict with its label.
 
+  openstack-faults:
+    kind: git
+    url: https://github.com/dessertlab/Fault-Injection-Dataset
+    commit: f16a73f87244211bb72916a6ec8134ab1d6270f6
+    paths:
+      - /nova.tsv
+      - /cinder.tsv
+      - /neutron.tsv
+      - /README.md
+      - /LICENSE
+      # The faulty round's service logs. Left out: Keystone (no fault was injected into it, and
+      # it is a third of the bytes), the client workload's output (it carries the API errors the
+      # baseline uses) and the injector's own traces (they name the fault).
+      - "*/Test_*/logs/round_1/nova/*"
+      - "*/Test_*/logs/round_1/cinder/*"
+      - "*/Test_*/logs/round_1/neutron/*"
+      - "*/Test_*/logs/round_1/glance/*"
+      - "*/Test_*/logs/round_1/heat/*"
+    compress: ["*.log.bzip2.out"]
+    license: AGPL-3.0; read only to evaluate, never redistributed
+    citation: "D. Cotroneo, L. De Simone, P. Liguori, R. Natella, N. Bidokhti. How Bad Can a Bug Get? An Empirical Analysis of Software Failures in the OpenStack Cloud Computing Platform. ESEC/FSE 2019."
+    description: Logs of 911 fault-injection experiments on OpenStack (439 in Nova, 269 in Cinder, 203 in Neutron). In each, one bug was injected into the code and a workload run against the cloud; the labels say whether the run failed, how (the check that failed), and whether an API error told the user. The fault-injection evaluation triages each faulty round's logs (src/aria/evals/openstack.py).
+
+  cloud-postmortems:
+    kind: git
+    url: https://github.com/IntelligentDDS/Post-mortems-Analysis
+    commit: 161e7cc9f167d9e87f96911b4055c74390058434
+    # The structured post-mortems only: the scraped status pages and the paper are left out.
+    paths: ["/anomaly_collection/", "/README.md"]
+    license: None stated; read only to evaluate, never redistributed
+    citation: "X. Li et al. Going through the Life Cycle of Faults in Clouds: Guidelines on Fault Handling. ISSRE 2022."
+    description: Public post-mortems of AWS, Azure and Google Cloud incidents from 2011 to 2021, each structured by the researchers with its layered root cause, its detection and the mitigations that ended it. The post-mortem evaluation asks incident memory for past incidents with the same root cause or fix (src/aria/evals/postmortems.py).
+
   uci-incidents:
     kind: uci
     dataset_id: 498

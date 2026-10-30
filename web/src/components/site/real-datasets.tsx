@@ -17,7 +17,7 @@ interface Card {
 }
 
 function cards(data: RealData): Card[] {
-  const { bgl, hadoop, tickets, gitlab, injection } = data;
+  const { bgl, hadoop, openstack, tickets, gitlab, injection } = data;
   const memory = gitlab.service;
   const failedJobs = hadoop.jobs - (hadoop.byLabel.normal ?? 0);
   const rulesWin = bgl.rules.macroF1 > bgl.aria.macroF1;
@@ -44,6 +44,16 @@ function cards(data: RealData): Card[] {
       compare: `A rule on ERROR lines flags ${hadoop.anyError.caught}, and ${hadoop.anyError.falseAlarms} of the ${hadoop.aria.healthy} healthy jobs; ARIA flags ${hadoop.aria.falseAlarms} of them.`,
       caveat: "ARIA has no failure mode for a full disk.",
       anchor: "real-failures-a-hadoop-clusters-jobs",
+    },
+    {
+      key: "openstack",
+      name: `${n(openstack.experiments)} OpenStack runs, each with a bug planted`,
+      what: `One bug injected into Nova, Cinder or Neutron per run, then a workload of VMs, volumes and networks. ${n(openstack.failed)} runs failed, ${n(openstack.silent)} of them with no API error to say so.`,
+      stat: `${n(openstack.paged.caught)} of ${n(openstack.paged.failed)}`,
+      statLabel: "Failed runs paged at SEV1-2",
+      compare: `It also paged on ${n(openstack.paged.falseAlarms)} of the ${n(openstack.paged.healthy)} runs that did not fail. A rule on ERROR lines flags ${n(openstack.anyError.caught)} failed and ${n(openstack.anyError.falseAlarms)} healthy runs; ranking failed runs above healthy ones, ARIA scores AUROC ${openstack.ranking.aria.value.toFixed(2)} and counting ERROR lines ${openstack.ranking.errors.value.toFixed(2)}, where 0.50 is chance.`,
+      caveat: `Unsure of ${n(openstack.unsure)} of the ${n(openstack.experiments)} runs, ARIA sent them to a reviewer: its one OpenStack failure mode is a missing image-cache file.`,
+      anchor: "real-failures-bugs-injected-into-openstack",
     },
     {
       key: "tickets",
@@ -84,10 +94,11 @@ function cards(data: RealData): Card[] {
   ];
 }
 
-// Three across and then two on wide screens; two across on tablets, an odd last card spanning
-// both, so no card sits alone in half a row.
+// Three across on wide screens, the cards of a short last row widening to fill it; two across on
+// tablets, an odd last card spanning both, so no card sits alone in part of a row.
 function span(i: number, total: number) {
-  const wide = i < 3 ? "lg:col-span-2" : "lg:col-span-3";
+  const full = total - (total % 3);
+  const wide = i < full ? "lg:col-span-2" : total % 3 === 2 ? "lg:col-span-3" : "lg:col-span-6";
   return total % 2 === 1 && i === total - 1 ? `md:col-span-2 ${wide}` : wide;
 }
 

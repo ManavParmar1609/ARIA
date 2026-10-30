@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -511,6 +511,145 @@ def _hadoop(section: Mapping[str, Any]) -> list[str]:
     ]
 
 
+def _share(d: Mapping[str, Any]) -> str:
+    return f"{d['flagged']} of {d['of']} ({_pct(d['share'])}, {_ci(d['ci95'])})"
+
+
+_SUBSYSTEMS = {
+    "Nova": "Nova (compute)",
+    "Cinder": "Cinder (volumes)",
+    "Neutron": "Neutron (networks)",
+}
+
+
+def _auroc(d: Mapping[str, Any]) -> str:
+    return f"{d['auroc']:.3f} ({_ci(d['auroc_ci95'], percent=False)})"
+
+
+def _unsure(section: Mapping[str, Any]) -> str:
+    review = section["review"]
+    decided = review["decided"]
+    text = (
+        f"ARIA was unsure of {_share(review['failed'])} failed runs and "
+        f"{_share(review['healthy'])} healthy runs: their prediction set held several labels, so "
+        "the conservative policy chose the most severe of them and sent the run to a reviewer."
+    )
+    total = decided["failed"] + decided["normal"]
+    if total and not decided["normal"]:
+        text += (
+            f" Every one of the {total} runs it decided by itself had failed, and it flagged "
+            f"{decided['failed_flagged']} of them."
+        )
+    elif total:
+        text += (
+            f" Of the {total} runs it decided by itself, it flagged "
+            f"{decided['failed_flagged']} of {decided['failed']} failed and "
+            f"{decided['normal_flagged']} of {decided['normal']} healthy."
+        )
+    return text
+
+
+def _capped(capped: int, cap: int) -> str:
+    if not capped:
+        return f"No run holds more than the per-run line cap of {cap:,}."
+    many = "runs hold" if capped > 1 else "run holds"
+    return f"{capped:,} {many} more than the per-run line cap of {cap:,}; ARIA reads up to the cap."
+
+
+def _all_of(hits: int, of: int) -> str:
+    return f"all {of:,}" if hits == of and of > 1 else f"{hits:,} of the {of:,}"
+
+
+def _openstack(section: Mapping[str, Any]) -> list[str]:
+    lines = ["## Real failures, bugs injected into OpenStack", ""]
+    if "missing" in section:
+        return [*lines, f"No results: {section['missing']}.", ""]
+    aria, base = section["aria"], section["baselines"]
+    errors = base["any_error_line"]
+    subsystems = section["by_subsystem"]
+    sevs = ("SEV1", "SEV2", "SEV3", "SEV4")
+    outcomes = {"failed": "Failed", "healthy": "Did not fail"}
+    ranks = {"ARIA's probability of SEV1-2": aria, "ERROR and CRITICAL lines, counted": errors}
+    return [
+        *lines,
+        (
+            f"{section['experiments']} fault-injection experiments on OpenStack ("
+            + ", ".join(f"{n} in {k}" for k, n in subsystems.items())
+            + f"; {section['lines']:,} lines). In each, one bug was injected into the code (a "
+            "wrong return value, a missing call, a thrown exception, wrong or missing "
+            "parameters) and a workload then created and used VMs, volumes and networks. "
+            f"{section['failed']} runs failed: {section['reported']} with an API error that told "
+            f"the user, and {section['silent']} silently, caught only by the experimenters' own "
+            "checks. A healthy run is one whose bug caused no failure. "
+            f"Source: {section['source']}; {section['citation']} Each run's service logs "
+            "from the faulty round were triaged offline, end to end, as one run; ARIA never saw "
+            "the label, the client's output or the injector's traces. A run counts as flagged "
+            "when ARIA rates it SEV1-SEV3, and as paged at SEV1-2, the level the BGL section counts "
+            f"as severe. {_capped(section['capped'], section['line_cap'])}"
+        ),
+        "",
+        "| Method | Failed runs flagged (95% CI) | Healthy runs flagged |",
+        "|---|---|---|",
+        f"| ARIA, end to end | {_flagged(aria)}",
+        f"| ARIA, paging only (SEV1-2) | {_flagged(aria['paged'])}",
+        f"| ARIA's rules alone | {_flagged(base['rules_only'])}",
+        f"| Any ERROR or CRITICAL line | {_flagged(errors)}",
+        f"| Keyword categories | {_flagged(base['keyword'])}",
+        "",
+        _unsure(section),
+        "",
+        "| Failed runs | ARIA flagged | Any ERROR or CRITICAL line |",
+        "|---|---|---|",
+        f"| Reported by an API error | {_share(aria['reported'])} | {_share(errors['reported'])} |",
+        f"| Silent: no API error | {_share(aria['silent'])} | {_share(errors['silent'])} |",
+        "",
+        (
+            "An API error is the signal the user already had: it reports every failure in the "
+            "first row and none in the second."
+        ),
+        "",
+        (
+            "Free of any threshold: how well each score ranks failed runs above healthy ones "
+            "(AUROC; 0.5 is chance, 1 is perfect)."
+        ),
+        "",
+        "| Score | Every run (95% CI) | Silent failures against healthy runs |",
+        "|---|---|---|",
+        *(
+            f"| {name} | {_auroc(d['ranking']['all'])} | {_auroc(d['ranking']['silent'])} |"
+            for name, d in ranks.items()
+        ),
+        "",
+        "| Bug injected into | Failed runs flagged | Healthy runs flagged |",
+        "|---|---|---|",
+        *(
+            f"| {_SUBSYSTEMS.get(k, k)} | {_flagged(d)}"
+            for k, d in section["by_subsystem_detail"].items()
+        ),
+        "",
+        "| Outcome | " + " | ".join(sevs) + " | ARIA's leading hypothesis |",
+        "|---|" + "---|" * len(sevs) + "---|",
+        *(
+            f"| {label} | "
+            + " | ".join(str(section["severity_by_outcome"][k].get(s, 0)) for s in sevs)
+            + " | "
+            + ", ".join(
+                f"{_MODE_NAMES.get(mode, mode.replace('_', ' '))} ({n})"
+                for mode, n in section["leading_mode_by_outcome"][k].items()
+            )
+            + " |"
+            for k, label in outcomes.items()
+        ),
+        "",
+        (
+            f"{_pct(section['overlap_with_training_sample'])} of these lines carry a message that "
+            "also appears in Loghub's 2,000-line OpenStack sample, which the training scenarios "
+            "are composed from; that sample comes from another OpenStack deployment."
+        ),
+        "",
+    ]
+
+
 _MODE_NAMES = {
     "resourcemanager_unreachable": "ResourceManager unreachable",
     "hdfs_lease_renewal": "HDFS lease renewal",
@@ -655,6 +794,85 @@ def _gitlab(section: Mapping[str, Any]) -> list[str]:
             "The issues are a live source: the download keeps the incidents created before a "
             "fixed date and records the snapshot's checksum, but issues can be edited later, so "
             "a fresh download may differ slightly."
+        ),
+        "",
+    ]
+    return lines
+
+
+_FIX_NAMES = {
+    "rollback": "a rollback",
+    "hotfix": "a hotfix",
+    "configuration": "a configuration change",
+    "load": "shedding load",
+    "traffic": "moving traffic",
+    "restart": "a restart",
+    "capacity": "added capacity",
+    "hardware": "power or hardware repair",
+    "self_healed": "recovering by itself",
+}
+
+
+def _and(items: Sequence[str]) -> str:
+    return ", ".join(items[:-1]) + " and " + items[-1] if len(items) > 1 else "".join(items)
+
+
+def _postmortems(section: Mapping[str, Any]) -> list[str]:
+    lines = ["## Real incidents, three clouds' post-mortems", ""]
+    if "missing" in section:
+        return [*lines, f"No results: {section['missing']}.", ""]
+    clouds = ", ".join(f"{n} from {k}" for k, n in section["by_cloud"].items())
+    lines += [
+        (
+            f"{section['postmortems']:,} public post-mortems ({clouds}) of incidents from "
+            f"{section['first'][:4]} to {section['last'][:4]}, each structured by researchers "
+            "with its layered root cause and the mitigations that ended it. Source: "
+            f"{section['source']}; {section['citation']} ARIA's retrieval index holds the "
+            f"{section['memory']:,} post-mortems of incidents before {section['cutoff']}, from "
+            f"their whole write-ups. Each of the {section['later']:,} later ones asks for similar "
+            "past incidents from its title and summary of impact, what a responder knows first; "
+            f"a hit is a past incident among the first {section['top']} with the same specific "
+            "root cause, or ended by the same kind of fix. Labels never enter the index or the "
+            "query."
+        ),
+        "",
+        (
+            "The researchers wrote each fix in their own words, so ARIA's evaluation sorts them "
+            "by the words they use into "
+            + _and([_FIX_NAMES.get(k, k) for k in section["fix_kinds"]])
+            + f": {_pct(section['fix_labels_sorted'])} of the {section['fix_labels']:,} "
+            "mitigations written fall into one of these."
+        ),
+        "",
+    ]
+    names = {"cause": "same specific root cause", "fix": "same kind of fix"}
+    for key, by in section["by"].items():
+        methods = by["methods"]
+        n = methods["aria"]["queries"]
+        top = list(by["label_counts"].items())[:3]
+        lines += [
+            (
+                f"**{names.get(key, key).capitalize()}** ({n:,} later incidents with a label; "
+                f"{by['labels']} labels among {by['memory_labelled']:,} labelled past incidents; "
+                "the commonest: " + _and([f"{_FIX_NAMES.get(k, k)} ({c})" for k, c in top]) + "):"
+            ),
+            "",
+            "| Method | Hit in the first 3 (95% CI) | Hit first | MRR@10 |",
+            "|---|---|---|---|",
+            *(
+                f"| {label} | {_pct(methods[m]['recall_at_3'])} "
+                f"({_ci(methods[m]['recall_at_3_ci95'])}) | {_pct(methods[m]['recall_at_1'])} | "
+                f"{methods[m]['mrr_at_10']:.3f} |"
+                for m, label in _RETRIEVAL_METHODS.items()
+                if m in methods
+            ),
+            "",
+        ]
+    lines += [
+        (
+            "A summary of impact says what customers saw, which seldom says what broke, and a few "
+            "labels cover most incidents, so three past incidents at random already share a label "
+            "with many of them."
         ),
         "",
     ]
@@ -864,8 +1082,13 @@ _REAL_SOURCES = {
     "hdfs": "a Hadoop cluster's log, with its experts' label for each storage block",
     "bgl": "the whole BlueGene/L log, with its administrators' alert tags",
     "hadoop": "Hadoop jobs, with the failure injected into each",
+    "openstack": "OpenStack runs, with a bug injected into each and the outcome it had",
     "uci_tickets": "a ServiceNow service desk's tickets, with their outcomes",
     "gitlab": "GitLab.com's production incidents, with their responders' labels",
+    "postmortems": (
+        "AWS, Azure and Google Cloud post-mortems, with the root cause and fix researchers "
+        "recorded for each"
+    ),
 }
 
 
@@ -928,10 +1151,14 @@ def render(results: Mapping[str, Any], live: Mapping[str, Any] | None = None) ->
             lines += _bgl(results["real"]["bgl"])
         if "hadoop" in results["real"]:
             lines += _hadoop(results["real"]["hadoop"])
+        if "openstack" in results["real"]:
+            lines += _openstack(results["real"]["openstack"])
         if "uci_tickets" in results["real"]:
             lines += _tickets(results["real"]["uci_tickets"])
         if "gitlab" in results["real"]:
             lines += _gitlab(results["real"]["gitlab"])
+        if "postmortems" in results["real"]:
+            lines += _postmortems(results["real"]["postmortems"])
     if "severity" in results:
         lines += _severity(results["severity"])
     if "pipeline" in results:
@@ -991,8 +1218,8 @@ def render(results: Mapping[str, Any], live: Mapping[str, Any] | None = None) ->
             "- The HDFS section measures one kind of failure signal, units of work that stop "
             "partway, and its labels say whether a block failed, not how severe the incident was. "
             "The BGL section's severity labels come from the administrators' tags through a "
-            "rubric written for this project. The Hadoop, ticket and incident sections measure "
-            "detection, priority and retrieval, not the reports ARIA writes."
+            "rubric written for this project. The Hadoop, OpenStack, ticket and incident sections "
+            "measure detection, priority and retrieval, not the reports ARIA writes."
         ),
         *_unmeasured(results.get("real") or {}),
         "",
@@ -1005,8 +1232,10 @@ def _unmeasured(real: Mapping[str, Any]) -> list[str]:
     names = {
         "bgl": "contiguous BGL windows",
         "hadoop": "the Hadoop jobs",
+        "openstack": "the OpenStack fault-injection runs",
         "uci_tickets": "the UCI incident log",
         "gitlab": "GitLab.com's incidents",
+        "postmortems": "the cloud post-mortems",
     }
     missing = [
         label for key, label in names.items() if "missing" in (real.get(key) or {"missing": 1})
@@ -1117,6 +1346,53 @@ def _hadoop_summary(section: Mapping[str, Any]) -> list[str]:
     ]
 
 
+def _openstack_summary(section: Mapping[str, Any]) -> list[str]:
+    if "aria" not in section:
+        return []
+    aria, errors = section["aria"], section["baselines"]["any_error_line"]
+    silent, review, paged = aria["silent"], section["review"], aria["paged"]
+    unsure = review["failed"]["flagged"] + review["healthy"]["flagged"]
+    return [
+        (
+            f"**Real injected bugs**: of {aria['failed']:,} OpenStack runs that failed after a "
+            f"bug was injected into the code, ARIA flagged {aria['failed_flagged']:,} "
+            f"({_ci(aria['recall_ci95'])}), including {_all_of(silent['flagged'], silent['of'])} "
+            "that no API error reported, and "
+            f"{_all_of(aria['normal_flagged'], aria['normal'])} runs that did not fail: it was "
+            f"unsure of {unsure:,} of the {section['experiments']:,} runs and sent them to a "
+            f"reviewer. Paging only at SEV1-2, it caught {paged['failed_flagged']:,} failed and "
+            f"{paged['normal_flagged']:,} healthy runs, where a rule on ERROR lines flags "
+            f"{errors['failed_flagged']:,} and {errors['normal_flagged']:,}; ranking failed above "
+            f"healthy runs, it scores AUROC {_auroc(aria['ranking']['all'])}, against "
+            f"{errors['ranking']['all']['auroc']:.3f} for counting ERROR lines."
+        ),
+        "",
+    ]
+
+
+def _postmortems_summary(section: Mapping[str, Any]) -> list[str]:
+    if "by" not in section or "cause" not in section["by"]:
+        return []
+    cause, fix = section["by"]["cause"]["methods"], section["by"].get("fix", {}).get("methods")
+    aria, chance = cause["aria"], cause["random"]
+    fixed = (
+        f"; a past incident fixed the same way, for {_pct(fix['aria']['recall_at_3'])} "
+        f"(at random: {_pct(fix['random']['recall_at_3'])})"
+        if fix
+        else ""
+    )
+    return [
+        (
+            f"**Real post-mortems**: from its title and summary of impact, ARIA's incident memory "
+            f"put a past AWS, Azure or Google Cloud incident with the same specific root cause "
+            f"among the first three for {_pct(aria['recall_at_3'])} "
+            f"({_ci(aria['recall_at_3_ci95'])}) of {aria['queries']:,} later incidents, against "
+            f"{_pct(chance['recall_at_3'])} at random{fixed}."
+        ),
+        "",
+    ]
+
+
 def _gitlab_summary(section: Mapping[str, Any]) -> list[str]:
     if "by" not in section or "service" not in section["by"]:
         return []
@@ -1187,8 +1463,10 @@ def _results(results: Mapping[str, Any], live: Mapping[str, Any] | None) -> list
         lines += _real_summary(results["real"])
         lines += _bgl_summary(results["real"].get("bgl") or {})
         lines += _hadoop_summary(results["real"].get("hadoop") or {})
+        lines += _openstack_summary(results["real"].get("openstack") or {})
         lines += _tickets_summary(results["real"].get("uci_tickets") or {})
         lines += _gitlab_summary(results["real"].get("gitlab") or {})
+        lines += _postmortems_summary(results["real"].get("postmortems") or {})
     if "severity" in results:
         sev = results["severity"]
         lines += [

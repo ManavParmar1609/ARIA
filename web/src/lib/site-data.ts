@@ -418,14 +418,30 @@ const flagged = (d: Flagged) => ({
   healthy: d.normal,
 });
 
+/** Part of a group flagged, with its exact interval. */
+const share = (d: { flagged: number; of: number; share: number; ci95: number[] }) => ({
+  caught: d.flagged,
+  of: d.of,
+  share: d.share,
+  ci: d.ci95,
+});
+
+/** How well a score ranks failed runs above healthy ones: 0.5 is chance, 1 is perfect. */
+const auroc = (d: { auroc: number; auroc_ci95: number[] }) => ({
+  value: d.auroc,
+  ci: d.auroc_ci95,
+});
+
 /**
  * The other real-data evaluations, each against labels its owners gave it: a supercomputer's
- * alert tags, a Hadoop cluster's injected failures, a service desk's ticket outcomes, GitLab.com's
- * incident labels and public prompt-injection benchmarks. Every number comes from
- * docs/eval-results.json.
+ * alert tags, a Hadoop cluster's injected failures, OpenStack runs with injected bugs, a service
+ * desk's ticket outcomes, GitLab.com's incident labels, three clouds' post-mortems and public
+ * prompt-injection benchmarks.
+ * Every number comes from docs/eval-results.json.
  */
 export function realData() {
-  const { bgl, hadoop, uci_tickets: tickets, gitlab } = evals.real;
+  const { bgl, hadoop, openstack, uci_tickets: tickets, gitlab, postmortems } = evals.real;
+  const errors = openstack.baselines.any_error_line;
   const injection = evals.injection_benchmarks;
   const retrieval = (m: (typeof gitlab.by.service.methods)["aria"]) => ({
     queries: m.queries,
@@ -499,6 +515,31 @@ export function realData() {
       severityByLabel: hadoop.severity_by_label as Record<string, Record<string, number>>,
       leadingByLabel: hadoop.leading_mode_by_label as Record<string, Record<string, number>>,
     },
+    openstack: {
+      citation: openstack.citation,
+      experiments: openstack.experiments,
+      lines: openstack.lines,
+      bySubsystem: openstack.by_subsystem as Record<string, number>,
+      failed: openstack.failed,
+      reported: openstack.reported,
+      silent: openstack.silent,
+      aria: flagged(openstack.aria),
+      paged: flagged(openstack.aria.paged),
+      rules: flagged(openstack.baselines.rules_only),
+      anyError: flagged(errors),
+      keyword: flagged(openstack.baselines.keyword),
+      ariaReported: share(openstack.aria.reported),
+      ariaSilent: share(openstack.aria.silent),
+      errorReported: share(errors.reported),
+      errorSilent: share(errors.silent),
+      unsure: openstack.review.failed.flagged + openstack.review.healthy.flagged,
+      ranking: {
+        aria: auroc(openstack.aria.ranking.all),
+        ariaSilent: auroc(openstack.aria.ranking.silent),
+        errors: auroc(errors.ranking.all),
+        errorsSilent: auroc(errors.ranking.silent),
+      },
+    },
     tickets: {
       citation: tickets.citation,
       incidents: tickets.incidents,
@@ -533,6 +574,18 @@ export function realData() {
       snapshot: gitlab.snapshot.downloaded_at.slice(0, 10),
       service: memory(gitlab.by.service),
       cause: memory(gitlab.by.cause),
+    },
+    postmortems: {
+      citation: postmortems.citation,
+      postmortems: postmortems.postmortems,
+      byCloud: postmortems.by_cloud as Record<string, number>,
+      memory: postmortems.memory,
+      later: postmortems.later,
+      cutoff: postmortems.cutoff,
+      top: postmortems.top,
+      fixLabelsSorted: postmortems.fix_labels_sorted,
+      cause: memory(postmortems.by.cause),
+      fix: memory(postmortems.by.fix),
     },
     injection: {
       attacks: injection.attacks.n,

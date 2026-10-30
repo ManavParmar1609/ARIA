@@ -70,11 +70,12 @@ test.describe("landing page", () => {
     await expect(real.getByText("Flags that were real failures")).toBeVisible();
     await expect(real.getByRole("figure")).toContainText("ARIA, following each block's steps");
     await expect(
-      real.getByRole("heading", { name: "And on five more real datasets" }),
+      real.getByRole("heading", { name: "And on six more real datasets" }),
     ).toBeVisible();
     for (const name of [
       /supercomputer/,
       /Hadoop jobs/,
+      /OpenStack runs/,
       /ServiceNow tickets/,
       /GitLab\.com incidents/,
       /prompt-injection/,

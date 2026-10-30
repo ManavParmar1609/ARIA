@@ -85,7 +85,7 @@ def job_lines(directory: Path) -> list[str]:
     return [line for _, _, lines in groups for line in lines]
 
 
-def _detection(flags: Sequence[bool], failed: Sequence[bool]) -> dict[str, Any]:
+def detection(flags: Sequence[bool], failed: Sequence[bool]) -> dict[str, Any]:
     tp = sum(f and b for f, b in zip(flags, failed, strict=True))
     fp = sum(f and not b for f, b in zip(flags, failed, strict=True))
     n_failed, n_normal = sum(failed), len(failed) - sum(failed)
@@ -172,10 +172,10 @@ async def evaluate(
         "overlap_with_training_sample": round(
             sum(r["pool_lines"] for r in rows) / max(1, sum(r["lines"] for r in rows)), 4
         ),
-        "aria": _detection([r["severity"] in FLAGGED for r in rows], failed),
+        "aria": detection([r["severity"] in FLAGGED for r in rows], failed),
         "baselines": {
-            "any_error_line": _detection([r["any_error"] for r in rows], failed),
-            "keyword": _detection([r["keyword"] in FLAGGED for r in rows], failed),
+            "any_error_line": detection([r["any_error"] for r in rows], failed),
+            "keyword": detection([r["keyword"] in FLAGGED for r in rows], failed),
         },
         "severity_by_label": {
             k: dict(sorted(Counter(r["severity"] for r in v).items()))

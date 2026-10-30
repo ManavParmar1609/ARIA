@@ -13,9 +13,13 @@ labels its owners gave it**:
 - the whole BlueGene/L log, in contiguous windows labelled by its administrators' alert tags
   ([below](#contiguous-bgl-windows));
 - 55 Hadoop jobs, each labelled healthy or with the failure injected into it;
+- 911 OpenStack runs, each with one bug injected into the code, and how each run ended: failed or
+  not, and whether an API error told the user;
 - a ServiceNow service desk's tickets, with their final priorities and SLA outcomes;
 - GitLab.com's public production incidents, with the service and root cause their responders
   labelled ([below](#gitlabcoms-production-incidents));
+- public post-mortems of AWS, Azure and Google Cloud incidents, with the root cause and the fix
+  researchers recorded for each;
 - six public prompt-injection benchmarks, and a benchmark of benign look-alikes.
 
 The other numbers come from **semi-synthetic** incident windows. Their log lines are real lines
@@ -27,7 +31,7 @@ behaves on that distribution. They are not a measurement of accuracy on producti
 |---|---|
 | Log lines | Real lines from the Loghub 2k samples: 2,000 lines from each of 16 systems |
 | Training and evaluation windows | **Semi-synthetic**: real lines, synthetic composition, 13 systems |
-| Real-data evaluation | **Real**: 104,815 HDFS lines and the experts' label for each of 7,940 blocks; the full BGL log (4,747,963 lines) and its alert tags; the container logs of 55 Hadoop jobs and their failure labels; 24,918 ServiceNow tickets; GitLab.com's public production incidents and their responders' labels; 2,654 public prompt-injection attacks and 339 benign look-alikes. Only the ticket model trains on any of it, on the oldest tickets |
+| Real-data evaluation | **Real**: 104,815 HDFS lines and the experts' label for each of 7,940 blocks; the full BGL log (4,747,963 lines) and its alert tags; the container logs of 55 Hadoop jobs and their failure labels; the service logs of 911 OpenStack runs, each with one bug injected, and how each run ended; 24,918 ServiceNow tickets; GitLab.com's public production incidents and their responders' labels; 355 public post-mortems of AWS, Azure and Google Cloud incidents and the root cause and fix researchers recorded for each; 2,654 public prompt-injection attacks and 339 benign look-alikes. Only the ticket model trains on any of it, on the oldest tickets |
 | Labels | BGL windows: the sysadmin alert tags, through a written rubric. Other systems: a documented scenario policy |
 | Splits | Separate scenario seeds per split; the held-out test seeds are used only by `make eval` |
 | Ticket data | The UCI ServiceNow log, fetched from checksum-pinned copies when the UCI host cannot be reached. The ticket model trains on its oldest 70% of tickets |
@@ -46,6 +50,8 @@ its integrity (see [What is in git](#what-is-in-git-and-what-is-not)).
 | `hdfs-100k` | The first 100,000 HDFS_v1 lines plus the later lines of the blocks they start, with expert block-level anomaly labels (Xu et al., SOSP 2009), from the loglizer repository at commit `ac67f972` | The real-log evaluation ([below](#real-logs-with-expert-labels)) and a small committed cut for tests and the console's real incident. `aria data ingest` also loads it. No model trains on it. | Downloaded |
 | `loghub-bgl` | The full BlueGene/L log (4,747,963 lines over 215 days) with sysadmin alert tags (Oliner and Stearley, DSN 2007), Zenodo record [8196385](https://zenodo.org/records/8196385) | Contiguous, real BGL windows ([below](#contiguous-bgl-windows)); `aria data ingest` loads its first lines | When Zenodo cannot be reached, the gzipped log comes from a public mirror and must match the sha256 in the manifest |
 | `loghub-hadoop` | The container logs of 55 Hadoop MapReduce jobs, each labelled normal or with its injected failure: machine down, network disconnection or disk full (Lin et al., ICSE-SEIP 2016), same Zenodo record | The failed-jobs evaluation: each job triaged end to end | Downloaded from a mirror: a public repository at a pinned commit |
+| `openstack-faults` | The dessertlab OpenStack fault-injection dataset (Cotroneo et al., ESEC/FSE 2019) at commit `f16a73f8`: 911 runs, each with one bug injected into Nova, Cinder or Neutron, how each ended (failed or not, the check that caught it, and the API error that reported it, if any) and every service's logs | The injected-bugs evaluation: each run's Nova, Cinder, Neutron, Glance and Heat logs from the round with the bug, triaged end to end | Downloaded: a sparse checkout of just those logs, stored gzipped. Keystone's logs, the client's output and the injector's traces are left out, so ARIA cannot read the outcome from them |
+| `cloud-postmortems` | Public post-mortems of AWS, Azure and Google Cloud incidents from 2011 to 2021, structured by Li et al. (ISSRE 2022) with each incident's layered root cause, detection and mitigations, at commit `161e7cc9` | The post-mortem evaluation: past incidents with the same root cause or kind of fix, from each later incident's title and summary of impact | Downloaded: a sparse checkout of the structured collection only |
 | `uci-incidents` | The UCI "Incident management process enriched event log" (dataset 498): a ServiceNow audit trail of 141,712 events for 24,918 incidents, with anonymised categorical codes and no free text | The ticket priority and SLA-breach models and their evaluation, and the outcome statistics of similar tickets | Downloaded from a mirror: two public copies of UCI's zip, checked against the sha256 in the manifest (the same CSV is in nine more repositories) |
 | `bipia`, `injecagent`, `cyberseceval-pi`, `tensor-trust`, `giskard-injections`, `jailbreak-llms` | Public prompt-injection benchmarks: BIPIA (Yi et al.), InjecAgent (Zhan et al.), CyberSecEval 2 (Meta), Tensor Trust (Toyer et al.), Giskard's collection and in-the-wild jailbreaks (Shen et al.), each at a pinned commit | Measuring the injection detector on attacks it was never tuned on | Downloaded |
 | `notinject` | NotInject (Li, Liu et al.): benign sentences that use one, two or three words common in injections | Measuring the detector's over-defence | Downloaded |
@@ -75,6 +81,16 @@ and the jailbreak prompts are MIT-licensed. InjecAgent and Tensor Trust state no
 their repositories; ARIA reads them only to evaluate the detector and never redistributes them.
 The manifest lists the paper to cite for each.
 
+The OpenStack fault-injection dataset is licensed AGPL-3.0. ARIA reads it only to evaluate and
+never redistributes it or any part of it. Cite D. Cotroneo, L. De Simone, P. Liguori, R. Natella
+and N. Bidokhti, "How Bad Can a Bug Get? An Empirical Analysis of Software Failures in the
+OpenStack Cloud Computing Platform", ESEC/FSE 2019.
+
+The structured post-mortems state no licence; the write-ups they structure are the clouds' own
+public status pages. ARIA reads them only to evaluate incident memory and never redistributes
+them. Cite X. Li et al., "Going through the Life Cycle of Faults in Clouds: Guidelines on Fault
+Handling", ISSRE 2022.
+
 GitLab.com's production incidents are public issues in
 [gitlab-com/gl-infra/production](https://gitlab.com/gitlab-com/gl-infra/production/-/issues),
 with no licence stated. ARIA reads them through GitLab's issues API only to evaluate incident
@@ -93,7 +109,7 @@ prompt-injection collections. These were reachable but left out, or could not be
 |---|---|
 | BPI Challenge 2014 (Rabobank ICT incidents) | Its priority is a fixed function of impact and urgency (every pair maps to one priority) and it has no SLA outcome, so it would only confirm the matrix the UCI log already measures |
 | BPI Challenge 2013 (Volvo IT incidents) | Impact only, no priority, SLA or free text |
-| OpenStack fault-injection runs (Cotroneo et al., ESEC/FSE 2019) and Nezha (Yu et al., ESEC/FSE 2023) | Reachable and labelled, but about 10 GB and 2 GB of logs; candidates for a future fault-localisation evaluation |
+| Nezha (Yu et al., ESEC/FSE 2023) | Reachable and labelled, but about 2 GB of logs from microservices ARIA has no parser or failure modes for; a candidate for a future fault-localisation evaluation |
 | Thunderbird sample (LogLead), splunk attack_data, OTRF Security-Datasets | Lines sampled out of order (no windows), or labels per dataset file rather than per line or window |
 | GitHub, Google Cloud and AWS status-page archives; danluu and Kubernetes postmortem lists | Short public notices or link lists: too little text, or no labels ARIA can be scored against |
 | Full Thunderbird, Spirit, Liberty, HDFS_v2, Loghub-2.0 full logs, RCAEval, MSDS, Eadro | Hosted only on Zenodo, figshare, Hugging Face, USENIX or similar hosts, which could not be reached when ARIA's datasets were gathered, and no verifiable copy was found elsewhere |
@@ -192,6 +208,42 @@ incidents from each later incident's title alone.
   nor answers.
 - **A live source.** Issues can be edited or relabelled after the download, so the download
   records its snapshot's sha256 and date, and [evaluation.md](evaluation.md) quotes them.
+
+## OpenStack runs with an injected bug
+
+Cotroneo et al. ran an OpenStack cloud 911 times, each time with one bug injected into Nova,
+Cinder or Neutron: a wrong return value, a missing call, a thrown exception, or wrong or missing
+parameters. A workload then created and used VMs, volumes and networks, and checks after each
+step recorded whether the run failed. The dataset's tables say, for each run, whether it failed,
+which check caught it, and the API error that told the user, if any. The evaluation
+([`src/aria/evals/openstack.py`](../src/aria/evals/openstack.py)) merges each run's Nova, Cinder,
+Neutron, Glance and Heat logs from the round with the bug in time order and triages them as one
+run, end to end and offline.
+
+- **Nothing is composed and nothing trains on it.** The outcome only scores the result.
+- **What ARIA cannot see.** The download leaves out Keystone's logs, the client's output (which
+  holds the API errors) and the injector's traces (which name the bug), so ARIA reads only what
+  the services logged.
+- **What "healthy" means.** A healthy run is one whose bug caused no failure. Its logs can still
+  show the bug at work, so an alarm on one is a false alarm by the dataset's labels, not always
+  by an operator's.
+
+## Three clouds' post-mortems
+
+Li et al. collected the public post-mortems of AWS, Azure and Google Cloud incidents from 2011 to
+2021 and structured each one by hand: its layered root cause (for example *internal causes*,
+*software bugs*, *config*), how it was detected, the operation under way, and the mitigations
+that ended it, in their own words. The evaluation
+([`src/aria/evals/postmortems.py`](../src/aria/evals/postmortems.py)) puts the post-mortems of
+incidents before 2019 into ARIA's retrieval index, from their whole write-ups, and asks for
+similar past incidents from each later incident's title and summary of impact.
+
+- **Nothing is composed and nothing trains on it.** The labels only score the results.
+- **Sorting the fixes.** The researchers wrote each mitigation in their own words, so the
+  evaluation sorts them into kinds of fix by the words they use (`FIXES` in the code); a
+  mitigation that matches no kind counts as no label, and [evaluation.md](evaluation.md) says how
+  many matched.
+- **Duplicates.** A write-up filed twice (same cloud, title and date) counts once.
 
 ## How semi-synthetic windows are built
 
