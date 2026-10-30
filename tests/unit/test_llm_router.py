@@ -46,14 +46,22 @@ class FailingProvider:
     kind = ProviderKind.NVIDIA_NIM
     model = "broken"
 
-    def __init__(self, name: str = "nim", status: int = 503) -> None:
+    def __init__(
+        self, name: str = "nim", status: int = 503, retry_after: float | None = None
+    ) -> None:
         self.name = name
         self.status = status
+        self.retry_after = retry_after
         self.calls = 0
 
     async def chat(self, messages: Any, **kwargs: Any) -> tuple[str, Usage]:
         self.calls += 1
-        raise ProviderError(f"{self.name}: HTTP {self.status}", status=self.status, retryable=True)
+        raise ProviderError(
+            f"{self.name}: HTTP {self.status}",
+            status=self.status,
+            retryable=True,
+            retry_after=self.retry_after,
+        )
 
 
 def _config(**routing: list[str]) -> LLMConfig:
@@ -140,6 +148,32 @@ async def test_circuit_breaker_opens_then_half_opens() -> None:
     await router.structured("default", "pick", MESSAGES, Pick)
     assert failing.calls == 3
     assert router.breaker("nim").state == "open"  # the trial failed, so it re-opens
+
+
+async def test_a_provider_that_says_when_to_come_back_is_skipped_until_then() -> None:
+    clock = Clock()
+    limited = FailingProvider(status=429, retry_after=90)
+    fake = FakeProvider(script={"pick": ['{"choice": "a"}'] * 5})
+    router = LLMRouter(
+        _config(), providers={"nim": limited, "fake": fake}, clock=clock, breaker_threshold=3
+    )
+    await router.structured("default", "pick", MESSAGES, Pick)
+    assert router.breaker("nim").state == "open"  # one refusal is enough when it says how long
+    clock.now = 60
+    await router.structured("default", "pick", MESSAGES, Pick)
+    assert limited.calls == 1  # not asked again inside the wait
+    clock.now = 91
+    assert router.breaker("nim").state == "half_open"
+
+
+def test_a_requested_wait_is_capped() -> None:
+    now = [0.0]
+    breaker = CircuitBreaker(max_wait_s=3600, clock=lambda: now[0])
+    breaker.failure("gemini: HTTP 429", retry_after=86_400)
+    now[0] = 3_000
+    assert breaker.state == "open"
+    now[0] = 3_601
+    assert breaker.state == "half_open"
 
 
 def test_breaker_closes_on_success() -> None:

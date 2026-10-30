@@ -56,12 +56,15 @@ class CircuitBreaker:
     """Opens after ``threshold`` consecutive failures and lets one trial through after ``cooldown_s``.
 
     A timeout trips it at once and for longer (``trip_cooldown_s``): a provider that is slow now
-    tends to stay slow, and every retry costs the run a full stall timeout.
+    tends to stay slow, and every retry costs the run a full stall timeout. A provider that says
+    how long to wait (a rate limit or quota with Retry-After) is left alone for that long, up to
+    ``max_wait_s``, so calls stop spending its limit on refusals.
     """
 
     threshold: int = 3
     cooldown_s: float = 30.0
     trip_cooldown_s: float = 300.0
+    max_wait_s: float = 3600.0
     clock: Callable[[], float] = time.monotonic
     failures: int = 0
     opened_at: float | None = None
@@ -82,11 +85,14 @@ class CircuitBreaker:
         self.opened_at = None
         self.last_error = None
 
-    def failure(self, error: str, *, trip: bool = False) -> None:
-        """Count a failure; ``trip`` opens the circuit at once (a timeout: the provider is slow)."""
+    def failure(self, error: str, *, trip: bool = False, retry_after: float | None = None) -> None:
+        """Count a failure; ``trip`` opens the circuit at once (a timeout: the provider is slow),
+        and ``retry_after`` opens it for as long as the provider asked."""
         self.failures += 1
         self.last_error = error[:300]
-        if trip:
+        if retry_after is not None and retry_after > 0:
+            self.opened_at, self.open_for = self.clock(), min(retry_after, self.max_wait_s)
+        elif trip:
             self.opened_at, self.open_for = self.clock(), self.trip_cooldown_s
         elif self.failures >= self.threshold or self.state == "half_open":
             self.opened_at, self.open_for = self.clock(), self.cooldown_s
@@ -381,7 +387,7 @@ class LLMRouter:
                     kwargs["model"] = model
                 text, usage = await provider.chat(conversation, **kwargs)
             except ProviderError as exc:
-                breaker.failure(str(exc), trip=exc.timed_out)
+                breaker.failure(str(exc), trip=exc.timed_out, retry_after=exc.retry_after)
                 mark_error(span, exc)
                 attempts.append(
                     {
@@ -436,7 +442,7 @@ class LLMRouter:
             try:
                 scores = await provider.rerank(query, passages)
             except ProviderError as exc:
-                self.breaker(name).failure(str(exc))
+                self.breaker(name).failure(str(exc), retry_after=exc.retry_after)
                 continue
             self.breaker(name).success()
             return name, scores

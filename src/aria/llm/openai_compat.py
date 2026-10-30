@@ -8,7 +8,9 @@ steps down (json_schema -> guided_json -> json_object -> prompt) and remembers w
 from __future__ import annotations
 
 import asyncio
+import email.utils
 import json
+import re
 import time
 from collections.abc import Sequence
 from typing import Any, Literal
@@ -34,6 +36,28 @@ _STEP_DOWN = {
 
 def _retryable(exc: BaseException) -> bool:
     return isinstance(exc, ProviderError) and exc.retryable
+
+
+# Longer than this and a retry inside the call would only hit the same limit (tenacity's backoff
+# tops out at 8 s), so the router fails over and keeps its breaker open for the wait instead.
+_MAX_WAIT_IN_CALL_S = 8.0
+_RETRY_DELAY = re.compile(r'"retryDelay":\s*"(\d+(?:\.\d+)?)s"')
+
+
+def _retry_after(response: httpx.Response, body: str) -> float | None:
+    """How long the provider asked callers to wait: Retry-After, or Gemini's RetryInfo."""
+    header = response.headers.get("retry-after", "").strip()
+    if header.replace(".", "", 1).isdigit():
+        return float(header)
+    if header:
+        try:
+            when = email.utils.parsedate_to_datetime(header)
+        except (TypeError, ValueError):
+            when = None
+        if when is not None:
+            return max(0.0, when.timestamp() - time.time())
+    match = _RETRY_DELAY.search(body)
+    return float(match.group(1)) if match else None
 
 
 class OpenAICompatibleProvider:
@@ -119,13 +143,17 @@ class OpenAICompatibleProvider:
                 f"{self.name}: {type(exc).__name__}: {exc}", retryable=True
             ) from exc
         if response.status_code >= 400:
-            body = (await response.aread()).decode(errors="replace")[:500]
+            raw = (await response.aread()).decode(errors="replace")
             await response.aclose()
+            wait = _retry_after(response, raw)
             retryable = response.status_code in (408, 409, 429) or response.status_code >= 500
+            if wait is not None and wait > _MAX_WAIT_IN_CALL_S:
+                retryable = False
             raise ProviderError(
-                f"{self.name}: HTTP {response.status_code}: {body}",
+                f"{self.name}: HTTP {response.status_code}: {raw[:500]}",
                 status=response.status_code,
                 retryable=retryable,
+                retry_after=wait,
             )
         return response
 

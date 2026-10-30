@@ -7,9 +7,9 @@ Accepted.
 ## Context
 
 ARIA must run on NVIDIA NIM (hosted or self-hosted), Google Gemini, Azure OpenAI or any
-OpenAI-compatible server, and fully offline for tests, evals and the demo. Model IDs change quickly, and a hosted model can
-be slow or down for hours. A run must never fail just because a model is unavailable or a budget
-is spent.
+OpenAI-compatible server, and fully offline for tests, evals and the demo. Model IDs change
+quickly, and a hosted model can be slow or down for hours. A run must never fail just because a
+model is unavailable or a budget is spent.
 
 ## Decision
 
@@ -26,15 +26,17 @@ is spent.
   (`adjudicator`, `investigator`, `reporter`, `critic`, `comms`, `ask`) an ordered chain: a
   self-hosted NIM, Gemini and a lighter Gemini model, hosted NIM and a second NIM model, Azure
   OpenAI, an OpenAI-compatible endpoint and the fake provider. A provider may name more than one
-  environment variable for its key; the first one set is used. Embeddings, reranking and the safety model have their own chains. A run can
-  put one provider first for every role.
+  environment variable for its key; the first one set is used. Embeddings, reranking and the
+  safety model have their own chains. A run can put one provider first for every role.
 - **Validate before falling back.** Structured output is checked against its Pydantic schema and a
   caller's own check (for example, cited evidence must exist). The model gets one repair attempt
   with the errors, then the router tries the next provider. When the chain is exhausted, the
   caller takes its deterministic path.
 - **Circuit breakers.** A provider's breaker opens for 30 seconds after three consecutive
-  failures; a timeout opens it at once for five minutes. Providers that stream every request fail
-  over when they send nothing for `stall_timeout_s`.
+  failures; a timeout opens it at once for five minutes; and a refusal that says how long to wait
+  (`Retry-After`, or Gemini's retry info on a rate limit or quota) opens it at once for that long,
+  up to an hour, so calls stop spending the provider's limit on refusals. Providers that stream
+  every request fail over when they send nothing for `stall_timeout_s`.
 - **Budgets.** [`BudgetGuard`](../../src/aria/llm/budget.py) checks tokens, cost, LLM calls, tool
   calls, steps and wall-clock time before each call, against limits in config that a run can
   only lower, for tokens and cost. A spent budget raises `BudgetExceededError`; the agent falls

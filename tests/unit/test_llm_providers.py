@@ -183,6 +183,50 @@ async def test_retries_rate_limits_then_succeeds(nim: OpenAICompatibleProvider) 
 
 
 @respx.mock
+async def test_a_long_retry_after_fails_over_at_once_and_says_how_long(
+    nim: OpenAICompatibleProvider,
+) -> None:
+    route = respx.post(f"{NIM}/chat/completions").mock(
+        return_value=httpx.Response(429, headers={"Retry-After": "120"}, json={"error": "quota"})
+    )
+    with pytest.raises(ProviderError) as info:
+        await nim.chat(MESSAGES)
+    assert info.value.retry_after == 120
+    assert not info.value.retryable
+    assert route.call_count == 1  # no retry into the same limit
+
+
+@respx.mock
+async def test_a_short_retry_after_is_still_retried(nim: OpenAICompatibleProvider) -> None:
+    route = respx.post(f"{NIM}/chat/completions").mock(
+        side_effect=[
+            httpx.Response(429, headers={"Retry-After": "2"}),
+            httpx.Response(200, json=_completion("done")),
+        ]
+    )
+    text, _ = await nim.chat(MESSAGES)
+    assert (text, route.call_count) == ("done", 2)
+
+
+@respx.mock
+async def test_gemini_retry_info_counts_as_retry_after(nim: OpenAICompatibleProvider) -> None:
+    body = [
+        {
+            "error": {
+                "code": 429,
+                "details": [
+                    {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "41s"}
+                ],
+            }
+        }
+    ]
+    respx.post(f"{NIM}/chat/completions").mock(return_value=httpx.Response(429, json=body))
+    with pytest.raises(ProviderError) as info:
+        await nim.chat(MESSAGES)
+    assert info.value.retry_after == 41.0
+
+
+@respx.mock
 async def test_auth_failure_is_not_retried(nim: OpenAICompatibleProvider) -> None:
     route = respx.post(f"{NIM}/chat/completions").mock(
         return_value=httpx.Response(401, json={"error": "bad key"})

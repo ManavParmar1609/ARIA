@@ -215,8 +215,9 @@ drive ARIA, an [AGENTS.md](AGENTS.md) for coding agents, and an [llms.txt](llms.
 
 Providers are switched in [config/aria.yaml](config/aria.yaml), and keys come only from the
 environment or Key Vault. Each role has a fallback chain, and a provider without a key is skipped.
-A circuit breaker opens on repeated failures, and per-run budgets (tokens, cost, latency, steps,
-tool and LLM calls) degrade a run to the rules-only path rather than failing it.
+A circuit breaker opens on repeated failures, or for as long as a rate-limited provider asks, and
+per-run budgets (tokens, cost, latency, steps, tool and LLM calls) degrade a run to the rules-only
+path rather than failing it.
 
 | Provider | Default models | Status |
 |---|---|---|

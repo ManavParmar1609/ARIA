@@ -56,11 +56,13 @@ class ProviderError(LLMError):
         status: int | None = None,
         retryable: bool = False,
         timed_out: bool = False,
+        retry_after: float | None = None,
     ) -> None:
         super().__init__(message)
         self.status = status
         self.retryable = retryable
         self.timed_out = timed_out  # slow, not broken: fail over now and avoid it for a while
+        self.retry_after = retry_after  # seconds the provider asked callers to wait, if it said
 
 
 class StructuredOutputError(LLMError):
