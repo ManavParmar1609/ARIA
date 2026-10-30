@@ -8,6 +8,9 @@ import type { Severity } from "./theme";
 
 const SEVERITIES: Severity[] = ["SEV1", "SEV2", "SEV3", "SEV4"];
 
+/** Who settled the severity, as ARIA's severity contract names it (`decided_by`). */
+export type DecidedBy = "rules" | "model" | "llm" | "fallback" | "human";
+
 const minutes = (seconds: number) => `${(seconds / 60).toFixed(1)} minutes`;
 
 const short = (text: string, max: number) =>
@@ -61,7 +64,7 @@ export const assessment = {
   set: severity.prediction_set as Severity[],
   coverage: pct(1 - severity.alpha, 0),
   confidence: severity.confidence,
-  decidedBy: severity.decided_by,
+  decidedBy: severity.decided_by as DecidedBy,
 };
 
 const investigation = demo.investigation;
