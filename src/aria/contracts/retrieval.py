@@ -34,9 +34,11 @@ class SimilarIncident(Contract):
     def applies_to(self, system: str, components: Iterable[str]) -> bool:
         """Whether this past incident can stand for a cause here: it comes from the same system,
         or its signal was on a component this window logs. A kernel panic on a supercomputer
-        explains nothing about a web app's errors, however close the words or the vectors."""
+        explains nothing about a web app's errors, however close the words or the vectors.
+        "generic" names no system, only an unknown log format, so there only a component counts."""
         present = set(components)
-        return self.system == system or any(c in present for c in self.components)
+        same_system = self.system == system and system != "generic"
+        return same_system or any(c in present for c in self.components)
 
 
 class TicketHistoryStats(Contract):

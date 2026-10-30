@@ -45,7 +45,7 @@ async def feedback(state: State, limit: Annotated[int, Query(ge=1, le=500)] = 50
     return FeedbackOut(
         calibration=CalibrationOut(
             model_version=model.version if model else None,
-            trained_version=str(meta.get("trained_version", model.version)) if model else None,
+            trained_version=model.trained_version if model else None,
             recalibrated=bool(meta.get("recalibrated_from")),
             reviews_in_model=in_model,
             reviewed=reviewed,

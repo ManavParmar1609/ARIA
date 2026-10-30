@@ -61,13 +61,13 @@ from aria.graph.runner import RunOutcome, TriageRunner
 router = APIRouter(tags=["ag-ui"])
 # A thread id that is a valid run id names its run; "." or ".." would be a path the console
 # cannot open, so an id must start with a letter or digit.
-_RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")
+_RUN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}")
 _CHUNK = 400
 
 
 def run_id_for(thread_id: str) -> str:
     """The ARIA run behind an AG-UI thread: the thread id itself when it is a valid run id."""
-    if _RUN_ID.match(thread_id):
+    if _RUN_ID.fullmatch(thread_id):
         return thread_id
     return "agui-" + hashlib.sha256(thread_id.encode()).hexdigest()[:20]
 

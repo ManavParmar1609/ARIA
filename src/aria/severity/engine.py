@@ -78,11 +78,12 @@ class SeverityEngine:
         trained = Path(config.log_model_file)
         live = live_model_path(trained, models_dir) if models_dir is not None else trained
         model = LinearModel.load(trained) if trained.exists() else None
-        # In a checkout the live and shipped files are one, so it may already be a recalibration.
-        version = _base_version(model) if model is not None else None
+        # In a checkout the live and shipped files are one: whatever it holds (a recalibration, or
+        # a model retrained in place) is the model, so there is no other release to guard against.
+        version = model.trained_version if model is not None and live != trained else None
         if live != trained and live.exists():
             recalibrated = LinearModel.load(live)
-            if version is None or _base_version(recalibrated) == version:
+            if version is None or recalibrated.trained_version == version:
                 model = recalibrated
             else:  # an upgrade shipped a retrained model: the old one's recalibration is stale
                 log.warning(
@@ -103,7 +104,7 @@ class SeverityEngine:
             log.warning("severity.model_reload_failed", path=str(self.model_path))
             return False
         self._model_mtime = mtime
-        if self.trained_version is not None and _base_version(model) != self.trained_version:
+        if self.trained_version is not None and model.trained_version != self.trained_version:
             # Written by a process still on the previous release, mid-upgrade.
             log.warning("severity.live_model_outdated", live=model.version)
             return False
@@ -270,11 +271,6 @@ class SeverityEngine:
             llm_unavailable_reason=result.reason,
         )
         return SeverityResult(assessment, pre, result)
-
-
-def _base_version(model: LinearModel) -> str:
-    """The trained model a model came from: itself, or the one a recalibration started from."""
-    return str(model.metadata.get("trained_version", model.version))
 
 
 def _mtime(path: Path | None) -> int | None:

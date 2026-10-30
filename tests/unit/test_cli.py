@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 
 import pytest
+import uvicorn
 from typer.testing import CliRunner
 
 from aria.api.worker import heartbeat_file
@@ -88,6 +89,28 @@ def test_serve_asks_for_the_database_to_be_set_up_first(
     assert result.exit_code == 1
     assert "aria db upgrade" in result.output
     assert "Traceback" not in result.output
+
+
+@pytest.mark.parametrize(
+    ("host", "base"),
+    [
+        ("0.0.0.0", "http://localhost:8123"),  # noqa: S104 - the address under test
+        ("::1", "http://localhost:8123"),
+        ("fd00::5", "http://[fd00::5]:8123"),
+    ],
+)
+def test_serve_names_an_address_its_links_can_use(
+    host: str, base: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An IPv6 host made the agent card advertise http://::1:8000/a2a, which is no URL."""
+    monkeypatch.setattr(uvicorn, "run", lambda *args, **kwargs: None)
+    monkeypatch.setenv("ARIA_MIGRATE_ON_START", "true")
+    monkeypatch.setenv("ARIA_PUBLIC_BASE_URL", "")
+    monkeypatch.delenv("ARIA_PUBLIC_BASE_URL")  # and restored to unset afterwards
+    reset_caches()
+    result = CliRunner().invoke(app, ["serve", "--host", host, "--port", "8123"])
+    assert result.exit_code == 0, result.output
+    assert os.environ["ARIA_PUBLIC_BASE_URL"] == base
 
 
 def test_training_will_not_replace_the_committed_model_with_one_fit_on_fixtures(

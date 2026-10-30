@@ -102,6 +102,11 @@ class LinearModel:
     version: str = "unversioned"
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    @property
+    def trained_version(self) -> str:
+        """The trained model this one comes from: itself, or the one it recalibrates."""
+        return str(self.metadata.get("trained_version", self.version))
+
     # --- inference -----------------------------------------------------------------------------
 
     def matrix(self, rows: Sequence[dict[str, float]]) -> FloatArray:

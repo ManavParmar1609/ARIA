@@ -20,6 +20,7 @@ from aria.db import repository as repo
 from aria.db.engine import get_engine, init_db
 from aria.graph.runner import TriageRunner
 from aria.services import Services
+from aria.severity import recalibration
 from aria.severity.engine import SeverityEngine
 from aria.severity.model import LinearModel, live_model_path
 from aria.severity.recalibration import (
@@ -135,6 +136,45 @@ def test_a_checkout_keeps_reloading_its_own_recalibrations(tmp_path: Path) -> No
     os.utime(path, ns=(time.time_ns(), time.time_ns() + 1_000_000))
     assert engine.refresh()
     assert engine.model.version == "tiny-1-recal50"
+    # Nor is a model retrained in place mistaken for a previous release's.
+    replace(tiny_model(conformal_q=0.3), version="tiny-2").save(path)
+    os.utime(path, ns=(time.time_ns(), time.time_ns() + 2_000_000))
+    assert engine.refresh()
+    assert engine.model.version == "tiny-2"
+
+
+def test_after_an_upgrade_reviews_recalibrate_the_new_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The job kept recalibrating the previous release's model, which the engine then refused,
+    so reviews never reached the model the upgrade shipped."""
+    shipped, shared = tmp_path / "app", tmp_path / "volume"
+    shipped.mkdir()
+    shared.mkdir()
+    trained_file = shipped / "severity_log.json"
+    live = live_model_path(trained_file, shared)
+    previous = tiny_model(conformal_q=0.2)
+    recalibrate(previous, examples(previous, 40, disagree=0.4, seed=1), alpha=0.1).model.save(live)
+    replace(tiny_model(conformal_q=0.5), version="tiny-2").save(trained_file)
+    engine = SeverityEngine.load(SeverityConfig(log_model_file=trained_file), models_dir=shared)
+    monkeypatch.setattr(
+        recalibration,
+        "reviewed_examples",
+        lambda db, model: examples(model, 60, disagree=0.4, seed=2),
+    )
+    monkeypatch.setattr(repo, "mark_feedback_used", lambda db, ids: None)
+
+    result = recalibrate_from_feedback(
+        get_engine(), live, alpha=0.1, min_new_reviews=10, trained=trained_file
+    )
+
+    assert result is not None
+    assert result.model.version == "tiny-2-recal60"
+    assert (shared / "severity_log.tiny-1-recal40.json").exists()  # the old one is kept
+    os.utime(live, ns=(time.time_ns(), time.time_ns() + 1_000_000))
+    assert engine.refresh()
+    assert engine.model is not None
+    assert engine.model.version == "tiny-2-recal60"
 
 
 @pytest.fixture

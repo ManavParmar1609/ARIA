@@ -182,6 +182,16 @@ class LLMRouter:
             fake = cfg.kind is ProviderKind.FAKE
         return not fake or self.allow_fake
 
+    def can_chat(self, name: str) -> bool:
+        """Set up, and with a chat model to answer a run's steps with (the offline embedder, for
+        one, only embeds)."""
+        if not self.is_set_up(name):
+            return False
+        if name in self._providers:
+            return callable(getattr(self._providers[name], "chat", None))
+        cfg = self.config.providers[name]
+        return cfg.kind is ProviderKind.FAKE or bool(cfg.chat_model)
+
     def is_available(self, name: str) -> bool:
         return self.is_set_up(name) and self.breaker(name).allow()
 

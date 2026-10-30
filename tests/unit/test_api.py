@@ -1656,6 +1656,12 @@ async def test_a_run_that_names_a_provider_this_server_lacks_is_refused(api: Api
     )
     assert keyless.status_code == 422
     assert "not set up" in keyless.json()["detail"]
+    # The offline embedder is always set up, but a run started on it failed at its first step.
+    embedder = await api.client.post(
+        "/api/v1/runs", json={**body, "options": {"provider": "local"}}
+    )
+    assert embedder.status_code == 422
+    assert "no chat model" in embedder.json()["detail"]
     offline = await api.client.post("/api/v1/runs", json={**body, "options": {"provider": "fake"}})
     assert offline.status_code == 202
 
@@ -1672,7 +1678,7 @@ def test_a_thread_id_the_console_cannot_open_gets_a_run_id_it_can() -> None:
     from aria.api.agui import run_id_for
 
     assert run_id_for("chat-abc123") == "chat-abc123"
-    for thread in ("..", ".", ".hidden", "a/b"):
+    for thread in ("..", ".", ".hidden", "a/b", "chat-1\n"):
         assert run_id_for(thread).startswith("agui-")
 
 

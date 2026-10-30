@@ -516,6 +516,32 @@ async def test_unrelated_logs_never_borrow_another_systems_cause(env: Env) -> No
     assert report.validation.errors == []
 
 
+async def test_two_unrelated_pastes_of_unknown_format_never_share_a_cause(env: Env) -> None:
+    """The system "generic" only means an unknown log format: an approved paste about a database
+    pool explained a later paste about a payment gateway, and pushed out its own lead."""
+    pool = [
+        f"2026-10-30 10:00:0{i} ERROR db.pool: connection timeout after 30000 ms, pool exhausted"
+        for i in range(1, 6)
+    ]
+    first = await env.runner.start(
+        TriageRequest(system="generic", logs=pool, options=RunOptions(use_llm=False))
+    )
+    await env.runner.resume(first.run_id, {"decision": "approve", "reviewer": "ana"})
+    gateway = [
+        f"2026-10-30 11:00:0{i} ERROR payments.Gateway: connection timeout calling the card "
+        "processor, retrying"
+        for i in range(1, 6)
+    ]
+    second = await env.runner.start(
+        TriageRequest(system="generic", logs=gateway, options=RunOptions(use_llm=False))
+    )
+    stored = repo.get_report(env.services.engine, f"rpt-{second.run_id}")
+    assert stored is not None
+    causes = " ".join(c.text for c in stored[0].suspected_cause)
+    assert "past incident" not in causes
+    assert "payments.Gateway" in causes
+
+
 async def test_a_crash_outside_the_nodes_fails_the_run_and_says_why(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ) -> None:

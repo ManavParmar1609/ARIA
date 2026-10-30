@@ -99,7 +99,7 @@ def recalibrate(
     before, set_before = _coverage(model, probs, labels)
     to_idx = {cls: i for i, cls in enumerate(model.classes)}
     threshold = conformal_threshold(probs, np.array([to_idx[v] for v in labels]), alpha)
-    base = str(model.metadata.get("trained_version", model.version))
+    base = model.trained_version
     recalibrated = replace(
         model,
         conformal_q=threshold,
@@ -152,15 +152,25 @@ def recalibrate_from_feedback(
 ) -> Recalibration | None:
     """Recalibrate when enough reviews have gathered since the loaded model was calibrated.
 
-    ``model_path`` is the live model, read and rewritten in place; until it exists, the
-    ``trained`` model is the starting point (and is never written). New reviews are counted
-    against the model file's own record, not the ``used`` marks, so a model restored from an
-    older file recalibrates again from the shared database. Returns None when there is nothing
-    to do."""
-    source = model_path if model_path.exists() else trained
-    if source is None or not source.exists():
+    ``model_path`` is the live model, read and rewritten in place; until it exists, or when it
+    recalibrates a different trained model (one an upgrade replaced), the ``trained`` model is
+    the starting point (and is never written). New reviews are counted against the model file's
+    own record, not the ``used`` marks, so a model restored from an older file recalibrates again
+    from the shared database. Returns None when there is nothing to do."""
+    live = LinearModel.load(model_path) if model_path.exists() else None
+    shipped = (
+        LinearModel.load(trained)
+        if trained is not None and trained != model_path and trained.exists()
+        else None
+    )
+    model = live or shipped
+    if live is not None and shipped is not None and live.trained_version != shipped.trained_version:
+        # The engine ignores the previous release's recalibration, so start again from the
+        # model this release ships; the old file is kept beside the new one.
+        log.info("severity.recalibration_restarted", live=live.version, trained=shipped.version)
+        model = shipped
+    if model is None:
         return None
-    model = LinearModel.load(source)
     examples = reviewed_examples(engine, model)
     new = len(examples) - reviews_in(model)
     if new < max(1, min_new_reviews) or len(examples) < MIN_REVIEWED:
@@ -168,7 +178,7 @@ def recalibrate_from_feedback(
     result = recalibrate(model, examples, alpha=alpha, new_reviews=new)
     if dry_run:
         return result
-    save_model(result.model, model_path, previous=model)
+    save_model(result.model, model_path, previous=live or model)
     repo.mark_feedback_used(engine, [e.feedback_id for e in examples if not e.used])
     log.info(
         "severity.recalibrated",
