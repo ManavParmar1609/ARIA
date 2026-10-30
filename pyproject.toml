@@ -1,0 +1,167 @@
+[project]
+name = "aria-triage"
+version = "0.1.0"
+description = "ARIA: first-pass incident triage with auditable agents"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+authors = [{ name = "ManavParmar1609" }]
+keywords = ["incident-response", "sre", "aiops", "langgraph", "mcp", "llm", "nvidia-nim"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
+dependencies = [
+    "langgraph>=1.2.18,<2",
+    "langgraph-checkpoint>=4.3.1,<5",
+    "langchain-core>=1.7.1,<2",
+    "mcp>=2.3.0,<3",
+    "pydantic>=2.14.1,<3",
+    "pydantic-settings>=2.16.2,<3",
+    "fastapi>=0.162.0,<1",
+    "uvicorn[standard]>=0.54.0",
+    "sse-starlette>=3.6.0",
+    "sqlalchemy>=2.1.6,<3",
+    "alembic>=1.20.1",
+    "numpy>=2.5.4",
+    "scipy>=1.18.1",
+    "scikit-learn>=1.9.1",
+    "pandas>=3.1.0",
+    "typer>=0.27.3",
+    "rich>=15.0.0",
+    "httpx>=0.28.1",
+    "pyyaml>=6.0.3",
+    "jinja2>=3.1.6",
+    "orjson>=3.13.0",
+    "tenacity>=9.2.1",
+    "structlog>=26.1.0",
+    "opentelemetry-sdk>=1.45.1",
+    "opentelemetry-instrumentation-fastapi>=0.66b1",
+    "prometheus-client>=0.26.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.45",
+    "a2a-sdk>=1.3",
+    "ag-ui-protocol>=1.0",
+]
+
+[project.optional-dependencies]
+azure = [
+    "pyodbc>=5.3.0",
+    "azure-identity>=1.27.0",
+    "azure-monitor-opentelemetry>=1.8.11",
+]
+
+[project.scripts]
+aria = "aria.cli:app"
+
+[dependency-groups]
+dev = [
+    { include-group = "lint" },
+    { include-group = "test" },
+    { include-group = "audit" },
+]
+lint = [
+    "ruff>=0.17.3",
+    "mypy>=2.4.1",
+    "types-PyYAML>=6.0.12",
+    "pandas-stubs>=3.0.5",
+    "pre-commit>=4.7.0",
+]
+test = [
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.4.1",
+    "pytest-cov>=7.1.0",
+    "hypothesis>=6.170.13",
+    "respx>=0.23.1",
+    "asgi-lifespan>=2.1.0",
+    "httpx-sse>=0.4.3",
+]
+audit = [
+    "pip-audit>=2.10.1",
+    "actionlint-py>=1.7.12",
+    "zizmor>=1.31.1",
+    "detect-secrets>=1.5.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.6,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "aria"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+extend-exclude = ["/web", "/video", "/data", "src/aria/db/migrations/versions"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W", "F", "I", "N", "UP", "B", "A", "C4", "DTZ", "T10", "T20", "ISC", "ICN", "PIE", "PT",
+    "RET", "SIM", "TID", "TC", "ARG", "PTH", "PERF", "PL", "RUF", "S", "ASYNC", "FURB", "LOG",
+]
+ignore = [
+    "E501",    # the formatter owns line length
+    "PLR0911", # too many return statements: explicit branches read better in rule code
+    "PLR0912", # too many branches
+    "PLR0913", # too many arguments: keyword-only arguments are used deliberately
+    "PLR0915", # too many statements
+    "PLR2004", # magic values: thresholds live next to the logic they guard
+    "RUF001",  # ambiguous unicode in log fixtures
+    "TC001", "TC002", "TC003", # runtime imports are needed by Pydantic and FastAPI
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "S108", "S311", "ARG", "PLC0415", "PERF", "N802"]
+"src/aria/cli.py" = ["T201", "PLC0415"]
+# A seeded scenario generator: `random` is not used for security, and the explicit loops fix the
+# order of random draws, which keeps every seed's scenarios reproducible.
+"src/aria/data/scenarios.py" = ["S311", "PERF401"]
+"scripts/**" = ["T201", "INP001"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header", "fastapi.Path", "typer.Option", "typer.Argument"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+files = ["src/aria"]
+exclude = ["src/aria/db/migrations/"]
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = ["sklearn.*", "scipy.*", "pyodbc", "sse_starlette.*", "mcp_types.*"]
+ignore_missing_imports = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-ra --strict-markers --strict-config"
+markers = [
+    "slow: long-running tests (deselect with -m 'not slow')",
+    "integration: tests that exercise several components together",
+    "e2e: end-to-end tests through the HTTP API",
+]
+
+[tool.coverage.run]
+source = ["aria"]
+branch = true
+omit = ["src/aria/db/migrations/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "@overload", "\\.\\.\\."]

@@ -1,0 +1,25 @@
+# ARIA
+
+> ARIA does the first pass of incident triage. It reads an alert or a burst of log lines, scores severity with rules, a calibrated model and a conformal prediction set, and finds the most similar past incidents. It then drafts an incident report in which every claim cites evidence, and waits for a human to approve it. It is open source (MIT), runs offline with no keys, and can use Google Gemini, NVIDIA NIM, Azure OpenAI or any OpenAI-compatible model.
+
+Several evaluations use real data with the labels its owners gave it: a Hadoop cluster's log, replayed window by window against the label Hadoop experts gave every storage block; the whole BlueGene/L log, in windows labelled by its administrators' alert tags; Hadoop jobs with injected failures; a ServiceNow service desk's tickets; GitLab.com's production incidents, with its responders' labels; and public prompt-injection benchmarks. The other results come from semi-synthetic incidents (real Loghub log lines composed into incidents) and are not accuracy on production incidents. The API is REST with server-sent events. ARIA also speaks MCP (read-only tools), A2A (an agent card plus JSON-RPC tasks) and AG-UI.
+
+## Docs
+
+- [README](https://raw.githubusercontent.com/ManavParmar1609/ARIA/main/README.md): what ARIA does, quickstart, provider setup including Gemini and NVIDIA NIM, measured results, limitations
+- [Agent skill](https://raw.githubusercontent.com/ManavParmar1609/ARIA/main/skills/aria-triage/SKILL.md): how an agent starts a triage run, reads the cited report and hands it to a human for review
+- [Evaluation](https://raw.githubusercontent.com/ManavParmar1609/ARIA/main/docs/evaluation.md): every measured number, its data and its method
+- [Model card](https://raw.githubusercontent.com/ManavParmar1609/ARIA/main/docs/model-card.md): the severity model, its calibration and conformal sets, and the third-party models ARIA calls
+- [Data card](https://raw.githubusercontent.com/ManavParmar1609/ARIA/main/docs/data-card.md): datasets, licences, the real labelled logs, and how the semi-synthetic incidents and labels are built
+- [Threat model](https://raw.githubusercontent.com/ManavParmar1609/ARIA/main/docs/threat-model.md): trust boundaries, prompt injection and the controls that handle it
+
+## API
+
+- [OpenAPI schema](https://raw.githubusercontent.com/ManavParmar1609/ARIA/main/docs/openapi.json): runs, event stream, reports, review, history and forks, alert webhooks, Ask ARIA, incidents, runbooks, real incidents to replay, feedback, evaluation
+
+## Optional
+
+- [Architecture decisions](https://raw.githubusercontent.com/ManavParmar1609/ARIA/main/docs/adr/README.md): why one LangGraph graph, the severity cascade, grounded reports and the rest
+- [Ops runbook](https://raw.githubusercontent.com/ManavParmar1609/ARIA/main/docs/ops-runbook.md): deploying, configuring, monitoring and troubleshooting ARIA
+- [AGENTS.md](https://raw.githubusercontent.com/ManavParmar1609/ARIA/main/AGENTS.md): conventions for coding agents working on the repository
+- [Build brief](https://raw.githubusercontent.com/ManavParmar1609/ARIA/main/docs/build-brief.md): the specification and its acceptance checks

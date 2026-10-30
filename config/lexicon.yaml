@@ -1,0 +1,13 @@
+# Keyword categories counted in every window. Each pattern is a case-insensitive regex matched
+# against redacted log messages; a message counts once per category.
+
+categories:
+  crash: "panic|segfault|segmentation fault|core dump|kernel terminated|fatal error|stopping execution|crash(ed)?|abort(ed)?"
+  data_risk: "corrupt|data loss|checksum|inconsistent|lost block|missing block|unrecoverable"
+  unavailable: "unavailable|unreachable|\\bdown\\b|no route|connection refused|timed? ?out|cannot open channel|error in contacting|not responding"
+  resource: "out of memory|\\boom\\b|disk full|no space|quota exceeded|too many open files|resource busy"
+  security: "failed password|authentication failure|authentication failed|invalid user|break-in|unauthori[sz]ed|permission denied|brute"
+  hardware: "machine check|parity|\\becc\\b|psu|power supply|\\bfan\\b|temperature|link ?error|hardware"
+  storage: "mount failed|mount failed|i/o error|input/output error|lustre|filesystem|file system|\\bdisk\\b|storage interrupt"
+  network: "packet|tree network|socket|connection reset|broken pipe|link has been severed|connection broken|disconnect"
+  degradation: "slow|latency|retry|retrying|backoff|throttl|degraded|lease"

@@ -1,0 +1,272 @@
+# ARIA severity rules.
+#
+# Rules read only what ARIA computes from the log window (counts, rates, spread, keyword
+# categories, component criticality) plus firing alerts. They never see dataset labels or BGL
+# alert tags, so scoring them against those labels is not circular. Lines quarantined as
+# possible prompt injection are excluded before features are computed, so they cannot move a
+# score.
+#
+# effect: score  adds `weight` to `severity`'s score. The rule severity is the most severe class
+#                whose score reaches its `activation` threshold (below), so one decisive SEV1
+#                rule is not outvoted by the weaker SEV2 rules a severe incident also trips.
+#                Noise (SEV4) rules can outvote SEV3-level signals only.
+# effect: floor  the final severity can never be less severe than `severity`.
+#
+# Conditions are {feature, op, value}, combined with all: [...] or any: [...] and nested freely.
+# Features: every numeric WindowFeatures field, level_counts.<LEVEL>, keyword_hits.<category>
+# (see config/lexicon.yaml), n_critical_components, alerts.firing, alerts.critical and
+# alerts.warning. Unknown feature names fail at load time.
+
+version: "2026.10.2"
+
+# A severity is decided without the LLM only when the prediction set is a single class and the
+# calibrated model gives it at least this probability.
+gate:
+  auto_confidence: 0.85
+
+# Summed weight a class needs before the rules call it. A single strong SEV1 rule (weight 2.5+)
+# is decisive; weaker signals need corroboration.
+activation:
+  SEV1: 2.5
+  SEV2: 2.0
+  SEV3: 1.0
+
+rules:
+  # --- SEV1: widespread outage or data-loss risk ------------------------------------------------
+  - id: crash_widespread
+    title: Crash signatures on four or more nodes
+    effect: score
+    severity: SEV1
+    weight: 3.0
+    when:
+      all:
+        - {feature: keyword_hits.crash, op: ">=", value: 10}
+        - {feature: error_nodes, op: ">=", value: 4}
+
+  - id: critical_component_widespread
+    title: A critical component is failing on eight or more nodes
+    effect: score
+    severity: SEV1
+    weight: 2.5
+    when:
+      all:
+        - {feature: max_component_criticality, op: ">=", value: 0.9}
+        - {feature: error_nodes, op: ">=", value: 8}
+
+  - id: error_storm
+    title: Error storm across most of the fleet
+    effect: score
+    severity: SEV1
+    weight: 2.5
+    when:
+      all:
+        - {feature: peak_errors_per_min, op: ">=", value: 100}
+        - {feature: node_spread, op: ">=", value: 0.5}
+        - {feature: error_nodes, op: ">=", value: 4}
+
+  - id: hardware_failure_widespread
+    title: Hardware or power faults on several nodes
+    effect: score
+    severity: SEV1
+    weight: 2.5
+    when:
+      all:
+        - {feature: keyword_hits.hardware, op: ">=", value: 10}
+        - {feature: error_nodes, op: ">=", value: 3}
+        - {feature: max_component_criticality, op: ">=", value: 0.8}
+
+  - id: critical_alert_firing
+    title: A monitoring alert labelled critical is firing
+    effect: score
+    severity: SEV1
+    weight: 1.5
+    when: {feature: alerts.critical, op: ">=", value: 1}
+
+  # --- SEV2: major degradation or a failing critical component ---------------------------------
+  - id: crash_signature
+    title: Crash signatures (panic, segfault, abort, kernel terminated)
+    effect: score
+    severity: SEV2
+    weight: 2.0
+    when: {feature: keyword_hits.crash, op: ">=", value: 1}
+
+  - id: critical_component_errors
+    title: Errors from a critical component
+    effect: score
+    severity: SEV2
+    weight: 2.0
+    when:
+      all:
+        - {feature: max_component_criticality, op: ">=", value: 0.8}
+        - {feature: error_events, op: ">=", value: 5}
+
+  - id: errors_spread
+    title: Errors on eight or more nodes
+    effect: score
+    severity: SEV2
+    weight: 1.5
+    when: {feature: error_nodes, op: ">=", value: 8}
+
+  - id: sustained_burst
+    title: Sustained error burst well above baseline
+    effect: score
+    severity: SEV2
+    weight: 1.5
+    when:
+      all:
+        - {feature: burst_score, op: ">=", value: 5}
+        - {feature: error_events, op: ">=", value: 50}
+
+  - id: unavailability_widespread
+    title: Services unreachable from several nodes
+    effect: score
+    severity: SEV2
+    weight: 1.5
+    when:
+      all:
+        - {feature: keyword_hits.unavailable, op: ">=", value: 20}
+        - {feature: error_nodes, op: ">=", value: 3}
+
+  - id: storage_failures
+    title: Storage or file-system failures
+    effect: score
+    severity: SEV2
+    weight: 1.0
+    when:
+      all:
+        - {feature: keyword_hits.storage, op: ">=", value: 3}
+        - {feature: error_events, op: ">=", value: 3}
+
+  - id: unfinished_work_widespread
+    title: One in twenty units of work or more broke off partway
+    effect: score
+    severity: SEV2
+    weight: 2.0
+    when:
+      all:
+        - {feature: broken_flows, op: ">=", value: 20}
+        - {feature: broken_flow_ratio, op: ">=", value: 0.05}
+
+  - id: attack_widespread
+    title: Authentication attacks against six or more hosts
+    effect: score
+    severity: SEV2
+    weight: 1.5
+    when:
+      all:
+        - {feature: keyword_hits.security, op: ">=", value: 30}
+        - {feature: distinct_nodes, op: ">=", value: 6}
+
+  - id: warning_alert_firing
+    title: A monitoring alert labelled warning is firing
+    effect: score
+    severity: SEV2
+    weight: 0.5
+    when: {feature: alerts.warning, op: ">=", value: 1}
+
+  # --- SEV3: contained errors ------------------------------------------------------------------
+  - id: errors_present
+    title: Error-level events in the window
+    effect: score
+    severity: SEV3
+    weight: 1.0
+    when: {feature: error_events, op: ">=", value: 3}
+
+  - id: novel_error_template
+    title: An error message ARIA has not seen before
+    effect: score
+    severity: SEV3
+    weight: 1.0
+    when: {feature: novel_error_templates, op: ">=", value: 1}
+
+  - id: degradation_signs
+    title: Retries, timeouts or degradation messages
+    effect: score
+    severity: SEV3
+    weight: 1.0
+    when:
+      any:
+        - {feature: keyword_hits.degradation, op: ">=", value: 5}
+        - {feature: keyword_hits.network, op: ">=", value: 5}
+
+  - id: security_attempts
+    title: Repeated authentication failures
+    effect: score
+    severity: SEV3
+    weight: 1.0
+    when: {feature: keyword_hits.security, op: ">=", value: 5}
+
+  - id: unfinished_work
+    title: Units of work (blocks, task attempts) that broke off partway
+    effect: score
+    severity: SEV3
+    weight: 1.0
+    when: {feature: broken_flows, op: ">=", value: 3}
+
+  - id: persistent_errors
+    title: Errors persisting for ten minutes or more
+    effect: score
+    severity: SEV3
+    weight: 0.5
+    when:
+      all:
+        - {feature: persistence_s, op: ">=", value: 600}
+        - {feature: error_events, op: ">=", value: 10}
+
+  # --- SEV4: noise -----------------------------------------------------------------------------
+  # Work that silently breaks off logs no errors, so a quiet window is noise only when its
+  # units of work also finished.
+  - id: no_errors
+    title: No error-level events, and units of work finish
+    effect: score
+    severity: SEV4
+    weight: 2.0
+    when:
+      all:
+        - {feature: error_events, op: "==", value: 0}
+        - {feature: broken_flows, op: "<", value: 3}
+
+  - id: low_error_rate
+    title: Errors are rare and confined to low-criticality components
+    effect: score
+    severity: SEV4
+    weight: 1.5
+    when:
+      all:
+        - {feature: error_ratio, op: "<", value: 0.05}
+        - {feature: max_component_criticality, op: "<", value: 0.5}
+        - {feature: keyword_hits.crash, op: "==", value: 0}
+        - {feature: broken_flows, op: "<", value: 3}
+
+  # --- floors: severities ARIA must never go below ---------------------------------------------
+  - id: data_risk_floor
+    title: Data-integrity signals (corruption, data loss, missing blocks)
+    effect: floor
+    severity: SEV2
+    when:
+      all:
+        - {feature: keyword_hits.data_risk, op: ">=", value: 1}
+        - {feature: error_events, op: ">=", value: 1}
+
+  - id: critical_crash_floor
+    title: A critical component is crashing
+    effect: floor
+    severity: SEV2
+    when:
+      all:
+        - {feature: keyword_hits.crash, op: ">=", value: 1}
+        - {feature: max_component_criticality, op: ">=", value: 0.9}
+
+  - id: critical_alert_floor
+    title: A critical monitoring alert is firing
+    effect: floor
+    severity: SEV2
+    when: {feature: alerts.critical, op: ">=", value: 1}
+
+  # Silent failures log no errors, so the model, trained on windows that do, can read them as
+  # noise. Work that broke off partway always gets a person's look.
+  - id: unfinished_work_floor
+    title: Units of work broke off partway, with no error logged
+    effect: floor
+    severity: SEV3
+    when: {feature: broken_flows, op: ">=", value: 3}

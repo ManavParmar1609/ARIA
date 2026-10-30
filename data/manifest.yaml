@@ -1,0 +1,198 @@
+# Datasets ARIA trains and evaluates on. Raw data is never committed; `aria data download`
+# fetches each source into data/raw/<name>/ and verifies it:
+#   git     - content-addressed: the pinned commit is the checksum
+#   zenodo  - md5 checksums published in the Zenodo record API
+#   http    - sha256 pinned below, or recorded on first download in data/checksums.lock
+#   mirrors - copies on other hosts, tried in order when the source's own host fails; each is
+#             trusted only if its file matches the sha256 pinned beside it
+
+sources:
+  loghub-2k:
+    kind: git
+    url: https://github.com/logpai/loghub
+    commit: dd61d0952749ee7963bde24220d1be5ede023033
+    paths:
+      - "*/*_2k.log_structured.csv"
+      - "*/*_2k.log_templates.csv"
+      - LICENSE
+      - CITATION
+    license: Loghub license (free for research and academic work; cite Zhu et al., ISSRE 2023)
+    citation: "J. Zhu, S. He, P. He, J. Liu, M. R. Lyu. Loghub: A Large Collection of System Log Datasets for AI-driven Log Analytics. ISSRE 2023."
+    description: 2,000-line samples from 16 systems with ground-truth templates; BGL and Thunderbird carry sysadmin alert tags.
+
+  loghub2-corrected:
+    kind: git
+    url: https://github.com/logpai/Loghub-2.0
+    commit: ac4aad2ea86f561e5a0acbc6587fa28b487259f9
+    paths:
+      - "2k_dataset/*/*_2k.log_structured_corrected.csv"
+      - "2k_dataset/*/*_2k.log_templates_corrected.csv"
+    license: Loghub license
+    citation: "Z. Jiang et al. A Large-scale Evaluation for Log Parsing Techniques: How Far are We? ISSTA 2024."
+    description: Corrected ground-truth templates for 14 of the 2k samples. The parsing evaluation scores the same parse against these too, joined by line id, beside the original Loghub templates.
+
+  hdfs-100k:
+    kind: git
+    url: https://github.com/logpai/loglizer
+    commit: ac67f9727acb660687a77b9c8042553aaa185cd3
+    paths:
+      - data/HDFS/HDFS_100k.log_structured.csv
+      - data/HDFS/anomaly_label.csv
+    license: Loghub license (loglizer code is MIT)
+    citation: "W. Xu, L. Huang, A. Fox, D. Patterson, M. I. Jordan. Detecting Large-Scale System Problems by Mining Console Logs. SOSP 2009."
+    description: The first 100,000 HDFS_v1 lines plus the later lines of the blocks they start, with expert block-level anomaly labels. The real-log evaluation replays it offline (src/aria/evals/real.py); no model trains on it.
+
+  loghub-bgl:
+    kind: zenodo
+    record: "8196385"
+    files: [BGL.zip]
+    mirrors:
+      # Loghub's BGL.log (743,185,031 bytes, 4,747,963 lines) gzipped in a public repository.
+      - url: https://raw.githubusercontent.com/Harsh-Tandel27/LogIQ/529b8a2bb05ab7296bf0e3f458c9edafb6854139/data/loghub/BGL/BGL.log.gz
+        sha256: 69d16138f2ae2a9bed1b7fb4ea9c498becafecad1dda825254146206a1a5110a
+    license: Loghub license
+    citation: "A. J. Oliner, J. Stearley. What Supercomputers Say: A Study of Five System Logs. DSN 2007."
+    description: Full BlueGene/L log (4,747,963 lines over 215 days) with the sysadmins' alert tags. The real-log evaluation labels contiguous windows of it with the BGL alert-tag rubric and scores ARIA's severity on them.
+
+  loghub-hadoop:
+    kind: zenodo
+    record: "8196385"
+    files: [Hadoop.zip]
+    mirrors:
+      # Loghub's Hadoop logs and labels in a public repository (LF line endings; a second copy,
+      # Harsh-Tandel27/LogIQ, differs only in its CRLF line endings).
+      - url: https://github.com/SohamPatel0810/Intelligent-Classification-of-Hadoop-Logs
+        commit: 3ff261893817b67d5968896eea71b2240df88ed9
+        paths: ["/data/Hadoop/"]
+    license: Loghub license
+    citation: "Q. Lin et al. Log Clustering based Problem Identification for Online Service Systems. ICSE 2016."
+    description: Every container log of 55 Hadoop MapReduce jobs (WordCount and PageRank), each labelled normal or with the failure injected into it (machine down, network disconnection, disk full). The real-log evaluation triages each job and compares ARIA's verdict with its label.
+
+  openstack-faults:
+    kind: git
+    url: https://github.com/dessertlab/Fault-Injection-Dataset
+    commit: f16a73f87244211bb72916a6ec8134ab1d6270f6
+    paths:
+      - /nova.tsv
+      - /cinder.tsv
+      - /neutron.tsv
+      - /README.md
+      - /LICENSE
+      # The faulty round's service logs. Left out: Keystone (no fault was injected into it, and
+      # it is a third of the bytes), the client workload's output (it carries the API errors the
+      # baseline uses) and the injector's own traces (they name the fault).
+      - "*/Test_*/logs/round_1/nova/*"
+      - "*/Test_*/logs/round_1/cinder/*"
+      - "*/Test_*/logs/round_1/neutron/*"
+      - "*/Test_*/logs/round_1/glance/*"
+      - "*/Test_*/logs/round_1/heat/*"
+    compress: ["*.log.bzip2.out"]
+    license: AGPL-3.0; read only to evaluate, never redistributed
+    citation: "D. Cotroneo, L. De Simone, P. Liguori, R. Natella, N. Bidokhti. How Bad Can a Bug Get? An Empirical Analysis of Software Failures in the OpenStack Cloud Computing Platform. ESEC/FSE 2019."
+    description: Logs of 911 fault-injection experiments on OpenStack (439 in Nova, 269 in Cinder, 203 in Neutron). In each, one bug was injected into the code and a workload run against the cloud; the labels say whether the run failed, how (the check that failed), and whether an API error told the user. The fault-injection evaluation triages each faulty round's logs (src/aria/evals/openstack.py).
+
+  cloud-postmortems:
+    kind: git
+    url: https://github.com/IntelligentDDS/Post-mortems-Analysis
+    commit: 161e7cc9f167d9e87f96911b4055c74390058434
+    # The structured post-mortems only: the scraped status pages and the paper are left out.
+    paths: ["/anomaly_collection/", "/README.md"]
+    license: None stated; read only to evaluate, never redistributed
+    citation: "X. Li et al. Going through the Life Cycle of Faults in Clouds: Guidelines on Fault Handling. ISSRE 2022."
+    description: Public post-mortems of AWS, Azure and Google Cloud incidents from 2011 to 2021, each structured by the researchers with its layered root cause, its detection and the mitigations that ended it. The post-mortem evaluation asks incident memory for past incidents with the same root cause or fix (src/aria/evals/postmortems.py).
+
+  gaia-logs:
+    kind: http
+    url: https://raw.githubusercontent.com/CloudWise-OpenSource/GAIA-DataSet/238a9e24ae0b69e7e05dff112652a3fa62db88fd/Companion_Data/log.zip
+    sha256: af0bc79a794cb7f07a8999781c057aa05d58c1df593ae390cfae085fa2c95731
+    license: GPL-2.0; read only to evaluate, never redistributed
+    citation: "CloudWise. GAIA (Generic AIOps Atlas), Companion Data. github.com/CloudWise-OpenSource/GAIA-DataSet, 2021."
+    description: GAIA's companion log data. The parsing evaluation reads its log-parsing set (10,000 lines from each of 14 systems, each line labelled with its template); five of the systems have no format or Drain settings in ARIA (src/aria/evals/parsing.py).
+
+  uci-incidents:
+    kind: uci
+    dataset_id: 498
+    fallback_url: https://archive.ics.uci.edu/static/public/498/incident+management+process+enriched+event+log.zip
+    sha256: 6294e29a311647306bfdfc85783f7df66517c197b9cd49aa5ee36ba9c525d1d6
+    mirrors:
+      # Byte-identical copies of UCI's zip; its CSV (sha256 fd184bbf...1bef) is in nine more repositories.
+      - url: https://raw.githubusercontent.com/Deviln18/PowerBI-Incident-Management-Analytics/c601a29bdf1a2f6b3d282f81ccf040f9af39b120/incident%2Bmanagement%2Bprocess%2Benriched%2Bevent%2Blog.zip
+        sha256: 6294e29a311647306bfdfc85783f7df66517c197b9cd49aa5ee36ba9c525d1d6
+      - url: https://raw.githubusercontent.com/pratham2385/EDI-5/314d5b97ad9441d9d335e6042c384ab78b31227d/datasets/uci_incident/raw/incident_event_log.zip
+        sha256: 6294e29a311647306bfdfc85783f7df66517c197b9cd49aa5ee36ba9c525d1d6
+    license: CC BY 4.0 (DOI 10.24432/C57S4H)
+    citation: "C. Amaral, M. Fantinato, H. Reijers, S. Peres. Enhancing Completion Time Prediction Through Attribute Selection. 2018. UCI ML Repository."
+    description: ServiceNow incident event log from an IT company (141,712 events, 24,918 incidents, anonymized categorical codes).
+
+  # --- prompt-injection benchmarks, for the injection guard (never tuned on any of them) -------
+  bipia:
+    kind: git
+    url: https://github.com/microsoft/BIPIA
+    commit: a004b69ec0dd446e0afd461d98cb5e96e120a5d0
+    paths: [benchmark/text_attack_test.json, benchmark/code_attack_test.json, LICENSE]
+    license: MIT
+    citation: "J. Yi et al. Benchmarking and Defending Against Indirect Prompt Injection Attacks on Large Language Models. arXiv:2312.14197."
+    description: BIPIA's held-out indirect-injection attacks, the instructions an attacker plants in content a model reads (text tasks and code tasks).
+  injecagent:
+    kind: git
+    url: https://github.com/uiuc-kang-lab/InjecAgent
+    commit: f19c9f2c79a41046eb13c03c51a24c567a8ffa07
+    paths: [data/attacker_cases_dh.jsonl, data/attacker_cases_ds.jsonl]
+    license: Not stated in the repository; used for evaluation only, never redistributed
+    citation: "Q. Zhan, Z. Liang, Z. Ying, D. Kang. InjecAgent: Benchmarking Indirect Prompt Injections in Tool-Integrated Large Language Model Agents. arXiv:2403.02691."
+    description: Attacker instructions planted in tool outputs to make an agent cause direct harm or steal data.
+  cyberseceval-pi:
+    kind: git
+    url: https://github.com/meta-llama/PurpleLlama
+    commit: d934ea285d124d81c10f7e15a06a1e1f74eff2c3
+    paths: [CybersecurityBenchmarks/datasets/prompt_injection/prompt_injection.json, CybersecurityBenchmarks/LICENSE]
+    license: MIT (CybersecurityBenchmarks)
+    citation: "M. Bhatt et al. CyberSecEval 2: A Wide-Ranging Cybersecurity Evaluation Suite for Large Language Models. arXiv:2404.13161."
+    description: Meta's prompt-injection test cases, direct and indirect, in 15 variants and several languages.
+  tensor-trust:
+    kind: git
+    url: https://github.com/HumanCompatibleAI/tensor-trust-data
+    commit: 747a75e096761ebc01bd3970158827326b4add23
+    paths: [benchmarks/hijacking-robustness/v1/hijacking_robustness_dataset.jsonl]
+    license: Not stated in the repository; used for evaluation only, never redistributed
+    citation: "S. Toyer et al. Tensor Trust: Interpretable Prompt Injection Attacks from an Online Game. arXiv:2311.01011."
+    description: Hijacking attacks people wrote against defended prompts in the Tensor Trust game.
+  notinject:
+    kind: git
+    url: https://github.com/SaFoLab-WISC/InjecGuard
+    commit: 1b5751e88bf7475acbedfc8eda795ce060307c84
+    paths: [datasets/NotInject_one.json, datasets/NotInject_two.json, datasets/NotInject_three.json, LICENSE]
+    license: MIT
+    citation: "H. Li, X. Liu et al. InjecGuard: Benchmarking and Mitigating Over-defense in Prompt Injection Guardrail Models. arXiv:2410.22770."
+    description: Benign sentences that use one, two or three words common in injections ("ignore", "override"), to measure over-defence.
+  giskard-injections:
+    kind: git
+    url: https://github.com/giskard-ai/prompt-injections
+    commit: ce50a549dadc46b48c931250d2dd71d5f003c0c2
+    paths: [prompt_injections.csv, LICENSE]
+    license: MIT
+    citation: "Giskard. Prompt injections, a curated collection drawn from garak and PromptInject. 2023."
+    description: A small curated collection of known prompt injections and jailbreaks.
+  jailbreak-llms:
+    kind: git
+    url: https://github.com/verazuo/jailbreak_llms
+    commit: 4f4031bf8be187f4478c7f94f42b08714722c12e
+    paths: [data/prompts/jailbreak_prompts_2023_12_25.csv, LICENSE]
+    license: MIT
+    citation: "X. Shen, Z. Chen, M. Backes, Y. Shen, Y. Zhang. \"Do Anything Now\": Characterizing and Evaluating In-The-Wild Jailbreak Prompts on Large Language Models. ACM CCS 2024."
+    description: Jailbreak prompts collected from Reddit, Discord, websites and prompt-sharing communities.
+
+  # --- real incidents -----------------------------------------------------------------------------
+  gitlab-incidents:
+    kind: gitlab
+    url: https://gitlab.com/api/v4/projects/7444821/issues
+    params:
+      labels: incident
+      scope: all
+      state: all
+      created_before: "2026-10-01T00:00:00Z"
+      order_by: created_at
+      sort: asc
+    license: Public issues with no licence stated; read only to evaluate, never redistributed
+    citation: "GitLab Inc. GitLab.com production incident tracker, https://gitlab.com/gitlab-com/gl-infra/production/-/issues."
+    description: GitLab.com's production incidents (gitlab-com/gl-infra/production), created before October 2026, with the responders' severity, service and root-cause labels. A live API, so the download records its snapshot's sha256 and date; the memory evaluation asks for similar past incidents from each later incident's title.

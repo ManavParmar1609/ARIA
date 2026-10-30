@@ -29,6 +29,8 @@ data/processed/
 data/cache/
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 
@@ -52,3 +54,9 @@ pnpm-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
+
+# Derived from the seeded corpus by `aria seed`
+models/embed_local.npz
+
+# Evaluation output (docs/evaluation.md and docs/eval-results.json are the published copies)
+reports/eval/

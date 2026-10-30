@@ -1,0 +1,140 @@
+# Failure-mode catalog for the scenario builder.
+#
+# Scenarios are SEMI-SYNTHETIC: every log line is a real line from the Loghub samples, and the
+# builder only composes them into a timed window (choosing nodes, rates and timestamps). Labels:
+#   * BGL scenarios are labelled by the ground-truth rubric (config/labeling/bgl_alert_impact.yaml)
+#     from the sysadmin alert tags of the injected lines.
+#   * Other systems are labelled by the `severity` policy below: a base severity escalated by how
+#     many nodes are affected or how fast the errors arrive. These policies are ARIA's documented
+#     domain judgement, not dataset annotations, and results on them are reported as synthetic.
+#
+# `match` selects incident lines by regex on the message; `benign` modes use error-level lines
+# that need no action, to measure over-triage.
+
+failure_modes:
+  # --- BlueGene/L (tags are ground truth) ------------------------------------------------------
+  bgl.kernel_panic:
+    system: bgl
+    title: "Kernel panics across {nodes} BlueGene/L compute nodes"
+    tags: [KERNRTSP, KERNTERM]
+    runbook: bgl-kernel-panic
+  bgl.memory_interrupts:
+    system: bgl
+    title: "Data TLB / storage interrupts on {nodes} compute nodes"
+    tags: [KERNDTLB, KERNSTOR]
+    runbook: bgl-memory-interrupts
+  bgl.lustre_mount_failure:
+    system: bgl
+    title: "Lustre mount failures on {nodes} I/O nodes"
+    tags: [KERNMNTF]
+    runbook: lustre-mount-failure
+  bgl.ciod_link_failure:
+    system: bgl
+    title: "CIOD control-stream link failures on {nodes} nodes"
+    tags: [APPSEV, APPRES, APPTO, APPREAD]
+    runbook: bgl-ciod-link
+  bgl.tree_network_errors:
+    system: bgl
+    title: "Tree-network packet errors on {nodes} nodes"
+    tags: [KERNREC]
+    runbook: bgl-tree-network
+
+  # --- other systems (policy labels) -------------------------------------------------------------
+  openssh.bruteforce:
+    system: openssh
+    title: "SSH brute-force attempts against {nodes} hosts"
+    match: "Failed password|authentication failure|POSSIBLE BREAK-IN ATTEMPT|invalid user"
+    runbook: ssh-bruteforce
+    severity: {base: SEV3, escalate: [{nodes_at_least: 6, to: SEV2}, {nodes_at_least: 24, to: SEV1}]}
+  linux.auth_failures:
+    system: linux
+    title: "Repeated authentication failures on {nodes} Linux hosts"
+    match: "authentication failure|Authentication failed|Kerberos authentication failed"
+    runbook: ssh-bruteforce
+    severity: {base: SEV3, escalate: [{nodes_at_least: 8, to: SEV2}]}
+  zookeeper.quorum_connection_loss:
+    system: zookeeper
+    title: "ZooKeeper quorum connection loss across {nodes} peers"
+    match: "Connection broken for id|Cannot open channel to|Interrupted while waiting for message|Interrupting SendWorker|Send worker leaving thread"
+    runbook: zookeeper-quorum-loss
+    severity: {base: SEV2, escalate: [{nodes_at_least: 3, to: SEV1}]}
+  hadoop.resourcemanager_unreachable:
+    system: hadoop
+    title: "MapReduce tasks cannot reach the ResourceManager ({nodes} nodes)"
+    match: "ERROR IN CONTACTING RM|Address change detected|NoRouteToHostException"
+    runbook: hadoop-rm-unreachable
+    severity: {base: SEV2, escalate: [{nodes_at_least: 10, to: SEV1}]}
+  hadoop.hdfs_lease_renewal:
+    system: hadoop
+    title: "HDFS lease renewal failures on {nodes} task nodes"
+    match: "Failed to renew lease"
+    runbook: hdfs-lease-renewal
+    severity: {base: SEV3, escalate: [{nodes_at_least: 8, to: SEV2}]}
+  hdfs.block_serve_exceptions:
+    system: hdfs
+    title: "DataNodes failing to serve blocks ({nodes} nodes)"
+    match: "Got exception while serving"
+    runbook: hdfs-block-serve
+    severity: {base: SEV3, escalate: [{nodes_at_least: 6, to: SEV2}, {rate_per_min_at_least: 120, to: SEV2}]}
+  hpc.interconnect_link_errors:
+    system: hpc
+    title: "Interconnect link errors on {nodes} HPC nodes"
+    match: "Linkerror event interval expired|link errors remain current|Link error"
+    runbook: hpc-link-errors
+    severity: {base: SEV3, escalate: [{nodes_at_least: 12, to: SEV2}]}
+  hpc.component_unavailable:
+    system: hpc
+    title: "Hardware components unavailable on {nodes} HPC nodes"
+    match: "is in the unavailable state"
+    runbook: hpc-component-unavailable
+    severity: {base: SEV2, escalate: [{nodes_at_least: 6, to: SEV1}]}
+  hpc.psu_failure:
+    system: hpc
+    title: "Power-supply failures on {nodes} HPC nodes"
+    match: "psu failure"
+    runbook: hpc-psu-failure
+    severity: {base: SEV2, escalate: [{nodes_at_least: 3, to: SEV1}]}
+  openstack.image_cache_missing:
+    system: openstack
+    title: "Nova image cache missing base files on {nodes} compute hosts"
+    match: "Unknown base file"
+    runbook: openstack-image-cache
+    severity: {base: SEV4, escalate: [{nodes_at_least: 10, to: SEV3}]}
+  apache.mod_jk_worker_error:
+    system: apache
+    title: "Apache mod_jk workers in error state ({nodes} servers)"
+    match: "mod_jk child workerEnv in error state|Can't find child"
+    runbook: apache-mod-jk
+    severity: {base: SEV3, escalate: [{nodes_at_least: 4, to: SEV2}, {rate_per_min_at_least: 150, to: SEV2}]}
+  proxifier.proxy_connectivity:
+    system: proxifier
+    title: "Clients cannot connect through the proxy ({nodes} clients)"
+    match: "Could not connect to proxy|Could not connect through proxy|connection attempt failed"
+    runbook: proxy-connectivity
+    severity: {base: SEV3, escalate: [{nodes_at_least: 25, to: SEV2}]}
+  thunderbird.dns_resolution:
+    system: thunderbird
+    title: "Name resolution failures on {nodes} Thunderbird nodes"
+    match: "failed to resolve data source name|unqualified host name"
+    runbook: dns-resolution
+    severity: {base: SEV3, escalate: [{nodes_at_least: 20, to: SEV2}]}
+
+  # --- benign noise: error-level lines that need no action ---------------------------------------
+  mac.cocoa_scripting_noise:
+    system: mac
+    title: "Cocoa scripting errors on {nodes} Macs (benign)"
+    match: "Cocoa scripting error|ISGenerateImageOp"
+    benign: true
+    severity: {base: SEV4, escalate: []}
+  android.permission_noise:
+    system: android
+    title: "Android task-permission warnings (benign)"
+    match: "does not hold REAL_GET_TASKS|shouldBlockLocation"
+    benign: true
+    severity: {base: SEV4, escalate: []}
+  zookeeper.old_client_noise:
+    system: zookeeper
+    title: "ZooKeeper connections from old clients (benign)"
+    match: "Connection request from old client"
+    benign: true
+    severity: {base: SEV4, escalate: []}

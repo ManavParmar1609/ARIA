@@ -1,0 +1,698 @@
+"""Command-line entry point: ``aria --help``."""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import json
+import os
+import signal
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Annotated
+
+import typer
+from rich.console import Console
+from rich.table import Table
+
+app = typer.Typer(no_args_is_help=True, help="ARIA incident triage.")
+db_app = typer.Typer(no_args_is_help=True, help="Database migrations.")
+# The latest end-to-end run through a live LLM: committed, quoted by `make eval`.
+LIVE_RESULTS = Path("docs/eval-live.json")
+data_app = typer.Typer(no_args_is_help=True, help="Download and ingest the public datasets.")
+train_app = typer.Typer(
+    help="Train and export the severity and ticket models.", invoke_without_command=True
+)
+providers_app = typer.Typer(no_args_is_help=True, help="Inspect LLM providers.")
+eval_app = typer.Typer(no_args_is_help=True, help="Evaluate ARIA and gate regressions.")
+app.add_typer(eval_app, name="eval")
+app.add_typer(db_app, name="db")
+app.add_typer(data_app, name="data")
+app.add_typer(train_app, name="train")
+app.add_typer(providers_app, name="providers")
+console = Console()
+
+
+@app.callback()
+def main() -> None:
+    """Load a local .env file (if present) before any command runs."""
+    from aria.config import load_dotenv_file
+
+    load_dotenv_file()
+
+
+@app.command()
+def version() -> None:
+    """Print the installed ARIA version."""
+    from aria import __version__
+
+    console.print(__version__)
+
+
+def _require_database() -> None:
+    """Stop with the commands to run, not a traceback, when the database is not set up."""
+    from sqlalchemy import inspect
+
+    from aria.db.engine import get_engine
+
+    if not inspect(get_engine()).has_table("incidents"):
+        console.print("The database is not set up yet. Run `aria db upgrade`, then `aria seed`.")
+        raise typer.Exit(code=1)
+
+
+def _require_provider(providers: Mapping[str, object], name: str | None) -> None:
+    if name is not None and name not in providers:
+        raise typer.BadParameter(f"unknown provider {name!r}; choose one of {', '.join(providers)}")
+
+
+# --- database ----------------------------------------------------------------------------------
+
+
+@db_app.command("upgrade")
+def db_upgrade(revision: str = "head") -> None:
+    """Apply migrations up to REVISION (default: head)."""
+    from aria.db.migrate import upgrade
+
+    upgrade(revision)
+    console.print(f"database upgraded to {revision}")
+
+
+@db_app.command("current")
+def db_current() -> None:
+    """Show the current migration revision."""
+    from aria.db.migrate import current
+
+    current()
+
+
+# --- data --------------------------------------------------------------------------------------
+
+
+@data_app.command("download")
+def data_download(
+    source: Annotated[list[str] | None, typer.Option(help="Only these source ids.")] = None,
+) -> None:
+    """Download sources from data/manifest.yaml into data/raw and verify their checksums."""
+    from aria.config import get_settings
+    from aria.data.download import download
+    from aria.data.manifest import load_manifest
+
+    settings = get_settings()
+    sources = load_manifest().sources
+    unknown = sorted(set(source or ()) - set(sources))
+    if unknown:
+        known = ", ".join(sorted(sources))
+        raise typer.BadParameter(f"unknown source {', '.join(unknown)}; choose from {known}")
+    failures = 0
+    for name, item in sources.items():
+        if source and name not in source:
+            continue
+        try:
+            path = download(item, settings.data_dir / "raw")
+            console.print(f"[green]ok[/] {name} -> {path}")
+        except Exception as exc:
+            failures += 1
+            console.print(f"[red]failed[/] {name}: {exc}")
+    if failures:
+        raise typer.Exit(code=1)
+
+
+@data_app.command("ingest")
+def data_ingest(bgl_max_lines: int = 500_000) -> None:
+    """Load every downloaded dataset into the database (missing ones are skipped)."""
+    from aria.config import get_settings
+    from aria.data.ingest import ingest_all
+    from aria.db.engine import get_engine
+
+    settings = get_settings()
+    for result in ingest_all(get_engine(), settings.data_dir / "raw", bgl_max_lines=bgl_max_lines):
+        console.print(result)
+
+
+# --- training ----------------------------------------------------------------------------------
+
+
+def _loghub_dir(*, fixtures: bool = True) -> Path:
+    """The Loghub samples, or the test fixtures when they are missing and ``fixtures`` allows."""
+    from aria.config import get_settings
+    from aria.evals.run import FIXTURES_DIR
+
+    real = get_settings().data_dir / "raw" / "loghub-2k"
+    if real.exists():
+        return real
+    if not fixtures:
+        console.print(
+            "data/raw/loghub-2k not found. The committed severity model was trained on these "
+            "samples: download them first (`aria data download --source loghub-2k`), or pass "
+            "--fixtures to replace it with a model fit on the test fixtures."
+        )
+        raise typer.Exit(code=1)
+    console.print(
+        "[yellow]data/raw/loghub-2k not found (uv run aria data download --source loghub-2k);"
+        " using the test fixtures[/]"
+    )
+    return FIXTURES_DIR
+
+
+@train_app.callback()
+def train_all(ctx: typer.Context) -> None:
+    """With no subcommand, train every model."""
+    if ctx.invoked_subcommand is None:
+        train_severity()
+        train_tickets()
+
+
+@train_app.command("severity")
+def train_severity(
+    workers: Annotated[int, typer.Option(help="Parser processes.")] = min(4, os.cpu_count() or 1),
+    per_mode: int = 6,
+    fixtures: Annotated[
+        bool, typer.Option(help="Without the Loghub samples, train on the test fixtures.")
+    ] = False,
+) -> None:
+    """Fit, calibrate and export the log-severity model (models/severity_log.json)."""
+    from aria.config import get_app_config
+    from aria.severity.rules import load_rules
+    from aria.severity.training import train_from_loghub
+
+    logs = _loghub_dir(fixtures=fixtures)
+    config = get_app_config().severity
+    rules = load_rules(config.rules_file)
+    model, report = train_from_loghub(
+        logs, rules, alpha=config.alpha, per_mode=per_mode, workers=workers
+    )
+    model.save(config.log_model_file)
+    report_path = config.log_model_file.with_suffix(".report.json")
+    report_path.write_text(json.dumps(report, indent=1, default=str), encoding="utf-8")
+    console.print(f"saved {config.log_model_file} ({model.version}); report: {report_path}")
+    console.print_json(json.dumps(report["conformal_split"]))
+
+
+@train_app.command("recalibrate")
+def train_recalibrate(
+    min_new_reviews: Annotated[
+        int | None,
+        typer.Option(help="Reviews needed since the last calibration (default: config)."),
+    ] = None,
+    dry_run: Annotated[bool, typer.Option(help="Report the effect without saving.")] = False,
+) -> None:
+    """Recalibrate the severity model's prediction sets on reviewed incidents."""
+    from aria.config import get_app_config, get_settings
+    from aria.db.engine import get_engine
+    from aria.severity.model import live_model_path
+    from aria.severity.recalibration import recalibrate_from_feedback
+
+    config = get_app_config().severity
+    result = recalibrate_from_feedback(
+        get_engine(),
+        live_model_path(config.log_model_file, get_settings().models_dir),
+        alpha=config.alpha,
+        min_new_reviews=config.recalibrate_after if min_new_reviews is None else min_new_reviews,
+        dry_run=dry_run,
+        trained=config.log_model_file,
+    )
+    if result is None:
+        console.print("not enough new reviews to recalibrate yet")
+        return
+    verb = "would save" if dry_run else "saved"
+    console.print(
+        f"{verb} {result.model.version}: {result.reviewed} reviewed incidents "
+        f"({result.new_reviews} new); coverage {result.coverage_before:.1%} -> "
+        f"{result.coverage_after:.1%}; mean set size {result.mean_set_before:.2f} -> "
+        f"{result.mean_set_after:.2f}"
+    )
+
+
+@train_app.command("tickets")
+def train_tickets() -> None:
+    """Fit the UCI ticket priority and SLA models, from the database or the downloaded log."""
+    import dataclasses
+
+    from sqlalchemy import select
+
+    from aria.config import get_app_config, get_settings
+    from aria.data.uci import aggregate, find_event_log, iter_events
+    from aria.db.engine import get_engine, session_scope
+    from aria.db.models import ItsmIncidentRow
+    from aria.severity.ticket import fit_ticket_models
+
+    config = get_app_config().severity
+    with session_scope(get_engine()) as session:
+        rows = [
+            {c.name: getattr(row, c.name) for c in ItsmIncidentRow.__table__.columns}
+            for row in session.scalars(select(ItsmIncidentRow))
+        ]
+    if not rows:
+        # Not ingested: read the downloaded log directly. Same aggregation, same time splits.
+        path = find_event_log(get_settings().data_dir / "raw" / "uci-incidents")
+        if path is not None:
+            rows = [dataclasses.asdict(s) for s in aggregate(iter_events(path))]
+    if not rows:
+        console.print(
+            "[yellow]no UCI incidents (aria data download --source uci-incidents); "
+            "skipping the ticket models[/]"
+        )
+        return
+    models, report = fit_ticket_models(rows, alpha=config.alpha)
+    models.save(config.ticket_model_file)
+    console.print(f"saved {config.ticket_model_file} ({models.version})")
+    console.print_json(json.dumps(report, default=str))
+
+
+# --- knowledge ---------------------------------------------------------------------------------
+
+
+@app.command()
+def seed(
+    workers: Annotated[int, typer.Option(help="Parser processes.")] = min(4, os.cpu_count() or 1),
+    per_mode: int = 3,
+) -> None:
+    """Load runbooks, seed incident memory (synthetic, labelled) and fit offline embeddings."""
+    from aria.config import get_settings
+    from aria.data.scenarios import LinePools, ScenarioBuilder
+    from aria.db.engine import get_engine
+    from aria.llm.local_embed import LsaEmbedder
+    from aria.retrieval.memory import IncidentMemory
+    from aria.retrieval.runbooks import load_runbooks, sync_runbooks
+    from aria.retrieval.seed import seed_incidents
+
+    settings = get_settings()
+    engine = get_engine()
+    runbooks = load_runbooks(settings.runbooks_dir)
+    console.print(f"runbooks: {sync_runbooks(engine, runbooks)}")
+    builder = ScenarioBuilder(LinePools.from_loghub(_loghub_dir()))
+    console.print(f"building and triaging synthetic incidents with {workers} worker(s)…")
+    incidents = seed_incidents(builder, settings.runbooks_dir, per_mode=per_mode, workers=workers)
+    corpus = [i.document().text for i in incidents] + [rb.search_text() for rb in runbooks.values()]
+    model_path = settings.models_dir / "embed_local.npz"
+    LsaEmbedder.fit(corpus, dims=128).save(model_path)
+    from aria.llm.router import get_router
+
+    memory = IncidentMemory(engine, get_router().embedding_provider())
+
+    async def store() -> int:
+        return await memory.bulk_insert(incidents)
+
+    count = asyncio.run(store())
+    console.print(
+        f"incident memory: {count} synthetic incidents (embeddings: {memory.embedding_model}); "
+        f"offline embedder: {model_path}"
+    )
+    from aria.graph.store import SqlStore
+    from aria.retrieval.seed import seed_known_templates
+
+    templates = asyncio.run(seed_known_templates(SqlStore(engine), builder))
+    console.print(f"template memory: {templates} routine-traffic templates")
+
+
+@app.command()
+def mcp(
+    transport: Annotated[str, typer.Option(help="stdio or streamable-http")] = "stdio",
+    host: str = "127.0.0.1",
+    port: int = 8001,
+) -> None:
+    """Run ARIA's read-only MCP server."""
+    from aria.config import get_settings
+    from aria.mcp.server import build_server
+    from aria.observability.logging import configure_logging
+
+    if transport not in ("stdio", "streamable-http"):
+        raise typer.BadParameter("transport must be stdio or streamable-http")
+    settings = get_settings()
+    configure_logging(settings.log_level, "json" if transport == "stdio" else settings.log_format)
+    server = build_server()
+    if transport == "stdio":
+        server.run("stdio")
+    else:
+        server.run("streamable-http", host=host, port=port)
+
+
+@app.command()
+def serve(
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    reload: Annotated[bool, typer.Option(help="Restart on code changes (development).")] = False,
+) -> None:
+    """Run the API: REST and SSE, MCP at /mcp, A2A at /a2a and AG-UI at /agui."""
+    import uvicorn
+
+    from aria.config import get_settings
+
+    # Links ARIA hands out (its A2A agent card, messages) name the address it serves on, unless
+    # ARIA_PUBLIC_BASE_URL says where it is reached from.
+    local = ("127.0.0.1", "0.0.0.0", "::", "::1")  # noqa: S104
+    shown = "localhost" if host in local else f"[{host}]" if ":" in host else host
+    os.environ.setdefault("ARIA_PUBLIC_BASE_URL", f"http://{shown}:{port}")
+
+    # Started before `aria db upgrade`, the API would stop on its first query with a traceback.
+    if not get_settings().migrate_on_start:
+        _require_database()
+    uvicorn.run(
+        "aria.api.app:create_app",
+        factory=True,
+        host=host,
+        port=port,
+        reload=reload,
+        proxy_headers=True,
+        log_level="info",
+    )
+
+
+@app.command()
+def worker(
+    concurrency: Annotated[
+        int | None,
+        typer.Option(min=1, max=64, help="Runs at once (default: ARIA_WORKER_CONCURRENCY)."),
+    ] = None,
+    interval: Annotated[float, typer.Option(help="Seconds between queue polls.")] = 2.0,
+) -> None:
+    """Run queued triage runs from the database (for ARIA_WORKER_MODE=external)."""
+    from aria.api.worker import heartbeat_file, poll_forever, serve_health
+    from aria.config import get_settings
+    from aria.graph.runner import TriageRunner
+    from aria.observability.logging import configure_logging
+    from aria.observability.tracing import configure_tracing
+    from aria.services import Services
+
+    settings = get_settings()
+    configure_logging(settings.log_level, settings.log_format)
+    configure_tracing(settings.otel_exporter, endpoint=settings.otlp_endpoint)
+
+    async def main() -> None:
+        services = await Services.create()
+        # A platform stops a container with SIGTERM: stop claiming runs and finish the ones in
+        # hand, instead of dying mid-run and leaving them claimed until the claims expire.
+        stop = asyncio.Event()
+        for signum in (signal.SIGTERM, signal.SIGINT):
+            with contextlib.suppress(NotImplementedError):  # no signal handlers on Windows
+                asyncio.get_running_loop().add_signal_handler(signum, stop.set)
+        beat = heartbeat_file(settings.data_dir)
+        health = (
+            await serve_health(settings.worker_health_port, beat)
+            if settings.worker_health_port
+            else None
+        )
+        try:
+            await poll_forever(
+                TriageRunner(services),
+                concurrency=concurrency or settings.worker_concurrency,
+                interval_s=interval,
+                stop=stop,
+                heartbeat=beat,
+            )
+        finally:
+            if health is not None:
+                health.close()
+            await services.aclose()
+
+    asyncio.run(main())
+
+
+@app.command("worker-health")
+def worker_health(
+    max_age: Annotated[float, typer.Option(help="Seconds since the last poll.")] = 60.0,
+) -> None:
+    """Exit 0 when the worker polled recently (a container health check)."""
+    from aria.api.worker import heartbeat_age, heartbeat_file
+    from aria.config import get_settings
+
+    age = heartbeat_age(heartbeat_file(get_settings().data_dir))
+    if age is None or age > max_age:
+        console.print(f"worker heartbeat stale: {'never' if age is None else f'{age:.0f} s ago'}")
+        raise typer.Exit(1)
+    console.print(f"worker polled {age:.0f} s ago")
+
+
+@app.command()
+def triage(
+    logs: Annotated[
+        Path | None,
+        typer.Argument(
+            help="A log file (one line per event).", exists=True, dir_okay=False, readable=True
+        ),
+    ] = None,
+    system: Annotated[str, typer.Option(help="Log format, e.g. bgl, hdfs, openssh.")] = "generic",
+    scenario: Annotated[
+        str | None, typer.Option(help="Use a semi-synthetic scenario, e.g. bgl.kernel_panic.")
+    ] = None,
+    approve: Annotated[bool, typer.Option(help="Approve and publish after the run.")] = False,
+    use_llm: Annotated[bool, typer.Option(help="Allow LLM steps.")] = True,
+) -> None:
+    """Triage a log file (or a scenario) end to end and print the report."""
+    from pydantic import ValidationError
+
+    from aria.contracts.base import first_problem
+    from aria.contracts.inputs import RunOptions, TriageRequest
+    from aria.data.scenarios import LinePools, ScenarioBuilder
+    from aria.db import repository as repo
+    from aria.graph.runner import TriageRunner
+    from aria.services import Services
+
+    synthetic = False
+    if scenario:
+        builder = ScenarioBuilder(LinePools.from_loghub(_loghub_dir()))
+        if scenario not in builder.pools.modes:
+            known = ", ".join(sorted(builder.pools.available_modes()))
+            raise typer.BadParameter(f"unknown scenario {scenario!r}; choose one of {known}")
+        built = builder.build(scenario, seed=1)
+        lines, system, synthetic = built.lines, built.system, True
+    elif logs is not None:
+        text = logs.read_text(encoding="utf-8", errors="replace")
+        lines = [line for line in text.splitlines() if line.strip()]
+        if not lines:
+            raise typer.BadParameter(f"{logs} has no log lines")
+    else:
+        raise typer.BadParameter("give a log file or --scenario")
+    try:
+        request = TriageRequest(
+            system=system, logs=lines, synthetic=synthetic, options=RunOptions(use_llm=use_llm)
+        )
+    except ValidationError as exc:
+        if exc.errors()[0]["loc"] == ("system",):
+            raise typer.BadParameter(
+                f"--system {system!r}: use up to 64 letters, digits, '_' or '-'"
+            ) from None
+        raise typer.BadParameter(first_problem(exc)) from None
+    _require_database()
+
+    async def main() -> None:
+        services = await Services.create()
+        try:
+            runner = TriageRunner(services)
+            outcome = await runner.start(request, trigger="cli")
+            console.print(f"run {outcome.run_id}: {outcome.status}")
+            if outcome.interrupt and approve:
+                outcome = await runner.resume(
+                    outcome.run_id, {"decision": "approve", "reviewer": "cli"}
+                )
+                console.print(f"after review: {outcome.status}")
+            stored = repo.get_report(services.engine, f"rpt-{outcome.run_id}")
+            if stored is not None:
+                from rich.markdown import Markdown
+
+                # Rendered, not raw: the export escapes log text (<*> is &lt;*&gt; there).
+                console.print(Markdown(stored[1]))
+        finally:
+            await services.aclose()
+
+    asyncio.run(main())
+
+
+@eval_app.command("run")
+def eval_run(
+    *,
+    suite: Annotated[
+        str, typer.Option(help="smoke, severity, pipeline, robustness, parsing, edge, real or all")
+    ] = "smoke",
+    gate: Annotated[bool, typer.Option(help="Fail when a threshold is missed (CI).")] = False,
+    llm: Annotated[bool, typer.Option(help="Use the configured LLM chain (costs calls).")] = False,
+    limit: Annotated[int | None, typer.Option(help="Cap end-to-end and robustness cases.")] = None,
+    workers: Annotated[int, typer.Option(help="Parser processes.")] = 0,
+    docs: Annotated[Path, typer.Option(help="Where `--suite all` writes the report.")] = Path(
+        "docs/evaluation.md"
+    ),
+) -> None:
+    """Run an evaluation suite; `--suite all` also regenerates docs/evaluation.md."""
+    import json
+
+    from aria.evals import report
+    from aria.evals.run import SUITES, check_gate, default_workers, run, save
+
+    if suite not in SUITES:
+        raise typer.BadParameter(f"unknown suite {suite!r}; choose one of {', '.join(SUITES)}")
+
+    results = asyncio.run(
+        run(
+            suite,
+            loghub_dir=_loghub_dir(),
+            use_llm=llm,
+            workers=workers or default_workers(),
+            limit=limit,
+        )
+    )
+    console.print(f"results: {save(results)}")
+    for section in ("severity", "pipeline", "robustness"):
+        if section in results:
+            headline = {
+                k: v
+                for k, v in results[section].items()
+                if k
+                in ("n", "groundedness", "retrieval", "severity_invariant", "tool_use_invariant")
+            }
+            if section == "severity":
+                headline["aria_policy"] = {
+                    k: results[section]["methods"]["aria_policy"][k]
+                    for k in ("accuracy", "macro_f1", "severe_under_triage")
+                }
+            console.print(f"[bold]{section}[/bold] {json.dumps(headline, default=str)}")
+    if suite == "pipeline" and llm:
+        LIVE_RESULTS.write_text(json.dumps(results, indent=2, default=str) + "\n", "utf-8")
+        console.print(f"wrote {LIVE_RESULTS}; `make eval` quotes it")
+    if suite == "all" and not llm:
+        live = json.loads(LIVE_RESULTS.read_text()) if LIVE_RESULTS.exists() else None
+        docs.parent.mkdir(parents=True, exist_ok=True)
+        docs.write_text(report.render(results, live), encoding="utf-8")
+        Path("docs/eval-results.json").write_text(
+            json.dumps({k: v for k, v in results.items() if not k.endswith("_cases")}, indent=2)
+            + "\n",
+            encoding="utf-8",
+        )
+        console.print(f"wrote {docs}")
+        content = report.blocks(results, live)
+        for path in report.QUOTING_DOCS:
+            if path.is_file():
+                text = path.read_text(encoding="utf-8")
+                if (updated := report.fill(text, content)) != text:
+                    path.write_text(updated, encoding="utf-8")
+                    console.print(f"updated the results quoted in {path}")
+    if gate:
+        failures = check_gate(results, suite)
+        for failure in failures:
+            console.print(f"[red]gate:[/red] {failure}")
+        if failures:
+            raise typer.Exit(1)
+        console.print("[green]gate passed[/green]")
+
+
+@app.command()
+def openapi(
+    out: Annotated[Path, typer.Option(help="Where to write the schema.")] = Path("openapi.json"),
+) -> None:
+    """Export the API's OpenAPI schema (for generating the web client)."""
+    import json
+
+    from aria.api.app import create_app
+
+    schema = create_app().openapi()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(schema, indent=2) + "\n", encoding="utf-8")
+    console.print(f"wrote {out} ({len(schema.get('paths', {}))} paths)")
+
+
+# --- providers ---------------------------------------------------------------------------------
+
+
+@providers_app.command("list")
+def providers_list() -> None:
+    """Show every configured provider, whether it is enabled, and which roles use it."""
+    from aria.llm.router import get_router
+
+    table = Table("provider", "kind", "enabled", "chat model", "verified", "roles")
+    for status in get_router().status():
+        table.add_row(
+            status.name,
+            status.kind,
+            "yes" if status.enabled else "no",
+            status.chat_model or "-",
+            "yes" if status.verified else "no",
+            ", ".join(status.roles),
+        )
+    console.print(table)
+
+
+@providers_app.command("check")
+def providers_check(
+    name: Annotated[str | None, typer.Argument(help="Only this provider.")] = None,
+    probe: Annotated[bool, typer.Option(help="Send one tiny chat and embedding request.")] = True,
+) -> None:
+    """Verify keys, reachability and model IDs for the configured LLM providers."""
+    from aria.llm.health import ProviderCheck, check_provider
+    from aria.llm.router import get_router
+
+    router = get_router()
+    _require_provider(router.config.providers, name)
+    names = [name] if name else [n for n in router.config.providers if n not in ("fake", "local")]
+
+    async def run() -> list[ProviderCheck]:
+        try:
+            reports = []
+            for n in names:
+                cfg = router.config.providers[n]
+                provider = router.provider(n) if cfg.is_enabled() else None
+                reports.append(await check_provider(n, cfg, provider, probe=probe))
+            return reports
+        finally:
+            await router.aclose()
+
+    table = Table(
+        "provider", "credential", "reachable", "models in catalog", "chat", "embed", "problems"
+    )
+
+    def mark(value: bool | None) -> str:
+        return "-" if value is None else ("yes" if value else "NO")
+
+    failed = False
+    for report in asyncio.run(run()):
+        models = (
+            ", ".join(f"{k.removesuffix('_model')}: {mark(v)}" for k, v in report.models.items())
+            or "-"
+        )
+        # Unconfigured providers are fine in a full check, but not when asked for by name.
+        failed = failed or (bool(report.problems) and (report.enabled or name is not None))
+        table.add_row(
+            report.name,
+            report.credential,
+            mark(report.reachable),
+            models,
+            mark(report.chat_ok),
+            mark(report.embed_ok),
+            "; ".join(report.problems) or "ok",
+        )
+    console.print(table)
+    if failed:
+        raise typer.Exit(code=1)
+
+
+@providers_app.command("models")
+def providers_models(name: str) -> None:
+    """List the models a provider serves (reads its /models endpoint)."""
+    from aria.llm.base import LLMError
+    from aria.llm.router import get_router
+
+    router = get_router()
+    _require_provider(router.config.providers, name)
+    if not router.config.providers[name].is_enabled():
+        # An endpoint without its key answers 401 or 404, and one without a URL cannot be asked.
+        console.print(
+            f"{name} is not set up: run `aria providers check {name}` to see what it needs"
+        )
+        raise typer.Exit(code=1)
+    provider = router.provider(name)
+    if not hasattr(provider, "list_models"):
+        console.print(f"{name} has no model catalog")
+        raise typer.Exit(code=1)
+
+    async def fetch() -> list[str]:
+        try:
+            models: list[str] = await provider.list_models()
+            return models
+        finally:
+            await router.aclose()
+
+    try:
+        found = asyncio.run(fetch())
+    except LLMError as exc:
+        console.print(f"{name} did not list its models: {exc}")
+        raise typer.Exit(code=1) from None
+    for model in found:
+        console.print(model)

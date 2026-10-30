@@ -1,0 +1,55 @@
+# How critical each component is (0..1). The severity rules read the highest criticality among
+# components that are logging errors. Exact names per system win; otherwise the first matching
+# pattern applies; otherwise `default`.
+#
+# In a real deployment this file comes from the CMDB / service catalog.
+
+default: 0.4
+
+systems:
+  bgl:
+    KERNEL: 0.9
+    HARDWARE: 0.9
+    BGLMASTER: 0.9
+    MMCS: 0.8
+    MONITOR: 0.7
+    LINKCARD: 0.7
+    APP: 0.6
+    CMCS: 0.6
+    SERV_NET: 0.5
+    DISCOVERY: 0.3
+  hdfs:
+    dfs.FSNamesystem: 0.9
+    dfs.DataNode: 0.6
+    dfs.DataNode$DataXceiver: 0.6
+    dfs.FSDataset: 0.6
+    dfs.DataNode$PacketResponder: 0.4
+    dfs.DataBlockScanner: 0.3
+  zookeeper:
+    QuorumPeer: 0.9
+    QuorumCnxManager: 0.9
+    FastLeaderElection: 0.9
+    Leader: 0.9
+    Follower: 0.8
+    NIOServerCnxn: 0.6
+    NIOServerCnxnFactory: 0.6
+
+patterns:
+  - pattern: "database|\\bdb\\b|sql|postgres|mysql|redis|payment|checkout|billing"
+    criticality: 1.0
+  - pattern: "kernel|\\bkern|\\brts\\b|machine.?check|power|psu|unix\\.hw"
+    criticality: 0.9
+  - pattern: "namenode|fsnamesystem|quorum|leader|election|master|resourcemanager|rmcommunicator|scheduler"
+    criticality: 0.9
+  - pattern: "gateway|proxy|ingress|load.?balancer|\\blb\\b|dns|resolver|named"
+    criticality: 0.8
+  - pattern: "sshd|\\bauth|pam_unix|kerberos|login|ftpd"
+    criticality: 0.7
+  - pattern: "nova\\.compute|virt|libvirt|hypervisor"
+    criticality: 0.7
+  - pattern: "datanode|nodemanager|executor|worker|taskattempt|container|leaserenewer"
+    criticality: 0.6
+  - pattern: "mod_jk|jk2|httpd|apache"
+    criticality: 0.6
+  - pattern: "cocoa|scripting|thumbnail|isgenerateimage|analytics|wallpaper|activitymanager"
+    criticality: 0.2

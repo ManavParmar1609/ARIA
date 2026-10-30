@@ -1,0 +1,57 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": {
+      "value": "${AZURE_ENV_NAME}"
+    },
+    "location": {
+      "value": "${AZURE_LOCATION}"
+    },
+    "principalId": {
+      "value": "${AZURE_PRINCIPAL_ID}"
+    },
+    "principalType": {
+      "value": "${AZURE_PRINCIPAL_TYPE=User}"
+    },
+    "ariaApiKeys": {
+      "value": "${ARIA_API_KEYS}"
+    },
+    "pseudonymKey": {
+      "value": "${ARIA_PSEUDONYM_KEY}"
+    },
+    "nvidiaApiKey": {
+      "value": "${NVIDIA_API_KEY=}"
+    },
+    "geminiApiKey": {
+      "value": "${GEMINI_API_KEY=}"
+    },
+    "slackWebhookUrl": {
+      "value": "${SLACK_WEBHOOK_URL=}"
+    },
+    "teamsWebhookUrl": {
+      "value": "${TEAMS_WEBHOOK_URL=}"
+    },
+    "outboundWebhookUrl": {
+      "value": "${ARIA_OUTBOUND_WEBHOOK_URL=}"
+    },
+    "outboundWebhookSecret": {
+      "value": "${ARIA_OUTBOUND_WEBHOOK_SECRET=}"
+    },
+    "deployOpenAi": {
+      "value": "${ARIA_DEPLOY_OPENAI=false}"
+    },
+    "openAiChatModel": {
+      "value": "${AZURE_OPENAI_CHAT_MODEL=}"
+    },
+    "openAiChatModelVersion": {
+      "value": "${AZURE_OPENAI_CHAT_MODEL_VERSION=}"
+    },
+    "useFreeSqlOffer": {
+      "value": "${ARIA_SQL_FREE_OFFER=true}"
+    },
+    "sqlFreeLimitBehavior": {
+      "value": "${ARIA_SQL_FREE_LIMIT=AutoPause}"
+    }
+  }
+}

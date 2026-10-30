@@ -1,0 +1,662 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * ARIA design tokens: a greenhouse on cream paper (web/DESIGN.md). Cream is the page; keylime,
+ * mint, sage and slate panels lie on it in layers, and that layering is the only depth: no
+ * shadows, no coloured card borders. Forest ink is the one saturated dark, for headings, links
+ * and every main action. Headlines are a light serif; everything else is a humanist sans.
+ *
+ * Every text pair below was measured for WCAG 2.2 AA (4.5:1 for text, 3:1 for control edges and
+ * focus). Sage and slate are surfaces only: small text on them is forest, charcoal or the muted
+ * green-grey, which holds 4.6:1 even on slate.
+ */
+:root {
+  /* palette */
+  --cream: #fffefc;
+  --forest: #0f3e17; /* 12.1:1 on cream, 7.4:1 on slate */
+  --forest-deep: #0c2f10;
+  --charcoal: #222222;
+  --mist: #efeeeb;
+  --keylime: #e1f4df;
+  --mint: #cfe7d3;
+  --sage: #b1dbb8;
+  --slate: #b6ced5;
+
+  /* roles */
+  --background: var(--cream);
+  --app: #f5f4ef; /* the console's canvas, so cream cards lift off it */
+  --foreground: var(--charcoal);
+  --heading: var(--forest);
+  --raised: var(--cream); /* cards */
+  --elevated: #ffffff; /* menus and dialogs */
+  --sunken: #f2f1eb; /* wells inside cards: inputs, code, bar tracks */
+  --rule: var(--mist); /* hairlines */
+  --control: #737b75; /* control edges: 3.6:1 on cream, 3.3:1 on keylime */
+  --muted-foreground: #3f4a42; /* 5.6:1 even on slate */
+  --faint: #4b564e; /* 4.7:1 on slate, 7.6:1 on cream */
+  --stat: var(--forest);
+  --accent-ink: var(--forest);
+
+  --primary: var(--forest);
+  --primary-hover: var(--forest-deep);
+  --primary-foreground: var(--cream);
+  --highlight: var(--mint); /* selection and the evidence sweep, always under ink */
+  --highlight-foreground: var(--forest);
+
+  /* the four panels, lightest to heaviest; text on them stays forest, charcoal or muted */
+  --panel-keylime: var(--keylime);
+  --panel-mint: var(--mint);
+  --panel-sage: var(--sage);
+  --panel-slate: var(--slate);
+
+  /* severity keeps its own earthy hues, apart from the greens; labels on them are ink */
+  --sev1: #e9826e;
+  --sev2: #f1aa6a;
+  --sev3: #ead27c;
+  --sev4: #a8c6cf;
+  --sev-ink: #10241a;
+  --sev1-fg: #a3361f; /* 6.7:1 on cream */
+  --sev2-fg: #8a4a0c;
+  --sev3-fg: #6a560c;
+  --sev-edge: rgb(15 62 23 / 0.18);
+
+  --danger: #a3361f;
+  --ok: #1d6a32;
+
+  /* shadcn/ui aliases */
+  --card: var(--raised);
+  --card-foreground: var(--foreground);
+  --popover: var(--elevated);
+  --popover-foreground: var(--foreground);
+  --secondary: var(--sunken);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--sunken);
+  --accent: var(--sunken);
+  --accent-foreground: var(--foreground);
+  --destructive: var(--danger);
+  --border: var(--rule);
+  --input: var(--control);
+  --ring: var(--forest);
+}
+
+.dark {
+  /* the greenhouse at night: deep green-black, pale leaf type, keylime as the action */
+  --background: #0f1a13;
+  --app: #0b140e;
+  --foreground: #e8efe6;
+  --heading: #f4f8f2;
+  --raised: #16231a;
+  --elevated: #1c2c21;
+  --sunken: #0b140e;
+  --rule: rgb(225 244 223 / 0.1);
+  --control: #7e9184; /* 4.9:1 on cards */
+  --muted-foreground: #b5c3b8;
+  --faint: #9aab9e;
+  --stat: #f4f8f2;
+  --accent-ink: #b1dbb8;
+
+  --primary: #e1f4df;
+  --primary-hover: #cfe7d3;
+  --primary-foreground: #0f3e17;
+  --highlight: #2a4a32;
+  --highlight-foreground: #ffffff;
+
+  --panel-keylime: #22392a; /* a step above the cards, so chips and icon wells show */
+  --panel-mint: #1c3022;
+  --panel-sage: #24402c;
+  --panel-slate: #1e2f35;
+
+  --sev1-fg: #f4a594;
+  --sev2-fg: #f5c08f;
+  --sev3-fg: #efdd98;
+  --sev-edge: rgb(0 0 0 / 0);
+
+  --danger: #f4a594;
+  --ok: #8fd19e;
+  --ring: #b1dbb8;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-app: var(--app);
+  --color-foreground: var(--foreground);
+  --color-raised: var(--raised);
+  --color-elevated: var(--elevated);
+  --color-sunken: var(--sunken);
+  --color-rule: var(--rule);
+  --color-control: var(--control);
+  --color-faint: var(--faint);
+  --color-highlight: var(--highlight);
+  --color-highlight-foreground: var(--highlight-foreground);
+  --color-accent-ink: var(--accent-ink);
+  --color-forest: var(--forest);
+  --color-charcoal: var(--charcoal);
+  --color-panel-keylime: var(--panel-keylime);
+  --color-panel-mint: var(--panel-mint);
+  --color-panel-sage: var(--panel-sage);
+  --color-panel-slate: var(--panel-slate);
+  --color-sev1: var(--sev1);
+  --color-sev2: var(--sev2);
+  --color-sev3: var(--sev3);
+  --color-sev4: var(--sev4);
+  --color-sev-ink: var(--sev-ink);
+  --color-sev1-fg: var(--sev1-fg);
+  --color-sev2-fg: var(--sev2-fg);
+  --color-sev3-fg: var(--sev3-fg);
+  --color-sev-edge: var(--sev-edge);
+  --color-danger: var(--danger);
+  --color-ok: var(--ok);
+  --color-heading: var(--heading);
+  --color-stat: var(--stat);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Newsreader for headlines, Inter for everything else, Geist Mono for log lines and IDs. */
+  --font-display: var(--font-newsreader), Georgia, ui-serif, serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* The reference's scale: 12 (the floor; it shows 10 and 11), 14, 15, 18, 20, 23, 28, 40, 56, 74. */
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.1rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.35rem;
+  --text-base: 0.9375rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.6rem;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl: 1.4375rem;
+  --text-2xl--line-height: 1.9rem;
+  --text-3xl: 1.75rem;
+  --text-3xl--line-height: 2.2rem;
+  --text-4xl: 2.5rem;
+  --text-4xl--line-height: 3rem;
+  --text-5xl: 3.5rem;
+  --text-5xl--line-height: 4rem;
+  --text-6xl: 4.625rem;
+  --text-6xl--line-height: 4.85rem;
+
+  --tracking-display: -0.03em;
+  --tracking-heading: -0.01em;
+  --tracking-label: 0em;
+
+  /* 14 px cards and buttons, 7 px for small controls, pills for tags. */
+  --radius-xs: 4px;
+  --radius-sm: 7px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 14px;
+  --radius-2xl: 20px;
+  --radius-card: 14px;
+
+  /* motion: unhurried, a fast start and a gentle settle */
+  --duration-instant: 80ms;
+  --duration-quick: 160ms;
+  --duration-moderate: 280ms;
+  --duration-slow: 420ms;
+  --duration-deliberate: 650ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* Infinite only while work is under way (a reply or a report being written); a status that
+     waits for a person pulses three times and then rests. */
+  --animate-pulse-dot: pulse-dot 1.6s var(--ease-in-out) infinite;
+  --animate-in: aria-enter var(--tw-animation-duration, var(--tw-duration, 0.15s))
+    var(--tw-ease, ease) var(--tw-animation-delay, 0s) var(--tw-animation-iteration-count, 1)
+    var(--tw-animation-direction, normal) var(--tw-animation-fill-mode, none);
+  --animate-out: aria-exit var(--tw-animation-duration, var(--tw-duration, 0.15s))
+    var(--tw-ease, ease) var(--tw-animation-delay, 0s) var(--tw-animation-iteration-count, 1)
+    var(--tw-animation-direction, normal) var(--tw-animation-fill-mode, none);
+  --animate-pulse-dot-thrice: pulse-dot 1.6s var(--ease-in-out) 3;
+
+  @keyframes pulse-dot {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    color-scheme: light;
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+  /* Anchors and keyboard focus land clear of a fixed header (the landing page's); console
+     headings set their own offsets with scroll-margin. */
+  html:has([data-fixed-header]) {
+    scroll-padding-top: 6rem;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+    font-optical-sizing: auto;
+  }
+  ::selection {
+    background: var(--highlight);
+    color: var(--highlight-foreground);
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  code,
+  kbd,
+  samp,
+  pre {
+    @apply font-mono;
+    font-size: 0.875em;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-optical-sizing: auto;
+    text-wrap: balance;
+    font-weight: 300;
+    letter-spacing: var(--tracking-heading);
+    color: var(--heading);
+  }
+  h4 {
+    text-wrap: balance;
+    font-weight: 600;
+    color: var(--heading);
+  }
+  p {
+    text-wrap: pretty;
+  }
+}
+
+@layer components {
+  /* The section tag: a small tinted label above a heading, like a seed packet's. On a panel it
+     turns cream (bg-raised). */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 4px;
+    background: var(--panel-slate);
+    padding: 0.125rem 0.5rem;
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+    font-weight: 500;
+    color: var(--heading);
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  /* The first screen's headline: 44 px on a phone, 74 px on a wide screen. */
+  .text-hero {
+    font-family: var(--font-display);
+    font-size: clamp(2.75rem, 3vw + 1.4rem, 4.25rem);
+    line-height: 1.04;
+    letter-spacing: var(--tracking-display);
+    font-weight: 300;
+  }
+  /* Section openers: 36 px on a phone, 56 px on a wide screen. */
+  .text-display {
+    font-family: var(--font-display);
+    font-size: clamp(2.25rem, 2.4vw + 1.35rem, 3.5rem);
+    line-height: 1.12;
+    letter-spacing: var(--tracking-display);
+    font-weight: 300;
+  }
+  /* Section headings: 30 px on a phone, 40 px on a wide screen. */
+  .text-section {
+    font-family: var(--font-display);
+    font-size: clamp(1.875rem, 1vw + 1.5rem, 2.5rem);
+    line-height: 1.2;
+    letter-spacing: var(--tracking-heading);
+    font-weight: 300;
+  }
+  /* Editorial statements: a serif paragraph, 23 to 28 px. */
+  .text-statement {
+    font-family: var(--font-display);
+    font-size: clamp(1.4375rem, 0.6vw + 1.25rem, 1.75rem);
+    line-height: 1.32;
+    letter-spacing: -0.005em;
+    font-weight: 300;
+    color: var(--heading);
+  }
+  /* The subhead under a heading: 15 to 18 px. */
+  .text-lead {
+    font-size: clamp(0.9375rem, 0.3vw + 0.875rem, 1.125rem);
+    line-height: 1.55;
+    color: var(--muted-foreground);
+  }
+  /* Small labels: sentence case, never uppercase. */
+  .eyebrow {
+    font-size: var(--text-sm);
+    line-height: 1.25rem;
+    font-weight: 500;
+  }
+  /* Large statistics: the serif, forest, figures that line up. */
+  .stat {
+    font-family: var(--font-display);
+    color: var(--stat);
+    font-weight: 300;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+  /* Links in running text: forest, underlined with a soft rule that firms up on hover. */
+  .link {
+    color: var(--accent-ink);
+    text-decoration-line: underline;
+    text-decoration-color: color-mix(in srgb, var(--accent-ink) 35%, transparent);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+    transition: text-decoration-color var(--duration-quick) var(--ease-out);
+  }
+  .link:hover {
+    text-decoration-color: var(--accent-ink);
+  }
+}
+
+/* Small elements the landing page animates (on wide screens) start hidden once script is known to
+   run (the `js` class is set before first paint); GSAP reveals them. The large blocks are never
+   hidden, so the largest paint happens on first render. If the animation never starts, the hidden
+   elements appear anyway. */
+@media (min-width: 1024px) and (prefers-reduced-motion: no-preference) {
+  .js [data-anim] {
+    visibility: hidden;
+    animation: reveal-fallback 0s linear 2.5s forwards;
+  }
+}
+
+@keyframes reveal-fallback {
+  to {
+    visibility: visible;
+  }
+}
+
+/* Hero entrance (hero.tsx): the three product cards rise into place one after another and the
+   thread joining them draws across. Transform only, never opacity, so every card keeps its full
+   contrast in every frame; the headline (the largest paint) never moves. */
+@media (prefers-reduced-motion: no-preference) and (min-width: 640px) {
+  .hero-rise {
+    animation: hero-rise 600ms var(--ease-out) var(--d, 0ms) both;
+  }
+  .hero-thread {
+    transform-origin: left;
+    animation: hero-thread 600ms var(--ease-out) 200ms both;
+  }
+}
+
+@keyframes hero-rise {
+  from {
+    transform: translateY(28px) scale(0.97);
+  }
+}
+
+@keyframes hero-thread {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+/* Line art (line-art.tsx): when a drawing comes into view its strokes draw in once, left to right,
+   each a little after the one before. Only the dash offset moves; with reduced motion the drawing
+   is simply there. */
+@media (prefers-reduced-motion: no-preference) {
+  .js .draw path {
+    stroke-dasharray: var(--len) var(--len);
+    stroke-dashoffset: var(--len);
+  }
+  .js .draw[data-drawn] path {
+    stroke-dashoffset: 0;
+    transition: stroke-dashoffset 1800ms var(--ease-out) calc(var(--i, 0) * 70ms);
+  }
+}
+
+/* Ticker: a list that drifts past (globals: .ticker). It pauses while pointed at or focused, and
+   its button stops it (WCAG 2.2.2); with reduced motion it stands still and scrolls by hand. */
+.ticker {
+  overflow: hidden;
+  mask-image: linear-gradient(transparent, #000 18%, #000 82%, transparent);
+}
+.ticker-track {
+  display: grid;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ticker-track {
+    animation: ticker var(--ticker-s, 40s) linear infinite;
+  }
+  .ticker:hover .ticker-track,
+  .ticker:focus-within .ticker-track,
+  .ticker[data-paused] .ticker-track {
+    animation-play-state: paused;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ticker {
+    overflow-y: auto;
+  }
+  .ticker-track > [aria-hidden="true"] {
+    display: none;
+  }
+}
+
+@keyframes ticker {
+  to {
+    transform: translateY(-50%);
+  }
+}
+
+/* RollingNumber (rolling-number.tsx): each digit is a strip of 0 to 9 behind a one-digit window,
+   resting on its final digit. "ready" drops the strips to 0 out of sight; "go" rolls them up, a
+   little later for each digit to the right; "done" leaves them at rest. */
+.roll-word {
+  display: inline-flex;
+  vertical-align: top;
+}
+.roll-col,
+.roll-char {
+  display: inline-block;
+  height: 1em;
+  line-height: 1;
+}
+.roll-col {
+  overflow: hidden;
+}
+/* Soft top and bottom edges only while the digits move, so those passing through fade instead of
+   being cut; at rest every digit stands whole. */
+[data-roll="ready"] .roll-col,
+[data-roll="go"] .roll-col {
+  mask-image: linear-gradient(transparent, #000 0.14em, #000 0.86em, transparent);
+}
+.roll-strip {
+  display: flex;
+  flex-direction: column;
+  transform: translateY(calc(var(--roll-to) * -1em));
+}
+.roll-strip > span {
+  height: 1em;
+}
+[data-roll="ready"] .roll-strip {
+  transform: none;
+}
+[data-roll="go"] .roll-strip {
+  transition: transform 1.1s var(--ease-emphasized) calc(var(--roll-i) * 70ms);
+}
+/* On paper there is no scroll to roll a number in: every one prints at its value. */
+@media print {
+  [data-roll] .roll-strip {
+    transform: translateY(calc(var(--roll-to) * -1em));
+    transition: none;
+  }
+  tr {
+    break-inside: avoid;
+  }
+}
+
+/* Severity stamp: the badge comes down like a rubber stamp, leaves a ring that fades, and the
+   prediction-set bracket then draws across the bars. */
+@media (prefers-reduced-motion: no-preference) {
+  .sev-stamp {
+    position: relative;
+    animation: sev-stamp 320ms var(--ease-out) both;
+  }
+  .sev-stamp::after {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border: 2px solid currentColor;
+    border-radius: inherit;
+    opacity: 0;
+    animation: sev-ink 360ms var(--ease-out) 120ms;
+  }
+  .sev-bracket {
+    transform-origin: left;
+    animation: sev-bracket 260ms var(--ease-out) 160ms both;
+  }
+}
+
+/* Scale and turn only, never opacity: the label keeps its full contrast in every frame, so an
+   accessibility check that runs mid-stamp still reads it as AA. */
+@keyframes sev-stamp {
+  0% {
+    transform: scale(1.3) rotate(-6deg);
+  }
+  55% {
+    transform: scale(0.96) rotate(-1deg);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes sev-ink {
+  from {
+    opacity: 0.45;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.7);
+  }
+}
+
+@keyframes sev-bracket {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+/* Evidence thread: pointing at a citation sweeps the highlight across each line it cites, one
+   after another (--thread-i). On the landing page the lines stay lit while the citation is
+   pointed at, and the sweep is a transition, so pointing away mid-sweep turns it around from where
+   it is; in a run's evidence panel, where every line shown is cited, it is one pass of light. */
+.thread-line,
+.thread-pass {
+  position: relative;
+  isolation: isolate;
+}
+.thread-line::before,
+.thread-pass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 4px;
+  background: var(--highlight);
+  transform-origin: left;
+}
+.thread-pass::before {
+  opacity: 0;
+}
+.thread-line::before {
+  transform: scaleX(0);
+  transition: transform 120ms var(--ease-out);
+}
+.thread-line.thread-lit::before {
+  transform: none;
+  transition: transform 220ms var(--ease-out) calc(var(--thread-i, 0) * 40ms);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .thread-pass::before {
+    animation: thread-pass 600ms var(--ease-out) calc(min(var(--thread-i, 0), 5) * 40ms) both;
+  }
+}
+
+@keyframes thread-pass {
+  0% {
+    opacity: 1;
+    transform: scaleX(0);
+  }
+  35%,
+  65% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: none;
+  }
+}
+
+/* tw-animate-css's enter and exit keyframes also animate filter: blur(), which keeps every
+   dialog, menu and popover entrance off the compositor. --animate-in and --animate-out (@theme)
+   point at these copies, which move transform and opacity only (no blur-in or blur-out utility is
+   used). */
+@keyframes aria-enter {
+  from {
+    opacity: var(--tw-enter-opacity, 1);
+    transform: translate3d(var(--tw-enter-translate-x, 0), var(--tw-enter-translate-y, 0), 0)
+      scale3d(var(--tw-enter-scale, 1), var(--tw-enter-scale, 1), var(--tw-enter-scale, 1))
+      rotate(var(--tw-enter-rotate, 0));
+  }
+}
+@keyframes aria-exit {
+  to {
+    opacity: var(--tw-exit-opacity, 1);
+    transform: translate3d(var(--tw-exit-translate-x, 0), var(--tw-exit-translate-y, 0), 0)
+      scale3d(var(--tw-exit-scale, 1), var(--tw-exit-scale, 1), var(--tw-exit-scale, 1))
+      rotate(var(--tw-exit-rotate, 0));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
