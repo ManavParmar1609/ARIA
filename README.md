@@ -113,7 +113,8 @@ run shows the blocks ARIA flagged next to the label Hadoop experts gave each one
 page's first tab tells the run as each agent's turn. In the console, Ctrl or ⌘ + K opens a
 command palette that jumps to any page, recent incident, sample or definition, and `?` lists the
 keyboard shortcuts. The API listens on
-http://127.0.0.1:8000 (OpenAPI docs at `/docs`).
+http://127.0.0.1:8000 (OpenAPI docs at `/docs`). If those ports are taken,
+`make dev API_PORT=8010 WEB_PORT=3010` moves both.
 
 Without downloaded data, ARIA seeds incident memory from the small test fixtures.
 `uv run aria data download --source loghub-2k` fetches the Loghub samples (pinned commit, checked
@@ -352,8 +353,9 @@ Every section, with its method: [docs/evaluation.md](docs/evaluation.md).
   performance score sits at or a few points below the brief's target of 95, varying from run to
   run; `make web-lighthouse` prints it, and CI gates at 90. Desktop and the other categories meet
   their bars.
-- **The UI components are written in this repo.** The shadcn, 21st.dev and React Bits registries
-  were unreachable from the build environment.
+- **The UI components are written in this repo,** in the shadcn/ui pattern, rather than pulled
+  from the shadcn, 21st.dev or React Bits registries, which could not be reached when they were
+  built.
 
 ## Development
 

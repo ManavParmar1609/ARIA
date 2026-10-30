@@ -18,9 +18,10 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
 
+from mcp import MCPError
 from mcp.server.mcpserver import MCPServer
-from mcp.server.mcpserver.exceptions import ToolError
-from mcp.types import ToolAnnotations
+from mcp.server.mcpserver.exceptions import ResourceNotFoundError, ToolError
+from mcp.types import INVALID_PARAMS, ToolAnnotations
 from pydantic import BaseModel, Field
 
 from aria import __version__
@@ -378,7 +379,7 @@ def build_server(
         runbook = svc().runbooks.get(slug)
         if runbook is None:
             msg = f"unknown runbook {slug}"
-            raise ValueError(msg)
+            raise ResourceNotFoundError(msg)  # the client learns why, as with the tools
         return f"# {runbook.title}\n\n{runbook.body}"
 
     @server.resource(
@@ -387,7 +388,10 @@ def build_server(
         description="A past incident as JSON.",
     )
     async def incident_resource(incident_id: str) -> str:
-        detail = await get_incident(incident_id)
+        try:
+            detail = await get_incident(incident_id)
+        except ToolError as exc:
+            raise ResourceNotFoundError(str(exc)) from None
         return detail.model_dump_json(indent=1)
 
     @server.prompt(
@@ -412,7 +416,10 @@ def build_server(
         description="Summarise one incident from ARIA's memory for a responder.",
     )
     async def summarize_incident(incident_id: Identifier) -> list[dict[str, Any]]:
-        detail = await get_incident(incident_id)
+        try:
+            detail = await get_incident(incident_id)
+        except ToolError as exc:  # any other error reaches the client as "Internal server error"
+            raise MCPError(INVALID_PARAMS, str(exc)) from None
         return [
             {
                 "role": "user",

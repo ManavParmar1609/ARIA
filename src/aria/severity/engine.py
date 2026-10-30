@@ -166,9 +166,10 @@ class SeverityEngine:
                 "top_contributions": self.model.contributions(x[0], str(top)),
             }
         shown = ", ".join(f"{s} {probabilities[s]:.2f}" for s in SEVERITY_ORDER)
+        # Without the calibrated model the numbers are rule scores; the title says so too.
         model_eid = evidence.add(
             EvidenceKind.MODEL,
-            f"Severity probabilities: {shown}",
+            f"{'Severity' if conformal else 'Rule-score'} probabilities: {shown}",
             source="severity.model",
             detail=(
                 (

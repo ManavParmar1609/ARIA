@@ -1,10 +1,9 @@
 # ARIA web design
 
-ARIA's look follows the **MindMarket** style reference the owner chose: "a warm storybook on
-cream paper". The owner supplied a written style spec and a screen recording of the reference
-site. Where the two disagree, this file follows the recording, because it shows the real site.
-For example, the spec gives 50 px corners to buttons and cards, but the recording shows small
-corners on those and 50 px only on whole page panels.
+ARIA's look is "a warm storybook on cream paper". It came with a written style spec and a
+screen recording of a reference site. Where the two disagree, this file follows the recording,
+because it shows a real site. For example, the spec gives 50 px corners to buttons and cards,
+but the recording shows small corners on those and 50 px only on whole page panels.
 
 This file adapts that reference to an incident-triage product. It is the source of truth for
 every page in `web/` and for the video in `video/`.
@@ -65,8 +64,7 @@ quiet moments (a first visit, an empty queue, a search with no match, a missing 
 9. **Motion answers people.**
    - Presses scale to 98%, and the round arrow nudges right on hover.
    - The landing page plays the recorded run in as it scrolls past (wide screens only).
-   - Larger animations are proposed to the owner and built only when chosen. The owner chose
-     these six:
+   - Larger animations are proposed first and built only once chosen. These six were chosen:
      - **Hero entrance:** the scene comes in once and then rests. Wide screens settle it back to
        front (about 1.2 s, CSS on the scene's groups: `scenes.tsx`, `.hero-in`); narrower screens
        raise it in as one piece (`.hero-scene`), which the compositor animates without repainting
@@ -189,8 +187,8 @@ Strip labels are ink, from 5.2:1 (SEV1) up.
 - `src/components/aria/`: the mark and wordmark, severity badges and the severity instrument
   (model probabilities, the conformal set bracket, the safety floor).
 - `src/components/ui/`: shadcn/ui-style primitives on Radix, restyled with the tokens above.
-  The shadcn registry, 21st.dev and React Bits were unreachable from the build environment, so
-  these were written in this repo in the same pattern.
+  They are written in this repo in the shadcn pattern; the shadcn, 21st.dev and React Bits
+  registries could not be reached when they were built.
 - `src/components/site/`: the landing page (`story.tsx` is the green road). Its numbers come
   from `src/data/*.json`, copied from `docs/` (`pnpm sync:data`) and from one recorded run
   (`scripts/record_demo_run.py`).

@@ -138,7 +138,8 @@ Two of these depend on configuration and history:
     least 90% of the time, but only on data exchangeable with the conformal split.
 - **Version.** `severity-log-<date>-<first 8 hex digits of a SHA-256 of the coefficients>`.
 - **Retraining.** `make train` (or `aria train severity`) writes the model and its training
-  report.
+  report. Without the Loghub samples it stops, unless `--fixtures` asks for a model fit on the
+  test fixtures.
 
 ## Recalibration on reviewed incidents
 
@@ -379,9 +380,8 @@ the matrix in a linear model, and its classes are not reweighted.
 
 Neither outcomes nor future tickets reach training.
 
-**Status: trained** (`models/severity_ticket.json`, shipped in the images). The UCI host is
-blocked in the build environment, so the log comes from two byte-identical copies whose sha256
-the manifest pins. `make eval` scores the newest 15% of tickets against the priority each one
+**Status: trained** (`models/severity_ticket.json`, shipped in the images). When the UCI host
+cannot be reached, the log comes from two byte-identical copies whose sha256 the manifest pins. `make eval` scores the newest 15% of tickets against the priority each one
 opened with and the commonest priority, and the SLA risk against each single field's breach rate:
 see [real tickets](evaluation.md#real-tickets-a-servicenow-service-desk). The outcome statistics
 of similar tickets come from the ingested log, so they need `aria data ingest`.

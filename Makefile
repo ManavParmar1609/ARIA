@@ -3,6 +3,9 @@ SHELL := /bin/bash
 UV ?= uv
 WEB := web
 VIDEO := video
+# Ports for make api, web and dev: make dev API_PORT=8010 WEB_PORT=3010
+API_PORT ?= 8000
+WEB_PORT ?= 3000
 
 .PHONY: help
 help: ## Show the available targets
@@ -70,8 +73,8 @@ eval-smoke: ## Fast offline evaluation used by CI as a regression gate
 
 # --- run -----------------------------------------------------------------------
 .PHONY: api
-api: ## Run the API with auto-reload on :8000
-	$(UV) run aria serve --reload
+api: ## Run the API with auto-reload on :8000 (API_PORT)
+	$(UV) run aria serve --reload --port $(API_PORT)
 
 .PHONY: worker
 worker: ## Run a background worker that executes queued triage runs
@@ -82,13 +85,14 @@ mcp: ## Run the ARIA MCP server over stdio
 	$(UV) run aria mcp --transport stdio
 
 .PHONY: web
-web: ## Run the web app dev server on :3000
-	pnpm --dir $(WEB) dev
+web: ## Run the web app dev server on :3000 (WEB_PORT)
+	pnpm --dir $(WEB) dev --port $(WEB_PORT)
 
 .PHONY: dev
 dev: ## Migrate the database, then run API and web together (Ctrl-C stops both)
 	@$(UV) run aria db upgrade
-	@trap 'kill 0' INT TERM EXIT; $(UV) run aria serve --reload & pnpm --dir $(WEB) dev & wait
+	@trap 'kill 0' INT TERM EXIT; $(UV) run aria serve --reload --port $(API_PORT) & \
+		ARIA_API_URL=$${ARIA_API_URL:-http://127.0.0.1:$(API_PORT)} pnpm --dir $(WEB) dev --port $(WEB_PORT) & wait
 
 .PHONY: openapi
 openapi: ## Export docs/openapi.json and regenerate the web client types from it

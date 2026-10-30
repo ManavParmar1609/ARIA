@@ -132,13 +132,21 @@ def data_ingest(bgl_max_lines: int = 500_000) -> None:
 # --- training ----------------------------------------------------------------------------------
 
 
-def _loghub_dir() -> Path:
+def _loghub_dir(*, fixtures: bool = True) -> Path:
+    """The Loghub samples, or the test fixtures when they are missing and ``fixtures`` allows."""
     from aria.config import get_settings
     from aria.evals.run import FIXTURES_DIR
 
     real = get_settings().data_dir / "raw" / "loghub-2k"
     if real.exists():
         return real
+    if not fixtures:
+        console.print(
+            "data/raw/loghub-2k not found. The committed severity model was trained on these "
+            "samples: download them first (`aria data download --source loghub-2k`), or pass "
+            "--fixtures to replace it with a model fit on the test fixtures."
+        )
+        raise typer.Exit(code=1)
     console.print("[yellow]data/raw/loghub-2k not found (make data); using the test fixtures[/]")
     return FIXTURES_DIR
 
@@ -155,16 +163,20 @@ def train_all(ctx: typer.Context) -> None:
 def train_severity(
     workers: Annotated[int, typer.Option(help="Parser processes.")] = min(4, os.cpu_count() or 1),
     per_mode: int = 6,
+    fixtures: Annotated[
+        bool, typer.Option(help="Without the Loghub samples, train on the test fixtures.")
+    ] = False,
 ) -> None:
     """Fit, calibrate and export the log-severity model (models/severity_log.json)."""
     from aria.config import get_app_config
     from aria.severity.rules import load_rules
     from aria.severity.training import train_from_loghub
 
+    logs = _loghub_dir(fixtures=fixtures)
     config = get_app_config().severity
     rules = load_rules(config.rules_file)
     model, report = train_from_loghub(
-        _loghub_dir(), rules, alpha=config.alpha, per_mode=per_mode, workers=workers
+        logs, rules, alpha=config.alpha, per_mode=per_mode, workers=workers
     )
     model.save(config.log_model_file)
     report_path = config.log_model_file.with_suffix(".report.json")
@@ -266,6 +278,7 @@ def seed(
     runbooks = load_runbooks(settings.runbooks_dir)
     console.print(f"runbooks: {sync_runbooks(engine, runbooks)}")
     builder = ScenarioBuilder(LinePools.from_loghub(_loghub_dir()))
+    console.print(f"building and triaging synthetic incidents with {workers} worker(s)…")
     incidents = seed_incidents(builder, settings.runbooks_dir, per_mode=per_mode, workers=workers)
     corpus = [i.document().text for i in incidents] + [rb.search_text() for rb in runbooks.values()]
     model_path = settings.models_dir / "embed_local.npz"
@@ -417,6 +430,9 @@ def triage(
     use_llm: Annotated[bool, typer.Option(help="Allow LLM steps.")] = True,
 ) -> None:
     """Triage a log file (or a scenario) end to end and print the report."""
+    from pydantic import ValidationError
+
+    from aria.contracts.base import first_problem
     from aria.contracts.inputs import RunOptions, TriageRequest
     from aria.data.scenarios import LinePools, ScenarioBuilder
     from aria.db import repository as repo
@@ -438,10 +454,17 @@ def triage(
             raise typer.BadParameter(f"{logs} has no log lines")
     else:
         raise typer.BadParameter("give a log file or --scenario")
+    try:
+        request = TriageRequest(
+            system=system, logs=lines, synthetic=synthetic, options=RunOptions(use_llm=use_llm)
+        )
+    except ValidationError as exc:
+        if exc.errors()[0]["loc"] == ("system",):
+            raise typer.BadParameter(
+                f"--system {system!r}: use up to 64 letters, digits, '_' or '-'"
+            ) from None
+        raise typer.BadParameter(first_problem(exc)) from None
     _require_database()
-    request = TriageRequest(
-        system=system, logs=lines, synthetic=synthetic, options=RunOptions(use_llm=use_llm)
-    )
 
     async def main() -> None:
         services = await Services.create()
@@ -456,7 +479,10 @@ def triage(
                 console.print(f"after review: {outcome.status}")
             stored = repo.get_report(services.engine, f"rpt-{outcome.run_id}")
             if stored is not None:
-                console.print(stored[1], markup=False, highlight=False)
+                from rich.markdown import Markdown
+
+                # Rendered, not raw: the export escapes log text (<*> is &lt;*&gt; there).
+                console.print(Markdown(stored[1]))
         finally:
             await services.aclose()
 
@@ -612,7 +638,8 @@ def providers_check(
             ", ".join(f"{k.removesuffix('_model')}: {mark(v)}" for k, v in report.models.items())
             or "-"
         )
-        failed = failed or (report.enabled and bool(report.problems))
+        # Unconfigured providers are fine in a full check, but not when asked for by name.
+        failed = failed or (bool(report.problems) and (report.enabled or name is not None))
         table.add_row(
             report.name,
             report.credential,

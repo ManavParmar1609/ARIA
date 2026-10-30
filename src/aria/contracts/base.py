@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
 EVIDENCE_ID_PATTERN = r"^E\d{1,5}$"
 EvidenceId = Annotated[str, StringConstraints(pattern=EVIDENCE_ID_PATTERN)]
@@ -19,6 +19,14 @@ JsonDict = dict[str, Any]
 
 def utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+def first_problem(exc: ValidationError) -> str:
+    """The first field at fault and why, in one line a client can show (no pydantic URLs)."""
+    error = exc.errors(include_url=False)[0]
+    field = ".".join(str(part) for part in error["loc"])
+    message = str(error["msg"]).removeprefix("Value error, ")
+    return f"{field}: {message}" if field else message
 
 
 class Contract(BaseModel):

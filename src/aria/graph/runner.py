@@ -15,7 +15,7 @@ import os
 import socket
 import uuid
 from collections import defaultdict
-from collections.abc import Callable, Mapping
+from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -47,6 +47,9 @@ from aria.services import Services
 
 log = get_logger(__name__)
 STREAM_MODES: list[StreamMode] = ["tasks", "custom", "checkpoints"]
+# A drive that has just paused still settles for a moment (its last events, its claim). A review
+# or delete arriving as the run shows "awaiting review" waits that out instead of failing.
+SETTLE_WAIT_S = 5.0
 
 # A fork's state update cannot go in front of a step reached by a routed Command, a Send or a
 # join: LangGraph drops the pending route, and the fork would stop at once. Those forks start
@@ -173,8 +176,11 @@ def run_fields(values: Json) -> Json:
     report = values.get("report") or {}
     if report:
         fields["report_id"] = report.get("report_id")
-        if report.get("title") and not (values.get("request") or {}).get("title"):
-            # A run started without a title takes its report's (and follows a reviewer's edit).
+        edits = (values.get("review") or {}).get("edits") or {}
+        if report.get("title") and (
+            edits.get("title") or not (values.get("request") or {}).get("title")
+        ):
+            # A run started without a title takes its report's; a reviewer's new title wins.
             fields["title"] = str(report["title"])[:300]
     meta = values.get("report_meta") or {}
     if meta.get("provider"):
@@ -386,14 +392,24 @@ class TriageRunner:
             await asyncio.sleep(repo.CLAIM_RENEW_S)
             await asyncio.to_thread(repo.renew_claims, self.engine, self.owner, [run_id])
 
+    @contextlib.asynccontextmanager
+    async def _holding(self, run_id: str) -> AsyncIterator[None]:
+        """Hold the run in this process, waiting briefly for a drive that is settling."""
+        lock = self._locks[run_id]
+        try:
+            await asyncio.wait_for(lock.acquire(), SETTLE_WAIT_S)
+        except TimeoutError:
+            msg = f"run {run_id} is already running"
+            raise RunBusyError(msg) from None
+        try:
+            yield
+        finally:
+            lock.release()
+
     async def _drive(
         self, run_id: str, graph_input: Any, *, config: RunnableConfig | None = None
     ) -> RunOutcome:
-        lock = self._locks[run_id]
-        if lock.locked():
-            msg = f"run {run_id} is already running"
-            raise RunBusyError(msg)
-        async with lock:
+        async with self._holding(run_id):
             # The claim spans processes: an API resuming a review and a worker recovering a run
             # it thinks abandoned can never drive the same run, so nothing is sent twice.
             if not await asyncio.to_thread(repo.claim_run, self.engine, run_id, self.owner):
@@ -611,11 +627,7 @@ class TriageRunner:
 
         It holds the run as a drive would, so a review applied at the same moment is refused
         (409) instead of failing halfway and writing checkpoints for a run that is gone."""
-        lock = self._locks[run_id]
-        if lock.locked():
-            msg = f"run {run_id} is running"
-            raise RunBusyError(msg)
-        async with lock:
+        async with self._holding(run_id):
             took = await asyncio.to_thread(
                 repo.claim_run, self.engine, run_id, self.owner, status=None
             )

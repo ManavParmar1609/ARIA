@@ -51,6 +51,7 @@ from pydantic import ValidationError
 from aria.api.schemas import ReviewRequest, links_for
 from aria.api.security import Principal
 from aria.api.state import AppState, app_state, current_principal
+from aria.contracts.base import first_problem
 from aria.contracts.inputs import TriageRequest
 from aria.contracts.report import ReviewDecision
 from aria.contracts.run import RunEvent, RunStatus
@@ -80,6 +81,12 @@ def _user_text(run_input: RunAgentInput) -> str:
             return "\n".join(getattr(part, "text", "") for part in content)
         return ""
     return ""
+
+
+def _follows_up(run_input: RunAgentInput) -> bool:
+    """True when the newest message is the user's, written after ARIA had already answered."""
+    roles = [getattr(message, "role", None) for message in run_input.messages]
+    return bool(roles) and roles[-1] == "user" and "assistant" in roles
 
 
 def triage_request_from(run_input: RunAgentInput) -> TriageRequest | None:
@@ -234,9 +241,7 @@ async def _stream(
             try:
                 review = ReviewRequest.model_validate(body)
             except ValidationError as exc:
-                yield error(
-                    f"invalid review: {exc.errors(include_url=False)[0]['msg']}", "bad_review"
-                )
+                yield error(f"invalid review: {first_problem(exc)}", "bad_review")
                 return
             decision = ReviewDecision(
                 decision=review.decision,
@@ -249,8 +254,9 @@ async def _stream(
         elif existing is None:
             try:
                 request = triage_request_from(run_input)
-            except ValidationError:
-                request = None
+            except ValidationError as exc:
+                yield error(f"invalid request: {first_problem(exc)}", "bad_request")
+                return
             if request is None:
                 yield error(
                     "send log lines as a user message, or forwardedProps.request", "no_input"
@@ -260,6 +266,13 @@ async def _stream(
                 runner.submit, request, run_id=run_id, trigger="agui", claim=True
             )
             job = runner.execute(run_id)
+        elif RunStatus(existing["status"]).terminal and _follows_up(run_input):
+            # One thread is one triage: new logs on a finished thread would be silently dropped.
+            yield error(
+                f"this thread's run is {existing['status']}; start a new thread to triage new logs",
+                "thread_finished",
+            )
+            return
         else:
             job = runner.execute(run_id)  # continue, or report where the run already stands
 

@@ -53,6 +53,7 @@ from starlette.routing import BaseRoute
 
 from aria import __version__
 from aria.config import Settings
+from aria.contracts.base import first_problem
 from aria.contracts.inputs import TriageRequest
 from aria.contracts.report import ReviewDecision
 from aria.contracts.run import RunStatus
@@ -154,6 +155,11 @@ class PrincipalContextBuilder(DefaultServerCallContextBuilder):
         return context
 
 
+def _says(exc: ValueError) -> str:
+    """What the client is told about input ARIA could not use: one line, not a pydantic dump."""
+    return first_problem(exc) if isinstance(exc, ValidationError) else str(exc)
+
+
 def reviewer_for(context: RequestContext, claimed: object) -> str:
     """Who reviews: the API key's name when keys are on (as over REST), else what the client says."""
     principal = context.call_context.state.get("principal") if context.call_context else None
@@ -200,15 +206,15 @@ class AriaExecutor(AgentExecutor):
             reviewer = reviewer_for(context, metadata.get("reviewer"))
             try:
                 decision = decision_from(message, reviewer)
-            except (ValueError, ValidationError) as exc:
-                await updater.requires_input(updater.new_agent_message([new_text_part(str(exc))]))
+            except ValueError as exc:  # pydantic's ValidationError included
+                await updater.requires_input(updater.new_agent_message([new_text_part(_says(exc))]))
                 return
             outcome = await self._gate(self.runner.resume(run_id, decision))
         else:
             try:
                 request = request_from(message, metadata)
-            except (ValueError, ValidationError) as exc:
-                await updater.reject(updater.new_agent_message([new_text_part(str(exc))]))
+            except ValueError as exc:
+                await updater.reject(updater.new_agent_message([new_text_part(_says(exc))]))
                 return
             await updater.start_work(
                 updater.new_agent_message([new_text_part("ARIA is triaging the incident.")])

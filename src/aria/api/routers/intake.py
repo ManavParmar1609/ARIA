@@ -89,17 +89,20 @@ async def ask(body: AskRequest, state: State) -> AskResponse:
     """Ask about a run (its evidence) or about incident history (memory search)."""
     services = state.services
     evidence: list[Evidence]
-    if body.run_id:
-        try:
-            snapshot = await state.runner.snapshot(body.run_id)
-        except RunNotFoundError as exc:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, f"run {body.run_id} not found") from exc
-        evidence = [Evidence.model_validate(e) for e in snapshot.values.get("evidence", [])]
-    else:
-        evidence = await memory_evidence(services, body.question)
     run = (
         await asyncio.to_thread(repo.get_run, services.engine, body.run_id) if body.run_id else None
     )
+    if body.run_id:
+        if run is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"run {body.run_id} not found")
+        try:
+            snapshot = await state.runner.snapshot(body.run_id)
+        except RunNotFoundError as exc:  # queued, or not yet at its first checkpoint
+            detail = f"run {body.run_id} is {run['status']} and has no evidence yet; ask again soon"
+            raise HTTPException(status.HTTP_409_CONFLICT, detail) from exc
+        evidence = [Evidence.model_validate(e) for e in snapshot.values.get("evidence", [])]
+    else:
+        evidence = await memory_evidence(services, body.question)
     use_llm = not (run and run.get("request", {}).get("options", {}).get("use_llm") is False)
     output, cited, model = await answer(services, body.question, evidence, use_llm=use_llm)
     referenced = {eid for claim in output.answer for eid in claim.evidence_ids}

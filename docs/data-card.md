@@ -30,7 +30,7 @@ behaves on that distribution. They are not a measurement of accuracy on producti
 | Real-data evaluation | **Real**: 104,815 HDFS lines and the experts' label for each of 7,940 blocks; the full BGL log (4,747,963 lines) and its alert tags; the container logs of 55 Hadoop jobs and their failure labels; 24,918 ServiceNow tickets; GitLab.com's public production incidents and their responders' labels; 2,654 public prompt-injection attacks and 339 benign look-alikes. Only the ticket model trains on any of it, on the oldest tickets |
 | Labels | BGL windows: the sysadmin alert tags, through a written rubric. Other systems: a documented scenario policy |
 | Splits | Separate scenario seeds per split; the held-out test seeds are used only by `make eval` |
-| Ticket data | The UCI ServiceNow log, fetched from checksum-pinned copies because the UCI host is blocked here. The ticket model trains on its oldest 70% of tickets |
+| Ticket data | The UCI ServiceNow log, fetched from checksum-pinned copies when the UCI host cannot be reached. The ticket model trains on its oldest 70% of tickets |
 | In git | The manifest, the download code, small fixtures and the trained severity and ticket models. Raw datasets are never committed |
 
 ## Sources
@@ -44,7 +44,7 @@ its integrity (see [What is in git](#what-is-in-git-and-what-is-not)).
 | `loghub-2k` | The Loghub 2k samples ([logpai/loghub](https://github.com/logpai/loghub) at commit `dd61d095`): 2,000 structured lines from each of Android, Apache, BGL, Hadoop, HDFS, HealthApp, HPC, Linux, Mac, OpenSSH, OpenStack, Proxifier, Spark, Thunderbird, Windows and Zookeeper, with hand-labelled event templates. BGL and Thunderbird lines open with a sysadmin alert-tag field; in these samples only BGL's lines hold alerts. | The scenario builder (13 of the 16 systems), the parsing evaluation (all 16) and the test fixtures | Downloaded |
 | `loghub2-corrected` | Corrected templates for 14 of the 2k samples from Loghub-2.0 (Jiang et al., ISSTA 2024), commit `ac4aad2e` | The parsing evaluation scores the same parse against these as well, joined by line id | Downloaded |
 | `hdfs-100k` | The first 100,000 HDFS_v1 lines plus the later lines of the blocks they start, with expert block-level anomaly labels (Xu et al., SOSP 2009), from the loglizer repository at commit `ac67f972` | The real-log evaluation ([below](#real-logs-with-expert-labels)) and a small committed cut for tests and the console's real incident. `aria data ingest` also loads it. No model trains on it. | Downloaded |
-| `loghub-bgl` | The full BlueGene/L log (4,747,963 lines over 215 days) with sysadmin alert tags (Oliner and Stearley, DSN 2007), Zenodo record [8196385](https://zenodo.org/records/8196385) | Contiguous, real BGL windows ([below](#contiguous-bgl-windows)); `aria data ingest` loads its first lines | Downloaded from a mirror: Zenodo is blocked here, so the gzipped log comes from a public repository and is checked against the sha256 in the manifest |
+| `loghub-bgl` | The full BlueGene/L log (4,747,963 lines over 215 days) with sysadmin alert tags (Oliner and Stearley, DSN 2007), Zenodo record [8196385](https://zenodo.org/records/8196385) | Contiguous, real BGL windows ([below](#contiguous-bgl-windows)); `aria data ingest` loads its first lines | When Zenodo cannot be reached, the gzipped log comes from a public mirror and must match the sha256 in the manifest |
 | `loghub-hadoop` | The container logs of 55 Hadoop MapReduce jobs, each labelled normal or with its injected failure: machine down, network disconnection or disk full (Lin et al., ICSE-SEIP 2016), same Zenodo record | The failed-jobs evaluation: each job triaged end to end | Downloaded from a mirror: a public repository at a pinned commit |
 | `uci-incidents` | The UCI "Incident management process enriched event log" (dataset 498): a ServiceNow audit trail of 141,712 events for 24,918 incidents, with anonymised categorical codes and no free text | The ticket priority and SLA-breach models and their evaluation, and the outcome statistics of similar tickets | Downloaded from a mirror: two public copies of UCI's zip, checked against the sha256 in the manifest (the same CSV is in nine more repositories) |
 | `bipia`, `injecagent`, `cyberseceval-pi`, `tensor-trust`, `giskard-injections`, `jailbreak-llms` | Public prompt-injection benchmarks: BIPIA (Yi et al.), InjecAgent (Zhan et al.), CyberSecEval 2 (Meta), Tensor Trust (Toyer et al.), Giskard's collection and in-the-wild jailbreaks (Shen et al.), each at a pinned commit | Measuring the injection detector on attacks it was never tuned on | Downloaded |
@@ -96,7 +96,7 @@ prompt-injection collections. These were reachable but left out, or could not be
 | OpenStack fault-injection runs (Cotroneo et al., ESEC/FSE 2019) and Nezha (Yu et al., ESEC/FSE 2023) | Reachable and labelled, but about 10 GB and 2 GB of logs; candidates for a future fault-localisation evaluation |
 | Thunderbird sample (LogLead), splunk attack_data, OTRF Security-Datasets | Lines sampled out of order (no windows), or labels per dataset file rather than per line or window |
 | GitHub, Google Cloud and AWS status-page archives; danluu and Kubernetes postmortem lists | Short public notices or link lists: too little text, or no labels ARIA can be scored against |
-| Full Thunderbird, Spirit, Liberty, HDFS_v2, Loghub-2.0 full logs, RCAEval, MSDS, Eadro | Hosted only on Zenodo, figshare, Hugging Face, USENIX or other hosts this build environment blocks, with no copy found elsewhere |
+| Full Thunderbird, Spirit, Liberty, HDFS_v2, Loghub-2.0 full logs, RCAEval, MSDS, Eadro | Hosted only on Zenodo, figshare, Hugging Face, USENIX or similar hosts, which could not be reached when ARIA's datasets were gathered, and no verifiable copy was found elsewhere |
 
 ## What is in git, and what is not
 
@@ -543,9 +543,11 @@ These four commands do the following:
 - `make data` downloads and verifies every source in the manifest.
 - `make seed` migrates the database, ingests the downloaded datasets, loads the runbooks, seeds
   incident memory and fits the offline embedder.
-- `make train` fits the severity model and the ticket models. The ticket models read the
-  ingested UCI log, or the downloaded file when nothing is ingested, and are skipped when
-  neither is there.
+- `make train` fits the severity model and the ticket models. The severity model needs the
+  Loghub samples: without them, training stops rather than replace the committed model with one
+  fit on the test fixtures (`aria train severity --fixtures` does that on purpose). The ticket
+  models read the ingested UCI log, or the downloaded file when nothing is ingested, and are
+  skipped when neither is there.
 - `make eval` runs every suite and regenerates [evaluation.md](evaluation.md).
 
 See also: the [model card](model-card.md), the [threat model](threat-model.md), the

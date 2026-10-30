@@ -6,7 +6,8 @@
 3. Optionally rerank the candidates with a cross-encoder (NVIDIA NIM rerank) when configured.
 4. Grade the result. Below ``min_grade``, re-plan: widen the candidate pool and rewrite the
    query (with the LLM when available, deterministically otherwise), then drop the system
-   filter to find analogues on other systems. The best-graded attempt wins.
+   filter to find analogues on other systems. The best-graded attempt wins, and an analogue's
+   grade is discounted, so it wins only over a much weaker match on the system itself.
 
 The grade is a documented heuristic (``grade_hits``), not a learned relevance model; every
 attempt is recorded so reviewers can see why ARIA searched again.
@@ -89,11 +90,21 @@ def build_query(batch: ParsedBatch, hypotheses: Sequence[Hypothesis] = ()) -> Re
     )
 
 
+# An analogue from another system is weaker evidence than the system's own history: without
+# the discount, a confident match on another system outgrades this system's own incidents.
+ANALOGUE_DISCOUNT = 0.6
+
+
 def grade_hits(
-    pairs: Sequence[tuple[MemoryIncident, Hit]], hints: Sequence[str], *, k: int
+    pairs: Sequence[tuple[MemoryIncident, Hit]],
+    hints: Sequence[str],
+    *,
+    k: int,
+    system: str | None = None,
 ) -> float:
     """0..1: lexical match of the best hit, dense similarity, agreement among the top k, and
-    agreement with the investigator's hypotheses (when there are any)."""
+    agreement with the investigator's hypotheses (when there are any). A best hit from a system
+    other than ``system`` counts for less (``ANALOGUE_DISCOUNT``)."""
     if not pairs:
         return 0.0
     top_incident, top = pairs[0]
@@ -105,7 +116,10 @@ def grade_hits(
     if hints:
         parts.append((0.15, 1.0 if top_incident.failure_mode in hints else 0.0))
     total = sum(w for w, _ in parts)
-    return round(sum(w * v for w, v in parts) / total, 4)
+    grade = sum(w * v for w, v in parts) / total
+    if system is not None and top_incident.system != system:
+        grade *= ANALOGUE_DISCOUNT
+    return round(grade, 4)
 
 
 def deterministic_rewrite(query: RetrievalQuery) -> str:
@@ -200,7 +214,7 @@ class Retriever:
         for attempt in range(1, self.config.max_attempts + 1):
             pairs = await self.memory.search(text, system=system, candidates=pool)
             reranked = await self._rerank(text, pairs)
-            grade = grade_hits(pairs, query.failure_mode_hints, k=k)
+            grade = grade_hits(pairs, query.failure_mode_hints, k=k, system=query.system)
             attempts.append(
                 RetrievalAttempt(
                     attempt=attempt,

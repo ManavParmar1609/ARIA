@@ -79,3 +79,36 @@ def test_serve_asks_for_the_database_to_be_set_up_first(
     assert result.exit_code == 1
     assert "aria db upgrade" in result.output
     assert "Traceback" not in result.output
+
+
+def test_training_will_not_replace_the_committed_model_with_one_fit_on_fixtures(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ARIA_DATA_DIR", str(tmp_path))  # no data/raw/loghub-2k here
+    reset_caches()
+    model = Path("models/severity_log.json")
+    before = model.read_bytes()
+    result = CliRunner().invoke(app, ["train", "severity"])
+    assert result.exit_code == 1
+    assert "--fixtures" in " ".join(result.output.split())
+    assert "Traceback" not in result.output
+    assert model.read_bytes() == before
+
+
+def test_a_system_name_with_path_characters_gets_a_clear_message(tmp_path: Path) -> None:
+    logs = tmp_path / "app.log"
+    logs.write_text("2026-10-29T10:00:00Z ERROR app: disk full\n", encoding="utf-8")
+    result = CliRunner().invoke(app, ["triage", str(logs), "--system", "../etc"])
+    assert result.exit_code == 2
+    assert "letters, digits" in " ".join(result.output.split())
+    assert "Traceback" not in result.output
+
+
+def test_checking_an_unconfigured_provider_by_name_fails() -> None:
+    runner = CliRunner()
+    named = runner.invoke(app, ["providers", "check", "azure", "--no-probe"])
+    assert named.exit_code == 1, named.output
+    assert "disabled" in named.output
+    # Without a name, providers nobody configured are not failures: offline is a valid setup.
+    every = runner.invoke(app, ["providers", "check", "--no-probe"])
+    assert every.exit_code == 0, every.output

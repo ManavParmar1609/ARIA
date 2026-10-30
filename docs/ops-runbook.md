@@ -37,7 +37,7 @@ uv run aria db upgrade && uv run aria seed
 make dev
 ```
 
-The API listens on http://127.0.0.1:8000 and the web app on http://localhost:3000. `aria seed` does three things:
+The API listens on http://127.0.0.1:8000 and the web app on http://localhost:3000; `make dev API_PORT=8010 WEB_PORT=3010` moves both. `aria seed` does three things:
 
 - loads the runbooks;
 - seeds incident memory with synthetic incidents, labelled as synthetic;

@@ -6,6 +6,7 @@ a fresh SQLite file, and the investigator's MCP tools run in-process.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -697,6 +698,15 @@ async def test_a_run_is_not_deleted_while_another_process_drives_it(env: Env) ->
     assert repo.get_run(engine, outcome.run_id) is None
     with pytest.raises(RunNotFoundError):  # a review that comes after finds no run
         await env.runner.resume(outcome.run_id, {"decision": "approve", "reviewer": "ana"})
+
+
+async def test_a_review_or_delete_waits_for_a_run_that_is_still_settling(env: Env) -> None:
+    outcome = await env.runner.start(kernel_panic(env))
+    lock = env.runner._locks[outcome.run_id]  # held here, as a settling drive would hold it
+    await lock.acquire()  # the run shows "awaiting review"; its drive is still finishing up
+    asyncio.get_running_loop().call_later(0.2, lock.release)
+    await env.runner.delete(outcome.run_id)  # waits for it, instead of a 409
+    assert repo.get_run(env.services.engine, outcome.run_id) is None
 
 
 async def test_delete_removes_the_run_everywhere(env: Env) -> None:

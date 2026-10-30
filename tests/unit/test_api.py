@@ -470,6 +470,21 @@ async def test_an_untitled_run_takes_its_report_title(api: Api) -> None:
     assert edited.json()["title"] == f"{report['severity']} · Kernel panics on rack R02"
 
 
+async def test_a_reviewers_new_title_replaces_the_one_the_run_started_with(api: Api) -> None:
+    created = await api.client.post(
+        "/api/v1/runs", json={"system": "bgl", "logs": logs(api), "title": "Pager alert 4411"}
+    )
+    run_id = created.json()["run_id"]
+    assert (await wait_for(api, run_id, "awaiting_review"))["title"] == "Pager alert 4411"
+    edited = await api.client.post(
+        f"/api/v1/runs/{run_id}/review",
+        json={"decision": "edit", "edits": {"title": "Kernel panics on rack R02"}},
+    )
+    assert edited.json()["title"].endswith("Kernel panics on rack R02")
+    listed = (await api.client.get("/api/v1/runs")).json()["runs"]
+    assert next(r for r in listed if r["id"] == run_id)["title"] == edited.json()["title"]
+
+
 async def test_a_real_incident_replays_as_an_ordinary_run(api: Api) -> None:
     listed = (await api.client.get("/api/v1/real-incidents")).json()
     assert [i["id"] for i in listed] == ["hdfs-silent-block-failures"]
@@ -553,6 +568,8 @@ async def test_review_errors_are_reported_without_losing_the_pause(api: Api) -> 
         ({"decision": "reject", "edits": {"title": "Not this"}}, 'only with the decision "edit"'),
         ({"decision": "edit", "edits": {}}, "at least one change"),
         ({"decision": "edit"}, "at least one change"),
+        # A misspelt field would leave the actions unapproved without a word.
+        ({"decision": "approve", "approve_action": ["a1"]}, "Extra inputs are not permitted"),
     ):
         refused = await api.client.post(f"/api/v1/runs/{run_id}/review", json=body)
         assert refused.status_code == 422, body
@@ -699,6 +716,16 @@ async def test_ask_cites_run_evidence(api: Api, monkeypatch: pytest.MonkeyPatch)
     assert nothing["insufficient_evidence"] is True
     missing = await api.client.post("/api/v1/ask", json={"question": "why?", "run_id": "run-nope"})
     assert missing.status_code == 404
+
+
+async def test_asking_about_a_queued_run_says_it_is_not_ready(api: Api) -> None:
+    request = TriageRequest(system="bgl", logs=["x"]).model_dump(mode="json")
+    repo.create_run(api.state.services.engine, "run-waiting", request=request, system="bgl")
+    queued = await api.client.post(
+        "/api/v1/ask", json={"question": "what failed?", "run_id": "run-waiting"}
+    )
+    assert queued.status_code == 409  # it exists; it has no evidence yet
+    assert "queued" in queued.json()["detail"]
 
 
 async def test_catalog_lists_incidents_and_runbooks(api: Api) -> None:
@@ -852,6 +879,14 @@ async def test_a2a_task_pauses_for_review_and_completes(api: Api) -> None:
     review = next(e for e in report["evidence"] if e["kind"] == "review")
     assert review["data"]["reviewer"] == "ana"
 
+    bad = {**message, "messageId": "m4", "metadata": {"system": "payments.api"}}
+    rpc = {"jsonrpc": "2.0", "id": 4, "method": "SendMessage", "params": {"message": bad}}
+    rejected = (await api.client.post("/a2a", json=rpc, headers=headers)).json()["result"]["task"]
+    assert rejected["status"]["state"] == "TASK_STATE_REJECTED"
+    said = rejected["status"]["message"]["parts"][0]["text"]
+    assert said.startswith("system: ")
+    assert "pydantic" not in said  # one readable line, not a validation dump
+
 
 async def test_agui_streams_a_run_and_resumes_its_interrupt(api: Api) -> None:
     body = {
@@ -898,6 +933,24 @@ async def test_agui_streams_a_run_and_resumes_its_interrupt(api: Api) -> None:
     assert finished["outcome"]["type"] == "success"
     assert finished["result"]["status"] == "published"
     assert (await api.client.post("/agui", json={"bad": True})).status_code == 422
+
+    answered = [*body["messages"], {"id": "a1", "role": "assistant", "content": "Report ready."}]
+    more = {
+        **body,
+        "runId": "ui-run-4",
+        "messages": [*answered, {**body["messages"][0], "id": "u2"}],
+    }
+    refused = sse((await api.client.post("/agui", json=more)).text)[-1]["data"]
+    assert (refused["type"], refused["code"]) == ("RUN_ERROR", "thread_finished")
+    invalid = {
+        "threadId": "thread-ui-2",
+        "runId": "ui-run-5",
+        "messages": [],
+        "forwardedProps": {"request": {"system": "payments.api", "logs": ["x"]}},
+    }
+    rejected = sse((await api.client.post("/agui", json=invalid)).text)[-1]["data"]
+    assert (rejected["type"], rejected["code"]) == ("RUN_ERROR", "bad_request")
+    assert "system" in rejected["message"]
 
 
 # --- real servers ---------------------------------------------------------------------------------

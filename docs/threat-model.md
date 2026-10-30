@@ -28,7 +28,7 @@ How to run ARIA safely is in the [ops runbook](ops-runbook.md). The data and mod
 |---|---|---|
 | Log lines and alert content | Request bodies, scanned log files, and the database (run records, checkpoints, analysed lines) | They can hold personal data, credentials and text an attacker wrote |
 | API keys | `ARIA_API_KEYS` (environment or Key Vault), and the web console's HttpOnly cookie | Every valid key has full access |
-| LLM provider keys | `NVIDIA_API_KEY`, `AZURE_OPENAI_API_KEY`, `OPENAI_API_KEY` | They spend money on the owner's account |
+| LLM provider keys | `NVIDIA_API_KEY`, `AZURE_OPENAI_API_KEY`, `OPENAI_API_KEY` | They spend money on the deployment's provider account |
 | Pseudonym key | `ARIA_PSEUDONYM_KEY` | With it, anyone can test candidate IP and e-mail addresses against the pseudonyms |
 | Incident memory | Database; retrieved as evidence in later runs | Poisoned memory misleads future triage |
 | Severity model files | `models/severity_log.json`, the versions kept beside it, `embed_local.npz` | They decide which incidents skip human review |

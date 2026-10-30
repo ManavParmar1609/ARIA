@@ -335,6 +335,9 @@ def test_grade_rewards_agreement_and_hypothesis_match(seeded: list[MemoryInciden
     assert grade_hits(same, [], k=2) > grade_hits(mixed, [], k=2)
     assert grade_hits(same, [seeded[0].failure_mode], k=2) > grade_hits(same, ["other"], k=2)
     assert grade_hits([], [], k=3) == 0.0
+    own = grade_hits(same, [], k=2, system=seeded[0].system)
+    elsewhere = grade_hits(same, [], k=2, system=f"not-{seeded[0].system}")
+    assert elsewhere < own  # the same match counts for less as an analogue from another system
 
 
 async def test_slow_query_embeddings_fall_back_to_lexical_search(memory: IncidentMemory) -> None:

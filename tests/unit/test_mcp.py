@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 import uvicorn
-from mcp import Client, StdioServerParameters
+from mcp import Client, MCPError, StdioServerParameters
 
 from aria.config import BudgetConfig, GuardrailConfig, get_settings
 from aria.contracts.base import EvidenceKind
@@ -171,6 +171,17 @@ async def test_bad_arguments_are_rejected_by_the_server(services: tuple[Services
         assert "unknown incident nope" in str(unknown.content)  # the caller learns why
         missing = await client.call_tool("get_runbook", {"slug": "no-such-runbook"})
         assert "unknown runbook no-such-runbook" in str(missing.content)
+        # Resources and prompts say why too, not "Internal server error".
+        for read, says in (
+            (lambda: client.read_resource("runbook://no-such-runbook"), "unknown runbook"),
+            (lambda: client.read_resource("incident://nope"), "unknown incident nope"),
+            (
+                lambda: client.get_prompt("summarize_incident", {"incident_id": "nope"}),
+                "unknown incident nope",
+            ),
+        ):
+            with pytest.raises(MCPError, match=says):
+                await read()
         assert (await client.call_tool("search_logs", {"query": "a%", "limit": 500})).is_error
         # A search across every run's lines is refused; one with no searchable term finds nothing.
         unbounded = await client.call_tool("search_logs", {"query": "panic"})

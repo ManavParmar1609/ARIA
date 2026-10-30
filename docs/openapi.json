@@ -1791,6 +1791,7 @@
             "title": "Run Id"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "question"
@@ -2317,6 +2318,7 @@
             "title": "Title"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "checkpoint_id"
@@ -2835,6 +2837,7 @@
             "$ref": "#/components/schemas/RunOptions"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "title": "ReplayRequest"
       },
@@ -3057,6 +3060,7 @@
             "title": "Approve Actions"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "decision"
