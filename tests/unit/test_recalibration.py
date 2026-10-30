@@ -118,6 +118,25 @@ def test_an_upgrade_ignores_a_recalibration_of_the_previous_model(tmp_path: Path
     assert reloaded.version == "tiny-2-recal40"
 
 
+def test_a_checkout_keeps_reloading_its_own_recalibrations(tmp_path: Path) -> None:
+    """In a checkout the live model is the shipped file, so after one recalibration the next must
+    still be picked up."""
+    models = tmp_path / "models"
+    models.mkdir()
+    path = models / "severity_log.json"
+    model = tiny_model(conformal_q=0.2)
+    first = recalibrate(model, examples(model, 40, disagree=0.4, seed=1), alpha=0.1).model
+    first.save(path)
+    engine = SeverityEngine.load(SeverityConfig(log_model_file=path), models_dir=models)
+    assert engine.model is not None
+    assert engine.model.version == "tiny-1-recal40"
+    second = recalibrate(first, examples(model, 50, disagree=0.4, seed=2), alpha=0.1).model
+    second.save(path)
+    os.utime(path, ns=(time.time_ns(), time.time_ns() + 1_000_000))
+    assert engine.refresh()
+    assert engine.model.version == "tiny-1-recal50"
+
+
 @pytest.fixture
 async def runner() -> AsyncIterator[TriageRunner]:
     init_db(get_engine())

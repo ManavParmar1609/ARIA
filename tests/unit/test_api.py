@@ -950,7 +950,7 @@ async def test_reviews_calibration_evaluation_and_tickets(
     severity = api.state.services.severity
     assert severity.model is not None
     live = tmp_path / "severity_log.json"
-    base = {"recalibrated_from": "x", "trained_version": severity.model.version}
+    base = {"recalibrated_from": "x", "trained_version": severity.trained_version}
     replace(severity.model, version="worker-recal", metadata=base).save(live)
     severity.model_path = live
     after = (await api.client.get("/api/v1/feedback")).json()["calibration"]

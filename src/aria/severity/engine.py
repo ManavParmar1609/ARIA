@@ -78,7 +78,8 @@ class SeverityEngine:
         trained = Path(config.log_model_file)
         live = live_model_path(trained, models_dir) if models_dir is not None else trained
         model = LinearModel.load(trained) if trained.exists() else None
-        version = model.version if model is not None else None
+        # In a checkout the live and shipped files are one, so it may already be a recalibration.
+        version = _base_version(model) if model is not None else None
         if live != trained and live.exists():
             recalibrated = LinearModel.load(live)
             if version is None or _base_version(recalibrated) == version:
