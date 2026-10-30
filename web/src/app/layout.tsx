@@ -6,9 +6,14 @@ import { THEME_SCRIPT } from "@/lib/theme-script";
 import { geistMono, inter, newsreader } from "./fonts";
 import "./globals.css";
 
+// Where the site is published: ARIA_WEB_URL, else the address Vercel gives the production
+// deployment, else a local run. Read at build time (pages are prerendered); empty values fall back.
+const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+const siteUrl =
+  process.env.ARIA_WEB_URL || (vercel ? `https://${vercel}` : "http://localhost:3000");
+
 export const metadata: Metadata = {
-  // Read at build time (pages are prerendered); an empty value falls back too.
-  metadataBase: new URL(process.env.ARIA_WEB_URL || "http://localhost:3000"),
+  metadataBase: new URL(siteUrl),
   title: {
     default: "ARIA: incident triage that shows its work",
     template: "%s | ARIA",

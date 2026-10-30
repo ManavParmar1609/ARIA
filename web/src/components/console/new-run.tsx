@@ -77,7 +77,15 @@ const SNIPPETS = [
   },
 ];
 
-export function NewRun() {
+/** The hint under the log box: what is wrong with the lines, else what happens to them. */
+export function logsHint(problem: string | null, publicDemo: boolean): string {
+  if (problem) return problem;
+  return publicDemo
+    ? "One event per line. This is a public demo: anyone can open the runs on it, so load a sample or paste only logs you can share."
+    : "One event per line. IP and e-mail addresses are pseudonymised and secrets redacted before analysis or any model call; the lines you paste stay with the run until you delete it.";
+}
+
+export function NewRun({ publicDemo = false }: { publicDemo?: boolean }) {
   const id = useId();
   const router = useRouter();
   const create = useCreateRun();
@@ -238,9 +246,7 @@ export function NewRun() {
                 touched && problem ? "text-sm text-danger" : "text-sm text-muted-foreground"
               }
             >
-              {touched && problem
-                ? problem
-                : "One event per line. IP and e-mail addresses are pseudonymised and secrets redacted before analysis or any model call; the lines you paste stay with the run until you delete it."}
+              {logsHint(touched ? problem : null, publicDemo)}
             </p>
           </div>
 
