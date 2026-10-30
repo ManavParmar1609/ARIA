@@ -169,8 +169,9 @@ acceptable.
 
 Every agent role (adjudicator, investigator, reporter, critic, comms and Ask ARIA) now tries NIM,
 after Gemini if that key is set too. To use your own GPUs, point `NVIDIA_NIM_BASE_URL` at a
-self-hosted NIM, or start the `nim` compose profile and set `NIM_LOCAL_BASE_URL` (see
-[compose.yaml](compose.yaml)). A self-hosted NIM leads every chain.
+self-hosted NIM, or start the `nim` compose profile and set `NIM_LOCAL_BASE_URL` and
+`NIM_LOCAL_CHAT_MODEL` to the model it serves (see [compose.yaml](compose.yaml)). A self-hosted
+NIM leads every chain.
 
 ### Send a sample alert
 
@@ -385,6 +386,14 @@ Every section, with its method: [docs/evaluation.md](docs/evaluation.md).
     duplicate runs.
 - **The graph is flat.** It is one LangGraph graph of specialist nodes, not nested subgraphs
   (see [ADR 0001](docs/adr/0001-one-langgraph-graph-of-specialist-nodes.md)).
+- **Two parts of the brief are not built.**
+  - The planner replans when retrieval is weak or no hypothesis forms, but not when a report
+    fails validation or severity confidence is low: those runs go to the reviewer as they are.
+  - The AG-UI endpoint sends a full state snapshot after each step, never a JSON Patch delta.
+    Clients get the same state, with more bytes per update.
+- **Raw log lines are kept with their run.** Analysis, model calls, reports, messages and memory
+  use redacted text, but the lines a run was sent stay in its stored request and checkpoints, so
+  it can be replayed, until the run is deleted. Nothing prunes old runs yet.
 - **Mobile Lighthouse is at or just under the brief's bar.** On mobile, the landing page's
   performance score sits at or a few points below the brief's target of 95, varying from run to
   run; `make web-lighthouse` prints it, and CI gates at 90. Desktop and the other categories meet

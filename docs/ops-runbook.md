@@ -203,7 +203,7 @@ The `config/aria.yaml` settings operators change most often:
 Two caveats about the worker check:
 
 - **Shared volume.** Each container writes its own heartbeat file (named after its hostname), so with several workers on one volume each check still reports on its own worker.
-- **Azure.** The worker app on Azure has no probe.
+- **Azure.** Container Apps ignores the image's HEALTHCHECK, so the worker app serves this heartbeat on port 8001 (`ARIA_WORKER_HEALTH_PORT`) and its liveness probe restarts a worker that stops polling (`infra/resources.bicep`).
 
 ### Metrics
 
