@@ -7,9 +7,9 @@ out what failed, how severe it is and which past incidents look the same. It the
 incident report in which every claim cites the log lines behind it, and pauses for a person to
 approve, edit or reject the report before anything is published or sent.
 
-ARIA runs offline with no API keys. Set an NVIDIA NIM key and the agents write with open models
-on NVIDIA's hosted API. Azure OpenAI and any OpenAI-compatible server work the same way: switching
-is a config change.
+ARIA runs offline with no API keys. Set a Gemini key (free tier available) or an NVIDIA NIM key,
+and the agents write with hosted models. Azure OpenAI and any OpenAI-compatible server work the
+same way: switching is a config change.
 
 ![ARIA's landing page: the headline "Incident triage that shows its work." on a sage-green panel beside three cards from a recorded run (the alert, its severity and the report waiting for approval) on a slate-blue panel.](docs/images/hero.webp)
 
@@ -76,7 +76,7 @@ flowchart LR
     RV -- reject --> RJ[reject]
   end
   T["MCP tools (read-only)<br/>logs, incidents, runbooks, tickets"]
-  LLM["LLM router<br/>NIM → NIM fallback → Azure → OpenAI-compatible → offline"]
+  LLM["LLM router<br/>Gemini → Gemini Lite → NIM → Azure → OpenAI-compatible → offline"]
   X["External MCP clients"] --> T
   W & S & U & C & A --> R --> G
   G <--> Q
@@ -138,6 +138,23 @@ This builds the api, worker and web images, migrates and seeds once, and waits u
 is healthy. Then open http://127.0.0.1:3000. `make smoke` sends a run through the stack, approves
 it and checks the console reads it back. `make down` stops it.
 
+### With Gemini
+
+1. Create a key in [Google AI Studio](https://aistudio.google.com) under **API keys**.
+2. Put it in a git-ignored `.env` at the repo root: `cp .env.example .env`, then set
+   `GEMINI_API_KEY=` to the key (`gemini_api_key` in lower case works too).
+3. Check the key, the endpoint and the model IDs:
+
+   ```bash
+   uv run aria providers check gemini
+   ```
+
+Every agent role now tries Gemini first: `gemini-3.6-flash`, then `gemini-3.5-flash-lite` when
+the first is busy or reaches its limit, then hosted NIM if its key is set. On the free tier,
+Google may use what it is sent to improve its products. ARIA sends only redacted, fenced
+evidence, but use a paid key, a self-hosted NIM or offline mode where even that is not
+acceptable.
+
 ### With NVIDIA NIM
 
 1. Sign in at [build.nvidia.com](https://build.nvidia.com), open a model page and choose
@@ -150,9 +167,10 @@ it and checks the console reads it back. `make down` stops it.
    uv run aria providers check nim
    ```
 
-Every agent role (adjudicator, investigator, reporter, critic, comms and Ask ARIA) now tries NIM
-first. To use your own GPUs, point `NVIDIA_NIM_BASE_URL` at a self-hosted NIM, or start the `nim`
-compose profile and set `NIM_LOCAL_BASE_URL` (see [compose.yaml](compose.yaml)).
+Every agent role (adjudicator, investigator, reporter, critic, comms and Ask ARIA) now tries NIM,
+after Gemini if that key is set too. To use your own GPUs, point `NVIDIA_NIM_BASE_URL` at a
+self-hosted NIM, or start the `nim` compose profile and set `NIM_LOCAL_BASE_URL` (see
+[compose.yaml](compose.yaml)). A self-hosted NIM leads every chain.
 
 ### Send a sample alert
 
@@ -202,6 +220,8 @@ tool and LLM calls) degrade a run to the rules-only path rather than failing it.
 
 | Provider | Default models | Status |
 |---|---|---|
+| Google Gemini (`gemini`) | chat `gemini-3.6-flash`, reasoning minimal | Verified with live calls on 2026-10-30, including a full triage |
+| Google Gemini, lighter model (`gemini-lite`) | chat `gemini-3.5-flash-lite` | Verified with live calls on 2026-10-30 |
 | NVIDIA NIM, hosted (`nim`) | chat `openai/gpt-oss-20b`; embeddings `nvidia/nemotron-3.5-embed-1b` | Verified with live calls on 2026-10-29 |
 | NVIDIA NIM, second model (`nim-fallback`) | chat `minimaxai/minimax-m3.1-flash` | Verified with live calls on 2026-10-29 |
 | NVIDIA NIM, self-hosted (`nim-local`) | Whatever your NIM container serves | Not verified (needs a GPU) |

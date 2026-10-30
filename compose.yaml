@@ -4,8 +4,9 @@
 # share the aria-data volume; `web` serves the landing page and console on 127.0.0.1:3000 and
 # calls the API over the compose network. The API listens on 127.0.0.1:8000 only. With the
 # default ARIA_ENV=dev it needs no API key; set ARIA_ENV=prod and ARIA_API_KEYS before exposing it.
-# Provider keys (NVIDIA_API_KEY, AZURE_OPENAI_*, ...) are read from your environment or the
-# git-ignored .env file; without any, every LLM step falls back to the offline fake provider.
+# Provider keys (GEMINI_API_KEY, NVIDIA_API_KEY, AZURE_OPENAI_*, ...) are read from your
+# environment or the git-ignored .env file; without any, every LLM step falls back to the offline
+# fake provider.
 #
 # Profiles:
 #   observability  Arize Phoenix for traces: http://127.0.0.1:6006
@@ -26,6 +27,7 @@ x-aria-env: &aria-env
   ARIA_CORS_ORIGINS: ${ARIA_CORS_ORIGINS:-http://localhost:3000}
   ARIA_OTEL_EXPORTER: ${ARIA_OTEL_EXPORTER:-none}
   ARIA_OTLP_ENDPOINT: ${ARIA_OTLP_ENDPOINT:-http://phoenix:6006/v1/traces}
+  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
   NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
   AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
   AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}

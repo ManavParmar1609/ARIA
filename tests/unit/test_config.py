@@ -100,6 +100,39 @@ def test_blank_secrets_count_as_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.mcp_url is None
 
 
+def test_a_provider_takes_its_key_from_the_first_variable_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = ProviderConfig(
+        kind=ProviderKind.OPENAI_COMPATIBLE,
+        base_url="https://example.invalid/v1",
+        api_key_env=["GEMINI_API_KEY", "gemini_api_key"],
+    )
+    assert cfg.api_key() is None
+    assert not cfg.is_enabled()
+    monkeypatch.setenv("gemini_api_key", "key-in-lower-case")
+    assert cfg.api_key_source() == "gemini_api_key"
+    key = cfg.api_key()
+    assert key is not None
+    assert key.get_secret_value() == "key-in-lower-case"
+    monkeypatch.setenv("GEMINI_API_KEY", "key-in-upper-case")
+    assert cfg.api_key_source() == "GEMINI_API_KEY"  # the first name listed wins
+
+
+def test_gemini_comes_after_a_self_hosted_nim_and_before_hosted_nim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    llm = get_app_config().llm
+    assert all(chain[1:3] == ["gemini", "gemini-lite"] for chain in llm.routing.values())
+    assert all(chain.index("gemini-lite") < chain.index("nim") for chain in llm.routing.values())
+    assert not llm.providers["gemini"].is_enabled()  # no Gemini key in tests
+    monkeypatch.setenv("gemini_api_key", "AIza-test")
+    reset_caches()
+    providers = get_app_config().llm.providers
+    assert providers["gemini"].is_enabled()
+    assert providers["gemini-lite"].is_enabled()
+
+
 def test_a_self_hosted_nim_leads_every_chain_once_configured(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

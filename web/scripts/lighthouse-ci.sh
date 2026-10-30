@@ -38,7 +38,8 @@ wait_for() {
   cd "${repo}"
   export ARIA_ENV=test ARIA_DATABASE_URL="sqlite:///${data}/aria.db" ARIA_DATA_DIR="${data}" \
     ARIA_RATE_LIMIT_PER_MINUTE=100000 ARIA_LOG_FORMAT=console UV_NO_PROGRESS=1 \
-    NVIDIA_API_KEY="" AZURE_OPENAI_API_KEY="" OPENAI_API_KEY="" NIM_LOCAL_BASE_URL=""
+    NVIDIA_API_KEY="" GEMINI_API_KEY="" gemini_api_key="" AZURE_OPENAI_API_KEY="" OPENAI_API_KEY="" \
+    NIM_LOCAL_BASE_URL=""
   uv run aria db upgrade
   uv run aria seed --workers 2
 ) > "${data}/seed.log" 2>&1 || { cat "${data}/seed.log" >&2; exit 1; }
@@ -47,7 +48,8 @@ wait_for() {
   cd "${repo}"
   export ARIA_ENV=test ARIA_DATABASE_URL="sqlite:///${data}/aria.db" ARIA_DATA_DIR="${data}" \
     ARIA_RATE_LIMIT_PER_MINUTE=100000 ARIA_LOG_FORMAT=console UV_NO_PROGRESS=1 \
-    NVIDIA_API_KEY="" AZURE_OPENAI_API_KEY="" OPENAI_API_KEY="" NIM_LOCAL_BASE_URL=""
+    NVIDIA_API_KEY="" GEMINI_API_KEY="" gemini_api_key="" AZURE_OPENAI_API_KEY="" OPENAI_API_KEY="" \
+    NIM_LOCAL_BASE_URL=""
   exec setsid uv run aria serve --port "${api_port}"
 ) > "${data}/api.log" 2>&1 &
 groups+=("$!")

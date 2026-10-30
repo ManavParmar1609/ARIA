@@ -338,9 +338,9 @@ regression.
 - **Privacy.**
   - Logs carry personal data. Secrets are redacted before any model sees the text, and e-mail
     and IP addresses are pseudonymised. Hostnames and usernames remain.
-  - With a hosted provider (NVIDIA's hosted NIM, Azure OpenAI or another endpoint), redacted
-    evidence leaves your network. Where that is not acceptable, use a self-hosted NIM or run
-    offline.
+  - With a hosted provider (Google Gemini, NVIDIA's hosted NIM, Azure OpenAI or another
+    endpoint), redacted evidence leaves your network. On Gemini's free tier, Google may use it to
+    improve its products. Where that is not acceptable, use a self-hosted NIM or run offline.
 - **Prompt injection.**
   - Injected lines are quarantined before features are computed.
   - An LLM can only pick a severity within the calibrated set and never below a floor.
@@ -405,8 +405,8 @@ tiny request.
 
 | Role | Provider chain | Default model | Verified |
 |---|---|---|---|
-| Severity adjudicator | `nim-local` → `nim` → `nim-fallback` → `azure` → `openai_compat` (no fake: the policy decides instead) | As for the chat roles below | As below |
-| Investigator, reporter, critic, comms and Ask ARIA | The same chain, ending at the deterministic `fake` provider | `nim`: `openai/gpt-oss-20b` (reasoning effort low). `nim-fallback`: `minimaxai/minimax-m3.1-flash`. `azure`: the deployment named `gpt-5.1`. `openai_compat` and `nim-local`: none set. | `nim` and `nim-fallback` answered live calls on 2026-10-29. `azure`, `openai_compat` and `nim-local` are not verified. |
+| Severity adjudicator | `nim-local` → `gemini` → `gemini-lite` → `nim` → `nim-fallback` → `azure` → `openai_compat` (no fake: the policy decides instead) | As for the chat roles below | As below |
+| Investigator, reporter, critic, comms and Ask ARIA | The same chain, ending at the deterministic `fake` provider | `gemini`: `gemini-3.6-flash` (reasoning effort minimal). `gemini-lite`: `gemini-3.5-flash-lite`. `nim`: `openai/gpt-oss-20b` (reasoning effort low). `nim-fallback`: `minimaxai/minimax-m3.1-flash`. `azure`: the deployment named `gpt-5.1`. `openai_compat` and `nim-local`: none set. | `gemini` and `gemini-lite` answered live calls on 2026-10-30, including a full triage. `nim` and `nim-fallback` answered live calls on 2026-10-29. `azure`, `openai_compat` and `nim-local` are not verified. |
 | Embeddings | `nim` → `azure` → `local` | `nim`: `nvidia/nemotron-3.5-embed-1b` (2048 dimensions). `azure`: the deployment named `text-embedding-3-small`. `local`: latent semantic analysis (TF-IDF over words and word pairs, reduced to 128 dimensions) fitted by `aria seed` on the incident corpus. | The NIM model answered live calls on 2026-10-29. The Azure deployment is not verified. |
 | Reranking | `nim` | None. Reranking is off until `NVIDIA_NIM_RERANK_MODEL` and `NVIDIA_NIM_RERANK_URL` are set. | Not applicable |
 | Content safety | `nim` | `nvidia/nemotron-3.5-content-safety` | **Listed in NIM's model catalog on 2026-10-29, but not called live**, so its verdict format is unverified. The guardrail is off by default (`guardrails.safety_model: false`). |

@@ -4,6 +4,7 @@
 # deploys the api, worker and web images. Before the first run:
 #   azd env set ARIA_API_KEYS "ops:<a long random secret>"
 #   azd env set ARIA_PSEUDONYM_KEY "<another long random secret>"
+#   azd env set GEMINI_API_KEY "<key from aistudio.google.com>"   # optional
 #   azd env set NVIDIA_API_KEY "<key from build.nvidia.com>"   # optional
 # After the first deploy, seed incident memory once:
 #   az containerapp job start -g "$(azd env get-value AZURE_RESOURCE_GROUP)" \

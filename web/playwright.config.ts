@@ -46,6 +46,8 @@ export default defineConfig({
         UV_NO_PROGRESS: "1",
         // Offline and deterministic: never reach a hosted model, even if a key is exported.
         NVIDIA_API_KEY: "",
+        GEMINI_API_KEY: "",
+        gemini_api_key: "",
         AZURE_OPENAI_API_KEY: "",
         OPENAI_API_KEY: "",
         NIM_LOCAL_BASE_URL: "",

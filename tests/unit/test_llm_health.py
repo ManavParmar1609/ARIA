@@ -92,6 +92,46 @@ async def test_disabled_provider_explains_what_is_missing() -> None:
     assert report.problems == ["disabled: needs a credential"]
 
 
+GEMINI = "https://generativelanguage.googleapis.com/v1beta/openai"
+
+
+def _gemini_cfg() -> ProviderConfig:
+    return ProviderConfig(
+        kind=ProviderKind.OPENAI_COMPATIBLE,
+        base_url=GEMINI,
+        api_key_env=["GEMINI_API_KEY", "gemini_api_key"],
+        chat_model="gemini-3.6-flash",
+        max_retries=0,
+    )
+
+
+async def test_a_missing_key_names_every_variable_it_may_come_from() -> None:
+    report = await check_provider("gemini", _gemini_cfg(), None)
+    assert report.credential == "missing: set GEMINI_API_KEY or gemini_api_key"
+
+
+@respx.mock
+async def test_gemini_ids_match_its_catalog_without_the_models_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("gemini_api_key", "AIza-test")
+    respx.get(f"{GEMINI}/models").mock(
+        return_value=httpx.Response(
+            200, json={"data": [{"id": "models/gemini-3.6-flash"}, {"id": "models/gemma-4"}]}
+        )
+    )
+    respx.post(f"{GEMINI}/chat/completions").mock(
+        return_value=httpx.Response(
+            200, json={"choices": [{"message": {"content": "OK"}}], "usage": {}}
+        )
+    )
+    cfg = _gemini_cfg()
+    report = await check_provider("gemini", cfg, OpenAICompatibleProvider("gemini", cfg))
+    assert report.ok
+    assert report.credential == "set via gemini_api_key"  # names the variable, never the key
+    assert report.models == {"chat_model": True}
+
+
 @respx.mock
 async def test_azure_deployments_are_not_matched_against_the_catalog() -> None:
     cfg = ProviderConfig(

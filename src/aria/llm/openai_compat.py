@@ -1,4 +1,4 @@
-"""One HTTP client for every OpenAI-compatible endpoint: NVIDIA NIM, Azure OpenAI, OpenAI, vLLM, Ollama.
+"""One HTTP client for every OpenAI-compatible endpoint: NIM, Azure OpenAI, Gemini, OpenAI, vLLM.
 
 Differences between providers are confined to URL construction, authentication, and how JSON
 output is requested. If a provider rejects the configured structured-output mode, the client
@@ -326,7 +326,10 @@ class OpenAICompatibleProvider:
             raise ProviderError(
                 f"{self.name}: HTTP {response.status_code}", status=response.status_code
             )
-        return sorted(str(item.get("id")) for item in response.json().get("data", []))
+        # Gemini lists "models/gemini-..." but takes the bare ID in requests.
+        return sorted(
+            str(item.get("id")).removeprefix("models/") for item in response.json().get("data", [])
+        )
 
     async def aclose(self) -> None:
         await self._client.aclose()

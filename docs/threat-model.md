@@ -28,7 +28,7 @@ How to run ARIA safely is in the [ops runbook](ops-runbook.md). The data and mod
 |---|---|---|
 | Log lines and alert content | Request bodies, scanned log files, and the database (run records, checkpoints, analysed lines) | They can hold personal data, credentials and text an attacker wrote |
 | API keys | `ARIA_API_KEYS` (environment or Key Vault), and the web console's HttpOnly cookie | Every valid key has full access |
-| LLM provider keys | `NVIDIA_API_KEY`, `AZURE_OPENAI_API_KEY`, `OPENAI_API_KEY` | They spend money on the deployment's provider account |
+| LLM provider keys | `GEMINI_API_KEY`, `NVIDIA_API_KEY`, `AZURE_OPENAI_API_KEY`, `OPENAI_API_KEY` | They spend money or free-tier quota on the deployment's provider account |
 | Pseudonym key | `ARIA_PSEUDONYM_KEY` (environment or Key Vault); without it, a random key ARIA keeps in the database | With it, anyone can test candidate IP and e-mail addresses against the pseudonyms |
 | Incident memory | Database; retrieved as evidence in later runs | Poisoned memory misleads future triage |
 | Severity model files | `models/severity_log.json`, the versions kept beside it, `embed_local.npz` | They decide which incidents skip human review |
@@ -70,7 +70,7 @@ flowchart LR
     models[("Model files")]
   end
   subgraph B3["B3 LLM providers"]
-    llm["NVIDIA NIM, Azure OpenAI, OpenAI-compatible"]
+    llm["Gemini, NVIDIA NIM, Azure OpenAI, OpenAI-compatible"]
   end
   subgraph B4["B4 outbound"]
     out["Slack, Teams, webhook"]

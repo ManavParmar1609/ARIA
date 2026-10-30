@@ -12,14 +12,16 @@ llm:
   # The adjudicator has no fake fallback: without a real model, the conservative severity policy
   # decides (most severe class in the prediction set, flagged for review).
   # nim-local (a self-hosted NIM) leads every chain; it is skipped until NIM_LOCAL_BASE_URL is set.
+  # Gemini comes next, then hosted NIM: each is skipped until its key is set, and a provider that
+  # fails, stalls or reaches its free-tier limit hands the call to the next.
   routing:
-    adjudicator: [nim-local, nim, nim-fallback, azure, openai_compat]
-    investigator: [nim-local, nim, nim-fallback, azure, openai_compat, fake]
-    reporter: [nim-local, nim, nim-fallback, azure, openai_compat, fake]
-    critic: [nim-local, nim, nim-fallback, azure, openai_compat, fake]
-    comms: [nim-local, nim, nim-fallback, azure, openai_compat, fake]
-    ask: [nim-local, nim, nim-fallback, azure, openai_compat, fake]
-    default: [nim-local, nim, nim-fallback, azure, openai_compat, fake]
+    adjudicator: [nim-local, gemini, gemini-lite, nim, nim-fallback, azure, openai_compat]
+    investigator: [nim-local, gemini, gemini-lite, nim, nim-fallback, azure, openai_compat, fake]
+    reporter: [nim-local, gemini, gemini-lite, nim, nim-fallback, azure, openai_compat, fake]
+    critic: [nim-local, gemini, gemini-lite, nim, nim-fallback, azure, openai_compat, fake]
+    comms: [nim-local, gemini, gemini-lite, nim, nim-fallback, azure, openai_compat, fake]
+    ask: [nim-local, gemini, gemini-lite, nim, nim-fallback, azure, openai_compat, fake]
+    default: [nim-local, gemini, gemini-lite, nim, nim-fallback, azure, openai_compat, fake]
   embeddings: [nim, azure, local]
   rerank: [nim]
   safety: [nim]
@@ -64,6 +66,46 @@ llm:
       notes: >-
         Second hosted NIM model on the same key, tried when the first fails or stalls.
         minimaxai/minimax-m3.1-flash was verified 2026-10-29 (strict JSON schema).
+
+    gemini:
+      kind: openai_compatible
+      base_url: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai}
+      api_key_env: [GEMINI_API_KEY, gemini_api_key]
+      chat_model: ${GEMINI_CHAT_MODEL:-gemini-3.6-flash}
+      reasoning_effort: ${GEMINI_REASONING_EFFORT:-minimal}
+      structured_output: json_schema
+      stream_always: true
+      stall_timeout_s: 25
+      timeout_s: 90
+      max_retries: 0  # a 429 or 503 goes straight to the next provider, not back into the limit
+      verified: true
+      notes: >-
+        Google's Gemini API through its OpenAI-compatible endpoint (key from aistudio.google.com).
+        Verified 2026-10-30 with live calls: gemini-3.6-flash answered streamed and plain requests,
+        filled ARIA's report schema in strict json_schema mode and wrote a full triage's report;
+        gemini-lite took the calls it answered with 503 or 429. Thinking tokens count against
+        max_tokens, so reasoning is minimal by default (low spent most of a 64-token reply on
+        thinking). gemini-3.8-flash is listed but answered HTTP 503 (high demand) that day. On
+        the free tier, Google may use prompts to improve its products and its daily limits are
+        shown only in AI Studio; ARIA sends only redacted, fenced evidence, but use a paid key,
+        a self-hosted NIM or the offline mode where that is not acceptable.
+
+    gemini-lite:
+      kind: openai_compatible
+      base_url: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai}
+      api_key_env: [GEMINI_API_KEY, gemini_api_key]
+      chat_model: ${GEMINI_LITE_MODEL:-gemini-3.5-flash-lite}
+      reasoning_effort: ${GEMINI_REASONING_EFFORT:-minimal}
+      structured_output: json_schema
+      stream_always: true
+      stall_timeout_s: 25
+      timeout_s: 90
+      max_retries: 0
+      verified: true
+      notes: >-
+        A lighter Gemini model on the same key, with higher free-tier limits, tried when the first
+        fails, stalls or reaches its daily limit. gemini-3.5-flash-lite was verified 2026-10-30
+        (streaming, strict json_schema with ARIA's report schema).
 
     nim-local:
       kind: nvidia_nim

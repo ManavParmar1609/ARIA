@@ -23,6 +23,9 @@
     "nvidiaApiKey": {
       "value": "${NVIDIA_API_KEY=}"
     },
+    "geminiApiKey": {
+      "value": "${GEMINI_API_KEY=}"
+    },
     "deployOpenAi": {
       "value": "${ARIA_DEPLOY_OPENAI=false}"
     },

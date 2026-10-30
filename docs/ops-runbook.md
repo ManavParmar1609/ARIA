@@ -99,10 +99,14 @@ azd env set ARIA_PSEUDONYM_KEY "<another long random secret>"
 ```
 
 ```bash
+azd env set GEMINI_API_KEY "<key from aistudio.google.com>"
+```
+
+```bash
 azd env set NVIDIA_API_KEY "<key from build.nvidia.com>"
 ```
 
-`NVIDIA_API_KEY` is optional. Then deploy, and seed incident memory once:
+`GEMINI_API_KEY` and `NVIDIA_API_KEY` are optional. Then deploy, and seed incident memory once:
 
 ```bash
 azd up
@@ -159,6 +163,8 @@ Both are read when a process starts, so restart after a change. `GET /api/v1/set
 | `ARIA_CONFIG_FILE`, `ARIA_DATA_DIR`, `ARIA_MODELS_DIR`, `ARIA_RUNBOOKS_DIR` | Where the config file, data, offline embeddings and runbooks live |
 | `ARIA_WEB_DIST_DIR` | Serve a static web build from the API (optional) |
 | `ARIA_MCP_URL`, `ARIA_MCP_TOKEN` | Have the investigator call tools on a remote MCP endpoint instead of in-process |
+| `GEMINI_API_KEY` (or `gemini_api_key`) | Enables Gemini for every role, ahead of hosted NIM |
+| `GEMINI_CHAT_MODEL`, `GEMINI_LITE_MODEL`, `GEMINI_REASONING_EFFORT`, `GEMINI_BASE_URL` | Override the Gemini models, the reasoning effort (minimal by default) and the endpoint |
 | `NVIDIA_API_KEY` | Enables hosted NVIDIA NIM for every role |
 | `NVIDIA_NIM_BASE_URL`, `NVIDIA_NIM_CHAT_MODEL`, `NVIDIA_NIM_REASONING_EFFORT`, `NVIDIA_NIM_FALLBACK_MODEL`, `NVIDIA_NIM_EMBED_MODEL`, `NVIDIA_NIM_SAFETY_MODEL`, `NVIDIA_NIM_RERANK_MODEL`, `NVIDIA_NIM_RERANK_URL` | NIM endpoint and model overrides. Reranking stays off until both rerank variables are set. |
 | `NIM_LOCAL_BASE_URL`, `NIM_LOCAL_CHAT_MODEL`, `NIM_LOCAL_EMBED_MODEL`, `NIM_LOCAL_RERANK_MODEL`, `NIM_LOCAL_RERANK_URL` | A self-hosted NIM, which leads every chain once its URL is set |
@@ -269,7 +275,7 @@ On Azure:
 2. Restart the api and worker revisions so they read the new value. To find a revision's name, run `az containerapp revision list -g <resource group> -n <app> -o table`.
 3. Restart each one with `az containerapp revision restart -g <resource group> -n <app> --revision <revision>`.
 
-Rotate provider keys (`NVIDIA_API_KEY` and the others) the same way: change the variable or the Key Vault secret, then restart.
+Rotate provider keys (`GEMINI_API_KEY`, `NVIDIA_API_KEY` and the others) the same way: change the variable or the Key Vault secret, then restart.
 
 ### Switch or add an LLM provider
 
@@ -277,6 +283,7 @@ A provider is enabled when its endpoint and key are set; chains skip disabled pr
 
 | Provider | What to set |
 |---|---|
+| Google Gemini | `GEMINI_API_KEY` (get one at aistudio.google.com). Optionally, the model variables. |
 | Hosted NVIDIA NIM | `NVIDIA_API_KEY` (keys start with `nvapi-`; get one at build.nvidia.com). Optionally, the model variables. |
 | Self-hosted NIM | `NIM_LOCAL_BASE_URL` and `NIM_LOCAL_CHAT_MODEL` (or the compose `nim` profile) |
 | Azure OpenAI | `AZURE_OPENAI_ENDPOINT`, then `AZURE_OPENAI_API_KEY` or `AZURE_OPENAI_USE_ENTRA=true`, and the deployment names |

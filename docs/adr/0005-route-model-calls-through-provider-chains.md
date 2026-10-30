@@ -6,8 +6,8 @@ Accepted.
 
 ## Context
 
-ARIA must run on NVIDIA NIM (hosted or self-hosted), Azure OpenAI or any OpenAI-compatible server,
-and fully offline for tests, evals and the demo. Model IDs change quickly, and a hosted model can
+ARIA must run on NVIDIA NIM (hosted or self-hosted), Google Gemini, Azure OpenAI or any
+OpenAI-compatible server, and fully offline for tests, evals and the demo. Model IDs change quickly, and a hosted model can
 be slow or down for hours. A run must never fail just because a model is unavailable or a budget
 is spent.
 
@@ -24,8 +24,9 @@ is spent.
   down from `json_schema` to `guided_json`, `json_object` and plain prompting.
 - **A chain per role.** [`LLMRouter`](../../src/aria/llm/router.py) gives each role
   (`adjudicator`, `investigator`, `reporter`, `critic`, `comms`, `ask`) an ordered chain: a
-  self-hosted NIM, hosted NIM, a second NIM model, Azure OpenAI, an OpenAI-compatible endpoint and
-  the fake provider. Embeddings, reranking and the safety model have their own chains. A run can
+  self-hosted NIM, Gemini and a lighter Gemini model, hosted NIM and a second NIM model, Azure
+  OpenAI, an OpenAI-compatible endpoint and the fake provider. A provider may name more than one
+  environment variable for its key; the first one set is used. Embeddings, reranking and the safety model have their own chains. A run can
   put one provider first for every role.
 - **Validate before falling back.** Structured output is checked against its Pydantic schema and a
   caller's own check (for example, cited evidence must exist). The model gets one repair attempt

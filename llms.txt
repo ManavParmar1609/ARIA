@@ -6,7 +6,7 @@ Several evaluations use real data with the labels its owners gave it: a Hadoop c
 
 ## Docs
 
-- [README](https://raw.githubusercontent.com/ManavParmar1609/ARIA/main/README.md): what ARIA does, quickstart, provider setup including NVIDIA NIM, measured results, limitations
+- [README](https://raw.githubusercontent.com/ManavParmar1609/ARIA/main/README.md): what ARIA does, quickstart, provider setup including Gemini and NVIDIA NIM, measured results, limitations
 - [Agent skill](https://raw.githubusercontent.com/ManavParmar1609/ARIA/main/skills/aria-triage/SKILL.md): how an agent starts a triage run, reads the cited report and hands it to a human for review
 - [Evaluation](https://raw.githubusercontent.com/ManavParmar1609/ARIA/main/docs/evaluation.md): every measured number, its data and its method
 - [Model card](https://raw.githubusercontent.com/ManavParmar1609/ARIA/main/docs/model-card.md): the severity model, its calibration and conformal sets, and the third-party models ARIA calls

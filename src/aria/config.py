@@ -60,7 +60,9 @@ class _Strict(BaseModel):
 class ProviderConfig(_Strict):
     kind: ProviderKind
     base_url: str | None = None
-    api_key_env: str | None = None
+    # The environment variable holding the key, or several names tried in order (the first one
+    # set wins), so a key stored under another spelling still works.
+    api_key_env: str | list[str] | None = None
     allow_no_key: bool = False
     azure_ad: bool = False
     api_version: str | None = None
@@ -99,11 +101,18 @@ class ProviderConfig(_Strict):
         # `${VAR:-}` interpolates to "" when VAR is unset; treat that as "not configured".
         return None if isinstance(value, str) and not value.strip() else value
 
+    def api_key_names(self) -> list[str]:
+        if self.api_key_env is None:
+            return []
+        return [self.api_key_env] if isinstance(self.api_key_env, str) else list(self.api_key_env)
+
+    def api_key_source(self) -> str | None:
+        """The first variable in ``api_key_env`` that holds a key, so reports can name it."""
+        return next((n for n in self.api_key_names() if os.environ.get(n, "").strip()), None)
+
     def api_key(self) -> SecretStr | None:
-        if not self.api_key_env:
-            return None
-        value = os.environ.get(self.api_key_env, "").strip()
-        return SecretStr(value) if value else None
+        name = self.api_key_source()
+        return SecretStr(os.environ[name].strip()) if name else None
 
     def is_enabled(self) -> bool:
         """A provider is usable when it has an endpoint and a credential (or needs none)."""
@@ -331,7 +340,7 @@ def get_app_config() -> AppConfig:
 def load_dotenv_file(path: Path = Path(".env")) -> bool:
     """Load ``.env`` into the process environment without overriding variables already set.
 
-    Provider keys (``NVIDIA_API_KEY``, ``AZURE_OPENAI_API_KEY``, ...) are read with
+    Provider keys (``NVIDIA_API_KEY``, ``GEMINI_API_KEY``, ...) are read with
     ``os.environ``, so entry points call this once at startup for local development. Real
     deployments set environment variables (or Key Vault references) instead.
     """

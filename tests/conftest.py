@@ -17,6 +17,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 _PROVIDER_ENV = (
     "NVIDIA_API_KEY",
     "NVIDIA_NIM_BASE_URL",
+    "GEMINI_API_KEY",
+    "gemini_api_key",
     "NIM_LOCAL_BASE_URL",
     "AZURE_OPENAI_ENDPOINT",
     "AZURE_OPENAI_API_KEY",

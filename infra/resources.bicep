@@ -15,6 +15,9 @@ param pseudonymKey string
 @secure()
 param nvidiaApiKey string
 
+@secure()
+param geminiApiKey string
+
 param deployOpenAi bool
 param openAiChatModel string
 param openAiChatModelVersion string
@@ -139,6 +142,14 @@ resource nvidiaSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empt
   name: 'nvidia-api-key'
   properties: {
     value: nvidiaApiKey
+  }
+}
+
+resource geminiSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(geminiApiKey)) {
+  parent: vault
+  name: 'gemini-api-key'
+  properties: {
+    value: geminiApiKey
   }
 }
 
@@ -302,6 +313,15 @@ var secrets = concat(
           keyVaultUrl: '${vault.properties.vaultUri}secrets/nvidia-api-key'
           identity: identity.id
         }
+      ],
+  empty(geminiApiKey)
+    ? []
+    : [
+        {
+          name: 'gemini-api-key'
+          keyVaultUrl: '${vault.properties.vaultUri}secrets/gemini-api-key'
+          identity: identity.id
+        }
       ]
 )
 
@@ -354,6 +374,14 @@ var sharedEnv = concat(
         {
           name: 'NVIDIA_API_KEY'
           secretRef: 'nvidia-api-key'
+        }
+      ],
+  empty(geminiApiKey)
+    ? []
+    : [
+        {
+          name: 'GEMINI_API_KEY'
+          secretRef: 'gemini-api-key'
         }
       ],
   deployOpenAi
@@ -481,6 +509,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
     appPulls
     appReadsSecrets
     nvidiaSecret
+    geminiSecret
     sqlAllowAzure
   ]
 }
@@ -540,6 +569,7 @@ resource worker 'Microsoft.App/containerApps@2024-03-01' = {
     appPulls
     appReadsSecrets
     nvidiaSecret
+    geminiSecret
     sqlAllowAzure
   ]
 }
@@ -663,6 +693,7 @@ resource seedJob 'Microsoft.App/jobs@2024-03-01' = {
     appPulls
     appReadsSecrets
     nvidiaSecret
+    geminiSecret
   ]
 }
 

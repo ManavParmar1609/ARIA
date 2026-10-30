@@ -90,6 +90,16 @@ def test_a_key_enables_the_hosted_nim_provider(monkeypatch: pytest.MonkeyPatch) 
     assert router.has_real_llm("reporter")
 
 
+def test_gemini_is_tried_before_hosted_nim_when_both_keys_are_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-x")
+    monkeypatch.setenv("GEMINI_API_KEY", "AIza-x")
+    router = LLMRouter(get_app_config().llm)
+    assert router.chain("adjudicator") == ["gemini", "gemini-lite", "nim", "nim-fallback"]
+    assert router.chain("reporter") == ["gemini", "gemini-lite", "nim", "nim-fallback", "fake"]
+
+
 def test_production_never_uses_the_fake_provider() -> None:
     router = LLMRouter(get_app_config().llm, env=Environment.PROD)
     assert router.chain("reporter") == []

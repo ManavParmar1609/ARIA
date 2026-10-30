@@ -34,6 +34,10 @@ param pseudonymKey string
 @description('NVIDIA API key for hosted NIM (build.nvidia.com). Leave empty to run without NIM.')
 param nvidiaApiKey string = ''
 
+@secure()
+@description('Google Gemini API key (aistudio.google.com). Leave empty to run without Gemini.')
+param geminiApiKey string = ''
+
 @description('Deploy an Azure OpenAI account and a chat deployment as another LLM provider.')
 param deployOpenAi bool = false
 
@@ -79,6 +83,7 @@ module resources 'resources.bicep' = {
     ariaApiKeys: ariaApiKeys
     pseudonymKey: pseudonymKey
     nvidiaApiKey: nvidiaApiKey
+    geminiApiKey: geminiApiKey
     deployOpenAi: deployOpenAi
     openAiChatModel: openAiChatModel
     openAiChatModelVersion: openAiChatModelVersion

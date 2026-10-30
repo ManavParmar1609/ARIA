@@ -40,11 +40,13 @@ def _credential(cfg: ProviderConfig) -> str:
         return "not needed"
     if cfg.azure_ad:
         return "Microsoft Entra ID (managed identity)"
-    if cfg.api_key_env and cfg.api_key() is not None:
-        return f"set via {cfg.api_key_env}"
+    source = cfg.api_key_source()
+    if source is not None:
+        return f"set via {source}"
     if cfg.allow_no_key:
         return "not needed (allow_no_key)"
-    return f"missing: set {cfg.api_key_env}" if cfg.api_key_env else "missing"
+    names = cfg.api_key_names()
+    return f"missing: set {' or '.join(names)}" if names else "missing"
 
 
 async def check_provider(
