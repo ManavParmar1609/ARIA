@@ -607,6 +607,7 @@ export function ConsoleCommands({ children }: { children: ReactNode }) {
       {children}
       <Dialog open={palette} onOpenChange={setPalette}>
         <DialogContent
+          instant
           closeLabel="Close the command palette"
           className="top-[12vh] max-w-2xl translate-y-0 gap-0 overflow-hidden p-0 [&>button:last-child]:hidden"
         >
@@ -618,7 +619,7 @@ export function ConsoleCommands({ children }: { children: ReactNode }) {
         </DialogContent>
       </Dialog>
       <Dialog open={help} onOpenChange={setHelp}>
-        <DialogContent closeLabel="Close the shortcuts" className="max-w-xl">
+        <DialogContent instant closeLabel="Close the shortcuts" className="max-w-xl">
           <DialogTitle>Keyboard shortcuts</DialogTitle>
           <DialogDescription>
             Move around the console without the mouse. Shortcuts wait while you type in a field.

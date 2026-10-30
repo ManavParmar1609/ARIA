@@ -25,15 +25,21 @@ export function DialogContent({
   className,
   children,
   closeLabel = "Close",
+  instant = false,
   ...props
-}: ComponentProps<typeof DialogPrimitive.Content> & { closeLabel?: string }) {
+}: ComponentProps<typeof DialogPrimitive.Content> & {
+  closeLabel?: string;
+  /** No open or close animation: for dialogs opened from the keyboard many times a day. */
+  instant?: boolean;
+}) {
   return (
     <DialogPrimitive.Portal>
-      <Overlay />
+      <Overlay className={instant ? "animate-none" : undefined} />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
           "fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-5 overflow-y-auto rounded-lg border border-rule bg-raised p-6 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.98]",
+          instant && "animate-none",
           className,
         )}
         {...props}
@@ -99,7 +105,7 @@ export function SheetContent({
       <DialogPrimitive.Content
         data-slot="sheet-content"
         className={cn(
-          "fixed inset-y-0 z-50 flex w-[min(20rem,calc(100%-3rem))] flex-col gap-4 border-rule bg-background p-5 outline-none data-[state=closed]:animate-out data-[state=closed]:duration-(--duration-quick) data-[state=open]:animate-in data-[state=open]:duration-(--duration-moderate)",
+          "fixed inset-y-0 z-50 flex w-[min(20rem,calc(100%-3rem))] flex-col gap-4 border-rule bg-background p-5 ease-(--ease-drawer) outline-none data-[state=closed]:animate-out data-[state=closed]:duration-(--duration-quick) data-[state=open]:animate-in data-[state=open]:duration-(--duration-moderate)",
           side === "left"
             ? "left-0 border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left"
             : "right-0 border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",

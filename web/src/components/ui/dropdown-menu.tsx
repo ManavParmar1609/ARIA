@@ -22,7 +22,7 @@ export function DropdownMenuContent({
         sideOffset={sideOffset}
         align={align}
         className={cn(
-          "z-50 min-w-44 rounded-md border border-rule bg-raised p-1 text-foreground data-[state=open]:animate-in data-[state=open]:fade-in-0",
+          "z-50 min-w-44 origin-(--radix-dropdown-menu-content-transform-origin) rounded-md border border-rule bg-raised p-1 text-foreground duration-(--duration-quick) ease-(--ease-out) data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97]",
           className,
         )}
         {...props}

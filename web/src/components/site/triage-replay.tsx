@@ -72,14 +72,14 @@ export function TriageReplay({ data }: { data: Replay }) {
       .set("[data-tag] [data-stamp]", { autoAlpha: 1 }, "-=0.2")
       .fromTo(
         "[data-tag] [data-stamp]",
-        { scale: 2, rotation: -12 },
-        { scale: 1, rotation: 0, duration: 0.5, ease: "back.out(2.2)" },
+        { scale: 1.3, rotation: -6 },
+        { scale: 1, rotation: 0, duration: 0.32, ease: "expo.out" },
         "<",
       )
       .fromTo(
         "[data-tag] [data-bracket]",
         { scaleX: 0 },
-        { scaleX: 1, transformOrigin: "left center", duration: 0.5, ease: "power2.inOut" },
+        { scaleX: 1, transformOrigin: "left center", duration: 0.26, ease: "expo.out" },
         "-=0.15",
       )
       .fromTo(
@@ -108,11 +108,16 @@ export function TriageReplay({ data }: { data: Replay }) {
         disabled={!known}
         aria-pressed={pinned === id}
         aria-describedby="replay-evidence"
-        onMouseEnter={() => setHovered(id)}
-        onMouseLeave={() => setHovered(null)}
+        // A tap also sends mouse events; only a real pointer hovers, so a second tap unpins cleanly.
+        onPointerEnter={(event) => event.pointerType === "mouse" && setHovered(id)}
+        onPointerLeave={(event) => event.pointerType === "mouse" && setHovered(null)}
         onFocus={() => setHovered(id)}
         onBlur={() => setHovered(null)}
-        onClick={() => setPinned((current) => (current === id ? null : id))}
+        onClick={() => {
+          const unpinning = pinned === id;
+          setPinned(unpinning ? null : id);
+          if (unpinning) setHovered(null);
+        }}
         className={cx(
           "inline-flex h-6 items-center rounded-xs border px-1.5 align-baseline font-mono text-xs transition-colors duration-(--duration-quick)",
           active === id
@@ -155,7 +160,7 @@ export function TriageReplay({ data }: { data: Replay }) {
                 ) : null}
                 <span
                   className={cx(
-                    "grid grid-cols-[2.25rem_1fr] items-baseline gap-2 border-l-2 px-4 transition-colors duration-(--duration-quick) sm:grid-cols-[2.25rem_3rem_1fr]",
+                    "thread-line grid grid-cols-[2.25rem_1fr] items-baseline gap-2 border-l-2 px-4 transition-colors duration-(--duration-quick) sm:grid-cols-[2.25rem_3rem_1fr]",
                     isLit
                       ? "thread-lit border-primary text-highlight-foreground [&>span]:text-highlight-foreground"
                       : "border-transparent",

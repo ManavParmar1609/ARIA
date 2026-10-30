@@ -43,9 +43,8 @@ export function SectionNav({ links }: { links: NavLink[] }) {
   }, [links]);
 
   // Move the pill under the current link (FLIP: it takes its new size at once, starts drawn where
-  // it was with a transform, and eases to the link, so only transform and opacity animate). It
-  // re-measures without animating when the links change size at a breakpoint.
-  const last = useRef<{ x: number; w: number } | null>(null);
+  // it is now with a transform, mid-move or not, and eases to the link, so only transform and
+  // opacity animate). It re-measures without animating when the links change size at a breakpoint.
   useLayoutEffect(() => {
     const el = pill.current;
     const root = nav.current;
@@ -54,11 +53,14 @@ export function SectionNav({ links }: { links: NavLink[] }) {
       const link = current ? root.querySelector<HTMLAnchorElement>(`a[href="${current}"]`) : null;
       if (!link) {
         el.style.opacity = "0";
-        last.current = null;
         return;
       }
       const [x, y, w] = [link.offsetLeft, link.offsetTop, link.offsetWidth];
-      const from = animate ? last.current : null;
+      let from: { x: number; w: number } | null = null;
+      if (animate && el.style.opacity === "1") {
+        const box = el.getBoundingClientRect();
+        from = { x: box.left - root.getBoundingClientRect().left, w: box.width };
+      }
       el.style.width = `${w}px`;
       el.style.height = `${link.offsetHeight}px`;
       el.style.transition = "none";
@@ -69,7 +71,6 @@ export function SectionNav({ links }: { links: NavLink[] }) {
       el.style.transition = "";
       el.style.transform = `translate(${x}px, ${y}px)`;
       el.style.opacity = "1";
-      last.current = { x, w };
     };
     place(true);
     // ResizeObserver also reports once on observe; only a real change of width re-places.
@@ -92,7 +93,7 @@ export function SectionNav({ links }: { links: NavLink[] }) {
       <span
         ref={pill}
         aria-hidden
-        className="absolute top-0 left-0 origin-left rounded-sm bg-panel-keylime opacity-0 transition-[transform,opacity] duration-(--duration-slow) ease-(--ease-out) dark:bg-highlight"
+        className="absolute top-0 left-0 origin-left rounded-sm bg-panel-keylime opacity-0 transition-[transform,opacity] duration-(--duration-moderate) ease-(--ease-out) dark:bg-highlight"
       />
       {links.map((link) => (
         <a

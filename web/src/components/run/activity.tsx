@@ -324,7 +324,7 @@ export function Activity({ events, offline, titles }: { events: RunEvent[] } & R
               key={row.key}
               initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
               className="grid grid-cols-[4.5rem_1.25rem_minmax(0,1fr)] gap-3 border-b border-rule/60 py-2.5 text-sm last:border-0"
             >
               <span className="tabular pt-0.5 text-right font-mono text-xs text-faint">

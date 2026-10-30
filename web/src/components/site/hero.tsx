@@ -43,7 +43,7 @@ function Trio({ data }: { data: Replay }) {
         className="hero-thread absolute inset-x-[8%] top-[42%] hidden h-px bg-forest/25 sm:block dark:bg-foreground/20"
       />
       <div aria-hidden className="relative grid gap-4 sm:grid-cols-3 sm:gap-3 lg:gap-5">
-        <Card name="Alert" delay={100}>
+        <Card name="Alert" delay={0}>
           <span className="grid size-11 place-items-center rounded-full bg-panel-keylime text-heading">
             <BellRingIcon className="size-5" strokeWidth={1.5} />
           </span>
@@ -58,7 +58,7 @@ function Trio({ data }: { data: Replay }) {
             Triaged
           </span>
         </Card>
-        <Card name="Severity" delay={240}>
+        <Card name="Severity" delay={60}>
           <p className="font-display text-[1.375rem] leading-none font-light text-heading">
             {data.severity}
             <span className="ml-2 font-sans text-xs text-muted-foreground">{p}% likely</span>
@@ -89,7 +89,7 @@ function Trio({ data }: { data: Replay }) {
             Prediction set: {data.predictionSet.join(" or ")}
           </p>
         </Card>
-        <Card name="Report" delay={380}>
+        <Card name="Report" delay={120}>
           <p className="text-xs font-medium text-muted-foreground">
             Claim {index + 1} of {data.claims.length}
           </p>

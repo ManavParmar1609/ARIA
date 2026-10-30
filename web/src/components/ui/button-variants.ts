@@ -12,10 +12,11 @@ export const buttonVariants = cva(
         primary: "bg-primary text-primary-foreground hover:bg-primary-hover",
         raised: "bg-raised text-heading ring-1 ring-rule ring-inset hover:bg-sunken",
         secondary: "bg-foreground/6 text-heading hover:bg-foreground/10 active:bg-foreground/14",
-        // Dot bloom: the hover and focus fill grows out of a dot at the centre. A circle twice the
-        // button's width covers it from there; overflow clips it to the button's corners.
+        // Dot bloom: the hover fill grows out of a dot at the centre, quickly, and shrinks back
+        // faster. A circle twice the button's width covers it from there; overflow clips it to the
+        // button's corners. Keyboard focus fills it at once: keys should never wait on motion.
         ghost:
-          "relative isolate overflow-hidden text-muted-foreground before:pointer-events-none before:absolute before:top-1/2 before:left-1/2 before:-z-10 before:aspect-square before:w-[200%] before:-translate-1/2 before:scale-0 before:rounded-full before:bg-foreground/6 before:transition-[scale,background-color] before:duration-(--duration-slow) before:ease-(--ease-in-out) hover:text-heading hover:before:scale-100 focus-visible:before:scale-100 active:before:bg-foreground/10",
+          "relative isolate overflow-hidden text-muted-foreground before:pointer-events-none before:absolute before:top-1/2 before:left-1/2 before:-z-10 before:aspect-square before:w-[200%] before:-translate-1/2 before:scale-[0.15] before:rounded-full before:bg-foreground/6 before:opacity-0 before:transition-[scale,opacity,background-color] before:duration-[120ms] before:ease-(--ease-out) hover:text-heading hover:before:scale-100 hover:before:opacity-100 hover:before:duration-(--duration-quick) focus-visible:before:scale-100 focus-visible:before:opacity-100 focus-visible:before:transition-none active:before:bg-foreground/10",
         danger: "bg-danger/12 text-danger hover:bg-danger/18 active:bg-danger/24",
         link: "h-auto px-0 text-accent-ink underline decoration-accent-ink/35 underline-offset-4 hover:decoration-accent-ink",
       },
