@@ -355,6 +355,9 @@ async def test_fork_before_review_is_a_separate_run(env: Env) -> None:
     assert fork.status is RunStatus.AWAITING_REVIEW
     assert fork.interrupt is not None
     assert fork.interrupt["report_id"] == f"rpt-{fork.run_id}"
+    # Its report and drafts are stored before approval, like any run's, under its own ids.
+    assert repo.get_report(engine, f"rpt-{fork.run_id}") is not None
+    assert set(repo.action_statuses(engine, fork.run_id).values()) == {"proposed"}
     original_ids = {a["action_id"] for a in first.interrupt["actions"]}
     assert original_ids.isdisjoint(a["action_id"] for a in fork.interrupt["actions"])
 
@@ -368,6 +371,21 @@ async def test_fork_before_review_is_a_separate_run(env: Env) -> None:
     assert (run["parent_run_id"], run["trigger"]) == (first.run_id, "fork")
     with pytest.raises(RunStateError):
         await env.runner.fork(first.run_id, history[0]["checkpoint_id"])  # the end of the run
+
+
+@pytest.mark.slow
+async def test_a_fork_from_any_step_reaches_review_and_never_reuses_an_approval(env: Env) -> None:
+    first = await env.runner.start(kernel_panic(env))
+    await env.runner.resume(first.run_id, {"decision": "approve", "reviewer": "ana"})
+    for point in await env.runner.history(first.run_id):
+        if not point["next"]:
+            continue  # the end of the run has nothing left to fork
+        fork = await env.runner.fork(first.run_id, point["checkpoint_id"])
+        # In front of publish, parse or a join, the fork starts a step earlier; it always pauses
+        # for its own review, with its own report, never publishing on the parent's approval.
+        assert fork.status is RunStatus.AWAITING_REVIEW, point["next"]
+        assert fork.interrupt is not None
+        assert fork.interrupt["report_id"] == f"rpt-{fork.run_id}"
 
 
 async def test_fork_with_new_options_reruns_from_the_parallel_step(env: Env) -> None:

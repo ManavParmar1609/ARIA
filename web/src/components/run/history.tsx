@@ -154,7 +154,8 @@ export function History({
           <DialogHeader>
             <DialogTitle>Fork a new run from this checkpoint</DialogTitle>
             <DialogDescription>
-              {forking ? describe(forking) : ""}. The original run is not changed.
+              {forking ? describe(forking) : ""}. The original run is not changed, and the new run
+              waits for its own review.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">

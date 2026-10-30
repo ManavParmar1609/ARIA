@@ -95,6 +95,13 @@ Fixed (287d817, a9f2d9e):
 - **The external worker died mid-run on SIGTERM,** leaving runs claimed until the claim expired. It
   now stops claiming, finishes the runs in hand and exits.
 - **Pinning a citation jumped the page** and left the evidence below the fold (a9f2d9e).
+- **Forking failed from five of a published run's twelve checkpoints** (in front of parse, merge,
+  investigation, the report and publishing): LangGraph drops a pending route when a fork updates
+  the state there. A fork from any checkpoint now reaches review: in front of such a step it
+  starts from the nearest earlier step that can take the update, and in front of publishing it
+  goes back to review, so a fork never publishes on its parent's approval. A fork taken after the
+  report step stores its own report and drafts at once, so they can be downloaded before
+  approval.
 - **Rough edges for people using it** (83d8936 and after): the CLI answers a missing or empty log
   file, an unknown scenario, suite, provider or source, and a database that is not set up with a
   sentence saying what to do; MCP tells a caller why an incident or runbook ID is unknown; an event
@@ -178,8 +185,8 @@ owner's decision. The [threat model](threat-model.md) lists the security residua
   checkpoints behind. Fixing these needs database-level claims or locks on runs and alert groups.
 - **External-mode AG-UI and A2A runs** that were running when the API restarted stay "running", and
   cannot be deleted. The worker would need to reclaim them, or these transports would need to queue.
-- **Forks** from some checkpoints of a published run fail or start nowhere, and a fork at review has
-  no stored report until it is approved.
+- **A fork's history** also lists the checkpoints its parent reached after the fork point, because
+  the whole thread is copied; copying only the fork point's ancestors needs a checkpointer change.
 - **Streams and slow clients.** Event streams have no per-caller cap, and slow-header connections
   are held open. Front the API with a proxy that enforces these limits. (A stream now ends when its
   run is deleted, and after an hour.)

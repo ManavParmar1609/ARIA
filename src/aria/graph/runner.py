@@ -25,7 +25,7 @@ from langgraph.types import Command, Overwrite, StateSnapshot, StreamMode
 from sqlalchemy import delete
 
 from aria.contracts.inputs import RunOptions, TriageRequest
-from aria.contracts.report import ReviewDecision
+from aria.contracts.report import IncidentReport, OutboundAction, ReviewDecision
 from aria.contracts.run import EventKind, Plan, RunEvent, RunStatus
 from aria.db import repository as repo
 from aria.db.engine import session_scope
@@ -36,12 +36,28 @@ from aria.graph.store import SqlStore
 from aria.graph.workflow import TriageContext, build_graph, rekey_for_fork
 from aria.mcp.client import Target
 from aria.observability.logging import get_logger
+from aria.reporting.markdown import render_markdown
 from aria.retrieval import runlog
 from aria.retrieval.memory import run_incident_id
 from aria.services import Services
 
 log = get_logger(__name__)
 STREAM_MODES: list[StreamMode] = ["tasks", "custom", "checkpoints"]
+
+# A fork's state update cannot go in front of a step reached by a routed Command, a Send or a
+# join: LangGraph drops the pending route, and the fork would stop at once. Those forks start
+# from the nearest earlier step that can take an update, which reruns the routing step too. Plan
+# and parsing are deterministic, assess is cheap, and a fork in front of publish goes back to
+# review, so it never reuses the parent's approval.
+FORK_FROM: dict[str, frozenset[str]] = {
+    "parse_shard": frozenset({"plan"}),
+    "merge": frozenset({"plan"}),
+    "investigate": frozenset({"severity", "recall"}),
+    "widen": frozenset({"assess"}),
+    "report": frozenset({"assess"}),
+    "publish": frozenset({"review"}),
+    "reject": frozenset({"review"}),
+}
 _SUBSCRIBER_QUEUE = 2_000
 
 
@@ -425,6 +441,29 @@ class TriageRunner:
             )
         return out
 
+    def _save_forked_report(self, update: Json, values: Json) -> None:
+        """A fork taken after the report step reruns neither report nor comms: save its re-keyed
+        report and drafts now, so the report and its Markdown export exist before approval."""
+        if update.get("report"):
+            report = IncidentReport.model_validate(update["report"])
+            decided_by = (values.get("severity") or {}).get("decided_by")
+            markdown = render_markdown(report, decided_by=decided_by)
+            repo.save_report(self.engine, report, markdown=markdown)
+        if update.get("actions"):
+            actions = [OutboundAction.model_validate(raw) for raw in update["actions"]]
+            repo.save_actions(self.engine, update["run_id"], actions)
+
+    async def _ancestor(self, run_id: str, checkpoint_id: str, nodes: frozenset[str]) -> str | None:
+        """The nearest earlier checkpoint of ``checkpoint_id`` about to run exactly ``nodes``."""
+        by_id = {h["checkpoint_id"]: h for h in await self.history(run_id, limit=200)}
+        current = by_id.get(checkpoint_id)
+        while current is not None:
+            parent = current["parent_checkpoint_id"]
+            current = by_id.get(parent) if parent else None
+            if current is not None and frozenset(current["next"]) == nodes:
+                return str(current["checkpoint_id"])
+        return None
+
     async def fork(
         self,
         run_id: str,
@@ -444,7 +483,21 @@ class TriageRunner:
         if not snapshot.next:
             msg = "this checkpoint is the end of the run; fork from an earlier one"
             raise RunStateError(msg)
-        request = TriageRequest.model_validate(snapshot.values["request"])
+        start = frozenset().union(*(FORK_FROM.get(node, frozenset()) for node in snapshot.next))
+        if start:
+            earlier = await self._ancestor(run_id, checkpoint_id, start)
+            if earlier is None:
+                msg = f"cannot fork in front of {' and '.join(snapshot.next)}; fork from an earlier step"
+                raise RunStateError(msg)
+            return await self.fork(run_id, earlier, options=options, title=title, execute=execute)
+        stored = snapshot.values.get("request")
+        if stored is None:  # the input checkpoint, before the graph has read it
+            run = await asyncio.to_thread(repo.get_run, self.engine, run_id)
+            stored = (run or {}).get("request")
+        if stored is None:
+            msg = "this checkpoint holds no request to fork from; fork from a later one"
+            raise RunStateError(msg)
+        request = TriageRequest.model_validate(stored)
         if options:
             merged = RunOptions.model_validate({**request.options.model_dump(), **options})
             request = request.model_copy(update={"options": merged})
@@ -486,6 +539,7 @@ class TriageRunner:
             parent_run_id=run_id,
             forked_from_checkpoint=checkpoint_id,
         )
+        await asyncio.to_thread(self._save_forked_report, update, snapshot.values)
         await self._event(
             new_id, "run_started", payload={"forked_from": run_id, "checkpoint_id": checkpoint_id}
         )
