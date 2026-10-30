@@ -151,7 +151,9 @@ after a few words; on wide screens the chips wrap evenly. Identifiers became wor
 the evaluation page, checkpoint labels, provider chains grouped by role, evidence data, failure
 modes in titles ("DNS resolution failures", not "Dns resolution"), and "1 node" and "1 shard".
 Table row headers read like their rows, the lifecycle check's two settings have plain names, and
-the Ask page's suggestions are chips in their own row. An offline run says "offline mode: no LLM"
+the Ask page's suggestions are chips in their own row. Labels set below the 13 px floor of the
+type scale (small severity tags, risk tags, the rule trace, the quarantine flag) were raised to it,
+and the one bold figure uses the medium weight like everything else. An offline run says "offline mode: no LLM"
 rather than counting the deterministic provider's calls as model calls (the overview stops
 counting its tokens too), and message drafts name the system as people write it ("HDFS").
 

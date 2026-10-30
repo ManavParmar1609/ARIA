@@ -189,7 +189,7 @@ export function TriageReplay({ data }: { data: Replay }) {
                 {line.quarantined ? (
                   <span
                     data-anim="flag"
-                    className="mx-4 mt-1 mb-1 ml-[3.25rem] inline-flex items-center gap-1.5 rounded-xs border border-danger/60 px-1.5 font-sans text-[0.6875rem] font-medium text-danger sm:ml-[6.75rem]"
+                    className="mx-4 mt-1 mb-1 ml-[3.25rem] inline-flex items-center gap-1.5 rounded-xs border border-danger/60 px-1.5 font-sans text-xs font-medium text-danger sm:ml-[6.75rem]"
                   >
                     Quarantined: reads like an instruction, not a log
                   </span>

@@ -64,7 +64,7 @@ export function SeverityBadge({
         className={cx(
           "tabular inline-flex items-center rounded-xs border border-sev-edge px-1.5 font-medium text-sev-ink",
           SEVERITY_BG[severity],
-          size === "sm" ? "h-5 text-[0.6875rem]" : "h-6 text-xs",
+          size === "sm" ? "h-5 text-xs" : "h-6 text-xs",
           stamp && "sev-stamp",
         )}
       >
@@ -208,7 +208,7 @@ export function SeverityScale({
           >
             {s}
             {floor === s ? (
-              <span className="block text-[0.6875rem] text-muted-foreground">floor</span>
+              <span className="block text-xs text-muted-foreground">floor</span>
             ) : null}
           </span>
         ))}

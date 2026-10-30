@@ -120,7 +120,7 @@ function Guard({ guard, raw }: { guard: GuardReport; raw: number }) {
               >
                 <span className="text-faint">line {f.line_idx + 1}: </span>
                 {f.excerpt.trim()}
-                <span className="block pt-1 font-sans text-[0.6875rem] text-muted-foreground">
+                <span className="block pt-1 font-sans text-xs text-muted-foreground">
                   matched {f.pattern.replaceAll("+", ", ").replaceAll("_", " ")} (score{" "}
                   {f.score.toFixed(2)})
                 </span>

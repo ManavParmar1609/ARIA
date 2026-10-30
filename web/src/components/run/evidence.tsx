@@ -123,9 +123,7 @@ function EvidencePreview({ evidence, lines }: { evidence: Evidence; lines: LogEv
         </p>
       ) : null}
       <LogLines lines={lines} limit={4} wrap />
-      <p className="text-[0.6875rem] text-faint">
-        Click the citation to keep it in the evidence panel.
-      </p>
+      <p className="text-xs text-faint">Click the citation to keep it in the evidence panel.</p>
     </div>
   );
 }

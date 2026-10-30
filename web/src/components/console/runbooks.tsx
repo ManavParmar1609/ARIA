@@ -22,7 +22,7 @@ function Risk({ risk }: { risk: string }) {
   return (
     <span
       className={cn(
-        "inline-flex h-5 items-center justify-self-start rounded-xs border px-1.5 text-[0.6875rem] font-medium",
+        "inline-flex h-5 shrink-0 items-center justify-self-start rounded-xs border px-1.5 text-xs font-medium whitespace-nowrap",
         RISK[risk] ?? RISK.low,
       )}
     >

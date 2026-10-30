@@ -149,7 +149,7 @@ export function SeverityPanel({ assessment }: { assessment: SeverityAssessment }
                         <span className="font-medium">{hit.title}</span>
                         <span
                           className={cn(
-                            "rounded-xs border px-1 text-[0.6875rem]",
+                            "rounded-xs border px-1 text-xs",
                             hit.effect === "floor"
                               ? "border-sev1-fg/60 text-sev1-fg"
                               : "border-control text-muted-foreground",
@@ -178,7 +178,7 @@ export function SeverityPanel({ assessment }: { assessment: SeverityAssessment }
                           }}
                         />
                       </div>
-                      <span className="tabular text-[0.6875rem] text-muted-foreground">
+                      <span className="tabular text-xs text-muted-foreground">
                         {s} {(assessment.rule_scores[s] ?? 0).toFixed(1)}
                       </span>
                     </div>
@@ -191,7 +191,7 @@ export function SeverityPanel({ assessment }: { assessment: SeverityAssessment }
       ) : (
         <p className="text-sm text-muted-foreground">No severity rule matched this window.</p>
       )}
-      <p className="text-[0.6875rem] text-faint">
+      <p className="text-xs text-faint">
         {rulesOnly
           ? `Rules ${assessment.model_version.slice("rules-only:".length)}, model not used`
           : `Model ${assessment.model_version}`}
