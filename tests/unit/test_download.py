@@ -12,7 +12,7 @@ import httpx
 import pytest
 import respx
 
-from aria.data.download import DownloadError, download
+from aria.data.download import DownloadError, compress_files, download
 from aria.data.manifest import DataSource, Mirror, load_manifest
 
 
@@ -299,3 +299,15 @@ def test_a_gitlab_page_that_fails_stops_the_download(tmp_path: Path) -> None:
     )
     with pytest.raises(DownloadError, match="page 1 returned 429"):
         download(source, tmp_path / "raw")
+
+
+def test_large_text_logs_are_stored_gzipped_one_file_at_a_time(tmp_path: Path) -> None:
+    logs = tmp_path / "Nova" / "Test_1" / "logs" / "round_1" / "nova"
+    logs.mkdir(parents=True)
+    (logs / "nova-api.log.bzip2.out").write_text("2018-06-26 03:21:12.936 1 INFO nova.api x\n")
+    (tmp_path / "nova.tsv").write_text("TEST\tROUND_1\n")
+    assert compress_files(tmp_path, ["*.log.bzip2.out"]) == 1
+    assert not (logs / "nova-api.log.bzip2.out").exists()
+    with gzip.open(logs / "nova-api.log.bzip2.out.gz", "rt", encoding="utf-8") as handle:
+        assert handle.read().startswith("2018-06-26 03:21:12.936")
+    assert (tmp_path / "nova.tsv").exists()  # only what matches is compressed

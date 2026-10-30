@@ -86,12 +86,28 @@ def download_git(source: DataSource, dest: Path) -> Path:
         _git(["sparse-checkout", "set", "--no-cone", *source.paths], work)
         _git(["fetch", "-q", "--depth", "1", "--filter=blob:none", "origin", source.commit], work)
         _git(["checkout", "-q", "FETCH_HEAD"], work)
+        shutil.rmtree(work / ".git")  # the objects are not needed once the files are out
+        compress_files(work, source.compress)
         if dest.exists():
             shutil.rmtree(dest)
-        shutil.copytree(work, dest, ignore=shutil.ignore_patterns(".git"))
+        shutil.copytree(work, dest)
     marker.write_text(source.commit + "\n")
     log.info("dataset.fetched", source=source.name, commit=source.commit[:12])
     return dest
+
+
+def compress_files(root: Path, patterns: list[str]) -> int:
+    """Gzip every file under ``root`` that matches one of ``patterns`` (``x`` becomes ``x.gz``),
+    one at a time, so a large checkout never needs room for two copies of itself."""
+    count = 0
+    for path in sorted(p for p in root.rglob("*") if p.is_file()):
+        if not any(path.match(pattern) for pattern in patterns):
+            continue
+        with path.open("rb") as src, gzip.open(path.with_name(path.name + ".gz"), "wb") as out:
+            shutil.copyfileobj(src, out, _CHUNK)
+        path.unlink()
+        count += 1
+    return count
 
 
 def _zenodo_files(record: str) -> list[dict[str, Any]]:

@@ -41,6 +41,9 @@ class DataSource(BaseModel):
     url: str | None = None
     commit: str | None = None
     paths: list[str] = Field(default_factory=list)
+    # Checked-out files to store gzipped (globs), for a git source of plain-text logs too big
+    # to keep as text.
+    compress: list[str] = Field(default_factory=list)
     record: str | None = None
     files: list[str] = Field(default_factory=list)
     dataset_id: int | None = None
