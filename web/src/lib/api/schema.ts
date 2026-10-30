@@ -565,6 +565,9 @@ export type paths = {
         /**
          * Get State
          * @description The run's graph state (at a checkpoint, if given), without the raw input lines.
+         *
+         *     A run that exists but has not written its first checkpoint has an empty state, not a 404: the
+         *     console asks as soon as a run starts, and asks again as its steps finish.
          */
         get: operations["get_state_api_v1_runs__run_id__state_get"];
         put?: never;

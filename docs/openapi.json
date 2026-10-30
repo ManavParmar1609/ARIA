@@ -326,7 +326,7 @@
           "runs"
         ],
         "summary": "Get State",
-        "description": "The run's graph state (at a checkpoint, if given), without the raw input lines.",
+        "description": "The run's graph state (at a checkpoint, if given), without the raw input lines.\n\nA run that exists but has not written its first checkpoint has an empty state, not a 404: the\nconsole asks as soon as a run starts, and asks again as its steps finish.",
         "operationId": "get_state_api_v1_runs__run_id__state_get",
         "parameters": [
           {
