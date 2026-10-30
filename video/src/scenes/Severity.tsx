@@ -1,11 +1,22 @@
 import { useCurrentFrame } from "remotion";
 
 import { Heading, Lead, Panel, Rail, SevBadge, Stage } from "../components";
-import { assessment } from "../data";
+import { assessment, type DecidedBy } from "../data";
 import { enter, progress } from "../motion";
 import { color, radius, sevColor, size } from "../theme";
 
 const BAR_HEIGHT = 230;
+
+const sure = Math.round(100 * assessment.confidence);
+
+// The scene's last line: how the recorded run's severity was settled, and so who has the last word.
+const DECIDED: Record<DecidedBy, string> = {
+  rules: "The rules settle it, so ARIA decides alone.",
+  model: `The model is ${sure}% sure: enough to decide alone.`,
+  llm: `The model is ${sure}% sure: not enough to decide alone, so an LLM picks from the set.`,
+  fallback: `The model is ${sure}% sure: not enough to decide alone, so a person confirms it.`,
+  human: "A reviewer set it.",
+};
 
 /** Rules, then calibrated probabilities, then the conformal set, then the decision. */
 export const Severity = () => {
@@ -135,10 +146,7 @@ export const Severity = () => {
         }}
       >
         <SevBadge severity={assessment.severity} scale={1.3} />
-        <Lead style={{ color: color.foreground }}>
-          The model is {Math.round(100 * assessment.confidence)}% sure: not enough to decide alone,
-          so a person confirms it.
-        </Lead>
+        <Lead style={{ color: color.foreground }}>{DECIDED[assessment.decidedBy]}</Lead>
       </div>
       <Rail active="Severity" />
     </Stage>
