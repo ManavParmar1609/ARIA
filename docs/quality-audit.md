@@ -300,13 +300,21 @@ test (5f5d310); one is left.
   overlap a send only if the sending process freezes for five minutes; the resend's idempotency
   key covers that case for receivers that honour it.
 
+### Alert storms on several replicas
+
+The audit had left this open, and it is now fixed (cb5e51c). A burst of deliveries for one new alert
+group opened several runs, even on one replica: each request found the group still without a run
+and opened its own, and two replicas could each open a group. A new group's ID now follows from
+its key and the group before it, and its run's ID from the group, so racing requests, on one
+replica or several, compute the same IDs and the database keeps one group and one run. If that
+run ID already belongs to an older run (a database restored in part), the storm opens a new run
+instead. A run's start is recorded only by the process that wins it.
+
 ## What was left
 
 These are recorded rather than fixed, because each needs a design change, infrastructure or an
 owner's decision. The [threat model](threat-model.md) lists the security residuals in detail.
 
-- **Alert storms across replicas.** Runs are now claimed across processes, but an alert storm
-  delivered to two API replicas at once can still open two runs: alert groups have no claim yet.
 - **A fork's history** also lists the checkpoints its parent reached after the fork point, because
   the whole thread is copied; copying only the fork point's ancestors needs a checkpointer change.
 - **Streams and slow clients.** Event streams have no per-caller cap, and slow-header connections
