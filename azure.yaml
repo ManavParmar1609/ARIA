@@ -6,6 +6,11 @@
 #   azd env set ARIA_PSEUDONYM_KEY "<another long random secret>"
 #   azd env set GEMINI_API_KEY "<key from aistudio.google.com>"   # optional
 #   azd env set NVIDIA_API_KEY "<key from build.nvidia.com>"   # optional
+# Approved messages go out only where a receiver is set (each optional, stored in Key Vault):
+#   azd env set SLACK_WEBHOOK_URL "<incoming webhook>"
+#   azd env set TEAMS_WEBHOOK_URL "<incoming webhook>"
+#   azd env set ARIA_OUTBOUND_WEBHOOK_URL "<ticket webhook>"
+#   azd env set ARIA_OUTBOUND_WEBHOOK_SECRET "<signing secret>"
 # After the first deploy, seed incident memory once:
 #   az containerapp job start -g "$(azd env get-value AZURE_RESOURCE_GROUP)" \
 #     -n "$(azd env get-value ARIA_SEED_JOB)"

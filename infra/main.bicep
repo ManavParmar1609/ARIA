@@ -38,6 +38,22 @@ param nvidiaApiKey string = ''
 @description('Google Gemini API key (aistudio.google.com). Leave empty to run without Gemini.')
 param geminiApiKey string = ''
 
+@secure()
+@description('Slack incoming-webhook URL for approved messages to responders. Leave empty to skip them.')
+param slackWebhookUrl string = ''
+
+@secure()
+@description('Microsoft Teams webhook URL for approved messages to stakeholders. Leave empty to skip them.')
+param teamsWebhookUrl string = ''
+
+@secure()
+@description('Webhook that receives approved ticket drafts and other actions. Leave empty to skip them.')
+param outboundWebhookUrl string = ''
+
+@secure()
+@description('Secret that signs deliveries to the outbound webhook (X-ARIA-Signature).')
+param outboundWebhookSecret string = ''
+
 @description('Deploy an Azure OpenAI account and a chat deployment as another LLM provider.')
 param deployOpenAi bool = false
 
@@ -84,6 +100,10 @@ module resources 'resources.bicep' = {
     pseudonymKey: pseudonymKey
     nvidiaApiKey: nvidiaApiKey
     geminiApiKey: geminiApiKey
+    slackWebhookUrl: slackWebhookUrl
+    teamsWebhookUrl: teamsWebhookUrl
+    outboundWebhookUrl: outboundWebhookUrl
+    outboundWebhookSecret: outboundWebhookSecret
     deployOpenAi: deployOpenAi
     openAiChatModel: openAiChatModel
     openAiChatModelVersion: openAiChatModelVersion

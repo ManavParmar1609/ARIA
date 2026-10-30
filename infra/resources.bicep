@@ -18,6 +18,18 @@ param nvidiaApiKey string
 @secure()
 param geminiApiKey string
 
+@secure()
+param slackWebhookUrl string
+
+@secure()
+param teamsWebhookUrl string
+
+@secure()
+param outboundWebhookUrl string
+
+@secure()
+param outboundWebhookSecret string
+
 param deployOpenAi bool
 param openAiChatModel string
 param openAiChatModelVersion string
@@ -150,6 +162,38 @@ resource geminiSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empt
   name: 'gemini-api-key'
   properties: {
     value: geminiApiKey
+  }
+}
+
+resource slackWebhookUrlSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(slackWebhookUrl)) {
+  parent: vault
+  name: 'slack-webhook-url'
+  properties: {
+    value: slackWebhookUrl
+  }
+}
+
+resource teamsWebhookUrlSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(teamsWebhookUrl)) {
+  parent: vault
+  name: 'teams-webhook-url'
+  properties: {
+    value: teamsWebhookUrl
+  }
+}
+
+resource outboundWebhookUrlSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(outboundWebhookUrl)) {
+  parent: vault
+  name: 'outbound-webhook-url'
+  properties: {
+    value: outboundWebhookUrl
+  }
+}
+
+resource outboundWebhookSecretSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(outboundWebhookSecret)) {
+  parent: vault
+  name: 'outbound-webhook-secret'
+  properties: {
+    value: outboundWebhookSecret
   }
 }
 
@@ -322,6 +366,42 @@ var secrets = concat(
           keyVaultUrl: '${vault.properties.vaultUri}secrets/gemini-api-key'
           identity: identity.id
         }
+      ],
+  empty(slackWebhookUrl)
+    ? []
+    : [
+        {
+          name: 'slack-webhook-url'
+          keyVaultUrl: '${vault.properties.vaultUri}secrets/slack-webhook-url'
+          identity: identity.id
+        }
+      ],
+  empty(teamsWebhookUrl)
+    ? []
+    : [
+        {
+          name: 'teams-webhook-url'
+          keyVaultUrl: '${vault.properties.vaultUri}secrets/teams-webhook-url'
+          identity: identity.id
+        }
+      ],
+  empty(outboundWebhookUrl)
+    ? []
+    : [
+        {
+          name: 'outbound-webhook-url'
+          keyVaultUrl: '${vault.properties.vaultUri}secrets/outbound-webhook-url'
+          identity: identity.id
+        }
+      ],
+  empty(outboundWebhookSecret)
+    ? []
+    : [
+        {
+          name: 'outbound-webhook-secret'
+          keyVaultUrl: '${vault.properties.vaultUri}secrets/outbound-webhook-secret'
+          identity: identity.id
+        }
       ]
 )
 
@@ -382,6 +462,38 @@ var sharedEnv = concat(
         {
           name: 'GEMINI_API_KEY'
           secretRef: 'gemini-api-key'
+        }
+      ],
+  empty(slackWebhookUrl)
+    ? []
+    : [
+        {
+          name: 'SLACK_WEBHOOK_URL'
+          secretRef: 'slack-webhook-url'
+        }
+      ],
+  empty(teamsWebhookUrl)
+    ? []
+    : [
+        {
+          name: 'TEAMS_WEBHOOK_URL'
+          secretRef: 'teams-webhook-url'
+        }
+      ],
+  empty(outboundWebhookUrl)
+    ? []
+    : [
+        {
+          name: 'ARIA_OUTBOUND_WEBHOOK_URL'
+          secretRef: 'outbound-webhook-url'
+        }
+      ],
+  empty(outboundWebhookSecret)
+    ? []
+    : [
+        {
+          name: 'ARIA_OUTBOUND_WEBHOOK_SECRET'
+          secretRef: 'outbound-webhook-secret'
         }
       ],
   deployOpenAi
@@ -510,6 +622,10 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
     appReadsSecrets
     nvidiaSecret
     geminiSecret
+    slackWebhookUrlSecret
+    teamsWebhookUrlSecret
+    outboundWebhookUrlSecret
+    outboundWebhookSecretSecret
     sqlAllowAzure
   ]
 }
@@ -570,6 +686,10 @@ resource worker 'Microsoft.App/containerApps@2024-03-01' = {
     appReadsSecrets
     nvidiaSecret
     geminiSecret
+    slackWebhookUrlSecret
+    teamsWebhookUrlSecret
+    outboundWebhookUrlSecret
+    outboundWebhookSecretSecret
     sqlAllowAzure
   ]
 }
@@ -694,6 +814,10 @@ resource seedJob 'Microsoft.App/jobs@2024-03-01' = {
     appReadsSecrets
     nvidiaSecret
     geminiSecret
+    slackWebhookUrlSecret
+    teamsWebhookUrlSecret
+    outboundWebhookUrlSecret
+    outboundWebhookSecretSecret
   ]
 }
 

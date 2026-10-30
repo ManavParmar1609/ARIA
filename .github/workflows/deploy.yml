@@ -5,7 +5,8 @@ name: Deploy to Azure
 #   variables  AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID (an app registration with
 #              a federated credential for this repository and environment), AZURE_PRINCIPAL_ID
 #              (that service principal's object id), AZURE_ENV_NAME, AZURE_LOCATION
-#   secrets    ARIA_API_KEYS, ARIA_PSEUDONYM_KEY, GEMINI_API_KEY and NVIDIA_API_KEY (both optional)
+#   secrets    ARIA_API_KEYS and ARIA_PSEUDONYM_KEY; optional: GEMINI_API_KEY, NVIDIA_API_KEY,
+#              SLACK_WEBHOOK_URL, TEAMS_WEBHOOK_URL, ARIA_OUTBOUND_WEBHOOK_URL and _SECRET
 on:
   workflow_dispatch:
     inputs:
@@ -61,5 +62,9 @@ jobs:
           ARIA_PSEUDONYM_KEY: ${{ secrets.ARIA_PSEUDONYM_KEY }}
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+          ARIA_OUTBOUND_WEBHOOK_URL: ${{ secrets.ARIA_OUTBOUND_WEBHOOK_URL }}
+          ARIA_OUTBOUND_WEBHOOK_SECRET: ${{ secrets.ARIA_OUTBOUND_WEBHOOK_SECRET }}
       - name: Deploy
         run: azd deploy --no-prompt

@@ -26,6 +26,18 @@
     "geminiApiKey": {
       "value": "${GEMINI_API_KEY=}"
     },
+    "slackWebhookUrl": {
+      "value": "${SLACK_WEBHOOK_URL=}"
+    },
+    "teamsWebhookUrl": {
+      "value": "${TEAMS_WEBHOOK_URL=}"
+    },
+    "outboundWebhookUrl": {
+      "value": "${ARIA_OUTBOUND_WEBHOOK_URL=}"
+    },
+    "outboundWebhookSecret": {
+      "value": "${ARIA_OUTBOUND_WEBHOOK_SECRET=}"
+    },
     "deployOpenAi": {
       "value": "${ARIA_DEPLOY_OPENAI=false}"
     },
