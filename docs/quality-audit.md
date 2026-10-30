@@ -247,6 +247,38 @@ database, and each finding was reproduced before it was fixed.
 - **Exports.** Emphasis and code marks in log text stay literal, so a template's `<*>` no longer
   turns the text after it italic.
 
+### The code review of these fixes
+
+A code review of the audit's own commits found ten problems, and fixing them turned up one more.
+Ten are fixed, each with a regression test (f5b6e83); one is left on purpose.
+
+- **Claims.** An A2A request cancelled while it waited for a slot kept its run's claim, renewed for
+  good, so no process could ever run it: the claim is now let go. Each runner claims under a name
+  of its own, so a restarted container never takes a dead predecessor's claims for its own. A
+  claim goes stale after 5 minutes instead of 10, so a crashed process's runs resume sooner, and a
+  worker with every slot busy leaves abandoned runs to the others instead of claiming runs it
+  cannot start.
+- **Messages.** A message whose process stopped while sending it stayed "Sending" for good. Once
+  its run has ended, the run page now says the delivery was not confirmed and offers **Send
+  again**, which holds the run as a drive does and sends with the same idempotency key. A bare
+  domain such as `status-help.com` now counts as a link, and a service label that is a domain or a
+  host name gives way to the system's name, so a message never fails its own check and goes
+  missing.
+- **Pseudonyms.** Without `ARIA_PSEUDONYM_KEY`, each process made its own key, so the API, which
+  cleans alerts, and a worker, which parses the logs, gave one host two pseudonyms. They now share
+  one random key kept in the database.
+- **Memory and redaction.** Memory in each process reloads when another process edits an incident,
+  not only when one is added or removed. An e-mail address whose local part is longer than 64
+  characters is redacted too.
+- **Reviews.** Saving an edit sent the whole form back, so changing only the title re-cited every
+  summary line to the review and dropped the evidence it cited. The panel now sends only what
+  changed, and a summary line the reviewer kept keeps its evidence.
+- **Tests.** While these fixes were checked, an accessibility scan caught a toast halfway through
+  fading out, which reads as low-contrast text. The scans now read the page with motion reduced,
+  so they measure what a person sees once it is still.
+- **Left on purpose:** a worker driving a run renews its claim twice a minute, once for the drive
+  and once with the other runs it holds. That is one extra update a minute, and it changes nothing.
+
 ## What was left
 
 These are recorded rather than fixed, because each needs a design change, infrastructure or an
@@ -273,8 +305,7 @@ owner's decision. The [threat model](threat-model.md) lists the security residua
   variants; the console's benign Cocoa sample is rated SEV2, because a `CrashReporter` file path
   matches the crash keyword (fixing the keyword changes a model feature, so it needs retraining and
   a new evaluation); the web CSP needs `'unsafe-inline'` for prerendered pages; MCP log search
-  scans without an index; images are pinned by tag, not digest; a message whose sending was cut
-  off by a crash stays "Sending" and cannot be sent again, because only a failed message can.
+  scans without an index; and images are pinned by tag, not digest.
 - **Smaller UI items:** "incident" names both the list of triage runs and the past incidents in
   memory (renaming the list is a product decision); chart text inside the landing page's drawings
   is small on phones; and on a 1440 × 900 screen the hero's illustration starts near the bottom of
