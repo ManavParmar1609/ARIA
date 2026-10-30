@@ -1,0 +1,17 @@
+# Render Blueprint: ARIA's API as a free public demo (open, offline, seeded at build time).
+# In Render, choose New, then Blueprint, and pick this repository. docs/deploy-free.md has the
+# steps, including the console on Vercel.
+services:
+  - type: web
+    name: aria-api
+    runtime: docker
+    plan: free
+    # Near Vercel's default function region (Washington, D.C.), so console requests stay short.
+    region: virginia
+    dockerfilePath: ./deploy/demo/Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    envVars:
+      # Keys each run's pseudonyms; Render generates a random value once.
+      - key: ARIA_PSEUDONYM_KEY
+        generateValue: true

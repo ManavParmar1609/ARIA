@@ -131,3 +131,4 @@ falls out of date.
 | `web/e2e/` | Playwright and axe tests |
 | `video/src/` | The Remotion explainer: one scene per pipeline step, data from `web/src/data/demo-run.json` and `docs/eval-results.json` |
 | `docs/adr/` | Why the architecture is the way it is |
+| `deploy/demo/Dockerfile`, `render.yaml` | The free public demo: open, offline and seeded at build time ([docs/deploy-free.md](docs/deploy-free.md)) |

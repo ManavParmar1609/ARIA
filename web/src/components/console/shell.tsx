@@ -295,9 +295,21 @@ function useHashOnArrival(ready: boolean) {
   }, [ready]);
 }
 
+/** True once `ms` have passed since the component mounted. */
+function useAfter(ms: number): boolean {
+  const [passed, setPassed] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setPassed(true), ms);
+    return () => window.clearTimeout(timer);
+  }, [ms]);
+  return passed;
+}
+
 function Gate({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const session = useSession();
+  // A free host puts an idle API to sleep, and the first answer after that takes about a minute.
+  const slow = useAfter(4000);
   const open = WITHOUT_API.has(pathname);
   const reachable = !session.isError && Boolean(session.data?.reachable);
   const signedOut = Boolean(session.data?.authRequired && !session.data.signedIn);
@@ -306,7 +318,13 @@ function Gate({ children }: { children: ReactNode }) {
   if (session.isPending) {
     return (
       <div role="status" className="grid gap-4">
-        <span className="sr-only">Connecting to ARIA</span>
+        {slow ? (
+          <p className="text-sm text-muted-foreground">
+            Still connecting to ARIA&apos;s API. A server waking from sleep can take up to a minute.
+          </p>
+        ) : (
+          <span className="sr-only">Connecting to ARIA</span>
+        )}
         <Skeleton className="h-10 w-64" />
         <Skeleton className="h-40 w-full" />
       </div>
@@ -319,7 +337,7 @@ function Gate({ children }: { children: ReactNode }) {
           title="ARIA's API is not answering"
           error={
             new Error(
-              "Runs, reviews and incident memory need it. If you run ARIA yourself, start it with make dev or docker compose up, and check that this web server's ARIA_API_URL points at it.",
+              "Runs, reviews and incident memory need it. A server that was asleep wakes within a minute, so try again shortly. If you run ARIA yourself, start it with make dev or docker compose up, and check that this web server's ARIA_API_URL points at it.",
             )
           }
           onRetry={() => void session.refetch()}

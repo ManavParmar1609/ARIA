@@ -427,6 +427,9 @@ and the image builds, and renders the explainer video (uploaded as the `aria-dem
 
 ## Deploying to Azure
 
+For a free public demo instead (the website on Vercel, the API on Render), follow
+[Deploy a free public demo](docs/deploy-free.md).
+
 ```bash
 azd env set ARIA_API_KEYS "ops:<a long random secret>"
 ```
@@ -502,6 +505,7 @@ Mining Console Logs", SOSP 2009, for the HDFS labels. Sources and pinned checksu
 - [Model card](docs/model-card.md)
 - [Threat model](docs/threat-model.md)
 - [Ops runbook](docs/ops-runbook.md)
+- [Deploy a free public demo](docs/deploy-free.md): the website on Vercel, the API on Render
 - [Quality audit](docs/quality-audit.md): what the pre-release audit checked, fixed and left
 - [Build brief](docs/build-brief.md): the specification and its acceptance checks
 - [AGENTS.md](AGENTS.md): conventions for coding agents working on this repo
