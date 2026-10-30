@@ -36,15 +36,18 @@ FROM ${PYTHON_IMAGE}
 RUN useradd --create-home --uid 1000 aria
 # A public demo: no API key (anyone may try it), no model provider keys (every step runs on the
 # offline provider, so nothing a visitor sends leaves the server) and no Slack, Teams or webhook
-# targets. The rate limit is shared, since every console visitor arrives through one proxy.
+# targets. The rate limit is shared, since every console visitor arrives through one proxy, and a
+# request may carry at most 8 MB, as through the console. Runs go one at a time, so a few large
+# ones arriving together stay inside a free plan's 512 MB.
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:${PATH}" \
     ARIA_ENV=dev \
     ARIA_LOG_FORMAT=json \
     ARIA_WORKER_MODE=inprocess \
-    ARIA_WORKER_CONCURRENCY=2 \
+    ARIA_WORKER_CONCURRENCY=1 \
     ARIA_RATE_LIMIT_PER_MINUTE=600 \
+    ARIA_MAX_BODY_BYTES=8388608 \
     ARIA_DATABASE_URL=sqlite:////home/aria/demo/aria.db \
     ARIA_DATA_DIR=/home/aria/demo/data \
     ARIA_MODELS_DIR=/home/aria/demo/models
