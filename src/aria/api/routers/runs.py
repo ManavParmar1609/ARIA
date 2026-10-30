@@ -110,12 +110,18 @@ async def get_run(run_id: RunId, state: State) -> RunDetail:
 async def get_state(
     run_id: RunId, state: State, checkpoint_id: str | None = None
 ) -> dict[str, Any]:
-    """The run's graph state (at a checkpoint, if given), without the raw input lines."""
+    """The run's graph state (at a checkpoint, if given), without the raw input lines.
+
+    A run that exists but has not written its first checkpoint has an empty state, not a 404: the
+    console asks as soon as a run starts, and asks again as its steps finish.
+    """
     await _run_or_404(state, run_id)
     try:
         snapshot = await state.runner.snapshot(run_id, checkpoint_id)
     except RunNotFoundError as exc:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "no state for this run yet") from exc
+        if checkpoint_id is not None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "no such checkpoint") from exc
+        return {"values": {}, "next": [], "checkpoint_id": None}
     return {
         "values": _public_state(snapshot.values),
         "next": list(snapshot.next),

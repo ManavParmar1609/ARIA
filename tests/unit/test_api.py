@@ -937,6 +937,24 @@ async def test_a_stream_ends_when_its_run_is_deleted_or_runs_too_long(api: Api) 
     assert await asyncio.wait_for(stream, timeout=5) == []  # it ends instead of pinging forever
 
 
+async def test_a_run_that_has_not_started_has_an_empty_state_not_a_404(api: Api) -> None:
+    runner = api.state.runner
+    queued = runner.submit(TriageRequest(system="bgl", logs=logs(api)))  # never executed here
+    empty = await api.client.get(f"/api/v1/runs/{queued}/state")
+    assert empty.status_code == 200
+    assert empty.json() == {"values": {}, "next": [], "checkpoint_id": None}
+    missing = await api.client.get(f"/api/v1/runs/{queued}/state?checkpoint_id=nope")
+    assert missing.status_code == 404
+    await runner.delete(queued)
+
+    replay = TriageRequest(system="hdfs", logs=logs(api), replay_of="hdfs-silent-block-failures")
+    waiting = runner.submit(replay, trigger="replay")  # never executed here
+    check = await api.client.get(f"/api/v1/runs/{waiting}/expert-check")
+    assert check.status_code == 200  # a replay that has not started is not ready, not missing
+    assert check.json()["ready"] is False
+    await runner.delete(waiting)
+
+
 async def test_streamed_runs_wait_for_a_worker_slot() -> None:
     """AG-UI and A2A runs execute inside the request that streams them; however many streams are
     open, no more of them run at once than the worker's concurrency allows."""

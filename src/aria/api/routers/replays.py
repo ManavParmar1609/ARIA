@@ -78,15 +78,15 @@ async def replay_real_incident(
 @runs_router.get("/{run_id}/expert-check", response_model=ExpertCheckOut)
 async def expert_check(run_id: RunId, state: State) -> ExpertCheckOut:
     """For a replayed real incident: the units ARIA flagged, with the experts' label for each."""
+    run = await asyncio.to_thread(repo.get_run, state.services.engine, run_id)
+    if run is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"run {run_id} not found")
     try:
-        snapshot = await state.runner.snapshot(run_id)
-    except RunNotFoundError as exc:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"run {run_id} not found") from exc
-    values = snapshot.values
-    request = values.get("request")
-    if request is None:  # queued: the graph has not started, so read the request as recorded
-        run = await asyncio.to_thread(repo.get_run, state.services.engine, run_id)
-        request = (run or {}).get("request")
+        values = (await state.runner.snapshot(run_id)).values
+    except RunNotFoundError:  # queued, or started without a checkpoint yet: not ready, not missing
+        values = {}
+    # Until the graph has read it, the request is the one the run recorded.
+    request = values.get("request") or run.get("request")
     incident = real_incident(str((request or {}).get("replay_of") or ""))
     if incident is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "this run does not replay a real incident")
