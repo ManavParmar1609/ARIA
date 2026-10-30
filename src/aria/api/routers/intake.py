@@ -12,7 +12,7 @@ from aria.api.ask import answer, memory_evidence
 from aria.api.schemas import AlertAccepted, AskRequest, AskResponse
 from aria.api.state import AppState, app_state
 from aria.contracts.base import Evidence
-from aria.contracts.inputs import AlertSignal
+from aria.contracts.inputs import AlertSignal, TriageRequest
 from aria.db import repository as repo
 from aria.graph.runner import RunNotFoundError
 
@@ -32,29 +32,13 @@ async def _accept(state: AppState, payload: dict[str, Any], source: str) -> Aler
     found = await asyncio.to_thread(
         intake.record_alerts, engine, key, alerts, system=system, window_s=window
     )
-    run_id = found.run_id
+    run_id, run = found.run_id, None
     firing = [a for a in alerts if a.status == "firing"]
     if run_id is None and firing:
-        # Requests that reach the group before its run is attached all name the same run, and
-        # only the first creates it.
         request = intake.triage_request(firing, common, system)
-        run_id = await asyncio.to_thread(
-            state.runner.submit,
-            request,
-            run_id=found.opens,
-            trigger=source,
-            alert_group_id=found.group_id,
-        )
-        opened = await asyncio.to_thread(repo.get_run, engine, run_id)
-        if opened is None or not intake.opened_by(opened, found.group_id):
-            # An older run already has that ID (a database restored in part): open a new one.
-            run_id = await asyncio.to_thread(
-                state.runner.submit, request, trigger=source, alert_group_id=found.group_id
-            )
-        await asyncio.to_thread(intake.attach_run, engine, found.group_id, run_id)
-        if state.inprocess:
-            state.worker.execute(run_id)
-    run = await asyncio.to_thread(repo.get_run, engine, run_id) if run_id else None
+        run_id, run = await _open_run(state, found, request, source)
+    elif run_id is not None:
+        run = await asyncio.to_thread(repo.get_run, engine, run_id)
     return AlertAccepted(
         alert_group_id=found.group_id,
         run_id=run_id,
@@ -62,6 +46,38 @@ async def _accept(state: AppState, payload: dict[str, Any], source: str) -> Aler
         alerts=len(alerts),
         status=run["status"] if run else "resolved",
     )
+
+
+async def _open_run(
+    state: AppState, found: intake.Grouping, request: TriageRequest, source: str
+) -> tuple[str, dict[str, Any] | None]:
+    """Open the group's run, or find the one a racing request opened: every request tries the
+    same IDs in the same order and stops at the first that is free or already the group's."""
+    engine = state.services.engine
+
+    async def submit(run_id: str | None) -> tuple[str, dict[str, Any] | None]:
+        given = await asyncio.to_thread(
+            state.runner.submit,
+            request,
+            run_id=run_id,
+            trigger=source,
+            alert_group_id=found.group_id,
+        )
+        return given, await asyncio.to_thread(repo.get_run, engine, given)
+
+    for candidate in intake.run_ids_for(found):
+        run_id, run = await submit(candidate)
+        if run is not None and intake.opened_by(run, found.group_id):
+            break
+    else:  # some other run holds every one of those IDs
+        run_id, run = await submit(None)
+    attached = await asyncio.to_thread(intake.attach_run, engine, found.group_id, run_id)
+    if attached != run_id:  # another run became the group's first: this one is not needed
+        await state.runner.delete(run_id)
+        run_id, run = attached, await asyncio.to_thread(repo.get_run, engine, attached)
+    elif state.inprocess:
+        state.worker.execute(run_id)
+    return run_id, run
 
 
 @router.post("/alerts/alertmanager", status_code=status.HTTP_202_ACCEPTED)

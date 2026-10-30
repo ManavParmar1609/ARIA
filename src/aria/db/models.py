@@ -20,6 +20,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -343,6 +344,18 @@ class AlertGroupRow(Base):
     """Correlated alerts that ARIA triages as one incident."""
 
     __tablename__ = "alert_groups"
+    # One open group per key, kept by the database: requests that race to open a key's group, on
+    # one API replica or several, insert one row, and the others join it.
+    __table_args__ = (
+        Index(
+            "uq_alert_groups_open_key",
+            "key",
+            unique=True,
+            sqlite_where=text("status = 'open'"),
+            postgresql_where=text("status = 'open'"),
+            mssql_where=text("status = 'open'"),
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     key: Mapped[str] = mapped_column(String(256), index=True)

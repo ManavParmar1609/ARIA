@@ -10,6 +10,7 @@ import threading
 import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -21,7 +22,7 @@ import uvicorn
 from asgi_lifespan import LifespanManager
 from fastapi import FastAPI
 from mcp import Client
-from sqlalchemy import select, update
+from sqlalchemy import select
 
 from aria.api import alerts as intake
 from aria.api.app import create_app
@@ -680,18 +681,17 @@ def test_two_replicas_opening_one_alert_group_at_once_share_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Two API replicas get the same new alert group at the same moment: each finds no open group
-    and opens one. They compute the same group ID, so the database keeps one and the other
-    request joins it, with the same run to open."""
+    and opens one. The database keeps one open group per key, so the other request joins it."""
     init_db(get_engine())
     engine = get_engine()
-    real = intake.group_id_after
+    real = intake.new_group_id
     both_looked = threading.Barrier(2, timeout=10)
 
-    def after_both_looked(key: str, previous: str | None) -> str:
+    def after_both_looked() -> str:
         both_looked.wait()  # neither has stored its group yet
-        return real(key, previous)
+        return real()
 
-    monkeypatch.setattr(intake, "group_id_after", after_both_looked)
+    monkeypatch.setattr(intake, "new_group_id", after_both_looked)
     alerts = [AlertSignal(source="alertmanager", name="DiskFull", fingerprint="d1")]
     found: list[intake.Grouping] = []
 
@@ -705,7 +705,7 @@ def test_two_replicas_opening_one_alert_group_at_once_share_it(
         replica.join(timeout=30)
     assert len(found) == 2
     assert found[0].group_id == found[1].group_id
-    assert found[0].opens == found[1].opens
+    assert intake.run_ids_for(found[0]) == intake.run_ids_for(found[1])
     assert sorted(f.grouped for f in found) == [False, True]
     with session_scope(engine) as session:
         groups = session.scalars(select(AlertGroupRow).where(AlertGroupRow.key == "storm")).all()
@@ -729,27 +729,91 @@ async def test_a_burst_of_deliveries_for_one_new_group_opens_one_run(api: Api) -
     assert sum(e.kind == "run_started" for e in events) == 1
 
 
-async def test_an_older_run_with_the_derived_id_never_takes_a_new_storm(api: Api) -> None:
-    """The ID a new group's run would take is already an older run's (a database restored in
-    part): the storm opens a run of its own instead of joining that one."""
+async def test_another_run_holding_the_group_run_id_moves_the_storm_to_the_next_id(
+    api: Api,
+) -> None:
+    """Some other run already has the ID a new group's run would take (an AG-UI thread named so,
+    or a database restored in part): the storm takes the next ID in the group's fixed order, the
+    same one every racing request would take."""
     engine = api.state.services.engine
-    found = intake.record_alerts(
-        engine,
-        "restored",
-        [AlertSignal(name="DiskFull", fingerprint="r1")],
-        system="bgl",
-        window_s=1,
-    )
+    payload = _alertmanager("taken", "firing")
+    key, alerts, _ = intake.normalize(payload, source="alertmanager")
+    found = intake.record_alerts(engine, key, alerts, system="bgl", window_s=300)
+    first, second = intake.run_ids_for(found)[:2]
     request = TriageRequest(system="bgl", logs=["x"]).model_dump(mode="json")
-    repo.create_run(engine, found.opens, request=request, status=RunStatus.PUBLISHED)
-    with session_scope(engine) as session:
-        session.execute(
-            update(AlertGroupRow).where(AlertGroupRow.id == found.group_id).values(run_id=None)
-        )
-    payload = _alertmanager("restored", "firing")
+    repo.create_run(engine, first, request=request, status=RunStatus.PUBLISHED)
     accepted = (await api.client.post("/api/v1/alerts/alertmanager", json=payload)).json()
-    assert accepted["alert_group_id"] == found.group_id
-    assert accepted["run_id"] not in (None, found.opens)
+    assert (accepted["alert_group_id"], accepted["run_id"]) == (found.group_id, second)
+    assert (repo.get_run(engine, first) or {})["status"] == "published"  # left as it was
+
+
+async def test_a_request_that_arrives_late_joins_the_run_it_raced_for(api: Api) -> None:
+    """Two deliveries found the new group without a run. The first opened the run, and it ended
+    (a reviewer rejected it) before the second got to it: the second still joins that run."""
+    from aria.api.routers.intake import _open_run
+
+    engine = api.state.services.engine
+    payload = _alertmanager("late", "firing")
+    key, alerts, common = intake.normalize(payload, source="alertmanager")
+    found = intake.record_alerts(engine, key, alerts, system="bgl", window_s=300)
+    request = intake.triage_request(alerts, common, "bgl")
+    opened = intake.run_ids_for(found)[0]
+    api.state.runner.submit(
+        request, run_id=opened, trigger="alertmanager", alert_group_id=found.group_id
+    )
+    repo.update_run(engine, opened, status=RunStatus.REJECTED)
+    intake.attach_run(engine, found.group_id, opened)
+    run_id, run = await _open_run(api.state, found, request, "alertmanager")
+    assert run_id == opened
+    assert (run or {})["status"] == "rejected"
+    group_runs = [r for r in repo.list_runs(engine) if r.get("alert_group_id") == found.group_id]
+    assert [r["id"] for r in group_runs] == [opened]
+
+
+def test_the_migration_keeps_one_open_group_per_key(tmp_path: Path) -> None:
+    """A database from before the rule may hold several open groups for one key: upgrading keeps
+    the latest open and closes the rest, then holds the rule for new groups."""
+    from sqlalchemy import create_engine, insert
+    from sqlalchemy.exc import IntegrityError
+
+    from aria.db import migrate
+
+    url = f"sqlite:///{tmp_path / 'old.db'}"
+    migrate.upgrade("7257db204ce1", url=url)
+    engine = create_engine(url)
+    rows = [
+        {"id": "grp-old", "last_at": datetime(2026, 10, 29, 1, tzinfo=UTC)},
+        {"id": "grp-new", "last_at": datetime(2026, 10, 29, 2, tzinfo=UTC)},
+    ]
+    with engine.begin() as conn:
+        for row in rows:
+            conn.execute(
+                insert(AlertGroupRow.__table__).values(
+                    key="k",
+                    system="bgl",
+                    status="open",
+                    alert_count=1,
+                    first_at=row["last_at"],
+                    **row,
+                )
+            )
+    migrate.upgrade("head", url=url)
+    with engine.connect() as conn:
+        statuses = dict(conn.execute(select(AlertGroupRow.id, AlertGroupRow.status)).all())
+    assert statuses == {"grp-old": "closed", "grp-new": "open"}
+    with pytest.raises(IntegrityError), engine.begin() as conn:
+        conn.execute(
+            insert(AlertGroupRow.__table__).values(
+                id="grp-dup",
+                key="k",
+                system="bgl",
+                status="open",
+                alert_count=0,
+                first_at=datetime.now(UTC),
+                last_at=datetime.now(UTC),
+            )
+        )
+    engine.dispose()
 
 
 async def test_malformed_or_unrelated_alerts_never_fail_or_merge(api: Api) -> None:

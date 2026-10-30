@@ -653,12 +653,11 @@ class TriageRunner:
             forked_from_checkpoint=checkpoint_id,
         )
         await asyncio.to_thread(self._save_forked_report, update, snapshot.values)
-        await self._event(
-            new_id, "run_started", payload={"forked_from": run_id, "checkpoint_id": checkpoint_id}
-        )
+        started = {"forked_from": run_id, "checkpoint_id": checkpoint_id}
         if not execute:
+            await self._event(new_id, "run_started", payload=started)
             return RunOutcome(new_id, RunStatus.QUEUED)
-        return await self._drive(new_id, None, config=forked)
+        return await self._drive(new_id, None, config=forked, started=started)
 
     async def resend(self, run_id: str, action_id: str, *, by: str) -> OutboundAction:
         """Send an approved message again after it did not go out.
