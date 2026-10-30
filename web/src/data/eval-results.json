@@ -1,7 +1,7 @@
 {
   "suite": "all",
-  "created_at": "2026-10-30T03:34:51+00:00",
-  "git_sha": "f4e6824",
+  "created_at": "2026-10-30T05:40:15+00:00",
+  "git_sha": "ed91fce",
   "llm": false,
   "data": {
     "synthetic": true,
@@ -2960,31 +2960,31 @@
       "false_alarms": 0.0
     },
     "latency": {
-      "time_to_review_p50_s": 0.569,
-      "time_to_review_p95_s": 1.206,
+      "time_to_review_p50_s": 0.455,
+      "time_to_review_p95_s": 0.969,
       "stage_p50_ms": {
-        "assess": 7.4,
-        "comms": 11.6,
-        "investigate": 98.2,
-        "merge": 77.3,
-        "parse_shard": 123.4,
-        "plan": 10.0,
-        "recall": 20.4,
-        "report": 16.6,
-        "review": 5.5,
-        "severity": 29.1
+        "assess": 5.0,
+        "comms": 8.6,
+        "investigate": 72.2,
+        "merge": 57.0,
+        "parse_shard": 93.7,
+        "plan": 7.6,
+        "recall": 15.3,
+        "report": 13.0,
+        "review": 4.0,
+        "severity": 21.3
       },
       "stage_p95_ms": {
-        "assess": 15.1,
-        "comms": 26.8,
-        "investigate": 203.0,
-        "merge": 249.2,
-        "parse_shard": 464.6,
-        "plan": 18.4,
-        "recall": 29.5,
-        "report": 26.2,
-        "review": 12.4,
-        "severity": 48.4
+        "assess": 14.4,
+        "comms": 16.9,
+        "investigate": 149.1,
+        "merge": 115.9,
+        "parse_shard": 319.7,
+        "plan": 21.1,
+        "recall": 23.2,
+        "report": 21.0,
+        "review": 12.6,
+        "severity": 32.4
       },
       "llm_call_p50_ms": 0.0,
       "llm_call_p95_ms": 0.0
@@ -2995,7 +2995,7 @@
       "runs_over_token_limit": 0,
       "runs_with_exhausted_budget": 0,
       "mean_llm_calls": 0.0,
-      "mean_tool_calls": 3.47
+      "mean_tool_calls": 3.48
     },
     "providers": {}
   },
