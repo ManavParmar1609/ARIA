@@ -296,6 +296,14 @@ export function evaluation() {
       lines: evals.parsing.lines,
       meanAccuracy: evals.parsing.mean_grouping_accuracy,
       bySystem: evals.parsing.systems,
+      gaia: {
+        systems: evals.parsing.gaia.n_systems,
+        lines: evals.parsing.gaia.lines,
+        meanAccuracy: evals.parsing.gaia.mean_grouping_accuracy,
+        knownAccuracy: evals.parsing.gaia.known.mean_grouping_accuracy,
+        newAccuracy: evals.parsing.gaia.new.mean_grouping_accuracy,
+        newSystems: evals.parsing.gaia.new.systems,
+      },
     },
     live: {
       createdAt: live.created_at,

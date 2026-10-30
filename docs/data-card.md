@@ -29,7 +29,7 @@ behaves on that distribution. They are not a measurement of accuracy on producti
 
 | | |
 |---|---|
-| Log lines | Real lines from the Loghub 2k samples: 2,000 lines from each of 16 systems |
+| Log lines | Real lines from the Loghub 2k samples: 2,000 lines from each of 16 systems. The parsing evaluation also reads GAIA's labelled lines from 14 systems |
 | Training and evaluation windows | **Semi-synthetic**: real lines, synthetic composition, 13 systems |
 | Real-data evaluation | **Real**: 104,815 HDFS lines and the experts' label for each of 7,940 blocks; the full BGL log (4,747,963 lines) and its alert tags; the container logs of 55 Hadoop jobs and their failure labels; the service logs of 911 OpenStack runs, each with one bug injected, and how each run ended; 24,918 ServiceNow tickets; GitLab.com's public production incidents and their responders' labels; 355 public post-mortems of AWS, Azure and Google Cloud incidents and the root cause and fix researchers recorded for each; 2,654 public prompt-injection attacks and 339 benign look-alikes. Only the ticket model trains on any of it, on the oldest tickets |
 | Labels | BGL windows: the sysadmin alert tags, through a written rubric. Other systems: a documented scenario policy |
@@ -52,6 +52,7 @@ its integrity (see [What is in git](#what-is-in-git-and-what-is-not)).
 | `loghub-hadoop` | The container logs of 55 Hadoop MapReduce jobs, each labelled normal or with its injected failure: machine down, network disconnection or disk full (Lin et al., ICSE-SEIP 2016), same Zenodo record | The failed-jobs evaluation: each job triaged end to end | Downloaded from a mirror: a public repository at a pinned commit |
 | `openstack-faults` | The dessertlab OpenStack fault-injection dataset (Cotroneo et al., ESEC/FSE 2019) at commit `f16a73f8`: 911 runs, each with one bug injected into Nova, Cinder or Neutron, how each ended (failed or not, the check that caught it, and the API error that reported it, if any) and every service's logs | The injected-bugs evaluation: each run's Nova, Cinder, Neutron, Glance and Heat logs from the round with the bug, triaged end to end | Downloaded: a sparse checkout of just those logs, stored gzipped. Keystone's logs, the client's output and the injector's traces are left out, so ARIA cannot read the outcome from them |
 | `cloud-postmortems` | Public post-mortems of AWS, Azure and Google Cloud incidents from 2011 to 2021, structured by Li et al. (ISSRE 2022) with each incident's layered root cause, detection and mitigations, at commit `161e7cc9` | The post-mortem evaluation: past incidents with the same root cause or kind of fix, from each later incident's title and summary of impact | Downloaded: a sparse checkout of the structured collection only |
+| `gaia-logs` | GAIA's companion log data (CloudWise's Generic AIOps Atlas) at commit `238a9e24`: 10,000 lines from each of 14 systems, each labelled with its template, five of them systems ARIA has no format for (ArangoDB, ClickHouse, Kafka, Redis, Tengine) | The parsing evaluation scores the production parser against these labels as well | Downloaded: one zip, checked against the sha256 in the manifest |
 | `uci-incidents` | The UCI "Incident management process enriched event log" (dataset 498): a ServiceNow audit trail of 141,712 events for 24,918 incidents, with anonymised categorical codes and no free text | The ticket priority and SLA-breach models and their evaluation, and the outcome statistics of similar tickets | Downloaded from a mirror: two public copies of UCI's zip, checked against the sha256 in the manifest (the same CSV is in nine more repositories) |
 | `bipia`, `injecagent`, `cyberseceval-pi`, `tensor-trust`, `giskard-injections`, `jailbreak-llms` | Public prompt-injection benchmarks: BIPIA (Yi et al.), InjecAgent (Zhan et al.), CyberSecEval 2 (Meta), Tensor Trust (Toyer et al.), Giskard's collection and in-the-wild jailbreaks (Shen et al.), each at a pinned commit | Measuring the injection detector on attacks it was never tuned on | Downloaded |
 | `notinject` | NotInject (Li, Liu et al.): benign sentences that use one, two or three words common in injections | Measuring the detector's over-defence | Downloaded |
@@ -85,6 +86,9 @@ The OpenStack fault-injection dataset is licensed AGPL-3.0. ARIA reads it only t
 never redistributes it or any part of it. Cite D. Cotroneo, L. De Simone, P. Liguori, R. Natella
 and N. Bidokhti, "How Bad Can a Bug Get? An Empirical Analysis of Software Failures in the
 OpenStack Cloud Computing Platform", ESEC/FSE 2019.
+
+GAIA is licensed GPL-2.0. ARIA reads its companion log data only to evaluate the parser and never
+redistributes it. Cite CloudWise, GAIA (Generic AIOps Atlas), github.com/CloudWise-OpenSource/GAIA-DataSet.
 
 The structured post-mortems state no licence; the write-ups they structure are the clouds' own
 public status pages. ARIA reads them only to evaluate incident memory and never redistributes

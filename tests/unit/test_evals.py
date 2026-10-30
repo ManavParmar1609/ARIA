@@ -183,6 +183,43 @@ def test_parsing_also_scores_loghub2_corrected_labels(tmp_path: Path) -> None:
     assert ps.summarize(FIXTURES, corrected_dir=tmp_path / "missing")["corrected"] is None
 
 
+def test_parsing_scores_gaia_logs_and_marks_the_systems_new_to_aria(tmp_path: Path) -> None:
+    def labelled(path: Path, rows: list[tuple[str, int]]) -> None:
+        # GAIA's files: an unnamed index column, and a newline kept inside each quoted message.
+        with path.open("w", newline="") as out:
+            writer = csv.writer(out)
+            writer.writerow(["", "log_message", "pattern_id"])
+            for i, (message, pattern) in enumerate(rows):
+                writer.writerow([i, message + "\n", pattern])
+
+    ssh = [
+        (f"Failed password for invalid user u{i} from 10.0.0.{i} port 22 ssh2", 0) for i in range(6)
+    ]
+    ssh += [(f"Accepted password for user{i} from 10.0.1.{i} port 22 ssh2", 1) for i in range(4)]
+    labelled(tmp_path / "ssh_result.csv", ssh)
+    labelled(tmp_path / "kafka.csv", [(f"Partition topic-{i} is now online", 7) for i in range(5)])
+    (tmp_path / "kafka_pattern.csv").write_text(",pattern_id,pattern\n0,7,Partition <*> online\n")
+
+    assert set(ps.gaia_files(tmp_path)) == {"ssh", "kafka"}  # the templates file is skipped
+    gaia = ps.summarize_gaia(tmp_path)
+    assert (gaia["n_systems"], gaia["lines"]) == (2, 15)
+    assert gaia["systems"]["ssh"]["aria_system"] == "openssh"
+    assert gaia["systems"]["kafka"]["aria_system"] is None
+    assert gaia["new"]["systems"] == ["kafka"]
+    assert gaia["systems"]["kafka"]["grouping_accuracy"] == 1.0
+    assert gaia["systems"]["ssh"]["commonest_event_share"] == 0.6
+    assert gaia["real_lines_flagged_as_injection"] == 0
+
+    loghub = ps.summarize(FIXTURES)
+    section = {**loghub, "gaia": gaia}
+    text = "\n".join(report._parsing(section))
+    assert "### GAIA's labelled logs" in text
+    assert "| Kafka | 5 | 1 |" in text
+    assert "new to ARIA" in text
+    assert "on GAIA's 15 labelled lines" in report._gaia_summary(gaia)
+    assert "missing" in ps.summarize_gaia(tmp_path / "nothing")
+
+
 def test_edge_suite_parses_everything_and_quarantines_attacks() -> None:
     inputs = ed.generate(n_attacks=110, n_benign=90, seed=5)
     assert {i.family for i in inputs if i.kind == "attack"} == set(ed.ATTACKS)

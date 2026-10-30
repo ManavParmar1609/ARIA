@@ -1026,6 +1026,82 @@ def _parsing(section: Mapping[str, Any]) -> list[str]:
         rule,
         *rows,
         "",
+        *_gaia(section.get("gaia") or {}, section["systems"]),
+    ]
+
+
+_GAIA_NAMES = {
+    "apache": "Apache",
+    "arangodb": "ArangoDB",
+    "clickhouse": "ClickHouse",
+    "hadoop": "Hadoop",
+    "kafka": "Kafka",
+    "linux": "Linux",
+    "mac": "Mac",
+    "openstack": "OpenStack",
+    "proxifier": "Proxifier",
+    "redis": "Redis",
+    "spark": "Spark",
+    "ssh": "OpenSSH",
+    "tengine": "Tengine",
+    "zookeeper": "ZooKeeper",
+}
+
+
+def _gaia(gaia: Mapping[str, Any], loghub: Mapping[str, Any]) -> list[str]:
+    if "systems" not in gaia:
+        return [f"No results on GAIA's labelled logs: {gaia['missing']}.", ""] if gaia else []
+    known, new = gaia["known"], gaia["new"]
+    names = [_GAIA_NAMES.get(n, n) for n in new["systems"]]
+
+    def sample(r: Mapping[str, Any]) -> str:
+        if not r["aria_system"]:
+            return "new to ARIA"
+        on = loghub.get(r["aria_system"])
+        return f"{on['grouping_accuracy']:.3f}" if on else "not downloaded"
+
+    split = [
+        f"{_GAIA_NAMES.get(n, n)}'s commonest event covers {_pct(r['commonest_event_share'])} "
+        "of its lines"
+        for n, r in gaia["systems"].items()
+        if r["grouping_accuracy"] < 0.5 and r["commonest_event_share"] >= 0.5
+    ]
+    return [
+        "### GAIA's labelled logs",
+        "",
+        (
+            f"{gaia['lines']:,} lines from {gaia['n_systems']} systems in {gaia['source']}, each "
+            "labelled with its template and parsed as production would parse it. Of these, "
+            f"{known['n_systems']} are Loghub systems, parsed with the same settings; "
+            f"{_and(names)} have no format or Drain settings in ARIA, so they get the "
+            "generic settings any new system would. The lines are messages without their headers. "
+            f"Mean grouping accuracy {gaia['mean_grouping_accuracy']:.3f}: "
+            f"{known['mean_grouping_accuracy']:.3f} on the Loghub systems and "
+            f"{new['mean_grouping_accuracy']:.3f} on the new ones. Real log lines flagged as "
+            f"injection: {gaia['real_lines_flagged_as_injection']}. Source: {gaia['citation']}"
+        ),
+        "",
+        "| System | Lines | True events | Templates found | Grouping accuracy | On Loghub's sample |",
+        "|---|---|---|---|---|---|",
+        *(
+            f"| {_GAIA_NAMES.get(n, n)} | {r['lines']:,} | {r['events']} | {r['templates']} | "
+            f"{r['grouping_accuracy']:.3f} | {sample(r)} |"
+            for n, r in sorted(
+                gaia["systems"].items(), key=lambda kv: _GAIA_NAMES.get(kv[0], kv[0])
+            )
+        ),
+        "",
+        *(
+            [
+                (
+                    "Grouping accuracy credits only exact groups, so splitting one large event "
+                    "costs every line in it: " + "; ".join(split) + "."
+                ),
+                "",
+            ]
+            if split
+            else []
+        ),
     ]
 
 
@@ -1370,6 +1446,17 @@ def _openstack_summary(section: Mapping[str, Any]) -> list[str]:
     ]
 
 
+def _gaia_summary(gaia: Mapping[str, Any]) -> str:
+    if "systems" not in gaia:
+        return ""
+    new = gaia["new"]
+    return (
+        f", and {gaia['mean_grouping_accuracy']:.3f} on GAIA's {gaia['lines']:,} labelled lines "
+        f"from {gaia['n_systems']} systems: {new['mean_grouping_accuracy']:.3f} on the "
+        f"{new['n_systems']} that ARIA has no format or settings for"
+    )
+
+
 def _postmortems_summary(section: Mapping[str, Any]) -> list[str]:
     if "by" not in section or "cause" not in section["by"]:
         return []
@@ -1529,7 +1616,7 @@ def _results(results: Mapping[str, Any], live: Mapping[str, Any] | None) -> list
             (
                 f"**Log parsing**: grouping accuracy {parsing['mean_grouping_accuracy']:.3f} against "
                 f"Loghub's labelled templates ({parsing['lines']:,} lines, {parsing['n_systems']} "
-                "systems)."
+                "systems)" + _gaia_summary(parsing.get("gaia") or {}) + "."
             ),
             "",
         ]

@@ -128,6 +128,8 @@ async def run(
     }
     if suite in ("smoke", "parsing", "all"):
         results["parsing"] = ps.summarize(loghub_dir)
+    if suite in ("parsing", "all"):  # 140,000 lines: too many for the smoke gate
+        results["parsing"]["gaia"] = ps.summarize_gaia()
     if suite in ("smoke", "edge", "all"):
         results["edge"] = ed.evaluate(ed.generate())
     if suite in ("edge", "all"):

@@ -339,6 +339,13 @@ const MODES: Record<string, string> = {
   component_errors: "Errors in one component",
   none: "No hypothesis held",
 };
+const GAIA_NAMES: Record<string, string> = {
+  arangodb: "ArangoDB",
+  clickhouse: "ClickHouse",
+  kafka: "Kafka",
+  redis: "Redis",
+  tengine: "Tengine",
+};
 const SLA_BASELINES: Record<string, string> = {
   first_assignment_group: "First assignment group's breach rate",
   category: "Category's breach rate",
@@ -982,7 +989,7 @@ export function Evals({
       <Section
         id="ev-robustness"
         title="Parsing, edge cases and injection"
-        intro={`Template grouping against Loghub's hand labels, and ${r.edgeN.toLocaleString("en")} hostile or broken inputs.`}
+        intro={`Template grouping against Loghub's and GAIA's hand labels, and ${r.edgeN.toLocaleString("en")} hostile or broken inputs.`}
       >
         <div className="grid gap-8 xl:grid-cols-2">
           <div className="grid content-start gap-3">
@@ -996,6 +1003,15 @@ export function Evals({
                 .sort((a, b) => b[1] - a[1])}
               format={(v) => v.toFixed(3)}
             />
+            <p className="text-sm text-muted-foreground">
+              On GAIA&apos;s {data.parsing.gaia.lines.toLocaleString("en")} labelled lines from{" "}
+              {data.parsing.gaia.systems} systems, the mean is{" "}
+              {data.parsing.gaia.meanAccuracy.toFixed(3)}:{" "}
+              {data.parsing.gaia.knownAccuracy.toFixed(3)} on the Loghub systems and{" "}
+              {data.parsing.gaia.newAccuracy.toFixed(3)} on{" "}
+              {data.parsing.gaia.newSystems.map((k) => GAIA_NAMES[k] ?? k).join(", ")}, which ARIA
+              has no format or settings for.
+            </p>
           </div>
           <div className="grid content-start gap-3">
             <h3 className="text-sm font-medium">

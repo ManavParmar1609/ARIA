@@ -101,6 +101,14 @@ sources:
     citation: "X. Li et al. Going through the Life Cycle of Faults in Clouds: Guidelines on Fault Handling. ISSRE 2022."
     description: Public post-mortems of AWS, Azure and Google Cloud incidents from 2011 to 2021, each structured by the researchers with its layered root cause, its detection and the mitigations that ended it. The post-mortem evaluation asks incident memory for past incidents with the same root cause or fix (src/aria/evals/postmortems.py).
 
+  gaia-logs:
+    kind: http
+    url: https://raw.githubusercontent.com/CloudWise-OpenSource/GAIA-DataSet/238a9e24ae0b69e7e05dff112652a3fa62db88fd/Companion_Data/log.zip
+    sha256: af0bc79a794cb7f07a8999781c057aa05d58c1df593ae390cfae085fa2c95731
+    license: GPL-2.0; read only to evaluate, never redistributed
+    citation: "CloudWise. GAIA (Generic AIOps Atlas), Companion Data. github.com/CloudWise-OpenSource/GAIA-DataSet, 2021."
+    description: GAIA's companion log data. The parsing evaluation reads its log-parsing set (10,000 lines from each of 14 systems, each line labelled with its template); five of the systems have no format or Drain settings in ARIA (src/aria/evals/parsing.py).
+
   uci-incidents:
     kind: uci
     dataset_id: 498
