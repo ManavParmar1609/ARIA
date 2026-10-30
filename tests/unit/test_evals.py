@@ -433,6 +433,19 @@ def test_report_states_provenance_results_and_limitations() -> None:
     assert "**Data.** Every number comes from semi-synthetic" in text
 
 
+def test_the_live_summary_names_the_services_that_answered() -> None:
+    providers: dict[str, dict[str, int]] = {
+        "gemini": {"calls": 4, "failures": 1},
+        "gemini-lite": {"calls": 2, "failures": 0},
+        "nim": {"calls": 1, "failures": 1},  # tried, never answered
+        "fake": {"calls": 3, "failures": 0},  # offline: never a live answer
+    }
+    assert report._answered_by(providers) == "Google Gemini"
+    providers["nim"] = {"calls": 2, "failures": 0}
+    assert report._answered_by(providers) == "Google Gemini and NVIDIA NIM"
+    assert report._answered_by({}) == "no hosted provider"
+
+
 def test_the_data_paragraph_names_only_the_real_sources_measured() -> None:
     results: dict[str, Any] = {
         "data": {"test_seeds": [41, 42]},

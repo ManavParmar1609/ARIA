@@ -146,16 +146,21 @@ export function Results({
         <div className="grid content-start gap-4">
           <h3 className="text-2xl tracking-heading">With a live model</h3>
           <p className="text-muted-foreground">
-            In {live.n} runs through hosted NVIDIA NIM models every report still validated and cited
-            its evidence, but a run took about {Math.round(live.p50s)} s, and {live.exhausted} of{" "}
-            {live.n} hit the {live.latencyBudgetS} s budget and finished on the deterministic path.
-            The leading hypothesis named the true cause in{" "}
+            In {live.n} runs through {live.answeredBy},{" "}
+            {live.valid === 1 && live.cited === 1
+              ? "every report validated and cited its evidence"
+              : `${pct(live.valid)} of reports validated and ${pct(live.cited)} cited every claim`}
+            . A run took about {Math.round(live.p50s)} s to reach review
+            {live.exhausted > 0
+              ? `, and ${live.exhausted} of ${live.n} hit the ${live.latencyBudgetS} s budget and finished on the deterministic path`
+              : ""}
+            . The leading hypothesis named the true cause in{" "}
             {Math.round(live.leadingCorrect * live.incidentRuns)} of {live.incidentRuns} incident
             runs.
           </p>
           <p className="text-sm text-muted-foreground">
-            Models used: {live.providers.flatMap((pr) => pr.models).join(" and ")}. Too few runs to
-            generalise from; latency depended on the provider&apos;s load that day.
+            Models that answered: {live.models.join(" and ")}. Too few runs to generalise from;
+            latency depended on the provider&apos;s load that day.
           </p>
         </div>
       </div>

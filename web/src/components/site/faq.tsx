@@ -27,7 +27,7 @@ const QUESTIONS: { q: string; a: ReactNode }[] = [
   },
   {
     q: "Can I run it without an API key?",
-    a: "Yes. Offline, every step uses deterministic logic and the trained severity model, and the report is written from a grounded template. Add NVIDIA NIM, Azure OpenAI or any OpenAI-compatible endpoint when you want a language model to investigate and write.",
+    a: "Yes. Offline, every step uses deterministic logic and the trained severity model, and the report is written from a grounded template. Add a Gemini or NVIDIA NIM key, Azure OpenAI or any OpenAI-compatible endpoint when you want a language model to investigate and write.",
   },
   {
     q: "What happens to sensitive data in my logs?",

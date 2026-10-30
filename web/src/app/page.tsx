@@ -200,6 +200,7 @@ const SPEAKS = [
   "AG-UI",
   "LangGraph",
   "OpenTelemetry",
+  "Google Gemini",
   "NVIDIA NIM",
   "Azure OpenAI",
 ];

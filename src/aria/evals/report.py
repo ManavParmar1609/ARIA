@@ -966,6 +966,28 @@ def _cost(value: float | None) -> str:
     return "not priced" if value is None else f"${value:.4f}"
 
 
+# How a provider key reads in prose; offline providers never count as a live answer.
+_PROVIDER_NAMES = {
+    "gemini": "Google Gemini",
+    "gemini-lite": "Google Gemini",
+    "nim": "NVIDIA NIM",
+    "nim-fallback": "NVIDIA NIM",
+    "nim-local": "a self-hosted NIM",
+    "azure": "Azure OpenAI",
+    "openai_compat": "an OpenAI-compatible endpoint",
+}
+
+
+def _answered_by(providers: Mapping[str, Mapping[str, Any]]) -> str:
+    """The services that answered at least one call, in the order the run tried them."""
+    names: list[str] = []
+    for key, p in providers.items():
+        name = _PROVIDER_NAMES.get(key)
+        if name and p.get("calls", 0) > p.get("failures", 0) and name not in names:
+            names.append(name)
+    return _and(names) or "no hosted provider"
+
+
 def _providers(providers: Mapping[str, Mapping[str, Any]]) -> list[str]:
     if not providers:
         return []
@@ -1244,8 +1266,9 @@ def render(results: Mapping[str, Any], live: Mapping[str, Any] | None = None) ->
         lines += [
             (
                 f"_Live run on {live['created_at']} (commit {live.get('git_sha') or 'unknown'}) "
-                "through the configured provider chain, NVIDIA NIM first. Latency depends on the "
-                "provider's load at the time._"
+                "through the configured provider chain; "
+                f"{_answered_by(live['pipeline'].get('providers') or {})} answered. Latency "
+                "depends on the provider's load at the time._"
             ),
             "",
         ]
@@ -1601,7 +1624,8 @@ def _results(results: Mapping[str, Any], live: Mapping[str, Any] | None) -> list
         g, lat = pipe["groundedness"], pipe["latency"]
         lines += [
             (
-                f"**With a live LLM** (NVIDIA NIM, {pipe['n']} runs at commit "
+                f"**With a live LLM** ({_answered_by(pipe.get('providers') or {})}, "
+                f"{pipe['n']} runs at commit "
                 f"`{live.get('git_sha') or 'unknown'}`): the LLM wrote "
                 f"{g['written_by'].get('llm', 0)} of the {pipe['n']} reports, and "
                 f"{_pct(g['every_claim_cited'])} cite evidence for every claim; time to review p50 "

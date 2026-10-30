@@ -38,7 +38,7 @@ const STANDARDS = [
     name: "Open-weight models",
     short: "models",
     why: "Why open-weight models",
-    what: "NVIDIA NIM, any OpenAI-compatible server, or Azure OpenAI. Switching provider is a configuration change; without one, ARIA runs deterministically.",
+    what: "Gemini, NVIDIA NIM, Azure OpenAI or any OpenAI-compatible server. Switching provider is a configuration change; without one, ARIA runs deterministically.",
     href: `${ADR}/0005-route-model-calls-through-provider-chains.md`,
   },
 ];

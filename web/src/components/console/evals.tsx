@@ -1037,7 +1037,7 @@ export function Evals({
       <Section
         id="ev-live"
         title="With a live model"
-        intro={`${live.n} runs through hosted NVIDIA NIM models, ${live.createdAt.slice(0, 10)}.`}
+        intro={`${live.n} runs through ${live.answeredBy}, ${live.createdAt.slice(0, 10)}.`}
       >
         <Facts
           items={[
@@ -1081,11 +1081,14 @@ export function Evals({
         </Table>
         <p className="max-w-3xl text-sm text-muted-foreground">
           Too few runs to generalise from. Latency depended on the hosted service&apos;s load that
-          day. {live.exhausted === 1 ? "One run" : `${live.exhausted} runs`} used up the{" "}
-          {live.latencyBudgetS} s budget after the model had written{" "}
-          {live.exhausted === 1 ? "its report" : "their reports"}, so only the steps after it fell
-          back to the deterministic path: every report was written by the model, and every one
-          validated.
+          day.{" "}
+          {live.exhausted > 0
+            ? `${live.exhausted === 1 ? "One run" : `${live.exhausted} runs`} used up the ${live.latencyBudgetS} s budget after the model had written ${live.exhausted === 1 ? "its report" : "their reports"}, so only the steps after it fell back to the deterministic path. `
+            : `No run used up the ${live.latencyBudgetS} s budget. `}
+          {live.writtenByModel === live.n
+            ? "Every report was written by the model"
+            : `The model wrote ${live.writtenByModel} of ${live.n} reports`}
+          {live.valid === 1 ? ", and every one validated." : "."}
         </p>
       </Section>
     </div>

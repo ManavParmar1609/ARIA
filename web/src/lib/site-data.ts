@@ -204,6 +204,32 @@ export interface MethodScore {
   severeUnderTriage: number;
 }
 
+// How a provider key reads in prose; offline providers never count as a live answer.
+const PROVIDER_NAMES: Record<string, string> = {
+  gemini: "Google Gemini",
+  "gemini-lite": "Google Gemini",
+  nim: "NVIDIA NIM",
+  "nim-fallback": "NVIDIA NIM",
+  "nim-local": "a self-hosted NIM",
+  azure: "Azure OpenAI",
+  openai_compat: "an OpenAI-compatible endpoint",
+};
+
+const listFormat = new Intl.ListFormat("en-GB", { type: "conjunction" });
+
+type LiveProvider = { calls: number; failures: number; models: string[] };
+
+/** The hosted providers that answered at least one call, in the order the run tried them. */
+function answered(providers: Record<string, LiveProvider>) {
+  const live = Object.entries(providers).filter(
+    ([name, p]) => name in PROVIDER_NAMES && p.calls > p.failures,
+  );
+  return {
+    services: listFormat.format([...new Set(live.flatMap(([name]) => PROVIDER_NAMES[name] ?? []))]),
+    models: [...new Set(live.flatMap(([, p]) => p.models))],
+  };
+}
+
 export function evaluation() {
   const sev = evals.severity;
   const methods: MethodScore[] = Object.entries(sev.methods)
@@ -319,6 +345,9 @@ export function evaluation() {
       tokenLimit: livePipe.budgets.token_limit,
       stageP50: livePipe.latency.stage_p50_ms as Record<string, number>,
       latencyBudgetS: 180,
+      writtenByModel: (livePipe.groundedness.written_by as Record<string, number>).llm ?? 0,
+      answeredBy: answered(livePipe.providers).services || "no hosted provider",
+      models: answered(livePipe.providers).models,
       providers: liveProviders,
     },
   };

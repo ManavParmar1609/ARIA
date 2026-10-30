@@ -362,7 +362,7 @@ export function Settings() {
       <Section
         id="set-providers"
         title="Model providers"
-        intro="NVIDIA NIM leads the chain when NVIDIA_API_KEY is set. Keys are never shown."
+        intro="A self-hosted NIM leads the chain, then Gemini, then hosted NIM, each once its key or endpoint is set. Keys are never shown."
       >
         {providers.isPending ? (
           <LoadingRows rows={3} label="Loading providers" />

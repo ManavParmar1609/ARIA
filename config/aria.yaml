@@ -27,45 +27,17 @@ llm:
   safety: [nim]
 
   providers:
-    nim:
+    nim-local:
       kind: nvidia_nim
-      base_url: ${NVIDIA_NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}
-      api_key_env: NVIDIA_API_KEY
-      chat_model: ${NVIDIA_NIM_CHAT_MODEL:-openai/gpt-oss-20b}
-      reasoning_effort: ${NVIDIA_NIM_REASONING_EFFORT:-low}
-      embedding_model: ${NVIDIA_NIM_EMBED_MODEL:-nvidia/nemotron-3.5-embed-1b}
-      rerank_model: ${NVIDIA_NIM_RERANK_MODEL:-}
-      rerank_url: ${NVIDIA_NIM_RERANK_URL:-}
-      safety_model: ${NVIDIA_NIM_SAFETY_MODEL:-nvidia/nemotron-3.5-content-safety}
-      structured_output: json_schema
-      stream_always: true
-      stall_timeout_s: 25
-      timeout_s: 90
-      verified: true
-      notes: >-
-        Hosted NVIDIA NIM (build.nvidia.com), OpenAI-compatible. Verified 2026-10-29 with live
-        calls: openai/gpt-oss-20b (strict JSON schema, streaming) and nvidia/nemotron-3.5-embed-1b
-        (2048-dim, input_type=query|passage). z-ai/glm-5.3-flash is listed but did not answer
-        within 100 s that day. nvidia/nemotron-3.5-content-safety (the optional guardrail, off by
-        default) is listed in the model catalog (checked 2026-10-29) but has not been called live,
-        so its verdict format is unverified. Reranking is off until NVIDIA_NIM_RERANK_MODEL and
-        NVIDIA_NIM_RERANK_URL are set (the retrieval API runs on ai.api.nvidia.com). Set
-        NVIDIA_NIM_BASE_URL to a self-hosted NIM (for example http://nim:8000/v1) to use your
-        own GPUs.
-
-    nim-fallback:
-      kind: nvidia_nim
-      base_url: ${NVIDIA_NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}
-      api_key_env: NVIDIA_API_KEY
-      chat_model: ${NVIDIA_NIM_FALLBACK_MODEL:-minimaxai/minimax-m3.1-flash}
-      structured_output: json_schema
-      stream_always: true
-      stall_timeout_s: 25
-      timeout_s: 90
-      verified: true
-      notes: >-
-        Second hosted NIM model on the same key, tried when the first fails or stalls.
-        minimaxai/minimax-m3.1-flash was verified 2026-10-29 (strict JSON schema).
+      base_url: ${NIM_LOCAL_BASE_URL:-}
+      allow_no_key: true
+      chat_model: ${NIM_LOCAL_CHAT_MODEL:-}
+      embedding_model: ${NIM_LOCAL_EMBED_MODEL:-}
+      rerank_model: ${NIM_LOCAL_RERANK_MODEL:-}
+      rerank_url: ${NIM_LOCAL_RERANK_URL:-}
+      structured_output: guided_json
+      verified: false
+      notes: Self-hosted NIM containers started by the `nim` docker compose profile.
 
     gemini:
       kind: openai_compatible
@@ -107,17 +79,45 @@ llm:
         fails, stalls or reaches its daily limit. gemini-3.5-flash-lite was verified 2026-10-30
         (streaming, strict json_schema with ARIA's report schema).
 
-    nim-local:
+    nim:
       kind: nvidia_nim
-      base_url: ${NIM_LOCAL_BASE_URL:-}
-      allow_no_key: true
-      chat_model: ${NIM_LOCAL_CHAT_MODEL:-}
-      embedding_model: ${NIM_LOCAL_EMBED_MODEL:-}
-      rerank_model: ${NIM_LOCAL_RERANK_MODEL:-}
-      rerank_url: ${NIM_LOCAL_RERANK_URL:-}
-      structured_output: guided_json
-      verified: false
-      notes: Self-hosted NIM containers started by the `nim` docker compose profile.
+      base_url: ${NVIDIA_NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}
+      api_key_env: NVIDIA_API_KEY
+      chat_model: ${NVIDIA_NIM_CHAT_MODEL:-openai/gpt-oss-20b}
+      reasoning_effort: ${NVIDIA_NIM_REASONING_EFFORT:-low}
+      embedding_model: ${NVIDIA_NIM_EMBED_MODEL:-nvidia/nemotron-3.5-embed-1b}
+      rerank_model: ${NVIDIA_NIM_RERANK_MODEL:-}
+      rerank_url: ${NVIDIA_NIM_RERANK_URL:-}
+      safety_model: ${NVIDIA_NIM_SAFETY_MODEL:-nvidia/nemotron-3.5-content-safety}
+      structured_output: json_schema
+      stream_always: true
+      stall_timeout_s: 25
+      timeout_s: 90
+      verified: true
+      notes: >-
+        Hosted NVIDIA NIM (build.nvidia.com), OpenAI-compatible. Verified 2026-10-29 with live
+        calls: openai/gpt-oss-20b (strict JSON schema, streaming) and nvidia/nemotron-3.5-embed-1b
+        (2048-dim, input_type=query|passage). z-ai/glm-5.3-flash is listed but did not answer
+        within 100 s that day. nvidia/nemotron-3.5-content-safety (the optional guardrail, off by
+        default) is listed in the model catalog (checked 2026-10-29) but has not been called live,
+        so its verdict format is unverified. Reranking is off until NVIDIA_NIM_RERANK_MODEL and
+        NVIDIA_NIM_RERANK_URL are set (the retrieval API runs on ai.api.nvidia.com). Set
+        NVIDIA_NIM_BASE_URL to a self-hosted NIM (for example http://nim:8000/v1) to use your
+        own GPUs.
+
+    nim-fallback:
+      kind: nvidia_nim
+      base_url: ${NVIDIA_NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}
+      api_key_env: NVIDIA_API_KEY
+      chat_model: ${NVIDIA_NIM_FALLBACK_MODEL:-minimaxai/minimax-m3.1-flash}
+      structured_output: json_schema
+      stream_always: true
+      stall_timeout_s: 25
+      timeout_s: 90
+      verified: true
+      notes: >-
+        Second hosted NIM model on the same key, tried when the first fails or stalls.
+        minimaxai/minimax-m3.1-flash was verified 2026-10-29 (strict JSON schema).
 
     azure:
       kind: azure_openai
