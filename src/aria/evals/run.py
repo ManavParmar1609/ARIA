@@ -23,11 +23,15 @@ import yaml
 from aria.config import get_app_config
 from aria.data.loghub import iter_structured_csv
 from aria.data.scenarios import LinePools, Scenario, ScenarioBuilder
+from aria.evals import bgl as bg
 from aria.evals import edge as ed
+from aria.evals import hadoop as hd
+from aria.evals import injection as inj
 from aria.evals import parsing as ps
 from aria.evals import pipeline as pl
 from aria.evals import real as rl
 from aria.evals import severity as sv
+from aria.evals import tickets as tk
 from aria.retrieval.seed import MEMORY_SEEDS
 from aria.severity.engine import SeverityEngine
 from aria.severity.training import SplitSeeds, known_templates
@@ -120,6 +124,8 @@ async def run(
         results["parsing"] = ps.summarize(loghub_dir)
     if suite in ("smoke", "edge", "all"):
         results["edge"] = ed.evaluate(ed.generate())
+    if suite in ("edge", "all"):
+        results["injection_benchmarks"] = inj.evaluate()
     if suite in ("real", "all"):
         pool = loghub_dir / "HDFS" / "HDFS_2k.log_structured.csv"
         results["real"] = rl.summarize(
@@ -129,6 +135,17 @@ async def run(
             if pool.exists()
             else None,
         )
+        bgl_pool = loghub_dir / "BGL" / "BGL_2k.log_structured.csv"
+        results["real"]["bgl"] = bg.summarize(
+            engine=SeverityEngine.load(config.severity),
+            known=known_templates(builder, "bgl"),
+            pool={r.message for r in iter_structured_csv("bgl", bgl_pool)}
+            if bgl_pool.exists()
+            else set(),
+            workers=workers,
+        )
+        results["real"]["uci_tickets"] = tk.summarize(Path(config.severity.ticket_model_file))
+        results["real"]["hadoop"] = await _hadoop(builder, loghub_dir, size, workers)
     test = sv.held_out(
         builder,
         seeds=size.severity_seeds,
@@ -187,6 +204,32 @@ async def run(
             finally:
                 await env.aclose()
     return results
+
+
+async def _hadoop(
+    builder: ScenarioBuilder, loghub_dir: Path, size: Size, workers: int
+) -> dict[str, Any]:
+    """The Hadoop jobs, each triaged end to end in a fresh offline environment."""
+    if hd.find_labels() is None:
+        return {"missing": "download it with: aria data download --source loghub-hadoop"}
+    sample = loghub_dir / "Hadoop" / "Hadoop_2k.log_structured.csv"
+    with tempfile.TemporaryDirectory(prefix="aria-eval-real-") as tmp:
+        env = await pl.EvalEnvironment.create(
+            builder,
+            db_path=Path(tmp) / "real.db",
+            memory_per_mode=size.memory_per_mode,
+            workers=workers,
+        )
+        try:
+            return await hd.evaluate(
+                env,
+                known=known_templates(builder, "hadoop"),
+                pool={r.message for r in iter_structured_csv("hadoop", sample)}
+                if sample.exists()
+                else None,
+            )
+        finally:
+            await env.aclose()
 
 
 def save(results: dict[str, Any], out_dir: Path = Path("reports/eval")) -> Path:

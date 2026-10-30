@@ -3,6 +3,8 @@
 #   git     - content-addressed: the pinned commit is the checksum
 #   zenodo  - md5 checksums published in the Zenodo record API
 #   http    - sha256 pinned below, or recorded on first download in data/checksums.lock
+#   mirrors - copies on other hosts, tried in order when the source's own host fails; each is
+#             trusted only if its file matches the sha256 pinned beside it
 
 sources:
   loghub-2k:
@@ -44,23 +46,97 @@ sources:
     kind: zenodo
     record: "8196385"
     files: [BGL.zip]
+    mirrors:
+      # Loghub's BGL.log (743,185,031 bytes, 4,747,963 lines) gzipped in a public repository.
+      - url: https://raw.githubusercontent.com/Harsh-Tandel27/LogIQ/529b8a2bb05ab7296bf0e3f458c9edafb6854139/data/loghub/BGL/BGL.log.gz
+        sha256: 69d16138f2ae2a9bed1b7fb4ea9c498becafecad1dda825254146206a1a5110a
     license: Loghub license
     citation: "A. J. Oliner, J. Stearley. What Supercomputers Say: A Study of Five System Logs. DSN 2007."
-    description: Full BlueGene/L log (~4.75M lines) with sysadmin alert tags, meant as a contiguous severity benchmark. It could not be downloaded in the build environment, and no code reads it yet.
+    description: Full BlueGene/L log (4,747,963 lines over 215 days) with the sysadmins' alert tags. The real-log evaluation labels contiguous windows of it with the BGL alert-tag rubric and scores ARIA's severity on them.
 
   loghub-hadoop:
     kind: zenodo
     record: "8196385"
     files: [Hadoop.zip]
+    mirrors:
+      # Loghub's Hadoop logs and labels in a public repository (LF line endings; a second copy,
+      # Harsh-Tandel27/LogIQ, differs only in its CRLF line endings).
+      - url: https://github.com/SohamPatel0810/Intelligent-Classification-of-Hadoop-Logs
+        commit: 3ff261893817b67d5968896eea71b2240df88ed9
+        paths: ["/data/Hadoop/"]
     license: Loghub license
     citation: "Q. Lin et al. Log Clustering based Problem Identification for Online Service Systems. ICSE 2016."
-    description: Hadoop application logs with injected failure types (machine down, network disconnection, disk full). It was not downloaded in the build environment, and nothing ingests it yet.
+    description: Every container log of 55 Hadoop MapReduce jobs (WordCount and PageRank), each labelled normal or with the failure injected into it (machine down, network disconnection, disk full). The real-log evaluation triages each job and compares ARIA's verdict with its label.
 
   uci-incidents:
     kind: uci
     dataset_id: 498
     fallback_url: https://archive.ics.uci.edu/static/public/498/incident+management+process+enriched+event+log.zip
-    sha256: null
+    sha256: 6294e29a311647306bfdfc85783f7df66517c197b9cd49aa5ee36ba9c525d1d6
+    mirrors:
+      # Byte-identical copies of UCI's zip; its CSV (sha256 fd184bbf...1bef) is in nine more repositories.
+      - url: https://raw.githubusercontent.com/Deviln18/PowerBI-Incident-Management-Analytics/c601a29bdf1a2f6b3d282f81ccf040f9af39b120/incident%2Bmanagement%2Bprocess%2Benriched%2Bevent%2Blog.zip
+        sha256: 6294e29a311647306bfdfc85783f7df66517c197b9cd49aa5ee36ba9c525d1d6
+      - url: https://raw.githubusercontent.com/pratham2385/EDI-5/314d5b97ad9441d9d335e6042c384ab78b31227d/datasets/uci_incident/raw/incident_event_log.zip
+        sha256: 6294e29a311647306bfdfc85783f7df66517c197b9cd49aa5ee36ba9c525d1d6
     license: CC BY 4.0 (DOI 10.24432/C57S4H)
     citation: "C. Amaral, M. Fantinato, H. Reijers, S. Peres. Enhancing Completion Time Prediction Through Attribute Selection. 2018. UCI ML Repository."
     description: ServiceNow incident event log from an IT company (141,712 events, 24,918 incidents, anonymized categorical codes).
+
+  # --- prompt-injection benchmarks, for the injection guard (never tuned on any of them) -------
+  bipia:
+    kind: git
+    url: https://github.com/microsoft/BIPIA
+    commit: a004b69ec0dd446e0afd461d98cb5e96e120a5d0
+    paths: [benchmark/text_attack_test.json, benchmark/code_attack_test.json, LICENSE]
+    license: MIT
+    citation: "J. Yi et al. Benchmarking and Defending Against Indirect Prompt Injection Attacks on Large Language Models. arXiv:2312.14197."
+    description: BIPIA's held-out indirect-injection attacks, the instructions an attacker plants in content a model reads (text tasks and code tasks).
+  injecagent:
+    kind: git
+    url: https://github.com/uiuc-kang-lab/InjecAgent
+    commit: f19c9f2c79a41046eb13c03c51a24c567a8ffa07
+    paths: [data/attacker_cases_dh.jsonl, data/attacker_cases_ds.jsonl]
+    license: Not stated in the repository; used for evaluation only, never redistributed
+    citation: "Q. Zhan, Z. Liang, Z. Ying, D. Kang. InjecAgent: Benchmarking Indirect Prompt Injections in Tool-Integrated Large Language Model Agents. arXiv:2403.02691."
+    description: Attacker instructions planted in tool outputs to make an agent cause direct harm or steal data.
+  cyberseceval-pi:
+    kind: git
+    url: https://github.com/meta-llama/PurpleLlama
+    commit: d934ea285d124d81c10f7e15a06a1e1f74eff2c3
+    paths: [CybersecurityBenchmarks/datasets/prompt_injection/prompt_injection.json, CybersecurityBenchmarks/LICENSE]
+    license: MIT (CybersecurityBenchmarks)
+    citation: "M. Bhatt et al. CyberSecEval 2: A Wide-Ranging Cybersecurity Evaluation Suite for Large Language Models. arXiv:2404.13161."
+    description: Meta's prompt-injection test cases, direct and indirect, in 15 variants and several languages.
+  tensor-trust:
+    kind: git
+    url: https://github.com/HumanCompatibleAI/tensor-trust-data
+    commit: 747a75e096761ebc01bd3970158827326b4add23
+    paths: [benchmarks/hijacking-robustness/v1/hijacking_robustness_dataset.jsonl]
+    license: Not stated in the repository; used for evaluation only, never redistributed
+    citation: "S. Toyer et al. Tensor Trust: Interpretable Prompt Injection Attacks from an Online Game. arXiv:2311.01011."
+    description: Hijacking attacks people wrote against defended prompts in the Tensor Trust game.
+  notinject:
+    kind: git
+    url: https://github.com/SaFoLab-WISC/InjecGuard
+    commit: 1b5751e88bf7475acbedfc8eda795ce060307c84
+    paths: [datasets/NotInject_one.json, datasets/NotInject_two.json, datasets/NotInject_three.json, LICENSE]
+    license: MIT
+    citation: "H. Li, X. Liu et al. InjecGuard: Benchmarking and Mitigating Over-defense in Prompt Injection Guardrail Models. arXiv:2410.22770."
+    description: Benign sentences that use one, two or three words common in injections ("ignore", "override"), to measure over-defence.
+  giskard-injections:
+    kind: git
+    url: https://github.com/giskard-ai/prompt-injections
+    commit: ce50a549dadc46b48c931250d2dd71d5f003c0c2
+    paths: [prompt_injections.csv, LICENSE]
+    license: MIT
+    citation: "Giskard. Prompt injections, a curated collection drawn from garak and PromptInject. 2023."
+    description: A small curated collection of known prompt injections and jailbreaks.
+  jailbreak-llms:
+    kind: git
+    url: https://github.com/verazuo/jailbreak_llms
+    commit: 4f4031bf8be187f4478c7f94f42b08714722c12e
+    paths: [data/prompts/jailbreak_prompts_2023_12_25.csv, LICENSE]
+    license: MIT
+    citation: "X. Shen, Z. Chen, M. Backes, Y. Shen, Y. Zhang. \"Do Anything Now\": Characterizing and Evaluating In-The-Wild Jailbreak Prompts on Large Language Models. ACM CCS 2024."
+    description: Jailbreak prompts collected from Reddit, Discord, websites and prompt-sharing communities.

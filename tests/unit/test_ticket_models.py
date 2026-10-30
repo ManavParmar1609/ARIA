@@ -108,3 +108,97 @@ def test_models_learn_priority_and_sla_risk(tmp_path: Path) -> None:
 def test_training_needs_labelled_tickets() -> None:
     with pytest.raises(ValueError, match="no training tickets"):
         fit_ticket_models([{"priority": None, "split": "train"}])
+
+
+def test_the_matrix_decides_a_known_pair_and_the_model_the_rest() -> None:
+    models, _ = fit_ticket_models(synthetic_tickets(), alpha=0.1)
+    known = models.predict(TicketContext(category="Category 9", impact="2 - x", urgency="2 - x"))
+    assert known.decided_by == "matrix"
+    assert known.priority == known.matrix_priority == "3"
+    assert known.priority in known.prediction_set
+    unknown = models.predict(TicketContext(category="Category 9", impact=None, urgency="2 - x"))
+    assert unknown.decided_by == "model"
+    assert unknown.matrix_priority is None
+    assert unknown.priority == unknown.model_priority
+
+
+def test_the_model_can_express_the_impact_urgency_matrix() -> None:
+    # Additive one-hot impact and urgency cannot express the matrix; the pair feature can.
+    models, _ = fit_ticket_models(synthetic_tickets(), alpha=0.1)
+    agree = [
+        models.predict(TicketContext(category="Category 26", impact=f"{i} - x", urgency=f"{u} - x"))
+        for (i, u) in MATRIX
+    ]
+    assert sum(p.model_priority == MATRIX[k] for p, k in zip(agree, MATRIX, strict=True)) >= 8
+
+
+def _write_uci_log(path: Path, rows: list[dict[str, Any]]) -> None:
+    """One audit event per ticket, in the UCI CSV's own format."""
+    import csv
+
+    from aria.data.uci import UCI_COLUMNS
+
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=UCI_COLUMNS)
+        writer.writeheader()
+        for row in rows:
+            opened = row["opened_at"].strftime("%d/%m/%Y %H:%M")
+            event = dict.fromkeys(UCI_COLUMNS, "?")
+            event.update(
+                number=row["number"],
+                incident_state="Closed",
+                active="false",
+                reassignment_count="0",
+                reopen_count="0",
+                sys_mod_count="1",
+                made_sla="true" if row["made_sla"] else "false",
+                opened_at=opened,
+                sys_updated_at=opened,
+                contact_type=row["contact_type"],
+                location=row["location"],
+                category=row["category"],
+                subcategory=row["subcategory"],
+                u_symptom=row["symptom"] or "?",
+                impact=row["impact"],
+                urgency=row["urgency"],
+                priority=row["priority"],
+                assignment_group=row["first_assignment_group"],
+                knowledge="true" if row["knowledge"] else "false",
+                u_priority_confirmation="true" if row["priority_confirmation"] else "false",
+            )
+            writer.writerow(event)
+
+
+def test_the_real_ticket_evaluation_scores_the_newest_tickets(tmp_path: Path) -> None:
+    import dataclasses
+
+    from aria.data.uci import aggregate, iter_events
+    from aria.evals.tickets import evaluate_uci, summarize
+
+    _write_uci_log(tmp_path / "incident_event_log.csv", synthetic_tickets())
+    rows = [
+        dataclasses.asdict(s) for s in aggregate(iter_events(tmp_path / "incident_event_log.csv"))
+    ]
+    models, _ = fit_ticket_models([r for r in rows if r["split"] != "test"], alpha=0.1)
+    result = evaluate_uci(models, tmp_path)
+    assert result["test"] == sum(r["split"] == "test" for r in rows)
+    aria, alone = result["priority"]["aria"], result["priority"]["model_only"]
+    assert aria["accuracy"] >= result["priority"]["majority_class"]["accuracy"]
+    assert aria["accuracy"] >= alone["accuracy"] - 0.05
+    assert result["decided_by_matrix"] == 1.0
+    assert result["sla"]["auroc"] > 0.6  # breaches follow priority in the synthetic tickets
+    assert result["conformal"]["coverage"] >= 0.8
+
+    from aria.evals.report import _tickets, _tickets_summary
+
+    text = "\n".join(_tickets(result))
+    assert "## Real tickets, a ServiceNow service desk" in text
+    assert "| ARIA's SLA model |" in text
+    assert "Real tickets" in "\n".join(_tickets_summary(result))
+    assert _tickets_summary({"missing": "x"}) == []
+
+    # A model trained on other tickets is reported as stale rather than scored.
+    stale, _ = fit_ticket_models(synthetic_tickets(seed=1)[:900], alpha=0.1)
+    assert "stale" in evaluate_uci(stale, tmp_path)
+    assert "missing" in summarize(tmp_path / "no-model.json", tmp_path)
+    assert "missing" in summarize(tmp_path / "no-model.json", tmp_path / "nothing")

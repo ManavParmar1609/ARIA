@@ -449,6 +449,8 @@ async def severity(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
                 "probabilities": prediction.probabilities,
                 "sla_breach_risk": prediction.sla_breach_risk,
                 "matrix_priority": prediction.matrix_priority,
+                "model_priority": prediction.model_priority,
+                "decided_by": prediction.decided_by,
                 "model_version": services.tickets.version,
             },
         )

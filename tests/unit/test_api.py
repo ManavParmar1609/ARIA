@@ -623,7 +623,9 @@ async def test_catalog_lists_incidents_and_runbooks(api: Api) -> None:
     assert (await api.client.get("/api/v1/runbooks/nope")).status_code == 404
 
 
-async def test_reviews_calibration_evaluation_and_tickets(api: Api, tmp_path: Path) -> None:
+async def test_reviews_calibration_evaluation_and_tickets(
+    api: Api, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     run = await start(api)
     done = await api.client.post(f"/api/v1/runs/{run['id']}/review", json={"decision": "approve"})
     assert done.json()["status"] == "published"
@@ -656,9 +658,18 @@ async def test_reviews_calibration_evaluation_and_tickets(api: Api, tmp_path: Pa
     assert results.status_code == 200
     assert results.json()["severity"]["n"] > 0
 
+    # The committed ticket model (trained on the UCI log) decides by the impact x urgency matrix.
     ticket = {"category": "network", "impact": "1 - High", "urgency": "1 - High"}
+    assert api.state.services.tickets is not None
+    trained = await api.client.post("/api/v1/tickets/assess", json=ticket)
+    assert trained.status_code == 200, trained.text
+    assert trained.json()["predicted_priority"] == "1"
+    assert trained.json()["severity"] == "SEV1"
+    assert "1" in trained.json()["prediction_set"]
+
+    monkeypatch.setattr(api.state.services, "tickets", None)
     untrained = await api.client.post("/api/v1/tickets/assess", json=ticket)
-    assert untrained.status_code == 503  # the UCI log is not ingested in tests
+    assert untrained.status_code == 503
     assert "aria train tickets" in untrained.json()["detail"]
 
 

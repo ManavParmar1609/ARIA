@@ -3,7 +3,9 @@
 Given the fields a ServiceNow-style ticket has when it is opened, two calibrated linear models
 estimate the ticket's eventual priority (with a conformal set) and the risk that it breaches its
 SLA. The ITIL impact x urgency matrix is learned from the data (the most common final priority
-per pair) rather than assumed, and acts as the auditable rule for ticket-only triage.
+per pair) rather than assumed, and it decides the priority whenever it knows the ticket's pair:
+on the UCI log the matrix was right more often than the model, so the model decides only for
+pairs the matrix has not seen, and its set always keeps the matrix's level.
 
 Training uses only open-time fields, and the splits are by open time (oldest 70% train), so the
 models never learn from outcomes or from the future.
@@ -41,6 +43,9 @@ CATEGORICAL = (
     "assignment_group",
     "impact",
     "urgency",
+    # The pair as one value: priority follows an impact x urgency matrix, an interaction that
+    # one-hot impact and urgency alone cannot express in a linear model.
+    "impact_urgency",
 )
 BOOLEAN = ("knowledge", "priority_confirmation")
 PRIORITY_SEVERITY = {
@@ -59,7 +64,13 @@ def level(value: str | None) -> str | None:
     return match.group(1) if match else None
 
 
+def _pair(impact: str | None, urgency: str | None) -> str | None:
+    return f"{impact}|{urgency}" if impact and urgency else None
+
+
 def ticket_fields(ticket: TicketContext) -> dict[str, Any]:
+    impact = level(ticket.impact) or ticket.impact
+    urgency = level(ticket.urgency) or ticket.urgency
     return {
         "category": ticket.category,
         "subcategory": ticket.subcategory,
@@ -67,8 +78,9 @@ def ticket_fields(ticket: TicketContext) -> dict[str, Any]:
         "contact_type": ticket.contact_type,
         "location": ticket.location,
         "assignment_group": ticket.assignment_group,
-        "impact": level(ticket.impact) or ticket.impact,
-        "urgency": level(ticket.urgency) or ticket.urgency,
+        "impact": impact,
+        "urgency": urgency,
+        "impact_urgency": _pair(impact, urgency),
         "knowledge": ticket.knowledge,
         "priority_confirmation": ticket.priority_confirmation,
         "opened_at": ticket.opened_at,
@@ -126,6 +138,8 @@ class TicketPrediction:
     prediction_set: list[str]
     sla_breach_risk: float | None
     matrix_priority: str | None
+    model_priority: str
+    decided_by: str  # "matrix" or "model"
 
 
 @dataclass
@@ -149,16 +163,19 @@ class TicketModels:
             breach = float(
                 self.sla.predict_proba(self.sla.matrix([row]))[0][self.sla.classes.index("breach")]
             )
-        key = f"{fields.get('impact')}|{fields.get('urgency')}"
+        matrix = self.matrix.get(fields.get("impact_urgency") or "")
+        decided = matrix or best
         return TicketPrediction(
-            priority=best,
-            severity=PRIORITY_SEVERITY.get(best, Severity.SEV3),
+            priority=decided,
+            severity=PRIORITY_SEVERITY.get(decided, Severity.SEV3),
             probabilities={
                 c: round(float(p), 6) for c, p in zip(self.priority.classes, probs, strict=True)
             },
-            prediction_set=pset,
+            prediction_set=sorted({*pset, decided}),
             sla_breach_risk=None if breach is None else round(breach, 4),
-            matrix_priority=self.matrix.get(key),
+            matrix_priority=matrix,
+            model_priority=best,
+            decided_by="matrix" if matrix else "model",
         )
 
     def save(self, path: Path) -> None:
@@ -206,6 +223,7 @@ def learn_matrix(rows: Sequence[Mapping[str, Any]], *, min_count: int = 5) -> di
 
 def summary_fields(summary: Mapping[str, Any]) -> dict[str, Any]:
     """Open-time fields from an aggregated UCI incident (``itsm_incidents`` row or dict)."""
+    impact, urgency = level(summary.get("impact")), level(summary.get("urgency"))
     return {
         "category": summary.get("category"),
         "subcategory": summary.get("subcategory"),
@@ -213,8 +231,9 @@ def summary_fields(summary: Mapping[str, Any]) -> dict[str, Any]:
         "contact_type": summary.get("contact_type"),
         "location": summary.get("location"),
         "assignment_group": summary.get("first_assignment_group"),
-        "impact": level(summary.get("impact")),
-        "urgency": level(summary.get("urgency")),
+        "impact": impact,
+        "urgency": urgency,
+        "impact_urgency": _pair(impact, urgency),
         "knowledge": summary.get("knowledge"),
         "priority_confirmation": summary.get("priority_confirmation"),
         "opened_at": summary.get("opened_at"),
@@ -252,8 +271,18 @@ def fit_ticket_models(
         return x, [level(r["priority"]) or "" for r in subset]
 
     x_tr, y_tr = xy(train)
+    # Unweighted: balancing the classes bought rare-priority recall at a large cost in accuracy
+    # (held-out accuracy fell below the impact x urgency matrix on the UCI log). Caution comes
+    # from the conformal set instead, which keeps the levels the model cannot rule out.
     priority = fit_linear_model(
-        "ticket_priority", x_tr, y_tr, classes=classes, feature_names=names, c=0.5, seed=seed
+        "ticket_priority",
+        x_tr,
+        y_tr,
+        classes=classes,
+        feature_names=names,
+        c=0.5,
+        class_weight=None,
+        seed=seed,
     )
     x_t, y_t = xy(temp_rows)
     x_c, y_c = xy(conf_rows)

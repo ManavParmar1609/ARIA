@@ -210,10 +210,13 @@ def train_recalibrate(
 
 @train_app.command("tickets")
 def train_tickets() -> None:
-    """Fit the UCI ticket priority and SLA models (needs `aria data ingest` with UCI data)."""
+    """Fit the UCI ticket priority and SLA models, from the database or the downloaded log."""
+    import dataclasses
+
     from sqlalchemy import select
 
-    from aria.config import get_app_config
+    from aria.config import get_app_config, get_settings
+    from aria.data.uci import aggregate, find_event_log, iter_events
     from aria.db.engine import get_engine, session_scope
     from aria.db.models import ItsmIncidentRow
     from aria.severity.ticket import fit_ticket_models
@@ -225,7 +228,15 @@ def train_tickets() -> None:
             for row in session.scalars(select(ItsmIncidentRow))
         ]
     if not rows:
-        console.print("[yellow]no UCI incidents in the database; skipping the ticket models[/]")
+        # Not ingested: read the downloaded log directly. Same aggregation, same time splits.
+        path = find_event_log(get_settings().data_dir / "raw" / "uci-incidents")
+        if path is not None:
+            rows = [dataclasses.asdict(s) for s in aggregate(iter_events(path))]
+    if not rows:
+        console.print(
+            "[yellow]no UCI incidents (aria data download --source uci-incidents); "
+            "skipping the ticket models[/]"
+        )
         return
     models, report = fit_ticket_models(rows, alpha=config.alpha)
     models.save(config.ticket_model_file)

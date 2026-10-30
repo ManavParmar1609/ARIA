@@ -360,6 +360,326 @@ def _real(section: Mapping[str, Any]) -> list[str]:
     return lines
 
 
+_BGL_METHODS = {
+    "aria_policy": "ARIA (rules, model and policy, offline)",
+    "rules_only": "The rules alone",
+    "model_only": "The model alone",
+    "keyword": "Keyword categories",
+    "highest_level": "Highest log level in the window",
+    "majority_class": "The commonest label",
+}
+
+
+def _bgl(section: Mapping[str, Any]) -> list[str]:
+    lines = ["## Real logs, a supercomputer's alert tags", ""]
+    if "missing" in section:
+        return [*lines, f"No results: {section['missing']}.", ""]
+    labels, methods = section["labels"], section["methods"]
+    severe = sum(n for c, n in labels.items() if c in ("SEV1", "SEV2"))
+    quiet = labels.get("SEV4", 0)
+    aria, conf, auto = methods["aria_policy"], section["conformal"], section["automation"]
+    overlap = section["overlap_with_training_sample"]
+    classes = section["confusion"]["classes"]
+    return [
+        *lines,
+        (
+            f"The whole log of LLNL's BlueGene/L supercomputer: {section['lines']:,} lines over "
+            f"{section['days']:g} days, {section['alert_lines']:,} of them tagged as alerts by "
+            f"the machine's administrators. Source: {section['source']}; {section['citation']} "
+            f"ARIA rated every {section['window_min']}-minute window that holds lines "
+            f"({section['windows']:,} windows) from the lines alone: the tags are removed before "
+            "parsing, and nothing was tuned on this log. Each window's label comes from its tags "
+            "through the rubric that also labels the BGL training scenarios: "
+            + ", ".join(f"{n:,} × {c}" for c, n in labels.items())
+            + "."
+        ),
+        "",
+        (
+            "| Method | Accuracy (95% CI) | Macro-F1 (95% CI) | "
+            f"SEV1-2 windows rated SEV3-4 (of {severe:,}) | SEV4 windows rated SEV1-2 "
+            f"(of {quiet:,}) |"
+        ),
+        "|---|---|---|---|---|",
+        *(
+            f"| {label} | {_pct(methods[key]['accuracy'])} ({_ci(methods[key]['accuracy_ci95'])}) "
+            f"| {methods[key]['macro_f1']:.3f} ({_ci(methods[key]['macro_f1_ci95'], percent=False)}) "
+            f"| {methods[key]['severe_missed']:,} | {methods[key]['quiet_paged']:,} |"
+            for key, label in _BGL_METHODS.items()
+            if key in methods
+        ),
+        "",
+        (
+            "- **Recall by label** (ARIA): "
+            + ", ".join(f"{c} {_pct(r)}" for c, r in aria["recall"].items())
+            + "."
+        ),
+        (
+            f"- **Prediction sets** held the label for {_pct(conf['coverage'])} of windows "
+            f"(target {_pct(conf['target_coverage'])}), with {conf['mean_set_size']} levels on "
+            f"average. {_pct(auto['auto_decided'])} of windows were decided without review, at "
+            f"{_pct(auto['accuracy_when_auto'])} accuracy."
+        ),
+        (
+            f"- **Overlap with training data**: {_pct(overlap['share'])} of these lines carry a "
+            "message that also appears in Loghub's 2,000-line BGL sample, which the training "
+            "scenarios are composed from. The scenarios re-time and recombine those lines; no "
+            "window here was seen in training."
+        ),
+        (
+            f"- **Lines left out or cut**: {section['lines_without_time']:,} lines carry no "
+            f"timestamp and cannot be placed in a window. {section['windows_over_line_cap']:,} "
+            f"windows hold more than the per-run line cap of {section['line_cap']:,}; ARIA reads "
+            "their first lines up to the cap, as a deployment would."
+        ),
+        "",
+        "Where ARIA's ratings fell (rows: the rubric's label; columns: ARIA):",
+        "",
+        "| Label | " + " | ".join(classes) + " |",
+        "|---|" + "---|" * len(classes),
+        *(
+            f"| {c} | " + " | ".join(f"{n:,}" for n in row) + " |"
+            for c, row in zip(classes, section["confusion"]["matrix"], strict=True)
+        ),
+        "",
+    ]
+
+
+_HADOOP_LABELS = {
+    "normal": "Healthy",
+    "machine_down": "Machine down",
+    "network_disconnection": "Network disconnection",
+    "disk_full": "Disk full",
+}
+
+
+def _flagged(d: Mapping[str, Any]) -> str:
+    return (
+        f"{d['failed_flagged']} of {d['failed']} ({_pct(d['recall'])}, {_ci(d['recall_ci95'])}) "
+        f"| {d['normal_flagged']} of {d['normal']} |"
+    )
+
+
+def _hadoop(section: Mapping[str, Any]) -> list[str]:
+    lines = ["## Real failures, a Hadoop cluster's jobs", ""]
+    if "missing" in section:
+        return [*lines, f"No results: {section['missing']}.", ""]
+    labels = section["by_label"]
+    order = [k for k in _HADOOP_LABELS if k in labels]
+    sevs = ("SEV1", "SEV2", "SEV3", "SEV4")
+    base = section["baselines"]
+    return [
+        *lines,
+        (
+            f"Every container log of {section['jobs']} MapReduce jobs on a real Hadoop cluster "
+            f"({section['lines']:,} lines): "
+            + ", ".join(f"{labels[k]} {_HADOOP_LABELS[k].lower()}" for k in order)
+            + f". Source: {section['source']}; {section['citation']} Each job was triaged "
+            "offline, end to end, as one run, and ARIA never saw its label. A job counts as "
+            f"flagged when ARIA rates it SEV1-SEV3. {section['capped_jobs']} jobs hold more than "
+            f"the per-run line cap of {section['line_cap']:,}; ARIA reads their first lines up to "
+            "the cap, as a deployment would."
+        ),
+        "",
+        "| Method | Failed jobs flagged (95% CI) | Healthy jobs flagged |",
+        "|---|---|---|",
+        f"| ARIA, end to end | {_flagged(section['aria'])}",
+        f"| Any ERROR or FATAL line | {_flagged(base['any_error_line'])}",
+        f"| Keyword categories | {_flagged(base['keyword'])}",
+        "",
+        "| Label | Jobs | " + " | ".join(sevs) + " | ARIA's leading hypothesis |",
+        "|---|---|" + "---|" * len(sevs) + "---|",
+        *(
+            f"| {_HADOOP_LABELS[k]} | {labels[k]} | "
+            + " | ".join(str(section["severity_by_label"][k].get(s, 0)) for s in sevs)
+            + " | "
+            + ", ".join(
+                f"{_MODE_NAMES.get(mode, mode.replace('_', ' '))} ({n})"
+                for mode, n in section["leading_mode_by_label"][k].items()
+            )
+            + " |"
+            for k in order
+        ),
+        "",
+        (
+            "ARIA's catalog has a mode for tasks that cannot reach the ResourceManager and one for "
+            "HDFS lease renewal failures, but none for a full disk. "
+            f"{_pct(section['overlap_with_training_sample'])} of these lines carry a message that "
+            "also appears in Loghub's 2,000-line Hadoop sample, which the training scenarios are "
+            "composed from."
+        ),
+        "",
+    ]
+
+
+_MODE_NAMES = {
+    "resourcemanager_unreachable": "ResourceManager unreachable",
+    "hdfs_lease_renewal": "HDFS lease renewal",
+    "component_errors": "errors in one component",
+    "none": "no hypothesis held",
+}
+
+
+_INJECTION_SOURCES = {
+    "bipia": "BIPIA, indirect injections in text and code tasks (Yi et al.)",
+    "injecagent": "InjecAgent, instructions planted in tool outputs (Zhan et al.)",
+    "cyberseceval": "CyberSecEval 2, prompt-injection cases (Meta)",
+    "tensor_trust": "Tensor Trust, hijacking attacks written by players (Toyer et al.)",
+    "giskard": "Giskard's curated collection",
+    "jailbreaks": "Jailbreak prompts collected in the wild (Shen et al.)",
+}
+
+
+def _injection(section: Mapping[str, Any]) -> list[str]:
+    lines = ["## Prompt injection, public benchmarks", ""]
+    if "missing" in section:
+        return [*lines, f"No results: {section['missing']}.", ""]
+    total, sources = section["attacks"], section["by_source"]
+    lines += [
+        (
+            "The edge-case attacks above were written by this project, which also wrote the "
+            "detector. These were written by others, and the detector was never tuned on them. "
+            "Each attack is flattened to one line, hidden in a log line the way the edge-case "
+            "suite hides its own, and parsed by the production parser on its own."
+        ),
+        "",
+        "| Benchmark | Attacks | Caught (95% CI) |",
+        "|---|---|---|",
+        *(
+            f"| {_INJECTION_SOURCES.get(key, key)} | {r['n']:,} | {r['flagged']:,} "
+            f"({_pct(r['rate'])}, {_ci(r['ci95'])}) |"
+            for key, r in sources.items()
+        ),
+        (
+            f"| All | {total['n']:,} | {total['flagged']:,} ({_pct(total['rate'])}, "
+            f"{_ci(total['ci95'])}) |"
+        ),
+        "",
+    ]
+    benign = section.get("benign")
+    if benign:
+        lines.append(
+            f"- **Over-defence**: of NotInject's {benign['n']} benign sentences that use the words "
+            f"injections use, the detector flagged {benign['flagged']} ({_pct(benign['rate'])}, "
+            f"{_ci(benign['ci95'])}): "
+            + ", ".join(
+                f"{g['flagged']} of {g['n']} with {name}" for name, g in benign["groups"].items()
+            )
+            + "."
+        )
+    real = section.get("real_lines") or {}
+    if real:
+        n = sum(r["n"] for r in real.values())
+        hits = sum(r["flagged"] for r in real.values())
+        names = {"hdfs": "HDFS", "bgl": "BGL", "hadoop": "Hadoop"}
+        parts = ", ".join(f"{names.get(k, k)} {r['n']:,}" for k, r in real.items())
+        if hits == 0:
+            bound = 1 / (1 - 0.025 ** (1 / n))
+            lines.append(
+                f"- **Real traffic**: none of the {n:,} real log lines the other evaluations read "
+                f"was flagged ({parts}); at 95% confidence the rate is below one line in "
+                f"{round(bound):,}."
+            )
+        else:
+            lines.append(
+                f"- **Real traffic**: {hits:,} of the {n:,} real log lines the other evaluations "
+                f"read were flagged ({parts})."
+            )
+    lines += [
+        (
+            "- **What it misses**: attacks phrased as ordinary requests (most of BIPIA's and "
+            "InjecAgent's), which no pattern can tell from a log message. The detector is the "
+            "first of several layers: a line it misses still reaches a model only fenced as "
+            "evidence, severity cannot leave the prediction set, the tools are read-only, and "
+            "nothing is sent before a person approves (see the robustness results)."
+        ),
+        "",
+    ]
+    return lines
+
+
+_SLA_BASELINES = {
+    "first_assignment_group": "Breach rate of the ticket's first assignment group",
+    "category": "Breach rate of the ticket's category",
+    "location": "Breach rate of the ticket's location",
+    "priority_at_open": "Breach rate of the ticket's opening priority",
+}
+
+
+def _tickets(section: Mapping[str, Any]) -> list[str]:
+    lines = ["## Real tickets, a ServiceNow service desk", ""]
+    if "missing" in section or "stale" in section:
+        why = section.get("missing") or section.get("stale")
+        return [*lines, f"No results: {why}.", ""]
+    split, pri, sla = section["split"], section["priority"], section["sla"]
+    names = {
+        "aria": "ARIA (impact x urgency matrix learned from training tickets)",
+        "model_only": "The ticket model alone",
+        "priority_at_open": "The priority the ticket opened with",
+        "majority_class": "The commonest priority",
+    }
+    severe = sum(n for p, n in section["test_by_priority"].items() if p in ("1", "2"))
+    conf, esc = section["conformal"], section["escalated"]
+    return [
+        *lines,
+        (
+            f"Real tickets from an IT company's ServiceNow service desk: {section['incidents']:,} "
+            f"incidents ({section['events']:,} audit events) opened from "
+            f"{section['opened_from']} to {section['opened_to']}, with anonymised codes and no "
+            f"free text. Source: {section['source']}; {section['citation']} ARIA uses only the "
+            "fields a ticket has when it opens, and splits by open time: the oldest "
+            f"{split['train']:,} train the models, the next {split['calib']:,} calibrate them, and "
+            f"the newest {split['test']:,} are scored here ({severe} of them priority 1 or 2). "
+            f"Model `{section['model_version']}`."
+        ),
+        "",
+        "| Final priority | Accuracy (95% CI) | Macro-F1 | Priority 1-2 rated 3-4 |",
+        "|---|---|---|---|",
+        *(
+            f"| {label} | {_pct(pri[key]['accuracy'])} ({_ci(pri[key]['accuracy_ci95'])}) | "
+            f"{pri[key]['macro_f1']:.3f} | {pri[key]['severe_missed']} of {severe} |"
+            for key, label in names.items()
+        ),
+        "",
+        (
+            f"- **The priority follows the matrix**: {_pct(section['same_as_at_open'])} of these "
+            "tickets ended at the priority they opened with, which impact and urgency set. ARIA "
+            "learns the matrix from training tickets and decides by it (here for "
+            f"{_pct(section['decided_by_matrix'])} of tickets). The model alone was less "
+            "accurate, so it decides only for impact and urgency pairs the matrix has not seen."
+        ),
+        (
+            f"- **Escalations**: {esc['tickets']} tickets were raised after they opened, and ARIA "
+            f"foresaw {esc['foreseen']} of them. Nothing a ticket holds when it opens predicts "
+            "them in this log, and they are most of the severe tickets rated 3 or 4."
+        ),
+        (
+            f"- **Prediction sets** hold the final priority for {_pct(conf['coverage'])} of "
+            f"tickets (target {_pct(conf['target_coverage'])}), with {conf['mean_set_size']} "
+            "levels on average."
+        ),
+        "",
+        (
+            f"The SLA breach risk, scored on the same {sla['n']:,} tickets "
+            f"({_pct(sla['breach_rate'])} of them breached):"
+        ),
+        "",
+        "| SLA breach risk | AUROC (95% CI) |",
+        "|---|---|",
+        f"| ARIA's SLA model | {sla['auroc']:.3f} ({_ci(sla['auroc_ci95'], percent=False)}) |",
+        *(
+            f"| {_SLA_BASELINES.get(key, key)} | {value:.3f} |"
+            for key, value in sla["baselines_auroc"].items()
+        ),
+        "",
+        (
+            f"Brier score {sla['brier']:.3f}, against {sla['brier_base_rate']:.3f} for always "
+            f"predicting the base rate; calibration error {sla['ece']:.3f}. Each baseline is one "
+            "field's breach rate among training tickets."
+        ),
+        "",
+    ]
+
+
 def _cost(value: float | None) -> str:
     return "not priced" if value is None else f"${value:.4f}"
 
@@ -508,6 +828,12 @@ def render(results: Mapping[str, Any], live: Mapping[str, Any] | None = None) ->
         ]
     if "real" in results:
         lines += _real(results["real"])
+        if "bgl" in results["real"]:
+            lines += _bgl(results["real"]["bgl"])
+        if "hadoop" in results["real"]:
+            lines += _hadoop(results["real"]["hadoop"])
+        if "uci_tickets" in results["real"]:
+            lines += _tickets(results["real"]["uci_tickets"])
     if "severity" in results:
         lines += _severity(results["severity"])
     if "pipeline" in results:
@@ -526,6 +852,8 @@ def render(results: Mapping[str, Any], live: Mapping[str, Any] | None = None) ->
         lines += _parsing(results["parsing"])
     if "edge" in results:
         lines += _edge(results["edge"])
+    if "injection_benchmarks" in results:
+        lines += _injection(results["injection_benchmarks"])
     if "robustness" in results:
         lines += _robustness(results["robustness"])
     lines += [
@@ -566,13 +894,26 @@ def render(results: Mapping[str, Any], live: Mapping[str, Any] | None = None) ->
             "of work that stop partway. Its labels say whether a block failed, not how severe the "
             "incident was, so it measures detection, not severity."
         ),
-        (
-            "- Contiguous BGL windows and the UCI incident log could not be downloaded in the build "
-            "environment, so no results on them are reported."
-        ),
+        *_unmeasured(results.get("real") or {}),
         "",
     ]
     return "\n".join(lines)
+
+
+def _unmeasured(real: Mapping[str, Any]) -> list[str]:
+    """A limitation line for each real source that produced no results this time."""
+    names = {"bgl": "contiguous BGL windows", "uci_tickets": "the UCI incident log"}
+    missing = [
+        label for key, label in names.items() if "missing" in (real.get(key) or {"missing": 1})
+    ]
+    if not missing:
+        return []
+    return [
+        (
+            f"- No results on {' or '.join(missing)} are reported: the data was not downloaded "
+            "(or the model not trained) when this report was generated."
+        )
+    ]
 
 
 def _provenance(results: Mapping[str, Any], *, real: bool = False) -> str:
@@ -625,6 +966,78 @@ def _real_summary(section: Mapping[str, Any]) -> list[str]:
     ]
 
 
+def _bgl_summary(section: Mapping[str, Any]) -> list[str]:
+    if "methods" not in section:
+        return []
+    aria, keyword = section["methods"]["aria_policy"], section["methods"]["keyword"]
+    severe = sum(n for c, n in section["labels"].items() if c in ("SEV1", "SEV2"))
+    return [
+        (
+            f"**Real severity**: on all {section['windows']:,} {section['window_min']}-minute "
+            f"windows of a supercomputer's {section['days']:g}-day log, labelled by its "
+            f"administrators' alert tags, ARIA rated {aria['severe_missed']:,} of the "
+            f"{severe:,} SEV1-2 windows as SEV3-4 (a keyword rule: {keyword['severe_missed']:,}) "
+            f"and paged on {aria['quiet_paged']:,} of {section['labels'].get('SEV4', 0):,} quiet "
+            f"windows; accuracy {_pct(aria['accuracy'])} ({_ci(aria['accuracy_ci95'])}), "
+            f"macro-F1 {aria['macro_f1']:.3f}."
+        ),
+        "",
+    ]
+
+
+def _hadoop_summary(section: Mapping[str, Any]) -> list[str]:
+    if "aria" not in section:
+        return []
+    aria, errors = section["aria"], section["baselines"]["any_error_line"]
+    return [
+        (
+            f"**Real failed jobs**: of {aria['failed']} Hadoop jobs with a failure injected, ARIA "
+            f"flagged {aria['failed_flagged']} ({_ci(aria['recall_ci95'])}), and "
+            f"{aria['normal_flagged']} of {aria['normal']} healthy jobs; a rule on ERROR lines "
+            f"flags {errors['failed_flagged']} and {errors['normal_flagged']}."
+        ),
+        "",
+    ]
+
+
+def _tickets_summary(section: Mapping[str, Any]) -> list[str]:
+    if "priority" not in section:
+        return []
+    aria, sla = section["priority"]["aria"], section["sla"]
+    best = max(sla["baselines_auroc"].values(), default=0.5)
+    return [
+        (
+            f"**Real tickets**: on the newest {section['test']:,} of {section['incidents']:,} "
+            "tickets from a ServiceNow service desk, ARIA's priority matched the final priority "
+            f"for {_pct(aria['accuracy'])} ({_ci(aria['accuracy_ci95'])}), the same as the "
+            "impact x urgency matrix it learns, and its SLA model ranks breaches at AUROC "
+            f"{sla['auroc']:.3f} ({_ci(sla['auroc_ci95'], percent=False)}), against {best:.3f} "
+            "for the best single field."
+        ),
+        "",
+    ]
+
+
+def _injection_summary(bench: Mapping[str, Any]) -> list[str]:
+    if "attacks" not in bench:
+        return []
+    total, benign = bench["attacks"], bench.get("benign") or {}
+    real = bench.get("real_lines") or {}
+    text = (
+        f"**Prompt injection, public benchmarks**: of {total['n']:,} attacks from "
+        f"{len(bench['by_source'])} public benchmarks the detector was never tuned on, it caught "
+        f"{_pct(total['rate'])} ({_ci(total['ci95'])})"
+    )
+    if benign:
+        text += f"; it flagged {_pct(benign['rate'])} of {benign['n']} benign look-alikes"
+    if real:
+        text += (
+            f" and {sum(r['flagged'] for r in real.values()):,} of "
+            f"{sum(r['n'] for r in real.values()):,} real log lines"
+        )
+    return [text + ". Fencing, the prediction set and approval do not rely on it.", ""]
+
+
 def _results(results: Mapping[str, Any], live: Mapping[str, Any] | None) -> list[str]:
     """The README's summary: headline numbers, each linked to its section of the full report."""
     lines = [_provenance(results, real="real" in results), ""]
@@ -632,6 +1045,9 @@ def _results(results: Mapping[str, Any], live: Mapping[str, Any] | None) -> list
         lines += ["**These numbers come from the small test fixtures.** Run `make data` first.", ""]
     if "real" in results:
         lines += _real_summary(results["real"])
+        lines += _bgl_summary(results["real"].get("bgl") or {})
+        lines += _hadoop_summary(results["real"].get("hadoop") or {})
+        lines += _tickets_summary(results["real"].get("uci_tickets") or {})
     if "severity" in results:
         sev = results["severity"]
         lines += [
@@ -711,6 +1127,7 @@ def _results(results: Mapping[str, Any], live: Mapping[str, Any] | None) -> list
             ),
             "",
         ]
+    lines += _injection_summary(results.get("injection_benchmarks") or {})
     lines.append("Every section, with its method: [docs/evaluation.md](docs/evaluation.md).")
     return lines
 

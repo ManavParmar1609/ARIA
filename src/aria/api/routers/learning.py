@@ -90,8 +90,8 @@ async def assess_ticket(ticket: TicketContext, state: State) -> TicketAssessment
     if models is None:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
-            "the ticket model is not trained: ingest the UCI incident log "
-            "(`aria data ingest`), then run `aria train tickets`",
+            "the ticket model is not trained: download the UCI incident log "
+            "(`aria data download --source uci-incidents`), then run `aria train tickets`",
         )
     prediction = await asyncio.to_thread(models.predict, ticket)
     return TicketAssessment(
