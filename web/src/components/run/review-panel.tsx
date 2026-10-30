@@ -211,7 +211,8 @@ export function ReviewPanel({
               : detail.status === "rejected"
                 ? "Rejected"
                 : "Saved";
-          if (decision === "reject") {
+          // The outcome, not the button pressed: it names what actually happened to the run.
+          if (detail.status === "rejected") {
             toast.success(label, { description: "The report was rejected; nothing was sent." });
             return;
           }
@@ -240,7 +241,10 @@ export function ReviewPanel({
       className="grid gap-4 rounded-lg bg-raised p-5 ring-1 ring-primary/50"
     >
       <div className="grid gap-1">
-        <h2 id={`${id}-title`} className="flex items-center gap-2 text-base font-medium">
+        <h2
+          id={`${id}-title`}
+          className="flex items-center gap-2 font-sans text-base font-semibold"
+        >
           <span
             aria-hidden
             className="block size-2 animate-pulse-dot-thrice rounded-full bg-primary"

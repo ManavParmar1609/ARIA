@@ -133,8 +133,9 @@ export function RiskCoverageChart({
 }) {
   const W = 360;
   const Hh = 200;
-  // r leaves room for half of the "100%" label, which is centred on the last tick.
-  const pad = { l: 40, r: 16, t: 12, b: 34 };
+  // l fits the widest tick label at its phone size; r leaves room for half of the "100%" label,
+  // which is centred on the last tick; b drops the x labels clear of the "0%" beside them.
+  const pad = { l: 46, r: 22, t: 12, b: 26 };
   const x = (c: number) => pad.l + ((c - 0.5) / 0.5) * (W - pad.l - pad.r);
   const y = (r: number) => pad.t + (1 - r / 0.1) * (Hh - pad.t - pad.b);
   const path = points
@@ -143,13 +144,19 @@ export function RiskCoverageChart({
   const opRisk = 1 - operating.accuracy;
   return (
     <figure className={cn("grid gap-2", className)}>
+      {/* The axis titles are page text, so they never shrink with the drawing. */}
+      <p aria-hidden className="mx-auto w-full max-w-lg text-xs text-muted-foreground">
+        Error rate
+      </p>
       <svg
         viewBox={`0 0 ${W} ${Hh}`}
         className="mx-auto h-auto w-full max-w-lg"
         role="img"
         aria-label={`Risk against coverage. At ${pct(operating.coverage)} coverage, ARIA's policy errs on ${pct(opRisk)} of the windows it decides alone; deciding all of them would raise that to ${pct(points.at(-1)?.risk ?? 0)}.`}
       >
-        <g className="text-[10px]">
+        {/* The drawing scales with its width, so labels are sized per breakpoint to stay
+            readable on a phone (about 11 px there) without growing large on a desktop. */}
+        <g className="text-[15px] sm:text-[10px]">
           {[0, 0.025, 0.05, 0.075, 0.1].map((r) => (
             <g key={r}>
               <line x1={pad.l} x2={W - pad.r} y1={y(r)} y2={y(r)} className="stroke-rule" />
@@ -162,28 +169,13 @@ export function RiskCoverageChart({
             <text
               key={c}
               x={x(c)}
-              y={Hh - pad.b + 14}
+              y={Hh - pad.b + 17}
               textAnchor="middle"
               className="tabular fill-faint"
             >
               {Math.round(c * 100)}%
             </text>
           ))}
-          <text
-            x={(pad.l + W - pad.r) / 2}
-            y={Hh - 4}
-            textAnchor="middle"
-            className="fill-muted-foreground"
-          >
-            share of windows ARIA decides without a person
-          </text>
-          <text
-            transform={`translate(10 ${(pad.t + Hh - pad.b) / 2}) rotate(-90)`}
-            textAnchor="middle"
-            className="fill-muted-foreground"
-          >
-            error rate
-          </text>
         </g>
         <path d={path} fill="none" strokeWidth="2" className="stroke-foreground/80" />
         {points.map((p) => (
@@ -206,11 +198,14 @@ export function RiskCoverageChart({
           x={x(operating.coverage) - 8}
           y={y(opRisk) - 10}
           textAnchor="end"
-          className="fill-foreground text-[11px] font-medium"
+          className="fill-foreground text-[15px] font-medium sm:text-[11px]"
         >
           ARIA today
         </text>
       </svg>
+      <p aria-hidden className="text-center text-xs text-muted-foreground">
+        Share of windows ARIA decides without a person
+      </p>
       <figcaption className="text-xs text-muted-foreground">
         Lower is better. Each point decides the most confident windows first.
       </figcaption>

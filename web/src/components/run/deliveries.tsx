@@ -67,7 +67,7 @@ export function Deliveries({
     });
   return (
     <section aria-labelledby="deliveries-title" className="grid gap-3 rounded-lg bg-raised p-5">
-      <h2 id="deliveries-title" className="text-base font-medium">
+      <h2 id="deliveries-title" className="font-sans text-base font-semibold">
         Messages
       </h2>
       <ul className="grid gap-2">

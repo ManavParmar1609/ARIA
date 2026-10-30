@@ -161,7 +161,9 @@ export function Memory() {
                         severity={isSeverity(incident.severity) ? incident.severity : null}
                         size="sm"
                       />
-                      <span className="min-w-0 flex-1 font-medium">
+                      {/* At least 12rem before the date and tag wrap below, so a phone never
+                          squeezes the title to a word per line. */}
+                      <span className="min-w-48 flex-1 font-medium">
                         {stripSeverity(incident.title)}
                       </span>
                       <span className="text-xs text-muted-foreground">{seen(incident)}</span>

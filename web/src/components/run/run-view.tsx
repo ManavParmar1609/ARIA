@@ -62,7 +62,7 @@ function Header({
       <TagStrip severity={sev} className="w-16 sm:w-20" />
       <div className="grid min-w-0 flex-1 gap-2 p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <h1 className="min-w-0 text-xl leading-snug font-medium tracking-heading sm:text-2xl">
+          <h1 className="min-w-0 text-xl leading-snug tracking-heading sm:text-2xl">
             {runTitle(run)}
           </h1>
           <RunStatus status={run.status} />

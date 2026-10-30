@@ -345,7 +345,7 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
             </div>
             <div className={cn("grid min-w-0 gap-2 pb-8", i === turns.length - 1 && "pb-0")}>
               <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                <h3 className="text-base font-medium">
+                <h3 className="font-sans text-base font-semibold">
                   {turn.name}
                   <span className="ml-2 text-sm font-normal text-muted-foreground">{turn.job}</span>
                 </h3>

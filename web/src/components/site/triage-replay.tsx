@@ -249,9 +249,13 @@ export function TriageReplay({ data }: { data: Replay }) {
           </h4>
           <ul className="mt-3 grid gap-2.5 text-sm leading-relaxed">
             {data.claims.map((claim) => (
-              <li key={claim.text} data-anim="claim" className="grid grid-cols-[0.75rem_1fr] gap-2">
+              <li
+                key={claim.text}
+                data-anim="claim"
+                className="grid grid-cols-[0.75rem_minmax(0,1fr)] gap-2"
+              >
                 <span aria-hidden className="mt-2.5 block size-1.5 rounded-full bg-foreground/70" />
-                <span>
+                <span className="wrap-anywhere">
                   {claim.text}{" "}
                   <span className="inline-flex flex-wrap gap-1 align-baseline">
                     {claim.evidence.slice(0, 3).map(chip)}

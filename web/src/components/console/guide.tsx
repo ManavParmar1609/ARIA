@@ -273,7 +273,7 @@ export function Guide() {
                 {i + 1}
               </span>
               <div className="grid content-start gap-1">
-                <h3 className="text-base font-medium">{part.title}</h3>
+                <h3 className="font-sans text-base font-semibold">{part.title}</h3>
                 <p className="text-sm text-muted-foreground">{part.body}</p>
               </div>
             </li>
@@ -316,7 +316,7 @@ export function Guide() {
         <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {SOURCES.map((source) => (
             <li key={source.title} className="grid content-start gap-2 rounded-lg bg-raised p-5">
-              <h3 className="text-base font-medium">{source.title}</h3>
+              <h3 className="font-sans text-base font-semibold">{source.title}</h3>
               <p className="text-sm text-muted-foreground">{source.body}</p>
             </li>
           ))}

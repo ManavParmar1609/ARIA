@@ -10,7 +10,8 @@ const DIGITS = "0123456789";
  * The server draws each digit as a strip already showing its final digit, so the first paint,
  * no-script views and screen readers (which read the plain text beside it) get the real value. A
  * number still below the screen once the page has loaded is reset to zeros out of sight and rolls
- * up when it comes into view. Under reduced motion it never moves. Only transforms animate.
+ * up when it comes into view, then rests with crisp edges. Under reduced motion it never moves.
+ * Only transforms animate.
  */
 export function RollingNumber({ value }: { value: string }) {
   const root = useRef<HTMLSpanElement>(null);
@@ -21,6 +22,7 @@ export function RollingNumber({ value }: { value: string }) {
     // The observer's first report says where the number is, without forcing a layout during
     // hydration: one already on (or above) the screen keeps its digits; one below waits at zero.
     let first = true;
+    let rest = 0;
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (!entry) return;
@@ -37,11 +39,17 @@ export function RollingNumber({ value }: { value: string }) {
         if (!entry.isIntersecting) return;
         el.dataset.roll = "go";
         observer.disconnect();
+        // Once the last column has landed (1.1 s, 70 ms later per digit), it rests.
+        const columns = el.querySelectorAll(".roll-col").length;
+        rest = window.setTimeout(() => (el.dataset.roll = "done"), 1200 + 70 * columns);
       },
       { threshold: 0.6 },
     );
     observer.observe(el);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(rest);
+    };
   }, []);
 
   const chars = [...value];

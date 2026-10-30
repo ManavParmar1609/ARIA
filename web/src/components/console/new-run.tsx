@@ -270,12 +270,12 @@ export function NewRun() {
         </form>
 
         <aside aria-labelledby={`${id}-other`} className="grid content-start gap-4">
-          <h2 id={`${id}-other`} className="text-base font-medium">
+          <h2 id={`${id}-other`} className="font-sans text-base font-semibold">
             Other ways to start a run
           </h2>
           {SNIPPETS.map((s) => (
             <div key={s.title} className="grid gap-2 border-t border-rule pt-4">
-              <h3 className="text-sm font-medium">{s.title}</h3>
+              <h3 className="font-sans text-sm font-semibold">{s.title}</h3>
               <p className="text-sm text-muted-foreground">{s.body}</p>
               <pre
                 tabIndex={0}

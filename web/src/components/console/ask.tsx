@@ -171,7 +171,7 @@ function Questions() {
 
       {turns.length === 0 ? (
         <section aria-labelledby={`${id}-try`} className="grid gap-2">
-          <h2 id={`${id}-try`} className="text-sm font-medium">
+          <h2 id={`${id}-try`} className="font-sans text-sm font-semibold">
             Not sure what to ask? Try one of these
           </h2>
           <ul className="flex flex-wrap gap-2">

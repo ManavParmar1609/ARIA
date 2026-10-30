@@ -48,7 +48,7 @@ function Section({
 function Contents({ groups }: { groups: [group: string, items: [id: string, label: string][]][] }) {
   return (
     <nav aria-labelledby="ev-contents" className="grid gap-3">
-      <h2 id="ev-contents" className="text-sm font-medium text-foreground">
+      <h2 id="ev-contents" className="font-sans text-sm font-semibold text-foreground">
         On this page
       </h2>
       {groups
@@ -976,7 +976,7 @@ export function Evals({
           ]}
         />
         <div className="grid gap-3">
-          <h3 className="text-sm font-medium">Median time per step</h3>
+          <h3 className="font-sans text-sm font-semibold">Median time per step</h3>
           <Bars
             label="Median milliseconds per graph step"
             rows={stages}
@@ -993,7 +993,7 @@ export function Evals({
       >
         <div className="grid gap-8 xl:grid-cols-2">
           <div className="grid content-start gap-3">
-            <h3 className="text-sm font-medium">
+            <h3 className="font-sans text-sm font-semibold">
               Grouping accuracy by system (mean {data.parsing.meanAccuracy.toFixed(3)})
             </h3>
             <Bars
@@ -1014,7 +1014,7 @@ export function Evals({
             </p>
           </div>
           <div className="grid content-start gap-3">
-            <h3 className="text-sm font-medium">
+            <h3 className="font-sans text-sm font-semibold">
               Attacks quarantined, by family (overall {pct(r.attackRecall)})
             </h3>
             <Bars

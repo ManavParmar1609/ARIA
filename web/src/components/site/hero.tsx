@@ -26,7 +26,13 @@ function Card({ name, delay, children }: { name: string; delay: number; children
 
 /** The recorded run in three cards: the alert, its severity, and the report waiting for review. */
 function Trio({ data }: { data: Replay }) {
-  const claim = data.claims[0];
+  // The first claim that reads as plain English: one quoting a log template ("<*>") would be cut
+  // mid-quote by the card's line clamp.
+  const index = Math.max(
+    0,
+    data.claims.findIndex((c) => !c.text.includes("<*>")),
+  );
+  const claim = data.claims[index];
   const p = Math.round((data.probabilities[data.severity] ?? 0) * 100);
   const summary = `From a recorded run: ${data.title}, ${data.nLines} log lines, rated ${data.severity} at ${p}% and waiting for a person to approve the report.`;
   return (
@@ -85,7 +91,7 @@ function Trio({ data }: { data: Replay }) {
         </Card>
         <Card name="Report" delay={380}>
           <p className="text-xs font-medium text-muted-foreground">
-            Claim 1 of {data.claims.length}
+            Claim {index + 1} of {data.claims.length}
           </p>
           <p className="line-clamp-4 text-sm leading-snug text-foreground">{claim?.text}</p>
           <div className="flex flex-wrap gap-1.5">

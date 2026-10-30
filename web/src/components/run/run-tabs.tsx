@@ -97,7 +97,7 @@ function Guard({ guard, raw }: { guard: GuardReport; raw: number }) {
   const redactions = Object.entries(guard.redactions?.counts ?? {});
   return (
     <div className="grid gap-3 rounded-lg bg-raised p-5 text-sm">
-      <h3 className="font-medium">Guardrails on the way in</h3>
+      <h3 className="font-sans font-semibold">Guardrails on the way in</h3>
       <p className="text-muted-foreground">
         {raw.toLocaleString("en")} lines read.{" "}
         {redactions.length
@@ -235,7 +235,7 @@ export function Similar({ retrieval }: { retrieval: RetrievalResult }) {
       )}
       {retrieval.attempts.length ? (
         <div className="grid gap-2">
-          <h3 className="text-sm font-medium">Retrieval attempts</h3>
+          <h3 className="font-sans text-sm font-semibold">Retrieval attempts</h3>
           <ol className="grid gap-1.5 text-xs">
             {retrieval.attempts.map((a) => (
               <li key={a.attempt} className="grid gap-0.5 rounded-sm bg-sunken p-2">

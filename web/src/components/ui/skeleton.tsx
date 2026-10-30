@@ -7,7 +7,12 @@ export function Skeleton({ className, ...props }: ComponentProps<"div">) {
     <div
       data-slot="skeleton"
       aria-hidden
-      className={cn("animate-pulse rounded-sm bg-sunken motion-reduce:animate-none", className)}
+      // A tint of the text colour, so a placeholder shows on the canvas and on cards alike, by
+      // day and at night.
+      className={cn(
+        "animate-pulse rounded-sm bg-foreground/8 motion-reduce:animate-none",
+        className,
+      )}
       {...props}
     />
   );

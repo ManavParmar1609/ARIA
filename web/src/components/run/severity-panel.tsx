@@ -133,11 +133,13 @@ export function SeverityPanel({ assessment }: { assessment: SeverityAssessment }
               <m.div
                 key="rule-trace"
                 id="rule-trace"
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: reduceMotion ? 0 : 0.22, ease: [0.25, 1, 0.5, 1] }}
-                className="grid gap-2 overflow-hidden"
+                // Opacity and a short drop only: animating height would lay the page out again
+                // on every frame (DESIGN.md, Motion).
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: reduceMotion ? 0 : 0.22, ease: [0.16, 1, 0.3, 1] }}
+                className="grid gap-2"
               >
                 <ul className="grid gap-2">
                   {assessment.rule_hits.map((hit) => (

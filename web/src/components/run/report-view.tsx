@@ -32,7 +32,7 @@ function ClaimList({ claims }: { claims: Claim[] }) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="grid gap-3">
-      <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
+      <h3 className="font-sans text-sm font-semibold text-muted-foreground">{title}</h3>
       {children}
     </section>
   );

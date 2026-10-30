@@ -39,6 +39,9 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   typedRoutes: true,
+  // The dev server trusts only localhost; opened as 127.0.0.1 it refused its own hot-reload
+  // socket, so the page never came alive. Development only.
+  allowedDevOrigins: ["127.0.0.1"],
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

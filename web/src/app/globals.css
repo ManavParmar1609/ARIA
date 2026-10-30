@@ -472,7 +472,7 @@
 
 /* RollingNumber (rolling-number.tsx): each digit is a strip of 0 to 9 behind a one-digit window,
    resting on its final digit. "ready" drops the strips to 0 out of sight; "go" rolls them up, a
-   little later for each digit to the right. */
+   little later for each digit to the right; "done" leaves them at rest. */
 .roll-word {
   display: inline-flex;
   vertical-align: top;
@@ -485,7 +485,11 @@
 }
 .roll-col {
   overflow: hidden;
-  /* Soft top and bottom edges: mid-roll, the digits passing through fade instead of being cut. */
+}
+/* Soft top and bottom edges only while the digits move, so those passing through fade instead of
+   being cut; at rest every digit stands whole. */
+[data-roll="ready"] .roll-col,
+[data-roll="go"] .roll-col {
   mask-image: linear-gradient(transparent, #000 0.14em, #000 0.86em, transparent);
 }
 .roll-strip {
