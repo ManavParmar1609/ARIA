@@ -2,9 +2,12 @@
 
 Alerts that share a group key (Alertmanager's ``groupKey``, else the common labels) and arrive
 within ``triggers.alert_group_window_s`` of the group's last alert join the open group instead
-of starting a new run, so an alert storm becomes one incident. Names, labels and annotations are
-untrusted: secrets are redacted before they are stored, and when a run starts its addresses are
-pseudonymised and any value that reads like an instruction is withheld (``security.fields``).
+of starting a new run, so an alert storm becomes one incident. That holds across API replicas
+too: a new group's ID follows from its key and the group before it, and its run's ID from the
+group, so requests that race to open either compute the same ID and the database keeps one.
+Names, labels and annotations are untrusted: secrets are redacted before they are stored, and
+when a run starts its addresses are pseudonymised and any value that reads like an instruction is
+withheld (``security.fields``).
 """
 
 from __future__ import annotations
@@ -13,9 +16,10 @@ import hashlib
 import json
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, NamedTuple
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from aria.contracts.base import utcnow
 from aria.contracts.inputs import AlertSignal, RunOptions, TriageRequest
@@ -116,6 +120,33 @@ def title_for(alerts: list[AlertSignal], common: dict[str, str]) -> str:
     return f"{head}{more}" + (f" on {where}" if where else "")
 
 
+class Grouping(NamedTuple):
+    """Where a payload's alerts went."""
+
+    group_id: str
+    run_id: str | None  # the group's run, once one is attached
+    grouped: bool  # joined an open group, rather than opening one
+    opens: str  # the run the group opens while it has none
+
+
+def group_id_after(key: str, previous: str | None) -> str:
+    """The ID of the group that follows ``previous`` for ``key`` (None: the key's first group).
+    Requests that race to open it, on two API replicas or one retrying, compute the same ID."""
+    digest = hashlib.sha256(f"{key}\x1f{previous or ''}".encode()).hexdigest()
+    return f"grp-{digest[:20]}"
+
+
+def run_id_for(group_id: str, first_at: datetime) -> str:
+    """The run an alert group opens: every request that joins the group before its run is
+    attached names this one, and a run created twice is kept once."""
+    return f"run-{first_at:%Y%m%d}-{group_id.removeprefix('grp-')[:10]}"
+
+
+def opened_by(run: dict[str, Any], group_id: str) -> bool:
+    """Whether ``run`` is the live run ``group_id`` opened, not an older one with the same ID."""
+    return run.get("alert_group_id") == group_id and not RunStatus(run["status"]).terminal
+
+
 def record_alerts(
     engine: Any,
     key: str,
@@ -123,8 +154,23 @@ def record_alerts(
     *,
     system: str,
     window_s: int,
-) -> tuple[str, str | None, bool]:
-    """Store the alerts and find or open their group. Returns (group id, run id, grouped)."""
+) -> Grouping:
+    """Store the alerts and find or open their group."""
+    try:
+        return _record(engine, key, alerts, system=system, window_s=window_s, follow=True)
+    except IntegrityError:  # another request opened this group a moment ago: join it
+        return _record(engine, key, alerts, system=system, window_s=window_s, follow=False)
+
+
+def _record(
+    engine: Any,
+    key: str,
+    alerts: list[AlertSignal],
+    *,
+    system: str,
+    window_s: int,
+    follow: bool,
+) -> Grouping:
     now = utcnow()
     with session_scope(engine) as session:
         group = session.scalar(
@@ -132,6 +178,7 @@ def record_alerts(
             .where(AlertGroupRow.key == key, AlertGroupRow.status == "open")
             .order_by(AlertGroupRow.last_at.desc())
         )
+        previous = group.id if group is not None else None
         if group is not None:
             last = group.last_at if group.last_at.tzinfo else group.last_at.replace(tzinfo=UTC)
             run = session.get(RunRow, group.run_id) if group.run_id else None
@@ -143,10 +190,18 @@ def record_alerts(
             ):
                 group.status = "closed"
                 group = None
+        if previous is None:
+            previous = session.scalar(
+                select(AlertGroupRow.id)
+                .where(AlertGroupRow.key == key)
+                .order_by(AlertGroupRow.first_at.desc(), AlertGroupRow.id.desc())
+                .limit(1)
+            )
         grouped = group is not None
         if group is None:
             group = AlertGroupRow(
-                id=f"grp-{uuid.uuid4().hex[:12]}",
+                # The next group in the key's chain; after a lost race, one of its own.
+                id=group_id_after(key, previous) if follow else f"grp-{uuid.uuid4().hex[:20]}",
                 key=key,
                 system=system,
                 status="open",
@@ -172,7 +227,7 @@ def record_alerts(
                     group_id=group.id,
                 )
             )
-        return group.id, group.run_id, grouped
+        return Grouping(group.id, group.run_id, grouped, run_id_for(group.id, group.first_at))
 
 
 def attach_run(engine: Any, group_id: str, run_id: str) -> None:

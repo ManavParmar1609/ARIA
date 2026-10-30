@@ -376,8 +376,11 @@ class TriageRunner:
                 finally:  # nothing to drive: give up a claim taken to drive it (a recovery)
                     await self.let_go(run_id)
             return await self._drive(run_id, None)  # crash recovery: continue from the checkpoint
-        await self._event(run_id, "run_started", payload={"trigger": run.get("trigger")})
-        return await self._drive(run_id, {"run_id": run_id, "request": run["request"]})
+        return await self._drive(
+            run_id,
+            {"run_id": run_id, "request": run["request"]},
+            started={"trigger": run.get("trigger")},
+        )
 
     async def start(self, request: TriageRequest, **kwargs: Any) -> RunOutcome:
         return await self.execute(self.submit(request, **kwargs))
@@ -435,7 +438,12 @@ class TriageRunner:
             lock.release()
 
     async def _drive(
-        self, run_id: str, graph_input: Any, *, config: RunnableConfig | None = None
+        self,
+        run_id: str,
+        graph_input: Any,
+        *,
+        config: RunnableConfig | None = None,
+        started: Json | None = None,
     ) -> RunOutcome:
         async with self._holding(run_id):
             # The claim spans processes: an API resuming a review and a worker recovering a run
@@ -446,6 +454,8 @@ class TriageRunner:
             self.held.add(run_id)
             renewal = asyncio.create_task(self._renew(run_id))
             try:
+                if started is not None:  # only the process that won the run says it started
+                    await self._event(run_id, "run_started", payload=started)
                 return await self._stream(run_id, graph_input, config)
             finally:
                 renewal.cancel()

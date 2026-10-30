@@ -21,16 +21,19 @@ import uvicorn
 from asgi_lifespan import LifespanManager
 from fastapi import FastAPI
 from mcp import Client
+from sqlalchemy import select, update
 
+from aria.api import alerts as intake
 from aria.api.app import create_app
 from aria.api.state import AppState
 from aria.api.worker import Worker, heartbeat_age, poll_forever
 from aria.config import Environment, get_settings, reset_caches
-from aria.contracts.inputs import TriageRequest
+from aria.contracts.inputs import AlertSignal, TriageRequest
+from aria.contracts.run import RunStatus
 from aria.data.scenarios import LinePools, ScenarioBuilder
 from aria.db import repository as repo
-from aria.db.engine import dispose_engines, get_engine, init_db
-from aria.db.models import RunRow
+from aria.db.engine import dispose_engines, get_engine, init_db, session_scope
+from aria.db.models import AlertGroupRow, RunRow
 from aria.graph.runner import RunBusyError, TriageRunner
 from aria.mcp.client import remote_target
 from aria.mcp.server import TOOL_NAMES
@@ -671,6 +674,82 @@ async def test_alert_storms_become_one_grouped_run(api: Api) -> None:
     assert own.status_code == 202
     empty = await api.client.post("/api/v1/alerts/alertmanager", json={"alerts": []})
     assert empty.status_code == 422
+
+
+def test_two_replicas_opening_one_alert_group_at_once_share_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two API replicas get the same new alert group at the same moment: each finds no open group
+    and opens one. They compute the same group ID, so the database keeps one and the other
+    request joins it, with the same run to open."""
+    init_db(get_engine())
+    engine = get_engine()
+    real = intake.group_id_after
+    both_looked = threading.Barrier(2, timeout=10)
+
+    def after_both_looked(key: str, previous: str | None) -> str:
+        both_looked.wait()  # neither has stored its group yet
+        return real(key, previous)
+
+    monkeypatch.setattr(intake, "group_id_after", after_both_looked)
+    alerts = [AlertSignal(source="alertmanager", name="DiskFull", fingerprint="d1")]
+    found: list[intake.Grouping] = []
+
+    def deliver() -> None:
+        found.append(intake.record_alerts(engine, "storm", alerts, system="bgl", window_s=300))
+
+    replicas = [threading.Thread(target=deliver) for _ in range(2)]
+    for replica in replicas:
+        replica.start()
+    for replica in replicas:
+        replica.join(timeout=30)
+    assert len(found) == 2
+    assert found[0].group_id == found[1].group_id
+    assert found[0].opens == found[1].opens
+    assert sorted(f.grouped for f in found) == [False, True]
+    with session_scope(engine) as session:
+        groups = session.scalars(select(AlertGroupRow).where(AlertGroupRow.key == "storm")).all()
+        assert [(g.alert_count, g.status) for g in groups] == [(2, "open")]
+
+
+async def test_a_burst_of_deliveries_for_one_new_group_opens_one_run(api: Api) -> None:
+    sent = await asyncio.gather(
+        *(
+            api.client.post("/api/v1/alerts/alertmanager", json=_alertmanager("burst", "firing"))
+            for _ in range(6)
+        )
+    )
+    accepted = [r.json() for r in sent]
+    assert {a["run_id"] for a in accepted} == {accepted[0]["run_id"]}
+    assert {a["alert_group_id"] for a in accepted} == {accepted[0]["alert_group_id"]}
+    runs = [r for r in repo.list_runs(api.state.services.engine) if r["trigger"] == "alertmanager"]
+    assert [r["id"] for r in runs] == [accepted[0]["run_id"]]
+    await wait_for(api, accepted[0]["run_id"], "awaiting_review")
+    events = repo.list_events(api.state.services.engine, accepted[0]["run_id"])
+    assert sum(e.kind == "run_started" for e in events) == 1
+
+
+async def test_an_older_run_with_the_derived_id_never_takes_a_new_storm(api: Api) -> None:
+    """The ID a new group's run would take is already an older run's (a database restored in
+    part): the storm opens a run of its own instead of joining that one."""
+    engine = api.state.services.engine
+    found = intake.record_alerts(
+        engine,
+        "restored",
+        [AlertSignal(name="DiskFull", fingerprint="r1")],
+        system="bgl",
+        window_s=1,
+    )
+    request = TriageRequest(system="bgl", logs=["x"]).model_dump(mode="json")
+    repo.create_run(engine, found.opens, request=request, status=RunStatus.PUBLISHED)
+    with session_scope(engine) as session:
+        session.execute(
+            update(AlertGroupRow).where(AlertGroupRow.id == found.group_id).values(run_id=None)
+        )
+    payload = _alertmanager("restored", "firing")
+    accepted = (await api.client.post("/api/v1/alerts/alertmanager", json=payload)).json()
+    assert accepted["alert_group_id"] == found.group_id
+    assert accepted["run_id"] not in (None, found.opens)
 
 
 async def test_malformed_or_unrelated_alerts_never_fail_or_merge(api: Api) -> None:

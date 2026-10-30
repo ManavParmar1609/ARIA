@@ -303,7 +303,7 @@ Changing the embedding provider changes the vector space. Memory re-embeds stale
 - **The database.** SQLite serialises writes. For more than a couple of workers, use Azure SQL.
 - **Abandoned runs.** Every process that drives a run, a worker or the API applying a review, claims it first and renews the claim every minute; it lets go when the run pauses or ends. A run whose holder went quiet for 5 minutes is reclaimed by another worker (or, in process, by the API), and a process with every slot busy leaves it to the others. A reclaimed run that had already paused for review, or ended, is recorded as such and let go at once. Two processes never drive one run at once, and each approved message is marked as being sent before it goes out, so it goes out once.
 - **Periodic jobs.** Each worker runs the recalibration job against the shared model file; repeating it is harmless, because the same reviews give the same threshold. Configure the log scan on one worker only, or replicas tailing the same files can open duplicate runs.
-- **More API replicas.** Run migrations as a separate step (`aria db upgrade`), and set `ARIA_MIGRATE_ON_START=false`. The rate limiter and the A2A task store live in each process's memory, so each replica keeps its own.
+- **More API replicas.** Run migrations as a separate step (`aria db upgrade`), and set `ARIA_MIGRATE_ON_START=false`. The rate limiter and the A2A task store live in each process's memory, so each replica keeps its own. Alert grouping does not: an alert storm delivered to several replicas at once still opens one group and one run, because racing requests compute the same group and run IDs and the database keeps one of each.
 
 ### Database migrations
 

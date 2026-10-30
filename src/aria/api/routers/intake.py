@@ -29,23 +29,36 @@ async def _accept(state: AppState, payload: dict[str, Any], source: str) -> Aler
     system = intake.system_for(common, alerts)
     window = state.services.config.triggers.alert_group_window_s
     engine = state.services.engine
-    group_id, run_id, grouped = await asyncio.to_thread(
+    found = await asyncio.to_thread(
         intake.record_alerts, engine, key, alerts, system=system, window_s=window
     )
+    run_id = found.run_id
     firing = [a for a in alerts if a.status == "firing"]
     if run_id is None and firing:
+        # Requests that reach the group before its run is attached all name the same run, and
+        # only the first creates it.
         request = intake.triage_request(firing, common, system)
         run_id = await asyncio.to_thread(
-            state.runner.submit, request, trigger=source, alert_group_id=group_id
+            state.runner.submit,
+            request,
+            run_id=found.opens,
+            trigger=source,
+            alert_group_id=found.group_id,
         )
-        await asyncio.to_thread(intake.attach_run, engine, group_id, run_id)
+        opened = await asyncio.to_thread(repo.get_run, engine, run_id)
+        if opened is None or not intake.opened_by(opened, found.group_id):
+            # An older run already has that ID (a database restored in part): open a new one.
+            run_id = await asyncio.to_thread(
+                state.runner.submit, request, trigger=source, alert_group_id=found.group_id
+            )
+        await asyncio.to_thread(intake.attach_run, engine, found.group_id, run_id)
         if state.inprocess:
             state.worker.execute(run_id)
     run = await asyncio.to_thread(repo.get_run, engine, run_id) if run_id else None
     return AlertAccepted(
-        alert_group_id=group_id,
+        alert_group_id=found.group_id,
         run_id=run_id,
-        grouped=grouped,
+        grouped=found.grouped,
         alerts=len(alerts),
         status=run["status"] if run else "resolved",
     )
