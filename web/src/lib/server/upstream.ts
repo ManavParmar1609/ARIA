@@ -13,6 +13,43 @@ export function apiBase(): string {
 export const KEY_COOKIE = "aria_key";
 const KEY_MAX_AGE_S = 12 * 60 * 60;
 
+/**
+ * The HttpOnly cookie that holds a visitor's own model key, as "<provider>~<key>". It goes to the
+ * ARIA API only with the requests that can call a model, and lasts a working day at most.
+ */
+export const MODEL_KEY_COOKIE = "aria_model_key";
+export const MODEL_KEY_MAX_AGE_S = 8 * 60 * 60;
+/** A key as the API accepts it: a plain token, so it can never break a header. */
+export const MODEL_KEY_SHAPE = /^[A-Za-z0-9._-]{20,200}$/;
+export const MODEL_KIND_SHAPE = /^[a-z][a-z0-9-]{0,23}$/;
+
+export interface ModelKey {
+  provider: string;
+  key: string;
+}
+
+/** Requests that can call a model; only these carry a visitor's own key. */
+const MODEL_KEY_ROUTES = [
+  /^\/api\/v1\/runs$/,
+  /^\/api\/v1\/runs\/[^/]+\/fork$/,
+  /^\/api\/v1\/real-incidents\/[^/]+\/replay$/,
+  /^\/api\/v1\/ask$/,
+  /^\/agui$/,
+];
+
+export function carriesModelKey(method: string, path: string): boolean {
+  return method === "POST" && MODEL_KEY_ROUTES.some((route) => route.test(path));
+}
+
+export function modelKeyFrom(request: NextRequest): ModelKey | undefined {
+  const value = request.cookies.get(MODEL_KEY_COOKIE)?.value ?? "";
+  const at = value.indexOf("~");
+  const provider = value.slice(0, at);
+  const key = value.slice(at + 1);
+  if (at < 1 || !MODEL_KIND_SHAPE.test(provider) || !MODEL_KEY_SHAPE.test(key)) return undefined;
+  return { provider, key };
+}
+
 const FORWARD_REQUEST_HEADERS = ["accept", "content-type", "last-event-id"];
 const FORWARD_RESPONSE_HEADERS = ["content-type", "retry-after", "cache-control", "x-request-id"];
 
@@ -117,6 +154,11 @@ export async function forward(
   }
   const key = init.key ?? keyFrom(request);
   if (key) headers.set("x-api-key", key);
+  const modelKey = carriesModelKey(method, path) ? modelKeyFrom(request) : undefined;
+  if (modelKey) {
+    headers.set("x-model-provider", modelKey.provider);
+    headers.set("x-model-key", modelKey.key);
+  }
 
   let body: Uint8Array<ArrayBuffer> | undefined;
   if (method !== "GET" && method !== "HEAD") {

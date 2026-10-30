@@ -19,7 +19,8 @@ import {
 import { Switch } from "@/components/ui/switch";
 import samples from "@/data/samples.json";
 import { ApiError } from "@/lib/api/client";
-import { useCreateRun, useSettingsView } from "@/lib/api/hooks";
+import { useCreateRun, useModelKey, useSettingsView } from "@/lib/api/hooks";
+import { modelKeyLabel } from "@/lib/api/model-key";
 import { MAX_BODY_BYTES } from "@/lib/limits";
 import { SYSTEM_NAMES } from "@/lib/systems";
 
@@ -85,6 +86,16 @@ export function logsHint(problem: string | null, publicDemo: boolean): string {
     : "One event per line. IP and e-mail addresses are pseudonymised and secrets redacted before analysis or any model call; the lines you paste stay with the run until you delete it.";
 }
 
+/** What the model switch does here: whose model answers when it is on, and what off means. */
+export function modelHint(kinds: string[], savedProvider: string | null): string {
+  const off = "Off: rules, the calibrated model and the grounded template only.";
+  if (savedProvider && kinds.includes(savedProvider)) {
+    return `On: your own ${modelKeyLabel(savedProvider)} key answers first. ${off}`;
+  }
+  if (kinds.length > 0) return `${off} To use a model, add your own key in Settings.`;
+  return `${off} Faster, and nothing leaves the server.`;
+}
+
 export function NewRun({ publicDemo = false }: { publicDemo?: boolean }) {
   const id = useId();
   const router = useRouter();
@@ -98,7 +109,10 @@ export function NewRun({ publicDemo = false }: { publicDemo?: boolean }) {
   const [approval, setApproval] = useState(true);
   const [touched, setTouched] = useState(false);
   // The server's rule wins: where it requires approval, every run waits for a person.
-  const approvalRequired = useSettingsView().data?.require_approval ?? true;
+  const settings = useSettingsView().data;
+  const approvalRequired = settings?.require_approval ?? true;
+  const savedKey = useModelKey().data;
+  const llmHint = modelHint(settings?.visitor_keys ?? [], savedKey?.provider ?? null);
 
   const lines = useMemo(() => text.split(/\r?\n/).filter((l) => l.trim()), [text]);
   // The lines' size as sent (UTF-8 JSON, with room for the other fields), so a paste the
@@ -254,7 +268,7 @@ export function NewRun({ publicDemo = false }: { publicDemo?: boolean }) {
             <Toggle
               id={`${id}-llm`}
               label="Use an LLM if one is configured"
-              hint="Off: rules, the calibrated model and the grounded template only. Faster, and nothing leaves the server."
+              hint={llmHint}
               checked={useLlm}
               onChange={setUseLlm}
             />

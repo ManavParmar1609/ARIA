@@ -3,6 +3,7 @@
 import { LogOutIcon } from "lucide-react";
 import Link from "next/link";
 
+import { ModelKeyPanel } from "@/components/console/model-key";
 import { ErrorState, LoadingRows, PageHeader } from "@/components/console/states";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +16,7 @@ import {
 } from "@/components/ui/table";
 import {
   useFeedback,
+  useModelKey,
   useProviders,
   useSession,
   useSettingsView,
@@ -283,6 +285,8 @@ export function Settings() {
   const providers = useProviders();
   const view = useSettingsView();
   const feedback = useFeedback();
+  const savedKey = useModelKey();
+  const kinds = view.data?.visitor_keys ?? [];
   const { theme, setTheme } = useTheme();
   // When the API is down every section fails the same way: say so once, in the first section
   // that failed, and let that one "Try again" reload them all.
@@ -358,6 +362,16 @@ export function Settings() {
           </div>
         </fieldset>
       </Section>
+
+      {kinds.length > 0 || savedKey.data?.provider ? (
+        <Section
+          id="set-model-key"
+          title="Your model key"
+          intro="Use your own Claude, Gemini, OpenAI or NVIDIA key for the runs you start and the questions you ask. Your browser keeps it and sends it only with those requests; the server uses it for that work alone and never stores it."
+        >
+          <ModelKeyPanel kinds={kinds} />
+        </Section>
+      ) : null}
 
       <Section
         id="set-providers"

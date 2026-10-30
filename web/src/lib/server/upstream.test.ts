@@ -3,7 +3,15 @@
 import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { cookieOptions, forward, isSameOrigin, readBody, upstreamPath } from "./upstream";
+import {
+  carriesModelKey,
+  cookieOptions,
+  forward,
+  isSameOrigin,
+  modelKeyFrom,
+  readBody,
+  upstreamPath,
+} from "./upstream";
 
 const req = (
   path: string,
@@ -119,6 +127,64 @@ describe("forward", () => {
     expect(await down.json()).toEqual({
       detail: "The ARIA API is not reachable. Check that it is running.",
     });
+  });
+});
+
+describe("a visitor's own model key", () => {
+  const KEY = "AIzaVisitorKey-0123456789abcdefghijklmno";
+  const cookie = `aria_model_key=gemini~${KEY}`;
+
+  it("goes only with requests that can call a model", () => {
+    for (const path of [
+      "/api/v1/runs",
+      "/api/v1/runs/run-1/fork",
+      "/api/v1/real-incidents/hdfs-1/replay",
+      "/api/v1/ask",
+      "/agui",
+    ]) {
+      expect(carriesModelKey("POST", path)).toBe(true);
+    }
+    for (const [method, path] of [
+      ["GET", "/api/v1/runs"],
+      ["POST", "/api/v1/runs/run-1/review"],
+      ["DELETE", "/api/v1/runs/run-1"],
+      ["POST", "/api/v1/alerts"],
+      ["POST", "/api/v1/runs/run-1/fork/x"],
+    ] as const) {
+      expect(carriesModelKey(method, path)).toBe(false);
+    }
+  });
+
+  it("reads only a well-formed cookie", () => {
+    expect(modelKeyFrom(req("/x", { headers: { cookie } }))).toEqual({
+      provider: "gemini",
+      key: KEY,
+    });
+    for (const bad of ["gemini", `~${KEY}`, "gemini~short", `Gemini~${KEY}`, `gemini~${KEY} x`]) {
+      expect(modelKeyFrom(req("/x", { headers: { cookie: `aria_model_key=${bad}` } }))).toBe(
+        undefined,
+      );
+    }
+  });
+
+  it("is forwarded with a new run and never with anything else", async () => {
+    const fetch = vi.fn(async () => Response.json({ ok: true }));
+    vi.stubGlobal("fetch", fetch);
+    const sent = (call: number) => (fetch.mock.calls[call] as unknown as [URL, RequestInit])[1];
+    await forward(
+      req("/api/v1/runs", { method: "POST", headers: { cookie }, body: "{}" }),
+      "/api/v1/runs",
+    );
+    expect((sent(0).headers as Headers).get("x-model-key")).toBe(KEY);
+    expect((sent(0).headers as Headers).get("x-model-provider")).toBe("gemini");
+    await forward(req("/api/v1/runs", { headers: { cookie } }), "/api/v1/runs");
+    await forward(
+      req("/api/v1/runs/r/review", { method: "POST", headers: { cookie }, body: "{}" }),
+      "/api/v1/runs/r/review",
+    );
+    for (const call of [1, 2]) {
+      expect((sent(call).headers as Headers).get("x-model-key")).toBeNull();
+    }
   });
 });
 

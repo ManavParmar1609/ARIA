@@ -3,6 +3,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiFetch, postJson } from "./client";
+import type { ModelKeyCheck, SavedModelKey } from "./model-key";
 import type { Session } from "./session";
 import type {
   AskRequest,
@@ -31,6 +32,7 @@ export type ExpertCheck = components["schemas"]["ExpertCheckOut"];
 
 export const keys = {
   session: ["session"] as const,
+  modelKey: ["model-key"] as const,
   health: ["health"] as const,
   runs: (status?: RunStatus | "all", limit?: number) =>
     ["runs", status ?? "all", limit ?? 50] as const,
@@ -76,6 +78,37 @@ export function useSignOut() {
     mutationFn: () => apiFetch<void>("/api/session", { method: "DELETE" }),
     onSuccess: () => {
       client.clear();
+    },
+  });
+}
+
+/** The visitor's own model key, if they saved one: its provider and last four characters. */
+export function useModelKey() {
+  return useQuery({
+    queryKey: keys.modelKey,
+    queryFn: () => apiFetch<SavedModelKey>("/api/model-key"),
+    staleTime: 60_000,
+  });
+}
+
+/** Check a key with its provider through the ARIA API, and keep it only if it is accepted. */
+export function useSaveModelKey() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { provider: string; key: string }) =>
+      postJson<ModelKeyCheck>("/api/model-key", body),
+    onSuccess: async (result) => {
+      if (result.accepted) await client.invalidateQueries({ queryKey: keys.modelKey });
+    },
+  });
+}
+
+export function useForgetModelKey() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<void>("/api/model-key", { method: "DELETE" }),
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: keys.modelKey });
     },
   });
 }

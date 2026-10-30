@@ -44,6 +44,9 @@ export default defineConfig({
         ARIA_RATE_LIMIT_PER_MINUTE: "100000",
         ARIA_LOG_FORMAT: "console",
         UV_NO_PROGRESS: "1",
+        // The Settings page shows the form for a visitor's own model key, so axe checks it. No
+        // test sends a key.
+        ARIA_VISITOR_KEYS: "true",
         // Offline and deterministic: never reach a hosted model, even if a key is exported.
         NVIDIA_API_KEY: "",
         GEMINI_API_KEY: "",
