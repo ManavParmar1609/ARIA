@@ -200,6 +200,7 @@ export function Queue() {
                     <TableCell className="max-w-0">
                       <Link
                         href={`/console/runs/${encodeURIComponent(run.id)}` as never}
+                        title={runTitle(run)}
                         className="block truncate font-medium after:absolute after:inset-0 after:content-['']"
                       >
                         {runTitle(run)}
@@ -240,7 +241,7 @@ export function Queue() {
                 </div>
                 <Link
                   href={`/console/runs/${encodeURIComponent(run.id)}` as never}
-                  className="mt-2 block font-medium after:absolute after:inset-0 after:content-['']"
+                  className="mt-2 block font-medium wrap-anywhere after:absolute after:inset-0 after:content-['']"
                 >
                   {runTitle(run)}
                 </Link>

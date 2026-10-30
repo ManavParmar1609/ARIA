@@ -121,9 +121,18 @@ function StartHere() {
 
 export function Overview() {
   const runs = useRuns("all", 200);
+  // Runs that wait for a person, and failures, have queries of their own: past 200 runs, the
+  // newest 200 miss older ones, and the counts came out wrong.
+  const waitingRuns = useRuns("awaiting_review", 200);
+  const failedRuns = useRuns("failed", 200);
   const providers = useProviders();
   const stats = useMemo(() => summarize(runs.data?.runs ?? []), [runs.data]);
-  const waiting = [...stats.waiting].sort(
+  // "+" where a list stopped at its limit: there are more than it counted.
+  const more = (page: { next_before?: string | null } | undefined) =>
+    page?.next_before ? "+" : "";
+  const today = `${stats.today.toLocaleString("en")}${stats.today === stats.total ? more(runs.data) : ""}`;
+  const failed = failedRuns.data?.runs.length ?? stats.failed;
+  const waiting = [...(waitingRuns.data?.runs ?? stats.waiting)].sort(
     (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
   );
   // Runs waiting for review are listed above; this list is the rest, newest first.
@@ -202,7 +211,8 @@ export function Overview() {
                 href="/console/runs?status=awaiting_review"
                 className="justify-self-start text-sm font-medium underline decoration-control underline-offset-4 hover:decoration-foreground"
               >
-                See all {waiting.length} waiting
+                See all {waiting.length}
+                {more(waitingRuns.data)} waiting
               </Link>
             ) : null}
           </section>
@@ -212,7 +222,7 @@ export function Overview() {
               How ARIA is doing
             </h2>
             <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <Fact label="Runs in the last 24 hours" value={stats.today.toLocaleString("en")} />
+              <Fact label="Runs in the last 24 hours" value={today} />
               <Fact
                 label="Median time to review"
                 value={duration(stats.medianLatency) || "None yet"}
@@ -304,19 +314,20 @@ export function Overview() {
               </ul>
             )}
           </section>
-          {stats.running > 0 || stats.failed > 0 ? (
+          {stats.running > 0 || failed > 0 ? (
             <p className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
               {stats.running > 0 ? (
                 <span className="inline-flex items-center gap-1">
                   <RunStatus status="running" /> {stats.running} in progress
                 </span>
               ) : null}
-              {stats.failed > 0 ? (
+              {failed > 0 ? (
                 <Link
                   href="/console/runs?status=failed"
                   className="inline-flex items-center gap-1 hover:underline"
                 >
-                  <RunStatus status="failed" /> {stats.failed} failed
+                  <RunStatus status="failed" /> {failed}
+                  {more(failedRuns.data)} failed
                 </Link>
               ) : null}
             </p>

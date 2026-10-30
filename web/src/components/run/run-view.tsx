@@ -3,7 +3,7 @@
 import { CircleHelpIcon, DownloadIcon, HistoryIcon, Trash2Icon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { TagStrip } from "@/components/aria/severity";
@@ -62,7 +62,7 @@ function Header({
       <TagStrip severity={sev} className="w-16 sm:w-20" />
       <div className="grid min-w-0 flex-1 gap-2 p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <h1 className="min-w-0 text-xl leading-snug tracking-heading sm:text-2xl">
+          <h1 className="min-w-0 text-xl leading-snug tracking-heading wrap-anywhere sm:text-2xl">
             {runTitle(run)}
           </h1>
           <RunStatus status={run.status} />
@@ -104,6 +104,7 @@ function Header({
 function DeleteRun({ runId }: { runId: string }) {
   const router = useRouter();
   const remove = useDeleteRun();
+  const deleting = useRef(false);
   const [open, setOpen] = useState(false);
   const error = remove.error instanceof ApiError ? remove.error.detail : remove.error?.message;
   return (
@@ -132,14 +133,20 @@ function DeleteRun({ runId }: { runId: string }) {
           <Button
             variant="danger"
             disabled={remove.isPending}
-            onClick={() =>
+            onClick={() => {
+              // A double click would send a second delete, which fails once the first succeeds.
+              if (deleting.current) return;
+              deleting.current = true;
               remove.mutate(runId, {
                 onSuccess: () => {
                   toast.success("Run deleted");
                   router.push("/console/runs");
                 },
-              })
-            }
+                onError: () => {
+                  deleting.current = false;
+                },
+              });
+            }}
           >
             {remove.isPending ? "Deleting" : "Delete the run"}
           </Button>
@@ -257,7 +264,7 @@ export function RunView({ runId }: { runId: string }) {
 
   return (
     <EvidenceProvider evidence={evidence} events={events}>
-      <div className="grid gap-6">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
         <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-3 gap-y-1">
           <Crumbs runId={detail.id} />
           <div className="flex flex-wrap gap-1.5">

@@ -163,7 +163,7 @@ export function Memory() {
                       />
                       {/* At least 12rem before the date and tag wrap below, so a phone never
                           squeezes the title to a word per line. */}
-                      <span className="min-w-48 flex-1 font-medium">
+                      <span className="min-w-48 flex-1 font-medium wrap-anywhere">
                         {stripSeverity(incident.title)}
                       </span>
                       <span className="text-xs text-muted-foreground">{seen(incident)}</span>

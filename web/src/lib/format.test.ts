@@ -8,6 +8,12 @@ describe("format", () => {
     expect(duration(2_240)).toBe("2.2 s");
     expect(duration(42_000)).toBe("42 s");
     expect(duration(193_000)).toBe("3 min 13 s");
+    // Seconds carry over into minutes and minutes into hours, after rounding.
+    expect(duration(9_960)).toBe("10 s");
+    expect(duration(59_600)).toBe("1 min");
+    expect(duration(239_600)).toBe("4 min");
+    expect(duration(7_200_000)).toBe("2 h");
+    expect(duration(7_260_000)).toBe("2 h 1 min");
     expect(duration(null)).toBe("");
   });
 

@@ -116,9 +116,9 @@ function EvidencePreview({ evidence, lines }: { evidence: Evidence; lines: LogEv
         <span className="font-mono text-foreground">{evidence.id}</span>{" "}
         {KIND_LABEL[evidence.kind] ?? evidence.kind}, from {evidence.source}
       </p>
-      <p className="text-sm leading-snug font-medium">{evidence.title}</p>
+      <p className="text-sm leading-snug font-medium wrap-anywhere">{evidence.title}</p>
       {evidence.detail ? (
-        <p className="line-clamp-4 text-xs leading-5 whitespace-pre-wrap text-muted-foreground">
+        <p className="line-clamp-4 text-xs leading-5 wrap-anywhere whitespace-pre-wrap text-muted-foreground">
           {evidence.detail}
         </p>
       ) : null}
@@ -220,7 +220,10 @@ export function EvidenceChip({ id }: { id: string }) {
       closeDelay={80}
     >
       <HoverCardTrigger asChild>{button}</HoverCardTrigger>
-      <HoverCardContent side="top" className="w-96">
+      <HoverCardContent
+        side="top"
+        className="max-h-(--radix-hover-card-content-available-height) w-96 overflow-auto"
+      >
         <EvidencePreview evidence={evidence} lines={linesFor(id)} />
       </HoverCardContent>
     </HoverCard>
@@ -364,12 +367,14 @@ export function EvidencePanel({ className }: { className?: string }) {
       {evidence ? (
         <>
           <div className="flex items-start justify-between gap-3">
-            <div className="grid gap-1">
+            <div className="grid min-w-0 gap-1">
               <p className="text-xs text-muted-foreground">
                 <span className="font-mono text-foreground">{evidence.id}</span>{" "}
                 {KIND_LABEL[evidence.kind] ?? evidence.kind}, from {evidence.source}
               </p>
-              <h3 className="font-sans text-sm leading-snug font-semibold">{evidence.title}</h3>
+              <h3 className="font-sans text-sm leading-snug font-semibold wrap-anywhere">
+                {evidence.title}
+              </h3>
             </div>
             {pinned === evidence.id ? (
               <Button

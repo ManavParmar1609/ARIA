@@ -44,14 +44,20 @@ export function clockTime(iso: string | null | undefined): string {
   });
 }
 
-/** 734 -> "734 ms", 12_400 -> "12.4 s", 193_000 -> "3 min 13 s". */
+/** 734 -> "734 ms", 12_400 -> "12.4 s", 193_000 -> "3 min 13 s", 7_260_000 -> "2 h 1 min". */
 export function duration(ms: number | null | undefined): string {
   if (ms == null) return "";
   if (ms < 1000) return `${Math.round(ms)} ms`;
   const s = ms / 1000;
-  if (s < 60) return `${s < 10 ? s.toFixed(1) : Math.round(s)} s`;
-  const m = Math.floor(s / 60);
-  return `${m} min ${Math.round(s - m * 60)} s`;
+  if (s < 9.95) return `${s.toFixed(1)} s`;
+  // Round once, to whole seconds, so 59.6 s reads "1 min", never "60 s" or "0 min 60 s".
+  const total = Math.round(s);
+  if (total < 60) return `${total} s`;
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  if (h) return m ? `${h} h ${m} min` : `${h} h`;
+  const rest = total % 60;
+  return rest ? `${m} min ${rest} s` : `${m} min`;
 }
 
 export function percent(x: number | null | undefined, digits = 0): string {

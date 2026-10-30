@@ -93,7 +93,7 @@ export function ErrorState({
         <CircleAlertIcon aria-hidden className="size-4" />
         {title}
       </p>
-      <p className="text-sm text-muted-foreground">{detail}</p>
+      <p className="max-w-full text-sm wrap-anywhere text-muted-foreground">{detail}</p>
       {onRetry || action ? (
         <div className="flex flex-wrap gap-2">
           {onRetry ? (

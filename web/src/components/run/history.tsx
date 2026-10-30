@@ -2,7 +2,7 @@
 
 import { GitForkIcon, HistoryIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { SeverityBadge } from "@/components/aria/severity";
@@ -57,6 +57,7 @@ export function History({
   const router = useRouter();
   const history = useHistory(runId);
   const fork = useFork(runId);
+  const starting = useRef(false);
   const [forking, setForking] = useState<Checkpoint | null>(null);
   const [title, setTitle] = useState("");
   const [useLlm, setUseLlm] = useState(true);
@@ -75,7 +76,9 @@ export function History({
   const items = history.data.filter((cp) => cp.next.length > 0 || cp.step != null);
 
   const startFork = () => {
-    if (!forking) return;
+    // A double click would start a second fork before the first one's state reached the button.
+    if (!forking || starting.current) return;
+    starting.current = true;
     fork.mutate(
       {
         checkpoint_id: forking.checkpoint_id,
@@ -87,6 +90,9 @@ export function History({
           setForking(null);
           toast.success("Fork started", { description: `New run ${accepted.run_id}` });
           router.push(`/console/runs/${encodeURIComponent(accepted.run_id)}` as never);
+        },
+        onSettled: () => {
+          starting.current = false;
         },
       },
     );

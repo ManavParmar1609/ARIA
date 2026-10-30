@@ -30,7 +30,7 @@ export function RunRow({ run, action }: { run: RunSummary; action?: "review" | "
         <div className="grid min-w-0 gap-0.5">
           <Link
             href={href as never}
-            className="line-clamp-2 font-medium text-heading outline-none after:absolute after:inset-0 after:content-[''] sm:line-clamp-1"
+            className="line-clamp-2 font-medium wrap-anywhere text-heading outline-none after:absolute after:inset-0 after:content-[''] sm:line-clamp-1"
           >
             {runTitle(run)}
           </Link>

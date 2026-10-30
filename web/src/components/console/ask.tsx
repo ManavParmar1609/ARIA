@@ -126,7 +126,7 @@ function Questions() {
         }}
         className="grid gap-3"
       >
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_16rem]">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-3 md:grid-cols-[minmax(0,1fr)_16rem]">
           <div className="grid gap-1.5">
             <Label htmlFor={`${id}-q`}>Your question</Label>
             <Input
@@ -194,7 +194,7 @@ function Questions() {
         <ol className="grid gap-8">
           {turns.map((turn) => (
             <li key={turn.id} className="grid gap-3 border-t border-rule pt-6">
-              <h2 className="text-xl tracking-heading">{turn.question}</h2>
+              <h2 className="text-xl tracking-heading wrap-anywhere">{turn.question}</h2>
               <Answer turn={turn} />
             </li>
           ))}

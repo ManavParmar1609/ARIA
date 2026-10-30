@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDownIcon, TriangleAlertIcon } from "lucide-react";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -186,53 +186,57 @@ export function ReviewPanel({
     setUnchanged(false);
   };
   const publishEdits = () => {
-    if (hasChanges(changedEdits(edit, original))) decide("edit");
+    if (hasChanges(changedEdits(edit, original))) void decide("edit");
     else setUnchanged(true);
   };
   const error = review.error instanceof ApiError ? review.error.detail : review.error?.message;
   const proposed = actions.filter((a) => a.status === "proposed" || a.status === undefined);
 
-  const decide = (decision: "approve" | "edit" | "reject") => {
+  const sending = useRef(false);
+  const decide = async (decision: "approve" | "edit" | "reject") => {
+    if (sending.current) return;
+    sending.current = true;
     const edits = decision === "edit" ? changedEdits(edit, original) : undefined;
-    review.mutate(
-      {
+    let detail: Awaited<ReturnType<typeof review.mutateAsync>>;
+    try {
+      detail = await review.mutateAsync({
         decision,
         comment: comment.trim() || undefined,
         edits,
         approve_actions: decision === "reject" ? [] : [...send],
-      },
-      {
-        onSuccess: (detail) => {
-          setEditing(false);
-          setRejecting(false);
-          const label =
-            detail.status === "published"
-              ? "Published"
-              : detail.status === "rejected"
-                ? "Rejected"
-                : "Saved";
-          // The outcome, not the button pressed: it names what actually happened to the run.
-          if (detail.status === "rejected") {
-            toast.success(label, { description: "The report was rejected; nothing was sent." });
-            return;
-          }
-          // What was delivered, not what was ticked: a receiver can be down or not configured.
-          const deliveries = detail.deliveries ?? [];
-          const sent = deliveries.filter((d) => d.status === "sent").length;
-          const missed = deliveries.length - sent;
-          const said = sent
-            ? `${sent} ${sent === 1 ? "message was" : "messages were"} sent.`
-            : "No messages were sent.";
-          if (missed) {
-            toast.warning(label, {
-              description: `${said} ${missed} could not be delivered: see Messages on this page.`,
-            });
-          } else {
-            toast.success(label, { description: said });
-          }
-        },
-      },
-    );
+      });
+    } catch {
+      return; // the panel shows the error
+    } finally {
+      sending.current = false;
+    }
+    setEditing(false);
+    setRejecting(false);
+    const label =
+      detail.status === "published"
+        ? "Published"
+        : detail.status === "rejected"
+          ? "Rejected"
+          : "Saved";
+    // The outcome, not the button pressed: it names what actually happened to the run.
+    if (detail.status === "rejected") {
+      toast.success(label, { description: "The report was rejected; nothing was sent." });
+      return;
+    }
+    // What was delivered, not what was ticked: a receiver can be down or not configured.
+    const deliveries = detail.deliveries ?? [];
+    const sent = deliveries.filter((d) => d.status === "sent").length;
+    const missed = deliveries.length - sent;
+    const said = sent
+      ? `${sent} ${sent === 1 ? "message was" : "messages were"} sent.`
+      : "No messages were sent.";
+    if (missed) {
+      toast.warning(label, {
+        description: `${said} ${missed} could not be delivered: see Messages on this page.`,
+      });
+    } else {
+      toast.success(label, { description: said });
+    }
   };
 
   return (
@@ -315,7 +319,11 @@ export function ReviewPanel({
         </p>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        <Button variant="primary" onClick={() => decide("approve")} disabled={review.isPending}>
+        <Button
+          variant="primary"
+          onClick={() => void decide("approve")}
+          disabled={review.isPending}
+        >
           {review.isPending
             ? "Saving"
             : send.size > 0
@@ -435,7 +443,11 @@ export function ReviewPanel({
           </div>
           <DialogFooter>
             <Button onClick={() => setRejecting(false)}>Keep reviewing</Button>
-            <Button variant="danger" onClick={() => decide("reject")} disabled={review.isPending}>
+            <Button
+              variant="danger"
+              onClick={() => void decide("reject")}
+              disabled={review.isPending}
+            >
               {review.isPending ? "Rejecting" : "Reject the report"}
             </Button>
           </DialogFooter>
