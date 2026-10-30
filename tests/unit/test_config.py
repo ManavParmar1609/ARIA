@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -144,3 +145,17 @@ def test_a_self_hosted_nim_leads_every_chain_once_configured(
     monkeypatch.setenv("NIM_LOCAL_BASE_URL", "http://nim:8000/v1")
     reset_caches()
     assert get_app_config().llm.providers["nim-local"].is_enabled()
+
+
+def test_vercel_installs_with_the_pnpm_the_lockfile_was_made_with() -> None:
+    """Vercel falls back to pnpm 6 when it cannot match the lockfile, which fails on current Node;
+    both Vercel configs pin the version package.json names."""
+    repo = Path(__file__).resolve().parents[2]
+    pinned = json.loads((repo / "web/package.json").read_text())["packageManager"]
+    configs = [
+        json.loads((repo / "web/vercel.json").read_text()),
+        json.loads((repo / "vercel.json").read_text())["services"]["web"],
+    ]
+    for config in configs:
+        for command in (config["installCommand"], config["buildCommand"]):
+            assert f"npx --yes {pinned} " in command

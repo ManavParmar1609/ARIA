@@ -1,7 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "services": {
-    "web": { "root": "web/", "framework": "nextjs" }
+    "web": {
+      "root": "web/",
+      "framework": "nextjs",
+      "installCommand": "npx --yes pnpm@10.28.0 install --frozen-lockfile",
+      "buildCommand": "npx --yes pnpm@10.28.0 run build"
+    }
   },
   "rewrites": [{ "source": "/(.*)", "destination": { "service": "web" } }]
 }
