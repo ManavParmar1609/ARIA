@@ -302,13 +302,18 @@ test (5f5d310); one is left.
 
 ### Alert storms on several replicas
 
-The audit had left this open, and it is now fixed (cb5e51c). A burst of deliveries for one new alert
-group opened several runs, even on one replica: each request found the group still without a run
-and opened its own, and two replicas could each open a group. A new group's ID now follows from
-its key and the group before it, and its run's ID from the group, so racing requests, on one
-replica or several, compute the same IDs and the database keeps one group and one run. If that
-run ID already belongs to an older run (a database restored in part), the storm opens a new run
-instead. A run's start is recorded only by the process that wins it.
+The audit had left this open, and it is now fixed (cb5e51c, then 23a0a90). A burst of deliveries
+for one new alert group opened several runs, even on one replica: each request found the group
+still without a run and opened its own, and two replicas could each open a group. The database
+now keeps one open group per alert key (a unique index; the migration closes any duplicates a
+database already holds), and a request that loses the race joins the winner's group. A group's
+run takes an ID that follows from the group, and every request tries the same IDs in the same
+order, so racing requests end up on the same run, even when another run already holds the first
+ID; a run is attached to a group only if the group has none. A run's start is recorded only by
+the process that wins it. A first version derived each group's ID from the group before it; a
+review of it showed that clock skew between replicas could defeat that, so the database
+enforces the rule instead. Left on purpose: a run recovered after its process stopped before the
+first checkpoint records a second start, because it did start again.
 
 ## What was left
 
