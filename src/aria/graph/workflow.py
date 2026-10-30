@@ -329,7 +329,10 @@ async def plan(state: TriageState, runtime: Runtime[TriageContext]) -> Command[A
     salt = await _db(run_salt, services.settings, state["run_id"], services.engine)
     request, withheld = clean_request(request, guard_cfg, salt)
     capped = lines[: guard_cfg.max_lines]
-    dropped = max(0, len(lines) - guard_cfg.max_lines)
+    # Lines past the cap were dropped when the run was recorded (TriageRunner.submit) or are
+    # dropped here, for a stored window.
+    received = len(lines) + request.logs_dropped
+    dropped = received - len(capped)
     shards = 1
     if request.options.fanout and len(capped) > SHARD_LINES:
         shards = min(MAX_SHARDS, math.ceil(len(capped) / SHARD_LINES))
@@ -339,7 +342,7 @@ async def plan(state: TriageState, runtime: Runtime[TriageContext]) -> Command[A
         fanout_shards=shards,
         retrieval_k=services.config.retrieval.k,
         retrieval_candidates=services.config.retrieval.candidates,
-        notes=[f"{len(lines)} input lines in {shards} {'shard' if shards == 1 else 'shards'}"]
+        notes=[f"{received} input lines in {shards} {'shard' if shards == 1 else 'shards'}"]
         + (
             [f"{dropped} lines over the {guard_cfg.max_lines}-line limit dropped"]
             if dropped

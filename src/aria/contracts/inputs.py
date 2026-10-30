@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Annotated, Literal
 
 from pydantic import Field, StringConstraints, field_validator, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
 from aria.contracts.base import Contract
 
@@ -98,6 +99,9 @@ class TriageRequest(Contract):
     # The real incident these logs replay (aria.data.real), so a run can be checked against the
     # labels its experts gave. Set by the replay endpoint.
     replay_of: Annotated[str, StringConstraints(max_length=64)] | None = None
+    # Lines past the per-run cap. ARIA drops them when it records a run, so they are never stored,
+    # and counts them here for the plan's note. It is not part of the published schema.
+    logs_dropped: SkipJsonSchema[Annotated[int, Field(ge=0)]] = 0
 
     @model_validator(mode="after")
     def _has_something_to_triage(self) -> TriageRequest:

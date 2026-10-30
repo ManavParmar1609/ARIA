@@ -338,7 +338,7 @@ class TriageRunner:
         if trigger != "replay" and request.replay_of is not None:
             # Only the replay endpoint may tie a run to a real incident's expert labels.
             request = request.model_copy(update={"replay_of": None})
-        request = self._cleaned(request, run_id)
+        request = self._cleaned(self._capped(request), run_id)
         repo.create_run(
             self.engine,
             run_id,
@@ -350,6 +350,20 @@ class TriageRunner:
             **fields,
         )
         return run_id
+
+    def _capped(self, request: TriageRequest) -> TriageRequest:
+        """The request with no more than a run reads: the first ``max_lines`` lines, each cut one
+        character past ``max_line_chars`` (so the parser still sees, and counts, a cut). A huge
+        paste would otherwise sit whole in the run row and in every checkpoint."""
+        guard = self.services.config.guardrails
+        extra = max(0, len(request.logs) - guard.max_lines)
+        width = guard.max_line_chars + 1
+        if not extra and all(len(line) <= width for line in request.logs):
+            return request
+        lines = [line[:width] for line in request.logs[: guard.max_lines]]
+        return request.model_copy(
+            update={"logs": lines, "logs_dropped": request.logs_dropped + extra}
+        )
 
     def _cleaned(self, request: TriageRequest, run_id: str) -> TriageRequest:
         """The request with its title, service, alerts and ticket cleaned with the run's key,

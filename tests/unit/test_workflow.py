@@ -542,6 +542,29 @@ async def test_two_unrelated_pastes_of_unknown_format_never_share_a_cause(env: E
     assert "payments.Gateway" in causes
 
 
+async def test_a_run_stores_no_more_lines_than_it_reads(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A 200,000-line paste sat whole in the run row and in every checkpoint, though a run reads
+    20,000: one request filled a small server's memory and disk."""
+    guard = env.services.config.guardrails
+    monkeypatch.setattr(guard, "max_lines", 60)
+    monkeypatch.setattr(guard, "max_line_chars", 100)
+    lines = [
+        f"2026-10-30 10:00:{i % 60:02d} ERROR db.pool: timeout {i} " + "x" * 300 for i in range(90)
+    ]
+    outcome = await env.runner.start(
+        TriageRequest(system="generic", logs=lines, options=RunOptions(use_llm=False))
+    )
+    run = repo.get_run(env.services.engine, outcome.run_id) or {}
+    assert len(run["request"]["logs"]) == 60
+    assert max(len(line) for line in run["request"]["logs"]) == 101  # the parser still sees a cut
+    values = (await env.runner.snapshot(outcome.run_id)).values
+    assert len(values["request"]["logs"]) == 60
+    assert "90 input lines in 1 shard" in values["plan"]["notes"]
+    assert "30 lines over the 60-line limit dropped" in values["plan"]["notes"]
+
+
 async def test_a_crash_outside_the_nodes_fails_the_run_and_says_why(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ) -> None:
