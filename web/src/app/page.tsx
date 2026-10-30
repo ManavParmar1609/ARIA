@@ -5,6 +5,7 @@ import { Suspense, type ReactNode } from "react";
 
 import { Term } from "@/components/aria/term";
 import { HeroScene, HeroSceneFrame } from "@/components/illustrations/scenes";
+import { RealDatasets } from "@/components/site/real-datasets";
 import { RealProof } from "@/components/site/real-proof";
 import { Results } from "@/components/site/results";
 import { RunGraph, type GraphStep } from "@/components/site/run-graph";
@@ -14,7 +15,15 @@ import { Limitations, Standards } from "@/components/site/standards";
 import { Story } from "@/components/site/story";
 import { TriageReplay } from "@/components/site/triage-replay";
 import { ArrowCircle, Button } from "@/components/ui/button";
-import { evaluation, realLogs, REPO_URL, replay, runFacts, type RunFacts } from "@/lib/site-data";
+import {
+  evaluation,
+  realData,
+  realLogs,
+  REPO_URL,
+  replay,
+  runFacts,
+  type RunFacts,
+} from "@/lib/site-data";
 import { cn } from "@/lib/utils";
 
 const ms = (value: number | undefined) =>
@@ -387,6 +396,7 @@ export default function Landing() {
             }
           >
             <RealProof data={real} />
+            <RealDatasets data={realData()} />
           </Section>
 
           <Section

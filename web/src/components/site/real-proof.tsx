@@ -122,7 +122,7 @@ export function RealProof({ data }: { data: RealLogs }) {
             {data.head
               ? ` The sample is the log's first ${n(data.head.lines)} lines plus later lines of the same blocks; on those ${n(data.head.lines)} lines alone, ARIA flags ${n(data.head.flagged)} blocks with ${n(data.head.falseAlarms)} false alarms.`
               : ""}{" "}
-            Measured on this one log; other systems are untested. Labels: {data.citation}
+            The lifecycle check is measured on this one log. Labels: {data.citation}
           </p>
           <div className="flex flex-wrap gap-3">
             <Button asChild variant="raised" size="md" className="pr-1.5">

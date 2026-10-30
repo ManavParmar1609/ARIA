@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { duration, median, money, percent, relativeTime, stripSeverity } from "./format";
+import { count, duration, median, money, percent, relativeTime, stripSeverity } from "./format";
 
 describe("format", () => {
   it("writes durations a person can read", () => {
@@ -36,5 +36,14 @@ describe("format", () => {
     );
     expect(stripSeverity("Kernel panics")).toBe("Kernel panics");
     expect(stripSeverity(null)).toBe("");
+  });
+});
+
+describe("count", () => {
+  it("spells counts below ten and writes digits from ten on", () => {
+    expect(count(0)).toBe("no");
+    expect(count(6)).toBe("six");
+    expect(count(10)).toBe("10");
+    expect(count(5247088)).toBe("5,247,088");
   });
 });

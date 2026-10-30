@@ -10,7 +10,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SEVERITIES } from "@/lib/api/types";
-import { EVAL_DOC_URL, type Evaluation, type RealLogs } from "@/lib/site-data";
+import { EVAL_DOC_URL, type Evaluation, type RealData, type RealLogs } from "@/lib/site-data";
+import { count } from "@/lib/format";
 import { NODE_LABEL } from "@/lib/steps";
 import { systemName } from "@/lib/systems";
 import { cn } from "@/lib/utils";
@@ -294,7 +295,277 @@ function RealSection({ real }: { real: RealLogs }) {
   );
 }
 
-export function Evals({ data, real }: { data: Evaluation; real?: RealLogs }) {
+const LABELS: Record<string, string> = {
+  normal: "Healthy",
+  machine_down: "Machine down",
+  network_disconnection: "Network disconnection",
+  disk_full: "Disk full",
+};
+const MODES: Record<string, string> = {
+  resourcemanager_unreachable: "ResourceManager unreachable",
+  hdfs_lease_renewal: "HDFS lease renewal",
+  component_errors: "Errors in one component",
+  none: "No hypothesis held",
+};
+const SLA_BASELINES: Record<string, string> = {
+  first_assignment_group: "First assignment group's breach rate",
+  category: "Category's breach rate",
+  location: "Location's breach rate",
+  priority_at_open: "Opening priority's breach rate",
+};
+const SOURCES: Record<string, string> = {
+  bipia: "BIPIA",
+  injecagent: "InjecAgent",
+  cyberseceval: "CyberSecEval 2",
+  tensor_trust: "Tensor Trust",
+  giskard: "Giskard",
+  jailbreaks: "Jailbreaks in the wild",
+};
+
+function MethodTable({
+  label,
+  head,
+  rows,
+}: {
+  label: string;
+  head: string[];
+  rows: { name: string; cells: string[]; strong?: boolean }[];
+}) {
+  return (
+    <Table aria-label={label}>
+      <TableHeader>
+        <TableRow>
+          {head.map((h, i) => (
+            <TableHead key={h} className={i > 0 ? "text-right" : undefined}>
+              {h}
+            </TableHead>
+          ))}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((row) => (
+          <TableRow key={row.name} className={cn(row.strong && "bg-highlight/40")}>
+            <TableHead scope="row" className={cn(row.strong && "text-foreground")}>
+              {row.name}
+            </TableHead>
+            {row.cells.map((cell, i) => (
+              <TableCell key={i} className="tabular text-right">
+                {cell}
+              </TableCell>
+            ))}
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+/** The other real-data evaluations: BGL windows, Hadoop jobs, tickets and injection benchmarks. */
+function MoreRealSections({ more }: { more: RealData }) {
+  const { bgl, hadoop, tickets, injection } = more;
+  const n = (x: number) => x.toLocaleString("en");
+  const sev = (m: typeof bgl.aria) => [
+    pct(m.accuracy),
+    m.macroF1.toFixed(3),
+    `${n(m.severeMissed)} of ${n(bgl.severe)}`,
+    `${n(m.quietPaged)} of ${n(bgl.quiet)}`,
+  ];
+  const job = (d: typeof hadoop.aria) => [
+    `${d.caught} of ${d.failed} (${pct(d.recall, 0)})`,
+    `${d.falseAlarms} of ${d.healthy}`,
+  ];
+  const ticket = (m: typeof tickets.aria) => [
+    pct(m.accuracy),
+    m.macroF1.toFixed(3),
+    `${m.severeMissed} of ${tickets.severe}`,
+  ];
+  const labelOrder = Object.keys(LABELS).filter((k) => k in hadoop.byLabel);
+  return (
+    <>
+      <Section
+        id="ev-bgl"
+        title="Severity on a supercomputer's whole log"
+        intro={
+          <>
+            {n(bgl.lines)} BlueGene/L lines over {Math.round(bgl.days)} days, cut into{" "}
+            {n(bgl.windows)} {bgl.windowMin}-minute windows. Each window&apos;s label comes from the
+            alert tags the machine&apos;s administrators gave its lines, through the rubric that
+            labels ARIA&apos;s BGL scenarios. ARIA rates each window from its lines alone; the tags
+            are removed first.
+          </>
+        }
+      >
+        <Facts
+          items={[
+            ["Windows", n(bgl.windows)],
+            ["Accuracy", pct(bgl.aria.accuracy)],
+            ["Macro-F1", bgl.aria.macroF1.toFixed(3)],
+            ["Severe windows rated minor", `${n(bgl.aria.severeMissed)} of ${n(bgl.severe)}`],
+            ["Quiet windows paged", `${n(bgl.aria.quietPaged)} of ${n(bgl.quiet)}`],
+            ["Set coverage", pct(bgl.coverage)],
+          ]}
+        />
+        <MethodTable
+          label="Severity on the BGL windows, by method"
+          head={["Method", "Accuracy", "Macro-F1", "SEV1-2 rated SEV3-4", "SEV4 rated SEV1-2"]}
+          rows={[
+            { name: "ARIA (rules, model and policy)", cells: sev(bgl.aria), strong: true },
+            { name: "The rules alone", cells: sev(bgl.rules) },
+            { name: "The model alone", cells: sev(bgl.model) },
+            { name: "Keyword categories", cells: sev(bgl.keyword) },
+            { name: "Highest log level", cells: sev(bgl.highestLevel) },
+            { name: "The commonest label", cells: sev(bgl.majority) },
+          ]}
+        />
+        <p className="max-w-prose text-sm text-muted-foreground">
+          The model learned from semi-synthetic windows, and on this log
+          {bgl.rules.macroF1 > bgl.aria.macroF1
+            ? " ARIA's rules alone did better than its rules and model together"
+            : " the rules and model together did at least as well as the rules alone"}
+          . {pct(bgl.overlapShare, 0)} of these lines carry a message that also appears in the
+          2,000-line sample the scenarios are built from.
+        </p>
+      </Section>
+
+      <Section
+        id="ev-hadoop"
+        title="Failed jobs on a Hadoop cluster"
+        intro={
+          <>
+            Every container log of {hadoop.jobs} MapReduce jobs ({n(hadoop.lines)} lines), each
+            triaged offline from start to finish as one run. Some ran normally; in the rest a
+            failure was injected while they ran. A job counts as flagged when ARIA rates it SEV1 to
+            SEV3.
+          </>
+        }
+      >
+        <MethodTable
+          label="Failed and healthy Hadoop jobs flagged, by method"
+          head={["Method", "Failed jobs flagged", "Healthy jobs flagged"]}
+          rows={[
+            { name: "ARIA, end to end", cells: job(hadoop.aria), strong: true },
+            { name: "Any ERROR or FATAL line", cells: job(hadoop.anyError) },
+            { name: "Keyword categories", cells: job(hadoop.keyword) },
+          ]}
+        />
+        <MethodTable
+          label="ARIA's severity and leading hypothesis for each kind of Hadoop job"
+          head={["Label", "Jobs", "SEV1", "SEV2", "SEV3", "SEV4", "Leading hypothesis"]}
+          rows={labelOrder.map((k) => {
+            const sevs = hadoop.severityByLabel[k] ?? {};
+            const [mode] = Object.entries(hadoop.leadingByLabel[k] ?? {});
+            return {
+              name: LABELS[k] ?? k,
+              cells: [
+                String(hadoop.byLabel[k]),
+                ...SEVERITIES.map((s) => String(sevs[s] ?? 0)),
+                mode ? `${MODES[mode[0]] ?? mode[0]} (${mode[1]})` : "",
+              ],
+            };
+          })}
+        />
+        <p className="max-w-prose text-sm text-muted-foreground">
+          ARIA&apos;s catalog has a failure mode for tasks that cannot reach the ResourceManager and
+          one for HDFS lease renewal, but none for a full disk.
+        </p>
+      </Section>
+
+      <Section
+        id="ev-tickets"
+        title="Tickets from a ServiceNow service desk"
+        intro={
+          <>
+            {n(tickets.incidents)} real tickets with anonymised codes. The ticket model trains on
+            the oldest and is scored on the newest {n(tickets.test)}, from the fields each ticket
+            had when it opened. {pct(tickets.sameAsAtOpen)} of them ended at the priority they
+            opened with.
+          </>
+        }
+      >
+        <MethodTable
+          label="Final priority of the newest tickets, by method"
+          head={["Method", "Accuracy", "Macro-F1", "Priority 1-2 rated 3-4"]}
+          rows={[
+            {
+              name: "ARIA (the learned impact x urgency matrix)",
+              cells: ticket(tickets.aria),
+              strong: true,
+            },
+            { name: "The ticket model alone", cells: ticket(tickets.modelOnly) },
+            { name: "The priority it opened with", cells: ticket(tickets.atOpen) },
+            { name: "The commonest priority", cells: ticket(tickets.majority) },
+          ]}
+        />
+        <div className="grid max-w-2xl gap-3">
+          <h3 className="text-lg tracking-heading">SLA breach risk, AUROC</h3>
+          <Bars
+            label="How well each method ranks the tickets that breached their SLA"
+            format={(v) => v.toFixed(3)}
+            rows={[
+              ["ARIA's SLA model", tickets.sla.auroc],
+              ...Object.entries(tickets.sla.baselines).map(
+                ([k, v]) => [SLA_BASELINES[k] ?? k, v] as [string, number],
+              ),
+            ]}
+          />
+          <p className="text-sm text-muted-foreground">
+            {pct(tickets.sla.breachRate)} of the {n(tickets.sla.n)} tickets breached their SLA. 0.5
+            is chance. {tickets.foreseen === 0 ? "None" : tickets.foreseen} of the{" "}
+            {tickets.escalated} tickets raised after they opened{" "}
+            {tickets.foreseen === 1 ? "was" : "were"} foreseen.
+          </p>
+        </div>
+      </Section>
+
+      <Section
+        id="ev-injection"
+        title="Prompt injection, public benchmarks"
+        intro={
+          <>
+            {n(injection.attacks)} attacks from {count(injection.sources.length)} public benchmarks
+            the detector was never tuned on, each hidden in a log line and parsed on its own. The
+            detector is the first of several layers: a line it misses still reaches a model only
+            fenced as evidence, and nothing is sent before approval.
+          </>
+        }
+      >
+        <Facts
+          items={[
+            ["Attacks", n(injection.attacks)],
+            ["Caught", pct(injection.rate)],
+            ["Benign look-alikes flagged", pct(injection.benign.rate)],
+            [
+              `Real log lines flagged, of ${n(injection.realLines)}`,
+              injection.realFlagged === 0 ? "None" : n(injection.realFlagged),
+            ],
+          ]}
+        />
+        <div className="grid max-w-2xl gap-3">
+          <Bars
+            label="Share of each benchmark's attacks the detector caught"
+            rows={injection.sources.map(
+              (s) => [SOURCES[s.key] ?? s.key, s.rate] as [string, number],
+            )}
+          />
+          <p className="text-sm text-muted-foreground">
+            It catches instructions phrased as overrides, role play and markup, and misses attacks
+            phrased as ordinary requests, which no pattern can tell from a log message.
+          </p>
+        </div>
+      </Section>
+    </>
+  );
+}
+
+export function Evals({
+  data,
+  real,
+  more,
+}: {
+  data: Evaluation;
+  real?: RealLogs;
+  more?: RealData;
+}) {
   const s = data.severity;
   const p = data.pipeline;
   const r = data.robustness;
@@ -309,10 +580,10 @@ export function Evals({ data, real }: { data: Evaluation; real?: RealLogs }) {
         description={
           <>
             Severity, end-to-end and robustness results are measured on {data.dataDescription}; the
-            real-log section on a real HDFS log with expert labels. Results from commit{" "}
-            <code>{data.gitSha}</code>, run {data.createdAt.slice(0, 10)}; <code>make eval</code>{" "}
-            reproduces them, and CI&rsquo;s smoke gate fails on a regression in severity, parsing,
-            retrieval or reporting.{" "}
+            real-data sections on real logs, jobs, tickets and attacks, with the labels their owners
+            gave them. Results from commit <code>{data.gitSha}</code>, run{" "}
+            {data.createdAt.slice(0, 10)}; <code>make eval</code> reproduces them, and CI&rsquo;s
+            smoke gate fails on a regression in severity, parsing, retrieval or reporting.{" "}
             <a
               href={EVAL_DOC_URL}
               className="text-foreground underline decoration-control underline-offset-4"
@@ -325,6 +596,7 @@ export function Evals({ data, real }: { data: Evaluation; real?: RealLogs }) {
       />
 
       {real ? <RealSection real={real} /> : null}
+      {more ? <MoreRealSections more={more} /> : null}
 
       <Section
         id="ev-severity"

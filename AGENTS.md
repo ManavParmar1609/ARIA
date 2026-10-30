@@ -114,9 +114,10 @@ falls out of date.
 | `src/aria/reporting/` | Report writer, critic, validator, comms drafts |
 | `src/aria/llm/` | Providers, router, budgets, prompts |
 | `src/aria/api/` | App, routers, webhooks, log scan, A2A, AG-UI, worker |
-| `src/aria/evals/` | Suites, metrics and the report generator (`real.py`: real logs, expert labels) |
+| `src/aria/evals/` | Suites, metrics and the report generator. Real data: `real.py` (HDFS, expert labels), `bgl.py` (BGL alert tags), `hadoop.py` (failed jobs), `tickets.py` (ServiceNow tickets), `injection.py` (public injection benchmarks) |
 | `src/aria/parsing/flows.py` | Units of work that stop partway, learned per window (`config/flows.yaml`) |
 | `src/aria/data/real.py` | Real, labelled logs and the real incidents the console replays |
+| `src/aria/data/download.py` | Fetching and verifying manifest sources, with checksum-pinned mirrors for blocked hosts |
 | `src/aria/cli.py` | The `aria` command |
 | `tests/unit/` | One file per area, for example `test_severity.py` |
 | `web/src/app/` | Landing page (`page.tsx`) and console (`console/`) |

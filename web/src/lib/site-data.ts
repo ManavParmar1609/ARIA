@@ -398,3 +398,129 @@ export function realLogs() {
 }
 
 export type RealLogs = ReturnType<typeof realLogs>;
+
+/** A detection rate with its exact interval, as the evaluation pages show it. */
+interface Flagged {
+  failed_flagged: number;
+  failed: number;
+  recall: number;
+  recall_ci95: number[];
+  normal_flagged: number;
+  normal: number;
+}
+
+const flagged = (d: Flagged) => ({
+  caught: d.failed_flagged,
+  failed: d.failed,
+  recall: d.recall,
+  recallCi: d.recall_ci95,
+  falseAlarms: d.normal_flagged,
+  healthy: d.normal,
+});
+
+/**
+ * The other real-data evaluations, each against labels its owners gave it: a supercomputer's
+ * alert tags, a Hadoop cluster's injected failures, a service desk's ticket outcomes and public
+ * prompt-injection benchmarks. Every number comes from docs/eval-results.json.
+ */
+export function realData() {
+  const { bgl, hadoop, uci_tickets: tickets } = evals.real;
+  const injection = evals.injection_benchmarks;
+  const severity = (m: (typeof bgl.methods)["aria_policy"]) => ({
+    accuracy: m.accuracy,
+    accuracyCi: m.accuracy_ci95,
+    macroF1: m.macro_f1,
+    severeMissed: m.severe_missed,
+    quietPaged: m.quiet_paged,
+    recall: m.recall as Record<string, number>,
+  });
+  const labels = bgl.labels as Record<string, number>;
+  const priority = (m: (typeof tickets.priority)["aria"]) => ({
+    accuracy: m.accuracy,
+    accuracyCi: m.accuracy_ci95,
+    macroF1: m.macro_f1,
+    severeMissed: m.severe_missed,
+  });
+  const byPriority = tickets.test_by_priority as Record<string, number>;
+  const sources = injection.by_source as Record<
+    string,
+    { n: number; flagged: number; rate: number; ci95: number[] }
+  >;
+  const realLines = Object.values(
+    injection.real_lines as Record<string, { n: number; flagged: number }>,
+  );
+  return {
+    bgl: {
+      citation: bgl.citation,
+      lines: bgl.lines,
+      days: bgl.days,
+      alertLines: bgl.alert_lines,
+      windows: bgl.windows,
+      windowMin: bgl.window_min,
+      labels,
+      severe: (labels.SEV1 ?? 0) + (labels.SEV2 ?? 0),
+      quiet: labels.SEV4 ?? 0,
+      aria: severity(bgl.methods.aria_policy),
+      rules: severity(bgl.methods.rules_only),
+      model: severity(bgl.methods.model_only),
+      keyword: severity(bgl.methods.keyword),
+      highestLevel: severity(bgl.methods.highest_level),
+      majority: severity(bgl.methods.majority_class),
+      coverage: bgl.conformal.coverage,
+      targetCoverage: bgl.conformal.target_coverage,
+      autoDecided: bgl.automation.auto_decided,
+      overlapShare: bgl.overlap_with_training_sample.share,
+    },
+    hadoop: {
+      citation: hadoop.citation,
+      jobs: hadoop.jobs,
+      lines: hadoop.lines,
+      byLabel: hadoop.by_label as Record<string, number>,
+      aria: flagged(hadoop.aria),
+      anyError: flagged(hadoop.baselines.any_error_line),
+      keyword: flagged(hadoop.baselines.keyword),
+      severityByLabel: hadoop.severity_by_label as Record<string, Record<string, number>>,
+      leadingByLabel: hadoop.leading_mode_by_label as Record<string, Record<string, number>>,
+    },
+    tickets: {
+      citation: tickets.citation,
+      incidents: tickets.incidents,
+      test: tickets.test,
+      severe: (byPriority["1"] ?? 0) + (byPriority["2"] ?? 0),
+      sameAsAtOpen: tickets.same_as_at_open,
+      aria: priority(tickets.priority.aria),
+      modelOnly: priority(tickets.priority.model_only),
+      atOpen: priority(tickets.priority.priority_at_open),
+      majority: priority(tickets.priority.majority_class),
+      escalated: tickets.escalated.tickets,
+      foreseen: tickets.escalated.foreseen,
+      coverage: tickets.conformal.coverage,
+      sla: {
+        n: tickets.sla.n,
+        breachRate: tickets.sla.breach_rate,
+        auroc: tickets.sla.auroc,
+        aurocCi: tickets.sla.auroc_ci95,
+        baselines: tickets.sla.baselines_auroc as Record<string, number>,
+        bestBaseline: Math.max(
+          ...Object.values(tickets.sla.baselines_auroc as Record<string, number>),
+        ),
+      },
+    },
+    injection: {
+      attacks: injection.attacks.n,
+      caught: injection.attacks.flagged,
+      rate: injection.attacks.rate,
+      rateCi: injection.attacks.ci95,
+      sources: Object.entries(sources).map(([key, r]) => ({ key, ...r })),
+      benign: {
+        n: injection.benign.n,
+        flagged: injection.benign.flagged,
+        rate: injection.benign.rate,
+      },
+      realLines: realLines.reduce((total, r) => total + r.n, 0),
+      realFlagged: realLines.reduce((total, r) => total + r.flagged, 0),
+    },
+  };
+}
+
+export type RealData = ReturnType<typeof realData>;

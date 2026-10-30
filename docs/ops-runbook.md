@@ -523,16 +523,12 @@ It answers 409 while the run is queued or running. Nothing deletes old runs auto
 
 ### `/api/v1/tickets/assess` answers 503
 
-**Likely cause.** The ticket model is not trained. It needs the UCI incident log, which is not bundled, and the images copy only the log-severity model. The log shows `services.ticket_models_missing` at start.
+**Likely cause.** No ticket model was found at start: `models/severity_ticket.json` is missing, or a mounted models directory hides the copy in the image. The log shows `services.ticket_models_missing` at start.
 
-**Fix.** Run the following, then restart the API, which loads the ticket model at start. In containers, also add `models/severity_ticket.json` to the image or a mounted models directory.
-
-```bash
-uv run aria data download
-```
+**Fix.** Train it from the UCI incident log (the download falls back to checksum-pinned mirrors when the UCI host is blocked), then restart the API, which loads the ticket model at start. In containers, mount the new file into the models directory or rebuild the image.
 
 ```bash
-uv run aria data ingest
+uv run aria data download --source uci-incidents
 ```
 
 ```bash

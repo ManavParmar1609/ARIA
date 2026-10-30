@@ -69,6 +69,12 @@ test.describe("landing page", () => {
     ).toBeVisible();
     await expect(real.getByText("Flags that were real failures")).toBeVisible();
     await expect(real.getByRole("figure")).toContainText("ARIA, following each block's steps");
+    await expect(
+      real.getByRole("heading", { name: "And on four more real datasets" }),
+    ).toBeVisible();
+    for (const name of [/supercomputer/, /Hadoop jobs/, /ServiceNow tickets/, /prompt-injection/]) {
+      await expect(real.getByRole("heading", { level: 4, name })).toBeVisible();
+    }
     await real.getByRole("link", { name: /Replay it yourself/ }).click();
     await expect(page).toHaveURL(/\/console\/guide$/);
     await expect(page.getByRole("heading", { name: "Replay a real incident" })).toBeVisible();

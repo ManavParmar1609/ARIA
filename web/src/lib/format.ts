@@ -82,3 +82,10 @@ export function median(values: number[]): number | null {
 export function stripSeverity(title: string | null | undefined): string {
   return (title ?? "").replace(/^SEV[1-4]\s*·\s*/, "");
 }
+
+const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+
+/** A count as prose writes it: words below ten ("six benchmarks"), digits from ten on. */
+export function count(n: number): string {
+  return (Number.isInteger(n) && WORDS[n]) || n.toLocaleString("en");
+}
