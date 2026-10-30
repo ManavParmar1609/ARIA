@@ -63,15 +63,24 @@ class SystemSpec:
 
 
 def format_to_regex(log_format: str) -> re.Pattern[str]:
-    """Turn '<Date> <Time> <Level> <Component>: <Content>' into a named-group regex."""
+    """Turn '<Date> <Time> <Level> <Component>: <Content>' into a named-group regex.
+
+    A message after plain spaces may be missing altogether: 0.7% of the full BGL log are
+    lines such as "... RAS KERNEL FATAL" that end at the level.
+    """
     parts = re.split(r"(<[^<>]+>)", log_format)
+    if len(parts) >= 3 and parts[-2:] == ["<Content>", ""] and parts[-3] and not parts[-3].strip():
+        parts[-3:] = ["", "<OptionalContent>", ""]  # the spaces move inside the optional group
     pattern = ""
     for i, part in enumerate(parts):
         if i % 2 == 0:
             pattern += re.sub(r" +", r"\\s+", part)
         else:
             name = part.strip("<>")
-            pattern += f"(?P<{name}>.*)" if name == "Content" else f"(?P<{name}>.*?)"
+            if name == "OptionalContent":
+                pattern += r"(?:\s+(?P<Content>.*))?"
+            else:
+                pattern += f"(?P<{name}>.*)" if name == "Content" else f"(?P<{name}>.*?)"
     return re.compile(f"^{pattern}$")
 
 

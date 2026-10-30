@@ -97,6 +97,21 @@ def test_bgl_alert_tags_are_kept_as_labels() -> None:
     assert all(r.ts is not None and r.ts.tzinfo is UTC for r in records)
 
 
+def test_a_bgl_line_with_no_message_keeps_its_time_node_and_level() -> None:
+    # 34,470 lines of the full BGL log end at the level; they once lost every header field.
+    line = (
+        "- 1120866514 2005.07.08 R02-M1-N8-C:J13-U01 2005-07-08-16.48.34.004234 "
+        "R02-M1-N8-C:J13-U01 RAS KERNEL FATAL\n"
+    )
+    record = parse_raw_line("bgl", line)
+    assert record.ts == datetime(2005, 7, 8, 23, 48, 34, tzinfo=UTC)
+    assert record.node == "R02-M1-N8-C:J13-U01"
+    assert record.level == "FATAL"
+    assert record.message == ""
+    # A separator other than spaces still needs its message: "Component:" alone is not a line.
+    assert format_to_regex("<Component>: <Content>").match("kernel:") is None
+
+
 def test_unknown_system_falls_back_to_generic_parsing() -> None:
     rec = parse_raw_line("payments", "2026-03-02T10:15:00Z ERROR [api.gateway]: upstream timed out")
     assert rec.level == "ERROR"

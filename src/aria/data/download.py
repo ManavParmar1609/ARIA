@@ -6,18 +6,23 @@ Integrity checks per source kind:
 * zenodo: files are verified against the md5 Zenodo publishes for the record.
 * uci / http: verified against a pinned sha256, or pinned on first download into
   ``data/checksums.lock`` (trust on first use) and verified on every later download.
+* mirrors: when a source's own host cannot be reached (or serves other bytes), its listed
+  mirrors are tried in order, each trusted only if its file matches the sha256 pinned beside it.
 """
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import shutil
 import subprocess
+import tarfile
 import tempfile
 import zipfile
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlsplit
 
 import httpx
 
@@ -161,7 +166,63 @@ def download_http(source: DataSource, dest: Path, lockfile: Path) -> Path:
     return dest
 
 
+def _file_name(url: str) -> str:
+    """The file a URL names, decoded: ``.../incident%2Blog.zip`` -> ``incident+log.zip``."""
+    return unquote(Path(urlsplit(url).path).name)
+
+
+def download_mirrors(source: DataSource, dest: Path) -> Path:
+    """Fetch the first mirror whose bytes match the sha256 pinned beside it, then unpack it."""
+    failures: list[str] = []
+    for mirror in source.mirrors:
+        if mirror.commit is not None:
+            copy = source.model_copy(
+                update={"url": mirror.url, "commit": mirror.commit, "paths": mirror.paths}
+            )
+            try:
+                download_git(copy, dest)
+            except (DownloadError, subprocess.CalledProcessError) as exc:
+                failures.append(f"{mirror.url}@{mirror.commit[:12]}: {exc}")
+                continue
+            log.info("dataset.mirror", source=source.name, url=mirror.url)
+            return dest
+        target = dest / _file_name(mirror.url)
+        try:
+            if not (target.exists() and _hash_file(target, "sha256") == mirror.sha256):
+                _stream_to(mirror.url, target)
+        except (DownloadError, httpx.HTTPError) as exc:
+            failures.append(f"{mirror.url}: {exc}")
+            continue
+        actual = _hash_file(target, "sha256")
+        if actual != mirror.sha256:
+            target.unlink(missing_ok=True)  # never leave unverified bytes behind
+            failures.append(f"{mirror.url}: sha256 mismatch (got {actual})")
+            continue
+        _extract(target, dest)
+        log.info("dataset.mirror", source=source.name, url=mirror.url)
+        return dest
+    msg = f"{source.name}: no mirror could be used ({'; '.join(failures) or 'none listed'})"
+    raise DownloadError(msg)
+
+
+def _gunzip(archive: Path, target: Path) -> None:
+    if target.exists() and target.stat().st_mtime >= archive.stat().st_mtime:
+        return  # already unpacked from this download
+    partial = target.with_name(target.name + ".part")
+    with gzip.open(archive, "rb") as source, partial.open("wb") as out:
+        shutil.copyfileobj(source, out, _CHUNK)
+    partial.replace(target)
+
+
 def _extract(archive: Path, dest: Path) -> None:
+    if archive.name.endswith((".tar.gz", ".tgz", ".tar")):
+        with tarfile.open(archive) as tarball:
+            # The "data" filter refuses absolute paths, "..", devices and links leaving dest.
+            tarball.extractall(dest, filter="data")
+        return
+    if archive.suffix == ".gz":
+        _gunzip(archive, dest / archive.stem)
+        return
     if archive.suffix != ".zip":
         return
     with zipfile.ZipFile(archive) as bundle:
@@ -170,7 +231,7 @@ def _extract(archive: Path, dest: Path) -> None:
             if not path.is_relative_to(dest.resolve()):  # zip-slip guard
                 msg = f"refusing to extract {member.filename} outside {dest}"
                 raise DownloadError(msg)
-        bundle.extractall(dest)  # members were validated above
+        bundle.extractall(dest)  # noqa: S202 - a zip, its members validated above
         nested = [m for m in bundle.namelist() if m.endswith(".zip")]
     for inner in nested:
         _extract(dest / inner, dest)
@@ -181,11 +242,17 @@ def download(source: DataSource, raw_dir: Path) -> Path:
     created = not dest.exists()
     dest.mkdir(parents=True, exist_ok=True)
     try:
-        if source.kind == "git":
-            return download_git(source, dest)
-        if source.kind == "zenodo":
-            return download_zenodo(source, dest)
-        return download_http(source, dest, raw_dir.parent / "checksums.lock")
+        try:
+            if source.kind == "git":
+                return download_git(source, dest)
+            if source.kind == "zenodo":
+                return download_zenodo(source, dest)
+            return download_http(source, dest, raw_dir.parent / "checksums.lock")
+        except (DownloadError, httpx.HTTPError, subprocess.CalledProcessError) as exc:
+            if not source.mirrors:
+                raise
+            log.warning("dataset.primary_failed", source=source.name, error=str(exc)[:200])
+            return download_mirrors(source, dest)
     except Exception:
         if created and not any(dest.iterdir()):
             dest.rmdir()  # leave no empty directory that would look like a downloaded source

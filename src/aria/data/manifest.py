@@ -6,9 +6,31 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 DEFAULT_MANIFEST = Path("data/manifest.yaml")
+
+
+class Mirror(BaseModel):
+    """A copy of a source on another host: one file trusted through its sha256, or a git
+    repository at a pinned commit (content-addressed) from which ``paths`` are checked out."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    url: str
+    sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    commit: str | None = Field(default=None, pattern=r"^[0-9a-f]{40}$")
+    paths: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _one_integrity_check(self) -> Mirror:
+        if (self.sha256 is None) == (self.commit is None):
+            msg = "a mirror needs exactly one of sha256 (a file) or commit (a git repository)"
+            raise ValueError(msg)
+        if self.commit is not None and not self.paths:
+            msg = "a git mirror needs the paths to check out"
+            raise ValueError(msg)
+        return self
 
 
 class DataSource(BaseModel):
@@ -24,6 +46,8 @@ class DataSource(BaseModel):
     dataset_id: int | None = None
     fallback_url: str | None = None
     sha256: str | None = None
+    # Tried in order when the source's own host cannot be reached or serves other bytes.
+    mirrors: list[Mirror] = Field(default_factory=list)
     license: str
     citation: str
     description: str
