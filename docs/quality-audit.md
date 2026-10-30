@@ -343,6 +343,7 @@ the first live evaluation on Gemini and restyled the explainer video.
   systems name the failing component (0e6c0da). Blank-only logs are refused, the MCP prompt takes
   only a plain system name, the A2A card names the address ARIA serves on, approved deliveries
   with no receiver keep their approver, and a system name fits the database column (ec76e30).
+  A refused request is answered in plain words without echoing the body back.
 
 ### Gaps and weak spots
 
@@ -405,8 +406,7 @@ owner's decision. The [threat model](threat-model.md) lists the security residua
   scans without an index; and images are pinned by tag, not digest.
 - **Smaller UI items:** "incident" names both the list of triage runs and the past incidents in
   memory (renaming the list is a product decision).
-- **From the second audit:** some 422 answers name only the request body, not the field; a title
-  that reads like an instruction is dropped without a note (alerts and tickets get one); a refused
+- **From the second audit:** a title that reads like an instruction is dropped without a note (alerts and tickets get one); a refused
   review's reason stays on the run until the next review; searches in non-Latin scripts find
   nothing, because the index splits ASCII words; Azure SQL and Azure OpenAI with managed identity
   run only in deployments, not in CI; and the graph's timeout and cache policies have no tests

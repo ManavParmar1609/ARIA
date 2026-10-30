@@ -1674,3 +1674,14 @@ def test_a_thread_id_the_console_cannot_open_gets_a_run_id_it_can() -> None:
     assert run_id_for("chat-abc123") == "chat-abc123"
     for thread in ("..", ".", ".hidden", "a/b"):
         assert run_id_for(thread).startswith("agui-")
+
+
+async def test_a_refused_request_says_what_is_wrong_without_echoing_it(api: Api) -> None:
+    """422s echoed the whole body back and prefixed messages with "Value error, "."""
+    secret = "checkout down, password=hunter2"
+    refused = await api.client.post("/api/v1/runs", json={"logs": [], "title": secret})
+    assert refused.status_code == 422
+    problem = refused.json()["detail"][0]
+    assert set(problem) == {"loc", "msg", "type"}
+    assert problem["msg"].startswith("provide logs")
+    assert "hunter2" not in refused.text

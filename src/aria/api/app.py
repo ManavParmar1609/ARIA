@@ -18,6 +18,7 @@ from urllib.parse import urlsplit
 
 from a2a.server.routes import add_a2a_routes_to_fastapi
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from mcp.server.transport_security import TransportSecuritySettings
@@ -224,6 +225,20 @@ def create_app(
     @app.exception_handler(RunBusyError)
     async def busy(_: Request, exc: RunBusyError) -> JSONResponse:
         return JSONResponse({"detail": str(exc)}, 409)
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid(_: Request, exc: RequestValidationError) -> JSONResponse:
+        # Where each problem is and what is wrong, in plain words, without echoing the request
+        # back: a large body, or one carrying a secret, would return to the caller verbatim.
+        problems = [
+            {
+                "loc": list(error.get("loc", ())),
+                "msg": str(error.get("msg", "")).removeprefix("Value error, "),
+                "type": str(error.get("type", "")),
+            }
+            for error in exc.errors()
+        ]
+        return JSONResponse({"detail": problems}, 422)
 
     return app
 
