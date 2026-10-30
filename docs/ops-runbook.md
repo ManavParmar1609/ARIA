@@ -17,6 +17,10 @@ It is not the incident runbook library in [`runbooks/`](../runbooks), which ARIA
 
 Review decisions can go to any API process, because checkpoints live in the shared database; the process that receives a decision publishes the report and sends approved messages.
 
+ARIA is single-tenant: one deployment serves one team. Every valid API key can read, review and delete every run, and incident memory is shared by all callers. Give each team its own deployment and database.
+
+With `ARIA_WORKER_MODE=external`, a run's events reach the console through the database, but LLM tokens stream only within the process that runs the model, so the console shows the finished report rather than the words as they are written.
+
 ## Deploy
 
 ### Local
@@ -275,6 +279,20 @@ On Azure:
 3. Restart each one with `az containerapp revision restart -g <resource group> -n <app> --revision <revision>`.
 
 Rotate provider keys (`GEMINI_API_KEY`, `NVIDIA_API_KEY` and the others) the same way: change the variable or the Key Vault secret, then restart.
+
+### Rotate the pseudonym key and the webhook secret
+
+- **`ARIA_PSEUDONYM_KEY`** keys each run's pseudonyms (`ip-…`, `email-…`). Change it between runs: a run that resumes after the change gives the same address a new pseudonym from then on, so its later evidence no longer matches its earlier evidence. Restart every API and worker process together.
+- **`ARIA_OUTBOUND_WEBHOOK_SECRET`** signs outbound deliveries (`X-ARIA-Signature`). Have the receiver accept both the old and the new secret, change it here and restart, then retire the old one at the receiver.
+
+### Upgrade ARIA
+
+1. Back up the database (see [Back up and restore](#back-up-and-restore)); there is no downgrade.
+2. Apply migrations: `aria db upgrade`, or let the `init` service (compose) or the API at start-up (Azure) do it.
+3. Roll out the new images or code to the API, the workers and the web app.
+4. Check `/readyz`, then `aria providers check` and `GET /api/v1/feedback` for the model version in use.
+
+A release can ship a retrained severity model. A recalibrated model left on the shared volume by the previous release is then ignored, and the new model is used until enough new reviews recalibrate it; the log line `severity.live_model_outdated` says so.
 
 ### Switch or add an LLM provider
 

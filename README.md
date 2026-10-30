@@ -361,9 +361,10 @@ Every section, with its method: [docs/evaluation.md](docs/evaluation.md).
   ([evaluation](docs/evaluation.md#real-incidents-three-clouds-post-mortems)).
 - **Some sources and suites are missing.** Zenodo, Hugging Face, figshare and UCI's own site were
   unreachable when these results were produced. ARIA fetches the BGL, Hadoop and UCI data from
-  copies pinned by checksum or commit, but the full Thunderbird, Spirit, Liberty and HDFS_v2 logs
-  had no reachable copy. The brief's LLM-only severity baseline and per-provider cost comparison have
-  no results yet.
+  copies pinned by checksum or commit. Zenodo and Hugging Face became reachable later: the full
+  HDFS and Thunderbird logs, Loghub-2.0's labelled templates and LogChunks are recorded in the
+  [data card](docs/data-card.md#found-later-for-the-next-round) for the next round. The brief's
+  LLM-only severity baseline and per-provider cost comparison have no results yet.
 - **The injection detector is a first line, not a wall.** On public benchmarks it was never
   tuned on, it misses most attacks phrased as ordinary requests
   ([evaluation](docs/evaluation.md#prompt-injection-public-benchmarks)). Fencing, the prediction

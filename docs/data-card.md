@@ -116,7 +116,21 @@ prompt-injection collections. These were reachable but left out, or could not be
 | Nezha (Yu et al., ESEC/FSE 2023) | Reachable and labelled, but about 2 GB of logs from microservices ARIA has no parser or failure modes for; a candidate for a future fault-localisation evaluation |
 | Thunderbird sample (LogLead), splunk attack_data, OTRF Security-Datasets | Lines sampled out of order (no windows), or labels per dataset file rather than per line or window |
 | GitHub, Google Cloud and AWS status-page archives; danluu and Kubernetes postmortem lists | Short public notices or link lists: too little text, or no labels ARIA can be scored against |
-| Full Thunderbird, Spirit, Liberty, HDFS_v2, Loghub-2.0 full logs, RCAEval, MSDS, Eadro | Hosted only on Zenodo, figshare, Hugging Face, USENIX or similar hosts, which could not be reached when ARIA's datasets were gathered, and no verifiable copy was found elsewhere |
+| Spirit, Liberty, HDFS_v2, Eadro | Hosted only on hosts that could not be reached when ARIA's datasets were gathered, and no verifiable copy was found elsewhere |
+
+### Found later, for the next round
+
+Zenodo and Hugging Face became reachable after the results on this page were produced. These
+sources fit ARIA and are recorded here with what each would test, so the next round can pin and
+add them through `data/manifest.yaml` and `make eval`. None is used yet.
+
+| Source | Archive (size, md5 from the Zenodo record) | What it would test |
+|---|---|---|
+| Loghub-2.0 (Jiang et al., ISSTA 2024), Zenodo [8275861](https://zenodo.org/records/8275861), CC BY 4.0 | 14 systems with a true template for every line; the ten smaller archives (Apache, Hadoop, HealthApp, HPC, Linux, Mac, OpenSSH, OpenStack, Proxifier, Zookeeper) come to about 34 MB, for example `OpenSSH.zip` (8,166,947 bytes, `fef920579c366462ea7d341af8f533d8`) | The parser's grouping accuracy on a standard benchmark, beside the GAIA scores |
+| Loghub HDFS_v1, Zenodo [8196385](https://zenodo.org/records/8196385), CC BY 4.0 | `HDFS_v1.zip` (186,645,559 bytes, `76a24b4d9a6164d543fb275f89773260`): the whole HDFS log with every block labelled | The check for units of work that stop partway on the full log, not one sample |
+| Loghub Thunderbird, same record | `Thunderbird.tar.gz` (2,016,100,298 bytes, `0891b048df2919dc78c99c4428686b44`); Loghub-2.0's copy is `Thunderbird.zip` (293,018,641 bytes, `a8d365d003845c3bef61661375513910`) | Severity on contiguous windows of a second supercomputer's alert-tagged log, as for BGL |
+| LogChunks (Brandt et al., MSR 2020), Zenodo [3632351](https://zenodo.org/records/3632351), CC BY 4.0 | `LogChunks.zip` (24,108,826 bytes, `aafa45079bdae44e340f4474ca5c4340`) | Whether a report cites the lines that explain a failed build |
+| MSDS (Zenodo 3549604), RCAEval (Zenodo 14590730), ITBench-Lite (Hugging Face, Apache-2.0) | Not yet checked file by file | Root-cause and fault-localisation evaluations across microservices, which need parsers and failure modes ARIA does not have yet |
 
 ## What is in git, and what is not
 
