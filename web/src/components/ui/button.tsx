@@ -1,5 +1,5 @@
 import { type VariantProps } from "class-variance-authority";
-import { ChevronRightIcon } from "lucide-react";
+import { ArrowRightIcon } from "lucide-react";
 import { Slot } from "radix-ui";
 import { type ComponentProps } from "react";
 
@@ -28,15 +28,17 @@ export function Button({
   );
 }
 
-/** The round arrow at the end of a call to action (decorative; the button's text names it). */
+/** The arrow at the end of a call to action (decorative; the button's text names it). */
 export function ArrowCircle({
   tone,
   size,
   className,
 }: VariantProps<typeof arrowCircleVariants> & { className?: string }) {
   return (
-    <span aria-hidden className={cn(arrowCircleVariants({ tone, size }), className)}>
-      <ChevronRightIcon strokeWidth={2.25} className="size-4" />
-    </span>
+    <ArrowRightIcon
+      aria-hidden
+      strokeWidth={1.75}
+      className={cn(arrowCircleVariants({ tone, size }), className)}
+    />
   );
 }

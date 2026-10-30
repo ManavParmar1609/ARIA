@@ -9,7 +9,7 @@ import { AllClearSpot, WelcomeSpot } from "@/components/illustrations/spots";
 import { RunRow } from "@/components/console/run-row";
 import { EmptyState, ErrorState, LoadingRows, PageHeader } from "@/components/console/states";
 import { RunStatus } from "@/components/console/status";
-import { ArrowCircle, Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import samples from "@/data/samples.json";
 import { useProviders, useRuns } from "@/lib/api/hooks";
 import { isSeverity, SEVERITIES, type RunSummary, type Severity } from "@/lib/api/types";
@@ -110,11 +110,8 @@ function StartHere() {
           Pick one of {samples.length} short incidents built from real logs and watch ARIA work
           through it. The guide also explains how to read a run and the words ARIA uses.
         </p>
-        <Button asChild variant="primary" size="md" className="mt-2 pr-1.5">
-          <Link href="/console/guide">
-            Open the guide
-            <ArrowCircle tone="white" size="md" />
-          </Link>
+        <Button asChild variant="primary" size="md" className="mt-2">
+          <Link href="/console/guide">Open the guide</Link>
         </Button>
       </div>
       <WelcomeSpot className="hidden h-auto w-full md:block" />

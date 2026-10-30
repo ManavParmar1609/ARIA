@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { RollingNumber } from "@/components/aria/rolling-number";
-import { ArrowCircle, Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { EVAL_DOC_URL, type RealLogs } from "@/lib/site-data";
 import { cn } from "@/lib/utils";
 
@@ -32,7 +32,7 @@ function Comparison({ data }: { data: RealLogs }) {
   const bar = (value: number, strong: boolean) => (
     <span aria-hidden className="relative block h-2.5 rounded-xs bg-sunken">
       <span
-        className={cn("block h-2.5 rounded-xs", strong ? "bg-grass-deep" : "bg-control")}
+        className={cn("block h-2.5 rounded-xs", strong ? "bg-primary" : "bg-control")}
         style={{ width: `${Math.max(0.5, value * 100)}%` }}
       />
     </span>
@@ -127,11 +127,8 @@ export function RealProof({ data }: { data: RealLogs }) {
             Labels: {data.citation}
           </p>
           <div className="flex flex-wrap gap-3">
-            <Button asChild variant="raised" size="md" className="pr-1.5">
-              <Link href="/console/guide">
-                Replay it yourself
-                <ArrowCircle tone="grass" size="md" />
-              </Link>
+            <Button asChild variant="primary" size="md">
+              <Link href="/console/guide">Replay it yourself</Link>
             </Button>
             <Button asChild variant="ghost" size="md">
               <a href={`${EVAL_DOC_URL}#real-logs-expert-labels`}>How it was measured</a>

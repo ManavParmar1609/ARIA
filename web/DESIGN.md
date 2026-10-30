@@ -1,211 +1,150 @@
 # ARIA web design
 
-ARIA's look is "a warm storybook on cream paper". It came with a written style spec and a
-screen recording of a reference site. Where the two disagree, this file follows the recording,
-because it shows a real site. For example, the spec gives 50 px corners to buttons and cards,
-but the recording shows small corners on those and 50 px only on whole page panels.
+ARIA's look is "a greenhouse on cream paper". It came with a written style reference and a
+screen recording of a real site. Where the two disagree, this file follows the recording,
+because it shows a real site. For example, the reference describes uppercase eyebrow labels,
+but the recording shows small sentence-case tags, so ARIA uses those.
 
-This file adapts that reference to an incident-triage product. It is the source of truth for
-every page in `web/` and for the video in `video/`.
+This file adapts the reference to an incident-triage product. It is the source of truth for
+every page in `web/`. The explainer video in `video/` still uses the earlier storybook look
+until it is restyled and rendered again.
 
-## Idea: a storybook on cream paper
+## Idea: a greenhouse on cream paper
 
-The site reads like a picture book about the night shift:
+The site reads like a calm, editorial field guide to an incident:
 
-- the page is cream paper;
-- cards are white sheets lifted off it, and wells are sandstone pressed into it;
-- whole panels of fresh grass open and close the page;
-- flat, playful characters act out what ARIA does: riding a long sheet of log lines,
-  stamping a severity, looking closer at pinned evidence, and giving a thumbs-up before
-  anything is sent.
+- the page is warm cream paper;
+- tinted panels lie on it in layers: keylime, mint, sage and slate;
+- one deep forest ink carries every heading, link and main action;
+- the product itself is the imagery, as cream cards from a real recorded run on a slate panel;
+- a forest-ink line drawing is the one illustration: many loose lines that run together into
+  one, the logs becoming a single incident. The logo carries the same idea.
 
-The console keeps the same paper, ink and green, but is calmer: illustrations appear only in
-quiet moments (a first visit, an empty queue, a search with no match, a missing page).
+The console keeps the same paper, ink and panels on a slightly warmer canvas, so cream cards lift
+off it.
 
 ## Principles
 
-1. **Paper, not shadow.**
-   - Depth comes only from the stack: cream (the page), white (cards, the floating nav),
-     sandstone (wells, code, log panes).
-   - There are no drop shadows and no gradients anywhere.
-2. **One face, two weights.**
-   - Inter only, at 400 (body) and 500 (headings, labels, buttons). Never bold.
-   - Code and log lines use Inter too, with its disambiguation set (`ss02`: slashed zero, I with
-     serifs, l with a tail) and tabular figures. This keeps `Il1` and `0O` distinct without a
-     second typeface.
-3. **Big, tight headlines.**
-   - The display size runs from 53 px on a phone to 144 px on a wide screen (`.text-display`),
-     at line height 0.95 and -0.06em.
-   - Section headings are 81 px on wide screens and 53 px on tablets, at -0.04em. Lead
-     paragraphs are 30 px at -0.03em.
-   - Labels are sentence case. There are no uppercase tracked labels.
-4. **One structural green.**
-   - Fresh grass (#8ed462) fills whole panels, the active item, toggles that are on, and the
-     round arrow on buttons.
-   - It is a fill under ink, never text: grass on cream is 1.6:1.
-5. **Pops are decoration, one per component.**
-   - Sky, coral, sunshine and lilac colour the story cards' buttons (one each), the chromatic
-     dots beside section names, and the characters' clothes.
-   - The footer band is sunshine yellow.
-   - A pop never means a state: severity has its own hues (principle 7).
-6. **Crisp corners, round panels.**
-   - 6 px for bars, buttons and inputs; 8 px for cards; 4 px for tiny tags.
-   - Circles for icon buttons and the arrow on calls to action.
-   - 50 px (`rounded-sheet`) only for whole page panels: the cream page laid over the green
-     hero, and the closing green panel over the yellow footer.
-7. **Severity is functional, and labelled.**
-   - SEV1 to SEV4 are rose, orange, mustard and slate. They are kept apart from the pops, so a
-     coral button never reads as "critical".
-   - Each strip carries its label in ink, so colour is never the only cue.
-8. **Every claim shows its evidence.**
-   - Citations (`E12`) are buttons. Hovering shows the evidence beside the claim, focusing fills
-     the evidence panel (announced to screen readers), and clicking pins it there.
-   - This is ARIA's core interaction and survives every restyle.
-9. **Motion answers people.**
-   - Presses scale to 98%, and the round arrow nudges right on hover.
-   - The landing page plays the recorded run in as it scrolls past (wide screens only).
-   - Larger animations are proposed first and built only once chosen. These six were chosen:
-     - **Hero entrance:** the scene comes in once and then rests. Wide screens settle it back to
-       front (about 1.2 s, CSS on the scene's groups: `scenes.tsx`, `.hero-in`); narrower screens
-       raise it in as one piece (`.hero-scene`), which the compositor animates without repainting
-       the drawing every frame.
-     - **Sliding nav pill:** a grass pill glides to the section being read on the landing page,
-       and between pages in the console sidebar. It moves by FLIP, so only transforms animate.
-     - **Rolling stats:** headline numbers roll up digit by digit as they come into view
-       (`RollingNumber`). The real value is always in the page as text.
-     - **Severity stamp:** a new severity lands like a rubber stamp, then the prediction-set
-       bracket draws across the bars (`.sev-stamp`, `.sev-bracket`, and the replay's timeline).
-       The stamp scales and turns but never fades, so its label meets AA contrast in every frame.
-     - **Evidence thread:** pointing at a citation sweeps the highlight across each line it cites
-       (`.thread-lit` on the landing page, one pass of light, `.thread-pass`, in a run's panel).
-     - **Dot bloom:** a ghost button's hover and focus fill grows out of a dot at its centre.
-   - Every animation moves only `transform` and `opacity`, so it never shifts layout. Anything
-     that starts larger than its box (the stamp) is clipped to its card, so a transform can never
-     make a narrow screen scroll sideways.
-   - Nothing moves on its own for more than a few seconds (WCAG 2.2.2). A dot pulses without end
-     only while work is under way (a reply or a report being written); a status that waits for a
-     person pulses three times, then rests.
-   - `prefers-reduced-motion` shows final states.
+1. **Layers, not shadows.**
+   - Depth comes only from the stack: cream (the page and cards), then keylime, mint, sage and
+     slate panels.
+   - There are no drop shadows and no coloured card borders. A neutral hairline (`--rule`)
+     marks a card when it sits on cream.
+2. **A light serif and a quiet sans.**
+   - Newsreader at weight 300 sets every headline (`h1` to `h3`) and editorial statement. It is
+     never bold.
+   - Inter sets everything else: body, navigation, labels and buttons.
+   - Geist Mono sets log lines, IDs and commands.
+3. **One saturated dark.**
+   - Forest ink `#0f3e17` is the only strong colour. It is used for headings, links, focus rings
+     and every main action.
+   - The panels are surfaces only and never carry text colour.
+4. **Product first.**
+   - Show what ARIA does with real data (the recorded run, real evaluation results) rather than
+     decoration.
+   - Every measured number comes from the generated data files, never typed by hand.
+5. **Generous and left-aligned.**
+   - Sections are left-aligned, with a small tag, the serif heading and a short subhead.
+   - Cards get 28 to 42 px of padding, and sections 64 to 96 px of space between them.
 
-## Tokens
+## Colour
 
-All tokens are defined once in `src/app/globals.css`. Every text pair was measured for WCAG 2.2
-AA: 4.5:1 for text, 3:1 for control edges.
+All pairs were measured for WCAG 2.2 AA: 4.5:1 for text, and 3:1 for control edges and focus.
 
-### Day (light, the default)
+| Token                | Light                 | Night             | Use                                                |
+| -------------------- | --------------------- | ----------------- | -------------------------------------------------- |
+| `--background`       | `#fffefc` cream paper | `#0f1a13`         | The landing page                                   |
+| `--app`              | `#f5f4ef`             | `#0b140e`         | The console's canvas                               |
+| `--raised`           | `#fffefc`             | `#16231a`         | Cards                                              |
+| `--sunken`           | `#f2f1eb`             | `#0b140e`         | Wells: inputs, code, bar tracks                    |
+| `--heading`          | `#0f3e17` forest      | `#f4f8f2`         | Headings and links (12.1:1 on cream)               |
+| `--foreground`       | `#222222` charcoal    | `#e8efe6`         | Body text                                          |
+| `--muted-foreground` | `#3f4a42`             | `#b5c3b8`         | Secondary text, 5.6:1 even on slate                |
+| `--faint`            | `#4b564e`             | `#9aab9e`         | Tertiary text, 4.7:1 on slate                      |
+| `--rule`             | `#efeeeb`             | leaf at 10%       | Hairlines                                          |
+| `--control`          | `#737b75`             | `#7e9184`         | Control edges (3.6:1 on cream)                     |
+| `--primary`          | forest                | keylime `#e1f4df` | The main action; its text is cream (night: forest) |
+| `--panel-keylime`    | `#e1f4df`             | `#18291c`         | The lightest panel                                 |
+| `--panel-mint`       | `#cfe7d3`             | `#1c3022`         |                                                    |
+| `--panel-sage`       | `#b1dbb8`             | `#24402c`         | The heaviest green panel                           |
+| `--panel-slate`      | `#b6ced5`             | `#1e2f35`         | The cool counter-panel, home of product cards      |
+| `--highlight`        | mint                  | `#2a4a32`         | Selection and the evidence sweep                   |
 
-| Token                       | Value                              | Use                                                 |
-| --------------------------- | ---------------------------------- | --------------------------------------------------- |
-| background                  | #f5f1e4 cream paper                | the page                                            |
-| foreground, heading         | #2c2e2a ink                        | text, borders, icons; 12.1:1 on cream               |
-| raised                      | #ffffff                            | cards, the floating nav                             |
-| sunken                      | #e0dbce sandstone                  | wells, code, inputs                                 |
-| rule                        | #d5d5d4 hairline mist              | dividers                                            |
-| control                     | #80827f stone grey                 | control edges, link underlines; 3.4:1 on cream      |
-| muted-foreground            | #50524e                            | secondary text; 6.9:1 on cream, 5.7:1 on sandstone  |
-| faint                       | #5d5f5a                            | quieter text; 4.7:1 even on sandstone               |
-| primary                     | ink                                | focus rings, selected edges                         |
-| grass                       | #8ed462                            | panels, active item, toggles; ink on it is 7.7:1    |
-| grass-deep                  | #6fbf3f                            | hills, pressed green; ink on it is 6.0:1            |
-| sky, coral, sunshine, lilac | #2ba0ff, #ff705d, #f5e211, #ebc0ff | decoration; ink on each is 5.0, 5.1, 10.3 and 8.8:1 |
+Severity keeps its own earthy hues, apart from the greens, so a level never reads as decoration:
 
-Stone grey, as the spec gives it, fails 4.5:1 for small text on cream. It draws edges and
-underlines, and small muted text uses the deeper greys above.
+- **Fills** (labels on them are ink): terracotta `#e9826e`, apricot `#f1aa6a`, wheat `#ead27c`
+  and slate blue `#a8c6cf`.
+- **Text versions** (`--sevN-fg`), each 6.7:1 or more on cream.
 
-### Night (dark)
+## Type
 
-This is the same paper after dark:
+| Role                              | Face           | Size                  | Notes                                     |
+| --------------------------------- | -------------- | --------------------- | ----------------------------------------- |
+| Hero (`.text-hero`)               | Newsreader 300 | 44 to 68 px           | -0.03em, line height 1.04                 |
+| Section opener (`.text-display`)  | Newsreader 300 | 36 to 56 px           | -0.03em                                   |
+| Section heading (`.text-section`) | Newsreader 300 | 30 to 40 px           | -0.01em                                   |
+| Statement (`.text-statement`)     | Newsreader 300 | 23 to 28 px           | Forest                                    |
+| Subhead (`.text-lead`)            | Inter 400      | 15 to 18 px           | Muted                                     |
+| Body                              | Inter 400      | 15 px (console 14 px) | Charcoal                                  |
+| Tag (`.tag`)                      | Inter 500      | 12 px                 | Sentence case on a slate (or cream) label |
+| Stat (`.stat`)                    | Newsreader 300 | 48 px and up          | Lining, tabular figures                   |
 
-- the page is warm ink (#1f211c), cards are #2b2e28 and wells are #171915;
-- text is cream, with #c9c6b9 for muted text and #aeab9f for faint text;
-- grass and the pops are unchanged, and always carry ink text;
-- the hero, the closing panel and the footer keep their colours, with ink text.
+The floor is 12 px; the reference's 10 and 11 px labels are raised to it.
 
-### Severity
+## Shape
 
-| Level | Strip                         | Text colour (on cream) |
-| ----- | ----------------------------- | ---------------------- |
-| SEV1  | rose `oklch(0.72 0.15 15)`    | `oklch(0.5 0.17 20)`   |
-| SEV2  | orange `oklch(0.8 0.14 60)`   | `oklch(0.5 0.12 55)`   |
-| SEV3  | mustard `oklch(0.87 0.13 95)` | `oklch(0.48 0.1 90)`   |
-| SEV4  | slate `oklch(0.83 0.04 235)`  | `oklch(0.46 0.05 240)` |
-
-Strip labels are ink, from 5.2:1 (SEV1) up.
-
-### Type
-
-- Inter (SIL OFL), self-hosted from Fontsource. The file carries the optical-size axis, so
-  `font-optical-sizing: auto` gives the 144 px headline Inter's display cut.
-- The scale in pixels is 13, 15, 16, 18, 20, 30, 36, 53, 64 and 81, plus the display size.
-
-### Space and layout
-
-- The content is at most 1200 px wide (`max-w-[75rem]`). The console runs wider (1440 px) for
-  tables.
-- Sections are 80 to 112 px apart, and cards are padded 28 to 48 px.
-- The landing page is one editorial column. Cards alternate sides along the green road.
+- Cards and large buttons have 14 px corners (`rounded-card`, `rounded-lg`).
+- Medium buttons have 10 px corners, and small controls and nav items 7 px.
+- Tags have 4 px corners, and badges and status pills are full pills.
 
 ## Components
 
-- **Floating navigation.** Two white bars, 6 px corners, 16 px from the top, fixed while
-  scrolling:
-  - the left bar holds the mark and name, the section links, and a round grass menu button;
-  - the right bar is "Open the console" with a small face in a sky disc (the reference's
-    chromatic dot).
-  - Below 360 px only the face shows; the link's name stays "Open the console".
-- **Call to action.** A label and a round arrow. The button is white on cream or grass with a
-  grass arrow, or a pop with a white arrow on story cards. On hover the arrow nudges right.
-- **Primary button (console).** Grass fill, ink text. One per view.
-- **Secondary and ghost buttons.** A faint ink tint, or transparent.
-- **Story card.** White, 8 px corners, a 36 to 53 px heading, a 20 px body, and one pop button.
-- **Section label.** Sentence case, with a chromatic dot (one pop per section). It names the
-  section the navigation links to.
-- **Statistic.** An ink number in Inter 500, tight, with tabular figures and its label below.
-  In the console, words such as "None yet" are set smaller and in muted grey.
-- **Console sidebar.** A floating white panel on the cream page. It holds the search button
-  (the command palette), then links grouped under Triage, Knowledge and System. The current
-  page is a grass row.
-- **Command palette.** It opens with Ctrl or Cmd + K, "/", or the search button. It is an ARIA
-  combobox over a grouped listbox: pages, recent incidents, samples, words and actions. The
-  selected row is grass.
-- **Shortcuts sheet.** It opens with "?". "g" then a letter goes to a page, and a switch turns
-  single-key shortcuts off (WCAG 2.1.4). Approval never has a shortcut.
-- **Illustrations.** Flat SVG built from one kit (`src/components/illustrations/kit.tsx`):
-  - bean torsos, round heads, rubber-hose limbs drawn as thick round-capped curves, and thin
-    ink lines for faces and fingers;
-  - skin tones include stylised blue and lilac, as in the reference;
-  - every scene is decorative (`aria-hidden`) and repeats what its text says;
-  - scenes cost only their markup: no images, no script.
+- **Navigation.** The name on the left, the sections in charcoal, and "Open the console" as the
+  forest button on the right. A keylime pill marks the section being read (the sliding nav
+  pill). The menu holds the sections, GitHub and the theme.
+- **Hero.** A sage panel holds the serif headline and the summary; beneath it sits a full-width
+  forest button with a trailing arrow. To the right, a slate panel holds three cream cards from
+  the recorded run (the alert, its severity and the report), each named below it and joined by
+  a thin line.
+- **Problem and answer.** A cream statement whose lines lie apart, then a sage statement whose
+  lines run together into one.
+- **Real data.** A keylime panel lists the datasets in the serif, drifting slowly upward (it has
+  a pause button and stops on hover or focus). Beside it are two stats from the evaluation data.
+- **Cards.** Cream with a hairline, a keylime icon tile holding a forest line icon, a serif
+  title and muted body text.
+- **FAQ.** Rows with the question in the serif on the left and the answer in the sans on the
+  right, a hairline between rows. Every answer is visible.
+- **Console.** A cream sidebar panel on the warm canvas, with keylime for the active item; cards
+  are cream, and the main action is forest.
 
-## Where things live
+## Motion
 
-- `src/app/globals.css`: tokens and the display, lead, label, statistic and link utilities.
-- `src/components/illustrations/`:
-  - `kit.tsx`: the cast and props;
-  - `scenes.tsx`: the landing page's scenes;
-  - `spots.tsx`: the console's small scenes.
-- `src/components/aria/`: the mark and wordmark, severity badges and the severity instrument
-  (model probabilities, the conformal set bracket, the safety floor).
-- `src/components/ui/`: shadcn/ui-style primitives on Radix, restyled with the tokens above.
-  They are written in this repo in the shadcn pattern; the shadcn, 21st.dev and React Bits
-  registries could not be reached when they were built.
-- `src/components/site/`: the landing page (`story.tsx` is the green road). Its numbers come
-  from `src/data/*.json`, copied from `docs/` (`pnpm sync:data`) and from one recorded run
-  (`scripts/record_demo_run.py`).
-- `src/components/console/` and `src/components/run/`: the console, including
-  `command-palette.tsx`.
+Motion is unhurried: a fast start and a gentle settle (`cubic-bezier(0.16, 1, 0.3, 1)`). Only
+transform, opacity and the stroke dash offset animate, and everything stops under
+`prefers-reduced-motion`. Nothing moves on its own for longer than five seconds without a way
+to stop it (WCAG 2.2.2).
 
-## Do
+- **Line art.** Each drawing's strokes draw in once as it comes into view.
+- **The six chosen animations:**
+  - the hero entrance: the three product cards rise into place one after another and the thread
+    joining them draws across;
+  - the sliding nav pill;
+  - numbers that roll into view;
+  - the severity stamp and the prediction-set bracket;
+  - the highlight that sweeps across cited evidence;
+  - the dot bloom on ghost buttons.
+- **The datasets ticker.** It pauses on hover, on focus or with its button.
 
-- Keep backgrounds to cream, white, sandstone, grass panels and the sunshine footer.
-- Put ink text on grass and on every pop.
-- Keep one pop per component, and a pop's meaning decorative.
-- Keep headings at Inter 500 with negative tracking.
-- Use 50 px corners only for whole page panels.
+## Icons and illustration
 
-## Do not
+- Icons are Lucide line icons at 1.5 px in forest ink, often on a keylime tile.
+- The mark is a forest square in which three lines run together into one (`components/aria/
+wordmark.tsx`, `app/icon.svg`), beside a lowercase serif "aria".
+- The console's quiet moments (a first visit, an empty queue, a search with no match, a missing
+  page) use small line drawings in the same hand (`components/illustrations/spots.tsx`).
 
-- Use drop shadows, gradients, bold weights or a second typeface.
-- Use grass or a pop as a text colour or as the only sign of a state.
-- Put white cards on white, or set small text in stone grey.
-- Set display text below 53 px.
+## Checks
+
+- `make web-check`: format, lint, typecheck and unit tests.
+- `make web-e2e`: Playwright with axe in both themes.
+- `make web-lighthouse`: desktop at 95 or more, and the mobile gate at 90.

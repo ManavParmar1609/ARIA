@@ -433,7 +433,7 @@ function Palette({ onClose, onHelp }: { onClose: () => void; onHelp: () => void 
                       onClick={() => item.run()}
                       className={cn(
                         "flex cursor-pointer items-center gap-3 rounded-md px-3 py-2.5",
-                        selected ? "bg-grass text-pop-ink" : "text-foreground",
+                        selected ? "bg-panel-keylime text-heading" : "text-foreground",
                       )}
                     >
                       <Icon aria-hidden className="size-4 shrink-0" strokeWidth={1.75} />
@@ -443,7 +443,7 @@ function Palette({ onClose, onHelp }: { onClose: () => void; onHelp: () => void 
                           <span
                             className={cn(
                               "truncate text-sm",
-                              selected ? "text-pop-ink" : "text-muted-foreground",
+                              selected ? "text-heading" : "text-muted-foreground",
                             )}
                           >
                             {item.hint}

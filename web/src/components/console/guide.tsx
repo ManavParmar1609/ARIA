@@ -7,7 +7,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { ErrorState, PageHeader } from "@/components/console/states";
-import { ArrowCircle, Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import samples from "@/data/samples.json";
 import { type RealIncident, useCreateRun, useRealIncidents, useReplay } from "@/lib/api/hooks";
@@ -73,9 +73,8 @@ const SOURCES = [
 ];
 
 // Each sample card's button takes one of the pops, as the site's story cards do.
-const TONES = ["coral", "sunshine", "sky", "lilac"] as const;
 
-function SampleCard({ sample, index }: { sample: (typeof samples)[number]; index: number }) {
+function SampleCard({ sample }: { sample: (typeof samples)[number] }) {
   const router = useRouter();
   const create = useCreateRun();
   const [started, setStarted] = useState(false);
@@ -105,22 +104,16 @@ function SampleCard({ sample, index }: { sample: (typeof samples)[number]; index
       <h3 className="text-lg leading-snug tracking-heading">{sample.label}</h3>
       <p className="text-sm text-muted-foreground">{SAMPLE_NOTES[sample.id]}</p>
       <Button
-        variant={TONES[index % TONES.length]}
+        variant="primary"
         size="md"
-        className="mt-auto self-start pr-1.5"
+        className="mt-auto self-start"
         onClick={start}
         disabled={busy}
         // The visible words lead the name (WCAG 2.5.3), and the sample tells the four apart.
         aria-label={`${busy ? "Starting" : "Triage it"}: ${sample.label}`}
       >
         {busy ? "Starting" : "Triage it"}
-        {busy ? (
-          <span aria-hidden className="grid size-8 place-items-center rounded-full bg-white">
-            <LoaderCircleIcon className="size-4 animate-spin" />
-          </span>
-        ) : (
-          <ArrowCircle tone="white" size="md" />
-        )}
+        {busy ? <LoaderCircleIcon aria-hidden className="size-4 animate-spin" /> : null}
       </Button>
       {create.isError ? (
         <ErrorState error={create.error} title="The sample could not be started" />
@@ -162,7 +155,7 @@ function RealIncidentCard({ incident }: { incident: RealIncident }) {
     <li className="grid gap-6 rounded-lg bg-raised p-5 sm:p-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:gap-10">
       <div className="grid gap-4">
         <p className="eyebrow flex items-center gap-2 text-muted-foreground">
-          <span aria-hidden className="size-2 rounded-full bg-grass" />
+          <span aria-hidden className="size-2 rounded-full bg-primary" />
           {systemName(incident.system)}, real logs
         </p>
         <h3 className="text-2xl leading-tight tracking-heading sm:text-3xl">{incident.title}</h3>
@@ -180,19 +173,13 @@ function RealIncidentCard({ incident }: { incident: RealIncident }) {
         <Button
           variant="primary"
           size="lg"
-          className="justify-self-start pr-2 lg:justify-self-end"
+          className="justify-self-start lg:justify-self-end"
           onClick={start}
           disabled={busy}
           aria-label={`${busy ? "Starting" : "Replay it"}: ${incident.title}`}
         >
           {busy ? "Starting" : "Replay it"}
-          {busy ? (
-            <span aria-hidden className="grid size-10 place-items-center rounded-full bg-white">
-              <LoaderCircleIcon className="size-5 animate-spin" />
-            </span>
-          ) : (
-            <ArrowCircle tone="white" size="lg" />
-          )}
+          {busy ? <LoaderCircleIcon aria-hidden className="size-5 animate-spin" /> : null}
         </Button>
         {replay.isError ? (
           <ErrorState error={replay.error} title="The replay could not be started" />
@@ -261,8 +248,8 @@ export function Guide() {
           </p>
         </div>
         <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {samples.map((sample, i) => (
-            <SampleCard key={sample.id} sample={sample} index={i} />
+          {samples.map((sample) => (
+            <SampleCard key={sample.id} sample={sample} />
           ))}
         </ul>
       </section>

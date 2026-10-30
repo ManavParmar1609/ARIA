@@ -3,56 +3,82 @@ import Link from "next/link";
 import { Wordmark } from "@/components/aria/wordmark";
 import { EVAL_DOC_URL, REPO_URL } from "@/lib/site-data";
 
-const LINK =
-  "underline decoration-pop-ink/40 underline-offset-4 transition-colors duration-(--duration-quick) hover:decoration-pop-ink";
+const DOCS = `${REPO_URL}/blob/main/docs`;
+const ADR = `${DOCS}/adr`;
 
-/** The sunshine band that closes every page of the site: what ARIA is made of, and where to go. */
+const COLUMNS: { title: string; links: { label: string; href: string; internal?: boolean }[] }[] = [
+  {
+    title: "Product",
+    links: [
+      { label: "Console", href: "/console", internal: true },
+      { label: "Example run", href: "#run" },
+      { label: "Real logs", href: "#real" },
+      { label: "Questions", href: "#faq" },
+    ],
+  },
+  {
+    title: "Evidence",
+    links: [
+      { label: "Evaluation", href: EVAL_DOC_URL },
+      { label: "Model card", href: `${DOCS}/model-card.md` },
+      { label: "Data card", href: `${DOCS}/data-card.md` },
+      { label: "Threat model", href: `${DOCS}/threat-model.md` },
+    ],
+  },
+  {
+    title: "Build on it",
+    links: [
+      { label: "Source on GitHub", href: REPO_URL },
+      { label: "API schema", href: `${DOCS}/openapi.json` },
+      { label: "Design decisions", href: ADR },
+      { label: "Back to top", href: "#main" },
+    ],
+  },
+];
+
+const LINK =
+  "text-muted-foreground transition-colors duration-(--duration-quick) hover:text-heading";
+
+/** The site's foot: what ARIA is made of, and where to go next. */
 export function SiteFooter({ recordedAt, gitSha }: { recordedAt: string; gitSha: string }) {
   return (
-    // Pulled up under the green panel above it, so its rounded corners show sunshine, not cream.
-    <footer className="-mt-[50px] bg-sunshine text-pop-ink">
-      <div className="mx-auto grid max-w-[75rem] gap-12 px-4 pt-[calc(4rem+50px)] pb-14 sm:px-6 md:grid-cols-[minmax(0,1fr)_auto] lg:pt-[calc(5rem+50px)]">
-        <div className="grid max-w-xl content-start gap-4">
-          <Wordmark className="[&_span]:text-pop-ink" />
-          <p className="text-lg">
+    <footer className="border-t border-rule">
+      <div className="mx-auto grid max-w-[75rem] gap-12 px-4 pt-16 pb-12 sm:px-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:pt-20">
+        <div className="grid max-w-md content-start gap-4">
+          <Wordmark />
+          <p className="text-muted-foreground">
             Open source under the MIT licence. Measured on real, public logs, tickets and incidents
             (Loghub, a ServiceNow desk, GitLab.com) and on semi-synthetic windows built from real
             lines; every synthetic incident is marked as synthetic.
           </p>
-          <p className="text-sm">
-            Replay recorded {recordedAt.slice(0, 10)} at commit {gitSha}.
-          </p>
         </div>
-        <nav aria-label="Project links" className="grid content-start gap-3">
-          <h2 className="text-sm font-medium text-pop-ink">Project</h2>
-          <ul className="grid gap-2 text-lg">
-            <li>
-              <Link href="/console" prefetch={false} className={LINK}>
-                Console
-              </Link>
-            </li>
-            <li>
-              <a href={REPO_URL} className={LINK}>
-                Source on GitHub
-              </a>
-            </li>
-            <li>
-              <a href={EVAL_DOC_URL} className={LINK}>
-                Evaluation
-              </a>
-            </li>
-            <li>
-              <a href={`${REPO_URL}/blob/main/docs/openapi.json`} className={LINK}>
-                API schema
-              </a>
-            </li>
-            <li>
-              <a href="#main" className={LINK}>
-                Back to top
-              </a>
-            </li>
-          </ul>
+        <nav aria-label="Project links" className="grid gap-8 sm:grid-cols-3">
+          {COLUMNS.map((column) => (
+            <div key={column.title} className="grid content-start gap-3">
+              <h2 className="font-sans text-sm font-semibold tracking-[-0.01em] text-heading">
+                {column.title}
+              </h2>
+              <ul className="grid gap-2.5">
+                {column.links.map((link) => (
+                  <li key={link.label}>
+                    {link.internal ? (
+                      <Link href={link.href} prefetch={false} className={LINK}>
+                        {link.label}
+                      </Link>
+                    ) : (
+                      <a href={link.href} className={LINK}>
+                        {link.label}
+                      </a>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </nav>
+      </div>
+      <div className="mx-auto max-w-[75rem] border-t border-rule px-4 py-6 text-sm text-faint sm:px-6">
+        Replay recorded {recordedAt.slice(0, 10)} at commit {gitSha}.
       </div>
     </footer>
   );

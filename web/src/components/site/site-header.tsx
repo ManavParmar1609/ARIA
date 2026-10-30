@@ -3,6 +3,8 @@ import Link from "next/link";
 import { Wordmark } from "@/components/aria/wordmark";
 import { SectionNav } from "@/components/site/section-nav";
 import { SiteMenu } from "@/components/site/site-menu";
+import { ArrowCircle } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { REPO_URL } from "@/lib/site-data";
 
 // The same names label the sections themselves, so a link and its destination always match.
@@ -11,58 +13,39 @@ export const SECTIONS = [
   { href: "#real", label: "Real logs" },
   { href: "#how", label: "How it works" },
   { href: "#results", label: "Results" },
-  { href: "#standards", label: "Standards" },
+  { href: "#faq", label: "Questions" },
 ];
 
-/** A small face in a sky-blue disc: the reference's "chromatic dot" on the console button. */
-function Face() {
-  return (
-    <span
-      aria-hidden
-      className="grid size-10 shrink-0 place-items-center rounded-full bg-sky transition-transform duration-(--duration-moderate) ease-(--ease-out) group-hover/button:rotate-12"
-    >
-      <svg viewBox="0 0 24 24" className="size-6">
-        <path
-          d="M7 10q1.5-2 3 0M14 10q1.5-2 3 0"
-          fill="none"
-          stroke="#2c2e2a"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-        />
-        <path d="M7.5 14q4.5 5 9 0Z" fill="#2c2e2a" />
-      </svg>
-    </span>
-  );
-}
-
 /**
- * The floating navigation: two white bars on whatever is behind them, as in the reference. The
- * left bar holds the name, the sections and the round menu button; the right one opens the console.
+ * The navigation, as in the reference: the name on the left, the sections in plain charcoal (a
+ * keylime pill marks the one being read), and the console as the forest action on the right.
+ * Below the large breakpoint the sections move into a menu.
  */
 export function SiteHeader() {
+  const links = [...SECTIONS, { href: REPO_URL, label: "GitHub" }];
   return (
-    <header className="fixed inset-x-0 top-3 z-40 px-3 sm:top-4 sm:px-6">
-      <div className="mx-auto flex max-w-[75rem] items-stretch gap-2 sm:gap-3">
-        <div className="flex h-14 min-w-0 flex-1 items-center justify-between gap-3 rounded-md bg-raised pr-2 pl-4 sm:h-16 sm:pl-5">
-          {/* No prefetch: on the home page it would fetch and decode the page already showing. */}
-          <Link href="/" prefetch={false} className="rounded-sm" aria-label="ARIA home">
-            <Wordmark />
-          </Link>
-          <SectionNav links={[...SECTIONS, { href: REPO_URL, label: "GitHub" }]} />
-          <SiteMenu links={[...SECTIONS, { href: REPO_URL, label: "GitHub" }]} />
-        </div>
-        <Link
-          href="/console"
-          prefetch={false}
-          className="group/button flex h-14 shrink-0 items-center gap-3 rounded-md bg-raised pr-2 pl-4 text-base font-medium text-heading transition-colors duration-(--duration-quick) hover:bg-raised/85 sm:h-16 sm:pl-5 sm:text-lg"
-        >
-          {/* Below 360 px only the face shows; the name stays "Open the console". */}
-          <span className="max-[359px]:sr-only">
-            <span className="sr-only sm:not-sr-only">Open the </span>
-            <span className="capitalize sm:normal-case">console</span>
-          </span>
-          <Face />
+    <header className="fixed inset-x-0 top-0 z-40 bg-background">
+      <div className="mx-auto flex h-16 max-w-[75rem] items-center justify-between gap-3 px-3 sm:px-6">
+        {/* No prefetch: on the home page it would fetch and decode the page already showing. */}
+        <Link href="/" prefetch={false} className="rounded-sm" aria-label="ARIA home">
+          <Wordmark />
         </Link>
+        <SectionNav links={links} />
+        <div className="flex items-center gap-2">
+          <Link
+            href="/console"
+            prefetch={false}
+            className={buttonVariants({ variant: "primary", size: "md" })}
+          >
+            {/* "Console" on a phone; a screen reader always hears "Open the console". */}
+            <span>
+              <span className="sr-only sm:not-sr-only">Open the </span>
+              <span className="capitalize sm:normal-case">console</span>
+            </span>
+            <ArrowCircle size="sm" />
+          </Link>
+          <SiteMenu links={links} />
+        </div>
       </div>
     </header>
   );

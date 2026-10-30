@@ -90,7 +90,7 @@ export function TagStrip({
   return (
     <div
       className={cx(
-        "relative flex shrink-0 flex-col items-center pt-5",
+        "relative m-3 grid aspect-square shrink-0 place-items-center self-start rounded-[18px]",
         severity ? SEVERITY_BG[severity] : "bg-sunken",
         className,
       )}
@@ -99,7 +99,7 @@ export function TagStrip({
       <span
         data-stamp
         className={cx(
-          "tabular text-sm font-medium tracking-[0.04em]",
+          "tabular text-sm font-semibold tracking-[0.02em]",
           severity ? "text-sev-ink" : "text-faint",
         )}
       >

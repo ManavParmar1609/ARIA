@@ -62,7 +62,7 @@ export function Standards() {
       {STANDARDS.map((s) => (
         <li
           key={s.name}
-          className="group/button relative grid grid-rows-[auto_1fr_auto] gap-4 rounded-lg bg-raised p-7 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring sm:p-9"
+          className="group/button relative grid grid-rows-[auto_1fr_auto] gap-4 rounded-card border border-rule bg-raised p-7 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring sm:p-9"
         >
           {/* Rows: name, text, link; the text row stretches, so links line up across a row. */}
           <h3 className="text-2xl leading-tight tracking-heading">{whole(s.name)}</h3>
@@ -70,7 +70,7 @@ export function Standards() {
           {/* The whole card is the link's target; the words say where it goes. */}
           <a
             href={s.href}
-            className="mt-1 inline-flex items-center gap-3 justify-self-start text-base font-medium text-heading outline-none after:absolute after:inset-0 after:rounded-lg after:content-['']"
+            className="mt-1 inline-flex items-center gap-3 justify-self-start text-base font-medium text-heading outline-none after:absolute after:inset-0 after:rounded-card after:content-['']"
           >
             {/* One span: the link is a flex row, and loose text would gain its gap. */}
             <span>{"why" in s ? s.why : <>Why ARIA uses {whole(s.short)}</>}</span>
@@ -98,7 +98,7 @@ export function Limitations() {
           key={item}
           className="grid grid-cols-[1.25rem_1fr] gap-3 border-b border-rule py-5 text-muted-foreground last:border-b-0"
         >
-          <span aria-hidden className="mt-2 block size-2.5 rounded-full bg-coral" />
+          <span aria-hidden className="mt-2 block size-2.5 rounded-full bg-sev2" />
           <span>{item}</span>
         </li>
       ))}

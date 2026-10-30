@@ -1,34 +1,30 @@
 import { cva } from "class-variance-authority";
 
 // Kept apart from <Button> so a component can use the styles without pulling in tailwind-merge.
-// Cream-paper style (DESIGN.md): crisp 6 px corners, no shadows. A button stands out from the
-// surface it sits on: grass for the one main action in a view, white on cream or grass, a quiet
-// ink tint otherwise. The four pops are for the story cards on the landing page, one per card.
+// Greenhouse style (DESIGN.md): soft 10 to 14 px corners and no shadows. The main action in a view
+// is forest ink with cream text; a cream button with a hairline sits beside it, and quiet actions
+// are a faint ink tint or a ghost.
 export const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center gap-2 rounded-md font-medium whitespace-nowrap transition-[background-color,color,opacity,scale] duration-(--duration-quick) ease-(--ease-out) select-none active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button inline-flex shrink-0 items-center justify-center gap-2 font-medium whitespace-nowrap transition-[background-color,color,opacity,scale] duration-(--duration-quick) ease-(--ease-out) select-none active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        primary: "bg-grass text-pop-ink hover:bg-grass-deep",
-        raised: "bg-raised text-heading hover:bg-raised/85",
-        secondary: "bg-foreground/7 text-heading hover:bg-foreground/12 active:bg-foreground/16",
+        primary: "bg-primary text-primary-foreground hover:bg-primary-hover",
+        raised: "bg-raised text-heading ring-1 ring-rule ring-inset hover:bg-sunken",
+        secondary: "bg-foreground/6 text-heading hover:bg-foreground/10 active:bg-foreground/14",
         // Dot bloom: the hover and focus fill grows out of a dot at the centre. A circle twice the
         // button's width covers it from there; overflow clips it to the button's corners.
         ghost:
           "relative isolate overflow-hidden text-muted-foreground before:pointer-events-none before:absolute before:top-1/2 before:left-1/2 before:-z-10 before:aspect-square before:w-[200%] before:-translate-1/2 before:scale-0 before:rounded-full before:bg-foreground/6 before:transition-[scale,background-color] before:duration-(--duration-slow) before:ease-(--ease-in-out) hover:text-heading hover:before:scale-100 focus-visible:before:scale-100 active:before:bg-foreground/10",
-        danger: "bg-danger/12 text-danger hover:bg-danger/20 active:bg-danger/25",
-        link: "h-auto px-0 text-foreground underline decoration-control underline-offset-4 hover:decoration-foreground",
-        coral: "bg-coral text-pop-ink hover:bg-coral/85",
-        sunshine: "bg-sunshine text-pop-ink hover:bg-sunshine/85",
-        sky: "bg-sky text-pop-ink hover:bg-sky/85",
-        lilac: "bg-lilac text-pop-ink hover:bg-lilac/80",
+        danger: "bg-danger/12 text-danger hover:bg-danger/18 active:bg-danger/24",
+        link: "h-auto px-0 text-accent-ink underline decoration-accent-ink/35 underline-offset-4 hover:decoration-accent-ink",
       },
       size: {
-        sm: "h-9 px-3 text-sm",
-        md: "h-11 px-4 text-sm",
-        lg: "h-14 px-5 text-lg",
-        icon: "size-10",
-        "icon-sm": "size-9",
+        sm: "h-8 rounded-sm px-3 text-sm",
+        md: "h-10 rounded-md px-4 text-sm",
+        lg: "h-12 rounded-lg px-5 text-[0.9375rem]",
+        icon: "size-10 rounded-md",
+        "icon-sm": "size-8 rounded-sm",
       },
     },
     compoundVariants: [{ variant: "link", className: "h-auto px-0 active:scale-100" }],
@@ -36,14 +32,14 @@ export const buttonVariants = cva(
   },
 );
 
-/** The round arrow that ends a call to action: grass on white buttons, white on coloured ones. */
+/** The trailing arrow on a call to action; it nudges right on hover. */
 export const arrowCircleVariants = cva(
-  "grid shrink-0 place-items-center rounded-full text-pop-ink transition-transform duration-(--duration-moderate) ease-(--ease-out) group-hover/button:translate-x-0.5",
+  "shrink-0 transition-transform duration-(--duration-moderate) ease-(--ease-out) group-hover/button:translate-x-0.5",
   {
     variants: {
-      tone: { grass: "bg-grass", white: "bg-white", ink: "bg-foreground text-background" },
-      size: { sm: "size-7", md: "size-8", lg: "size-10" },
+      tone: { light: "", powder: "", ink: "" },
+      size: { sm: "size-4", md: "size-[1.1rem]", lg: "size-5" },
     },
-    defaultVariants: { tone: "grass", size: "lg" },
+    defaultVariants: { size: "md" },
   },
 );

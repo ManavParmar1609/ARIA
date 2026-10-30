@@ -3,7 +3,7 @@ import { type ReactNode } from "react";
 
 import { THEME_SCRIPT } from "@/lib/theme-script";
 
-import { inter } from "./fonts";
+import { geistMono, inter, newsreader } from "./fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -22,15 +22,19 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f5f1e4" },
-    { media: "(prefers-color-scheme: dark)", color: "#1f211c" },
+    { media: "(prefers-color-scheme: light)", color: "#fffefc" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f1a13" },
   ],
   colorScheme: "light dark",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={inter.variable} suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${newsreader.variable} ${inter.variable} ${geistMono.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         {/* Before first paint: apply the stored theme, and mark that script runs so animated
             elements can start hidden. */}

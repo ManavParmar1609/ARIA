@@ -51,7 +51,7 @@ export function ExpertCheck({ runId }: { runId: string }) {
     >
       <div className="grid gap-1">
         <p className="eyebrow flex items-center gap-2 text-muted-foreground">
-          <span aria-hidden className="size-2 rounded-full bg-grass" />
+          <span aria-hidden className="size-2 rounded-full bg-primary" />
           Real logs, real labels
         </p>
         <h2 id="expert-check-title" className="text-xl tracking-heading">

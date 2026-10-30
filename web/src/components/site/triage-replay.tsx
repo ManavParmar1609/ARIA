@@ -279,7 +279,7 @@ export function TriageReplay({ data }: { data: Replay }) {
               <span
                 aria-hidden
                 data-pulse
-                className="block size-2.5 rounded-full bg-grass ring-1 ring-pop-ink/40"
+                className="block size-2.5 rounded-full bg-primary ring-2 ring-primary/20"
               />
               Waiting for a person to approve
             </span>

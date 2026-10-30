@@ -93,7 +93,7 @@ export function BaselineChart({
                   aria-hidden
                   className={cn(
                     "absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2",
-                    isAria ? "border-pop-ink bg-grass" : "border-foreground/70 bg-background",
+                    isAria ? "border-heading bg-primary" : "border-foreground/70 bg-background",
                   )}
                   style={{ left: `${m.accuracy * 100}%` }}
                 />

@@ -4,62 +4,73 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * ARIA design tokens: a storybook on cream paper (web/DESIGN.md). Cream is the page, white is a
- * card lifted off it, sandstone is a well pressed into it; that stack is the only depth, so there
- * are no shadows and no gradients. Ink carries text, edges and icons. Fresh grass is the one
- * structural colour (whole panels, the active item, the round arrow on buttons); the four pops
- * (sky, coral, sunshine, lilac) are decoration, one per component, and never mean a state.
+ * ARIA design tokens: a greenhouse on cream paper (web/DESIGN.md). Cream is the page; keylime,
+ * mint, sage and slate panels lie on it in layers, and that layering is the only depth: no
+ * shadows, no coloured card borders. Forest ink is the one saturated dark, for headings, links
+ * and every main action. Headlines are a light serif; everything else is a humanist sans.
  *
- * Every text pair below was measured for WCAG 2.2 AA (4.5:1 for text, 3:1 for control edges).
- * Stone grey (#80827f) is only 3.4:1 on cream, so it draws control edges and rules, and small
- * muted text uses a deeper grey. Grass is 1.6:1 on cream, so it is a fill under ink, never a
- * focus ring or text colour.
+ * Every text pair below was measured for WCAG 2.2 AA (4.5:1 for text, 3:1 for control edges and
+ * focus). Sage and slate are surfaces only: small text on them is forest, charcoal or the muted
+ * green-grey, which holds 4.6:1 even on slate.
  */
 :root {
-  /* day (light, the default) */
-  --background: #f5f1e4; /* cream paper */
-  --foreground: #2c2e2a; /* ink black */
-  --heading: #2c2e2a;
-  --raised: #ffffff; /* cards */
-  --sunken: #e0dbce; /* sandstone wells */
-  --rule: #d5d5d4; /* hairline mist */
-  --control: #80827f; /* stone grey: 3.4:1 on cream, 3.9:1 on white */
-  --muted-foreground: #50524e; /* 6.9:1 on cream, 5.7:1 on sandstone */
-  --faint: #5d5f5a; /* 5.7:1 on cream, 4.7:1 on sandstone, 6.5:1 on white */
-  --stat: #2c2e2a;
+  /* palette */
+  --cream: #fffefc;
+  --forest: #0f3e17; /* 12.1:1 on cream, 7.4:1 on slate */
+  --forest-deep: #0c2f10;
+  --charcoal: #222222;
+  --mist: #efeeeb;
+  --keylime: #e1f4df;
+  --mint: #cfe7d3;
+  --sage: #b1dbb8;
+  --slate: #b6ced5;
 
-  --primary: #2c2e2a; /* ink: focus rings, selected edges, emphasis */
-  --primary-foreground: #ffffff;
-  --highlight: #8ed462; /* selection and toggled-on fills, always under ink */
-  --highlight-foreground: #2c2e2a;
+  /* roles */
+  --background: var(--cream);
+  --app: #f5f4ef; /* the console's canvas, so cream cards lift off it */
+  --foreground: var(--charcoal);
+  --heading: var(--forest);
+  --raised: var(--cream); /* cards */
+  --elevated: #ffffff; /* menus and dialogs */
+  --sunken: #f2f1eb; /* wells inside cards: inputs, code, bar tracks */
+  --rule: var(--mist); /* hairlines */
+  --control: #737b75; /* control edges: 3.6:1 on cream, 3.3:1 on keylime */
+  --muted-foreground: #3f4a42; /* 5.6:1 even on slate */
+  --faint: #4b564e; /* 4.7:1 on slate, 7.6:1 on cream */
+  --stat: var(--forest);
+  --accent-ink: var(--forest);
 
-  --grass: #8ed462; /* fresh grass */
-  --grass-deep: #6fbf3f; /* hills and pressed states; ink on it is 6.0:1 */
-  --sky: #2ba0ff;
-  --coral: #ff705d;
-  --sunshine: #f5e211;
-  --lilac: #ebc0ff;
-  --pop-ink: #2c2e2a; /* text on any pop or on grass */
+  --primary: var(--forest);
+  --primary-hover: var(--forest-deep);
+  --primary-foreground: var(--cream);
+  --highlight: var(--mint); /* selection and the evidence sweep, always under ink */
+  --highlight-foreground: var(--forest);
 
-  /* severity has its own hues, kept apart from the decorative pops; labels are ink */
-  --sev1: oklch(0.72 0.15 15); /* #f37986 */
-  --sev2: oklch(0.8 0.14 60); /* #ffa659 */
-  --sev3: oklch(0.87 0.13 95); /* #efd369 */
-  --sev4: oklch(0.83 0.04 235); /* #afccde */
-  --sev-ink: #2c2e2a;
-  --sev1-fg: oklch(0.5 0.17 20);
-  --sev2-fg: oklch(0.5 0.12 55);
-  --sev3-fg: oklch(0.48 0.1 90);
-  --sev4-fg: oklch(0.46 0.05 240);
-  --sev-edge: oklch(0.29 0.008 130 / 0.18);
+  /* the four panels, lightest to heaviest; text on them stays forest, charcoal or muted */
+  --panel-keylime: var(--keylime);
+  --panel-mint: var(--mint);
+  --panel-sage: var(--sage);
+  --panel-slate: var(--slate);
 
-  --danger: oklch(0.5 0.18 25);
-  --ok: oklch(0.47 0.11 145);
+  /* severity keeps its own earthy hues, apart from the greens; labels on them are ink */
+  --sev1: #e9826e;
+  --sev2: #f1aa6a;
+  --sev3: #ead27c;
+  --sev4: #a8c6cf;
+  --sev-ink: #10241a;
+  --sev1-fg: #a3361f; /* 6.7:1 on cream */
+  --sev2-fg: #8a4a0c;
+  --sev3-fg: #6a560c;
+  --sev4-fg: #2c5a68;
+  --sev-edge: rgb(15 62 23 / 0.18);
+
+  --danger: #a3361f;
+  --ok: #1d6a32;
 
   /* shadcn/ui aliases */
   --card: var(--raised);
   --card-foreground: var(--foreground);
-  --popover: var(--raised);
+  --popover: var(--elevated);
   --popover-foreground: var(--foreground);
   --secondary: var(--sunken);
   --secondary-foreground: var(--foreground);
@@ -69,52 +80,66 @@
   --destructive: var(--danger);
   --border: var(--rule);
   --input: var(--control);
-  --ring: var(--primary);
+  --ring: var(--forest);
 }
 
 .dark {
-  /* night: the same paper after dark, warm ink instead of cream */
-  --background: #1f211c;
-  --foreground: #f5f1e4;
-  --heading: #ffffff;
-  --raised: #2b2e28;
-  --sunken: #171915;
-  --rule: oklch(0.95 0.02 95 / 0.12);
-  --control: #8f918a; /* 4.3:1 on cards */
-  --muted-foreground: #c9c6b9;
-  --faint: #aeab9f;
-  --stat: #f5f1e4;
+  /* the greenhouse at night: deep green-black, pale leaf type, keylime as the action */
+  --background: #0f1a13;
+  --app: #0b140e;
+  --foreground: #e8efe6;
+  --heading: #f4f8f2;
+  --raised: #16231a;
+  --elevated: #1c2c21;
+  --sunken: #0b140e;
+  --rule: rgb(225 244 223 / 0.1);
+  --control: #7e9184; /* 4.9:1 on cards */
+  --muted-foreground: #b5c3b8;
+  --faint: #9aab9e;
+  --stat: #f4f8f2;
+  --accent-ink: #b1dbb8;
 
-  --primary: #f5f1e4;
-  --primary-foreground: #2c2e2a;
+  --primary: #e1f4df;
+  --primary-hover: #cfe7d3;
+  --primary-foreground: #0f3e17;
+  --highlight: #2a4a32;
+  --highlight-foreground: #ffffff;
 
-  --sev1-fg: oklch(0.78 0.13 18);
-  --sev2-fg: oklch(0.83 0.12 62);
-  --sev3-fg: oklch(0.88 0.11 95);
-  --sev4-fg: oklch(0.82 0.05 235);
-  --sev-edge: oklch(0 0 0 / 0);
+  --panel-keylime: #18291c;
+  --panel-mint: #1c3022;
+  --panel-sage: #24402c;
+  --panel-slate: #1e2f35;
 
-  --danger: oklch(0.78 0.13 22);
-  --ok: oklch(0.82 0.13 140);
+  --sev1-fg: #f4a594;
+  --sev2-fg: #f5c08f;
+  --sev3-fg: #efdd98;
+  --sev4-fg: #bcd6de;
+  --sev-edge: rgb(0 0 0 / 0);
+
+  --danger: #f4a594;
+  --ok: #8fd19e;
+  --ring: #b1dbb8;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-app: var(--app);
   --color-foreground: var(--foreground);
   --color-raised: var(--raised);
+  --color-elevated: var(--elevated);
   --color-sunken: var(--sunken);
   --color-rule: var(--rule);
   --color-control: var(--control);
   --color-faint: var(--faint);
   --color-highlight: var(--highlight);
   --color-highlight-foreground: var(--highlight-foreground);
-  --color-grass: var(--grass);
-  --color-grass-deep: var(--grass-deep);
-  --color-sky: var(--sky);
-  --color-coral: var(--coral);
-  --color-sunshine: var(--sunshine);
-  --color-lilac: var(--lilac);
-  --color-pop-ink: var(--pop-ink);
+  --color-accent-ink: var(--accent-ink);
+  --color-forest: var(--forest);
+  --color-charcoal: var(--charcoal);
+  --color-panel-keylime: var(--panel-keylime);
+  --color-panel-mint: var(--panel-mint);
+  --color-panel-sage: var(--panel-sage);
+  --color-panel-slate: var(--panel-slate);
   --color-sev1: var(--sev1);
   --color-sev2: var(--sev2);
   --color-sev3: var(--sev3);
@@ -135,6 +160,7 @@
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
@@ -147,61 +173,55 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  /* Inter only. "Mono" is Inter too, with its disambiguation set (slashed zero, serifed I, l with
-     a tail), so log lines and IDs stay unambiguous without a second face. Tabular figures are
-     left to .tabular on columns of numbers: in Inter they also widen the hyphen, which spaced
-     out "--system" and run IDs. */
+  /* Newsreader for headlines, Inter for everything else, Geist Mono for log lines and IDs. */
+  --font-display: var(--font-newsreader), Georgia, ui-serif, serif;
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-mono--font-feature-settings: "ss02";
-  --default-mono-font-feature-settings: "ss02";
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* The reference's sizes: 13, 15, 16, 18, 20, 30, 36, 53, 64, 81 px, and a display that runs
-     from 53 px on a phone to 144 px on a wide screen (.text-display). */
-  --text-xs: 0.8125rem;
-  --text-xs--line-height: 1.15rem;
-  --text-sm: 0.9375rem;
+  /* The reference's scale: 12 (the floor; it shows 10 and 11), 14, 15, 18, 20, 23, 28, 40, 56, 74. */
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.1rem;
+  --text-sm: 0.875rem;
   --text-sm--line-height: 1.35rem;
-  --text-base: 1rem;
+  --text-base: 0.9375rem;
   --text-base--line-height: 1.5rem;
   --text-lg: 1.125rem;
   --text-lg--line-height: 1.6rem;
   --text-xl: 1.25rem;
-  --text-xl--line-height: 1.6rem;
-  --text-2xl: 1.875rem;
-  --text-2xl--line-height: 2.25rem;
-  --text-3xl: 2.25rem;
-  --text-3xl--line-height: 2.5rem;
-  --text-4xl: 3.3125rem;
-  --text-4xl--line-height: 3.4rem;
-  --text-5xl: 4rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl: 1.4375rem;
+  --text-2xl--line-height: 1.9rem;
+  --text-3xl: 1.75rem;
+  --text-3xl--line-height: 2.2rem;
+  --text-4xl: 2.5rem;
+  --text-4xl--line-height: 3rem;
+  --text-5xl: 3.5rem;
   --text-5xl--line-height: 4rem;
-  --text-6xl: 5.0625rem;
-  --text-6xl--line-height: 5rem;
+  --text-6xl: 4.625rem;
+  --text-6xl--line-height: 4.85rem;
 
-  --tracking-display: -0.06em;
-  --tracking-heading: -0.04em;
-  --tracking-lead: -0.03em;
-  --tracking-label: -0.005em;
+  --tracking-display: -0.03em;
+  --tracking-heading: -0.01em;
+  --tracking-label: 0em;
 
-  /* Small, crisp corners on bars, buttons, inputs and cards; 50 px only on whole page panels
-     and big frames (rounded-sheet). Circles for icon buttons. */
+  /* 14 px cards and buttons, 7 px for small controls, pills for tags. */
   --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 8px;
-  --radius-sheet: 50px;
+  --radius-sm: 7px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 14px;
+  --radius-2xl: 20px;
+  --radius-card: 14px;
 
-  /* motion: durations and easings used everywhere (GSAP reads the same values) */
+  /* motion: unhurried, a fast start and a gentle settle */
   --duration-instant: 80ms;
-  --duration-quick: 140ms;
-  --duration-moderate: 220ms;
-  --duration-slow: 360ms;
-  --duration-deliberate: 600ms;
-  --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
+  --duration-quick: 160ms;
+  --duration-moderate: 280ms;
+  --duration-slow: 420ms;
+  --duration-deliberate: 650ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-  --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
 
   /* Infinite only while work is under way (a reply or a report being written); a status that
      waits for a person pulses three times and then rests. */
@@ -227,7 +247,7 @@
     color-scheme: light;
     -webkit-text-size-adjust: 100%;
     text-rendering: optimizeLegibility;
-    /* Anchors and keyboard focus land clear of the landing page's floating nav. */
+    /* Anchors and keyboard focus land clear of the landing page's navigation. */
     scroll-padding-top: 6rem;
   }
   html.dark {
@@ -250,14 +270,21 @@
   samp,
   pre {
     @apply font-mono;
-    font-size: 0.9375em;
+    font-size: 0.875em;
   }
   h1,
   h2,
-  h3,
+  h3 {
+    font-family: var(--font-display);
+    font-optical-sizing: auto;
+    text-wrap: balance;
+    font-weight: 300;
+    letter-spacing: var(--tracking-heading);
+    color: var(--heading);
+  }
   h4 {
     text-wrap: balance;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--heading);
   }
   p {
@@ -265,50 +292,91 @@
   }
 }
 
+@layer components {
+  /* The section tag: a small tinted label above a heading, like a seed packet's. On a panel it
+     turns cream (bg-raised). */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 4px;
+    background: var(--panel-slate);
+    padding: 0.125rem 0.5rem;
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+    font-weight: 500;
+    color: var(--heading);
+  }
+}
+
 @layer utilities {
   .tabular {
     font-variant-numeric: tabular-nums;
   }
-  /* The headline face: 53 px on a phone, 144 px on a wide screen, at line-height 0.95. */
-  .text-display {
-    font-size: clamp(3.3125rem, 9.2vw + 0.6rem, 9rem);
-    line-height: 0.95;
+  /* The first screen's headline: 44 px on a phone, 74 px on a wide screen. */
+  .text-hero {
+    font-family: var(--font-display);
+    font-size: clamp(2.75rem, 3vw + 1.4rem, 4.25rem);
+    line-height: 1.04;
     letter-spacing: var(--tracking-display);
-    font-weight: 500;
+    font-weight: 300;
   }
-  /* Lead paragraphs: the reference's 30 px medium with tight tracking. */
-  .text-lead {
-    font-size: clamp(1.25rem, 1.6vw + 0.8rem, 1.875rem);
+  /* Section openers: 36 px on a phone, 56 px on a wide screen. */
+  .text-display {
+    font-family: var(--font-display);
+    font-size: clamp(2.25rem, 2.4vw + 1.35rem, 3.5rem);
+    line-height: 1.12;
+    letter-spacing: var(--tracking-display);
+    font-weight: 300;
+  }
+  /* Section headings: 30 px on a phone, 40 px on a wide screen. */
+  .text-section {
+    font-family: var(--font-display);
+    font-size: clamp(1.875rem, 1vw + 1.5rem, 2.5rem);
     line-height: 1.2;
-    letter-spacing: var(--tracking-lead);
-    font-weight: 500;
+    letter-spacing: var(--tracking-heading);
+    font-weight: 300;
   }
-  /* Small labels: sentence case, medium weight, never uppercase. */
+  /* Editorial statements: a serif paragraph, 23 to 28 px. */
+  .text-statement {
+    font-family: var(--font-display);
+    font-size: clamp(1.4375rem, 0.6vw + 1.25rem, 1.75rem);
+    line-height: 1.32;
+    letter-spacing: -0.005em;
+    font-weight: 300;
+    color: var(--heading);
+  }
+  /* The subhead under a heading: 15 to 18 px. */
+  .text-lead {
+    font-size: clamp(0.9375rem, 0.3vw + 0.875rem, 1.125rem);
+    line-height: 1.55;
+    color: var(--muted-foreground);
+  }
+  /* Small labels: sentence case, never uppercase. */
   .eyebrow {
     font-size: var(--text-sm);
-    line-height: 1.35;
+    line-height: 1.25rem;
     font-weight: 500;
-    letter-spacing: var(--tracking-label);
   }
-  /* Large statistics: ink, medium, tight, figures that line up. */
+  /* Large statistics: the serif, forest, figures that line up. */
   .stat {
+    font-family: var(--font-display);
     color: var(--stat);
-    font-weight: 500;
+    font-weight: 300;
     line-height: 1;
-    letter-spacing: -0.04em;
-    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums lining-nums;
   }
-  /* Links in running text: ink, underlined with a stone-grey rule that darkens on hover. */
+  /* Links in running text: forest, underlined with a soft rule that firms up on hover. */
   .link {
-    color: var(--foreground);
+    color: var(--accent-ink);
     text-decoration-line: underline;
-    text-decoration-color: var(--control);
+    text-decoration-color: color-mix(in srgb, var(--accent-ink) 35%, transparent);
     text-decoration-thickness: 1px;
     text-underline-offset: 0.2em;
     transition: text-decoration-color var(--duration-quick) var(--ease-out);
   }
   .link:hover {
-    text-decoration-color: var(--foreground);
+    text-decoration-color: var(--accent-ink);
   }
 }
 
@@ -329,38 +397,76 @@
   }
 }
 
-/* The hero comes in once, then rests: nothing on the page moves on its own for long (WCAG 2.2.2).
-   Wide screens settle the scene back to front, each part with its own offset and timing
-   (scenes.tsx: settle; lengths are viewBox units, so the motion scales with the scene). Chrome
-   repaints an SVG's moving parts on the main thread every frame, so narrower screens, mostly
-   phones, raise the whole scene in as one piece, which the compositor can animate alone. */
-@media (min-width: 1024px) and (prefers-reduced-motion: no-preference) {
-  .hero-in {
-    transform-box: fill-box;
-    transform-origin: 50% 100%;
-    animation: hero-in var(--hero-ms) var(--ease-emphasized) var(--hero-delay) both;
+/* Hero entrance (hero.tsx): the three product cards rise into place one after another and the
+   thread joining them draws across. Transform only, never opacity, so every card keeps its full
+   contrast in every frame; the headline (the largest paint) never moves. */
+@media (prefers-reduced-motion: no-preference) {
+  .hero-rise {
+    animation: hero-rise 800ms var(--ease-out) var(--d, 0ms) both;
   }
-  .hero-spring {
-    animation-timing-function: cubic-bezier(0.34, 1.4, 0.64, 1);
-  }
-}
-@media (max-width: 1023.98px) and (prefers-reduced-motion: no-preference) {
-  .hero-scene {
-    animation: hero-scene-in 700ms var(--ease-emphasized) both;
+  .hero-thread {
+    transform-origin: left;
+    animation: hero-thread 1000ms var(--ease-out) 500ms both;
   }
 }
 
-@keyframes hero-in {
+@keyframes hero-rise {
   from {
-    opacity: 0;
-    transform: translate(var(--hero-x), var(--hero-y)) scale(var(--hero-s));
+    transform: translateY(28px) scale(0.97);
   }
 }
 
-@keyframes hero-scene-in {
+@keyframes hero-thread {
   from {
-    opacity: 0;
-    transform: translateY(24px);
+    transform: scaleX(0);
+  }
+}
+
+/* Line art (line-art.tsx): when a drawing comes into view its strokes draw in once, left to right,
+   each a little after the one before. Only the dash offset moves; with reduced motion the drawing
+   is simply there. */
+@media (prefers-reduced-motion: no-preference) {
+  .js .draw path {
+    stroke-dasharray: var(--len) var(--len);
+    stroke-dashoffset: var(--len);
+  }
+  .js .draw[data-drawn] path {
+    stroke-dashoffset: 0;
+    transition: stroke-dashoffset 1800ms var(--ease-out) calc(var(--i, 0) * 70ms);
+  }
+}
+
+/* Ticker: a list that drifts past (globals: .ticker). It pauses while pointed at or focused, and
+   its button stops it (WCAG 2.2.2); with reduced motion it stands still and scrolls by hand. */
+.ticker {
+  overflow: hidden;
+  mask-image: linear-gradient(transparent, #000 18%, #000 82%, transparent);
+}
+.ticker-track {
+  display: grid;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ticker-track {
+    animation: ticker var(--ticker-s, 40s) linear infinite;
+  }
+  .ticker:hover .ticker-track,
+  .ticker:focus-within .ticker-track,
+  .ticker[data-paused] .ticker-track {
+    animation-play-state: paused;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ticker {
+    overflow-y: auto;
+  }
+  .ticker-track > [aria-hidden="true"] {
+    display: none;
+  }
+}
+
+@keyframes ticker {
+  to {
+    transform: translateY(-50%);
   }
 }
 
@@ -407,8 +513,8 @@
   }
 }
 
-/* Severity stamp: the badge comes down like a rubber stamp, leaves a ring of ink that fades, and
-   the prediction-set bracket then draws across the bars. */
+/* Severity stamp: the badge comes down like a rubber stamp, leaves a ring that fades, and the
+   prediction-set bracket then draws across the bars. */
 @media (prefers-reduced-motion: no-preference) {
   .sev-stamp {
     position: relative;
@@ -479,6 +585,7 @@
   position: absolute;
   inset: 0;
   z-index: -1;
+  border-radius: 4px;
   background: var(--highlight);
   transform-origin: left;
 }

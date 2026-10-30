@@ -121,7 +121,7 @@ export function RunGraph({ steps }: { steps: GraphStep[] }) {
               className={cx(
                 "tabular flex size-10 items-center justify-center rounded-full border text-sm font-medium transition-colors duration-(--duration-moderate)",
                 i <= active
-                  ? "border-transparent bg-grass text-pop-ink"
+                  ? "border-transparent bg-panel-keylime text-heading"
                   : "border-control/60 text-muted-foreground",
               )}
               aria-hidden
@@ -144,7 +144,7 @@ export function RunGraph({ steps }: { steps: GraphStep[] }) {
               >
                 {step.body}
               </p>
-              <p className="mt-4 inline-flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md bg-raised px-3.5 py-2 text-sm">
+              <p className="mt-4 inline-flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md bg-panel-keylime px-3.5 py-2 text-sm">
                 <span
                   className={cx(
                     "eyebrow inline-flex items-center gap-1.5",
@@ -160,7 +160,7 @@ export function RunGraph({ steps }: { steps: GraphStep[] }) {
         ))}
       </ol>
       <div className="order-first lg:order-none">
-        <div className="rounded-lg bg-raised px-4 py-6 sm:px-8 lg:sticky lg:top-[14vh]">
+        <div className="rounded-card bg-panel-slate/60 px-4 py-6 sm:px-8 lg:sticky lg:top-[14vh]">
           <svg
             viewBox="0 0 360 790"
             className="mx-auto h-auto w-full max-w-sm lg:max-h-[78vh]"

@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { Wordmark } from "@/components/aria/wordmark";
 import { LostSpot } from "@/components/illustrations/spots";
-import { ArrowCircle, Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = { title: "Page not found" };
 
@@ -22,10 +22,9 @@ export default function NotFound() {
         The link may be out of date, or the run it pointed to was deleted.
       </p>
       <div className="flex flex-wrap justify-center gap-3">
-        <Button asChild variant="primary" size="lg" className="pr-2">
+        <Button asChild variant="primary" size="lg">
           <Link href="/console" prefetch={false}>
             Open the console
-            <ArrowCircle tone="white" />
           </Link>
         </Button>
         <Button asChild variant="ghost" size="lg">

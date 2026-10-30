@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 
 import { Citations } from "./evidence";
 
-type Tone = "sky" | "sunshine" | "lilac" | "coral" | "grass" | "raised";
+type Tone = "slate" | "keylime" | "mint" | "sage" | "cream" | "raised";
 type TurnState = "waiting" | "working" | "done" | "yours";
 
 interface Turn {
@@ -33,14 +33,14 @@ interface Turn {
   said: ReactNode[];
 }
 
-// Each agent keeps one pop for its avatar, as the story cards on the landing page do. The pop is
-// decoration only: the words beside it say what happened.
+// Each agent keeps one panel tint for its avatar. The tint is decoration only: the words beside it
+// say what happened.
 const TONE: Record<Tone, string> = {
-  sky: "bg-sky",
-  sunshine: "bg-sunshine",
-  lilac: "bg-lilac",
-  coral: "bg-coral",
-  grass: "bg-grass",
+  slate: "bg-panel-slate",
+  keylime: "bg-panel-keylime",
+  mint: "bg-panel-mint",
+  sage: "bg-panel-sage",
+  cream: "bg-raised ring-1 ring-rule ring-inset",
   raised: "bg-sunken",
 };
 
@@ -263,7 +263,7 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
         name: "Parser",
         job: "Reads every line, hides secrets, follows each unit of work",
         icon: ScanSearchIcon,
-        tone: "sky",
+        tone: "slate",
         nodes: ["plan", "parse_shard", "merge"],
         said: parser,
       },
@@ -272,7 +272,7 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
         name: "Severity",
         job: "Rules, a calibrated model and a prediction set",
         icon: GaugeIcon,
-        tone: "sunshine",
+        tone: "keylime",
         nodes: ["severity"],
         said: sev ? severityLine(sev) : [],
       },
@@ -281,7 +281,7 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
         name: "Memory",
         job: "Recalls similar incidents and their runbooks",
         icon: BookOpenTextIcon,
-        tone: "lilac",
+        tone: "mint",
         nodes: ["recall", "widen"],
         said: memory,
       },
@@ -290,7 +290,7 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
         name: "Investigator",
         job: "Tests causes with read-only tools",
         icon: SearchCheckIcon,
-        tone: "coral",
+        tone: "sage",
         nodes: ["investigate", "assess"],
         said: investigator,
       },
@@ -299,7 +299,7 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
         name: "Reporter and critic",
         job: "Writes the cited report, then checks it",
         icon: FileTextIcon,
-        tone: "grass",
+        tone: "cream",
         nodes: ["report", "comms"],
         said: reporter,
       },
@@ -334,7 +334,7 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
               <span
                 aria-hidden
                 className={cn(
-                  "grid size-11 shrink-0 place-items-center rounded-full text-pop-ink",
+                  "grid size-11 shrink-0 place-items-center rounded-full text-heading",
                   TONE[turn.tone],
                   state === "waiting" && "opacity-50",
                 )}

@@ -130,7 +130,7 @@ export function PageHeader({
             <p className="eyebrow inline-flex items-center gap-2 text-muted-foreground">
               <span
                 aria-hidden
-                className="block size-2 rounded-full bg-grass ring-1 ring-pop-ink/30"
+                className="block size-2 rounded-full bg-primary ring-2 ring-primary/20"
               />
               {eyebrow}
             </p>

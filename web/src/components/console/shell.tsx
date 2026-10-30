@@ -102,7 +102,7 @@ function PaletteButton() {
     >
       <SearchIcon aria-hidden className="size-4" />
       <span className="flex-1 text-left">Search</span>
-      <kbd className="rounded-xs border border-control/60 px-1.5 text-xs">
+      <kbd className="rounded-md border border-control/50 px-1.5 text-xs">
         {mac ? "⌘ K" : "Ctrl K"}
       </kbd>
     </button>
@@ -169,7 +169,7 @@ function Nav({ onNavigate }: { onNavigate?: () => void }) {
       <span
         ref={pill}
         aria-hidden
-        className="absolute top-0 left-0 rounded-md bg-grass opacity-0 transition-[transform,opacity] duration-(--duration-slow) ease-(--ease-out)"
+        className="absolute top-0 left-0 rounded-sm bg-panel-keylime opacity-0 transition-[transform,opacity] duration-(--duration-slow) ease-(--ease-out)"
       />
       {NAV.map((group) => (
         <div key={group.label} role="group" aria-labelledby={`nav-${group.label}`}>
@@ -187,16 +187,16 @@ function Nav({ onNavigate }: { onNavigate?: () => void }) {
                   onClick={onNavigate}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "relative flex h-9 items-center gap-3 rounded-md px-3 text-[0.9375rem] transition-colors duration-(--duration-quick)",
+                    "relative flex h-10 items-center gap-3 rounded-sm px-3 text-sm transition-colors duration-(--duration-quick)",
                     active
-                      ? "bg-grass font-medium text-pop-ink group-data-[pill=on]/nav:bg-transparent"
+                      ? "bg-panel-keylime font-medium text-heading group-data-[pill=on]/nav:bg-transparent"
                       : "text-foreground hover:bg-foreground/6",
                   )}
                 >
                   <Icon
                     aria-hidden
                     strokeWidth={1.75}
-                    className={cn("size-4", active ? "text-pop-ink" : "text-muted-foreground")}
+                    className={cn("size-4", active ? "text-heading" : "text-muted-foreground")}
                   />
                   {item.label}
                   {item.href === "/console/runs" ? <ReviewCount /> : null}
@@ -350,14 +350,14 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
       <ConsoleCommands>
         <a
           href="#console-main"
-          className="sr-only z-50 rounded-sm bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:px-3 focus:py-2"
+          className="sr-only z-50 rounded-sm bg-primary px-4 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:px-3 focus:py-2"
         >
           Skip to content
         </a>
-        <div className="min-h-dvh lg:grid lg:grid-cols-[17.5rem_minmax(0,1fr)]">
+        <div className="min-h-dvh bg-app lg:grid lg:grid-cols-[17.5rem_minmax(0,1fr)]">
           {/* A floating white panel on the cream page, like the site's navigation bars. */}
           <aside className="hidden p-3 lg:block">
-            <div className="sticky top-3 flex h-[calc(100dvh-1.5rem)] flex-col gap-4 rounded-lg bg-raised px-3 py-4">
+            <div className="sticky top-3 flex h-[calc(100dvh-1.5rem)] flex-col gap-4 rounded-card border border-rule bg-raised px-3 py-5">
               <Link href="/" className="rounded-sm px-3" aria-label="ARIA home">
                 <Wordmark />
               </Link>
@@ -370,8 +370,8 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
             </div>
           </aside>
           <div className="flex min-w-0 flex-col">
-            <header className="sticky top-0 z-30 bg-background px-3 pt-3 lg:hidden">
-              <div className="flex h-14 items-center justify-between gap-3 rounded-md bg-raised px-2">
+            <header className="sticky top-0 z-30 bg-app px-3 pt-3 lg:hidden">
+              <div className="flex h-14 items-center justify-between gap-3 rounded-card border border-rule bg-raised px-2">
                 <Dialog open={open} onOpenChange={setOpen}>
                   <DialogTrigger asChild>
                     <Button variant="ghost" size="icon-sm" aria-label="Open navigation">

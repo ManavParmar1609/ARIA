@@ -11,7 +11,7 @@ ARIA runs offline with no API keys. Set an NVIDIA NIM key and the agents write w
 on NVIDIA's hosted API. Azure OpenAI and any OpenAI-compatible server work the same way: switching
 is a config change.
 
-![ARIA's landing page: the headline "Incident triage that shows its work." on a green panel, above an illustration of three people riding a long sheet of log lines.](docs/images/hero.webp)
+![ARIA's landing page: the headline "Incident triage that shows its work." on a sage-green panel beside three cards from a recorded run (the alert, its severity and the report waiting for approval) on a slate-blue panel.](docs/images/hero.webp)
 
 > [!IMPORTANT]
 > Several results use **real data with the labels its owners gave it**: a Hadoop cluster's log (the
@@ -174,7 +174,7 @@ lines. With `ARIA_ENV=prod`, every call needs an API key from `ARIA_API_KEYS`.
 
 ## Ways in and out
 
-![The console's run view: a SEV1 ZooKeeper incident waiting for review, with its steps, the severity panel's probabilities and prediction set, and the messages that will be sent only on approval.](docs/images/run.webp)
+![The console's run view: an HDFS incident rated SEV3 and waiting for review, with its steps, the severity panel's probabilities and prediction set, and the messages that will be sent only on approval.](docs/images/run.webp)
 
 | Surface | Where | What it is for |
 |---|---|---|

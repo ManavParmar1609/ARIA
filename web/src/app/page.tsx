@@ -1,29 +1,21 @@
-import { ArrowDownIcon } from "lucide-react";
-import Image from "next/image";
-import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
 
 import { Term } from "@/components/aria/term";
-import { HeroScene, HeroSceneFrame } from "@/components/illustrations/scenes";
+import { Closing } from "@/components/site/closing";
+import { Faq } from "@/components/site/faq";
+import { Hero } from "@/components/site/hero";
+import { Converge, Rings } from "@/components/site/line-art";
+import { ProofTicker } from "@/components/site/proof-ticker";
 import { RealDatasets } from "@/components/site/real-datasets";
 import { RealProof } from "@/components/site/real-proof";
 import { Results } from "@/components/site/results";
 import { RunGraph, type GraphStep } from "@/components/site/run-graph";
 import { SiteFooter } from "@/components/site/site-footer";
 import { SiteHeader } from "@/components/site/site-header";
-import { Limitations, Standards } from "@/components/site/standards";
-import { Story } from "@/components/site/story";
+import { Standards } from "@/components/site/standards";
 import { TriageReplay } from "@/components/site/triage-replay";
-import { ArrowCircle, Button } from "@/components/ui/button";
-import {
-  evaluation,
-  realData,
-  realLogs,
-  REPO_URL,
-  replay,
-  runFacts,
-  type RunFacts,
-} from "@/lib/site-data";
+import { Why } from "@/components/site/why";
+import { evaluation, realData, realLogs, replay, runFacts, type RunFacts } from "@/lib/site-data";
 import { cn } from "@/lib/utils";
 
 const ms = (value: number | undefined) =>
@@ -123,60 +115,63 @@ function steps(f: RunFacts): GraphStep[] {
   ];
 }
 
-type Dot = "coral" | "sunshine" | "sky" | "lilac";
+type Tone = "cream" | "keylime" | "mint" | "sage" | "slate";
 
-const DOT: Record<Dot, string> = {
-  coral: "bg-coral",
-  sunshine: "bg-sunshine",
-  sky: "bg-sky",
-  lilac: "bg-lilac",
+const PANEL: Record<Tone, string> = {
+  cream: "",
+  keylime: "bg-panel-keylime",
+  mint: "bg-panel-mint",
+  sage: "bg-panel-sage",
+  slate: "bg-panel-slate",
 };
 
+/**
+ * A section: a small tag, the serif heading and its subhead, left-aligned as in the reference,
+ * on the cream page or inside one tinted panel.
+ */
 function Section({
   id,
-  label,
-  dot,
+  tag,
   title,
   intro,
+  tone = "cream",
   deferred = false,
   children,
 }: {
   id: string;
-  /** The section's name, as the navigation calls it. */
-  label: string;
-  /** The small chromatic dot beside the name: one pop colour per section. */
-  dot: Dot;
+  tag: string;
   title: ReactNode;
   intro?: ReactNode;
+  tone?: Tone;
   /** Skip layout and paint until the section nears the viewport (for sections far below the
    * fold that nothing measures on load). */
   deferred?: boolean;
   children: ReactNode;
 }) {
+  const panel = tone !== "cream";
   return (
     <section
       id={id}
       aria-labelledby={`${id}-title`}
       className={cn(
-        "scroll-mt-20",
+        "mx-auto max-w-[75rem] scroll-mt-20 px-3 sm:px-6",
         deferred && "[contain-intrinsic-size:auto_1400px] [content-visibility:auto]",
       )}
     >
-      <div className="mx-auto grid max-w-[75rem] gap-12 px-4 py-20 sm:px-6 lg:gap-16 lg:py-28">
-        <div className="grid max-w-4xl gap-5">
-          <p className="eyebrow inline-flex items-center gap-2.5 text-muted-foreground">
-            <span aria-hidden className={cn("block size-2.5 rounded-full", DOT[dot])} />
-            {label}
-          </p>
-          <h2
-            id={`${id}-title`}
-            className="text-[2.5rem] leading-none tracking-heading sm:text-4xl lg:text-6xl lg:leading-[0.98]"
-          >
+      <div
+        className={cn(
+          "grid gap-10 lg:gap-14",
+          panel
+            ? `rounded-card px-5 py-12 sm:px-10 sm:py-16 lg:px-12 ${PANEL[tone]}`
+            : "py-16 lg:py-24",
+        )}
+      >
+        <div className="grid max-w-3xl gap-4">
+          <span className={cn("tag justify-self-start", panel && "bg-raised")}>{tag}</span>
+          <h2 id={`${id}-title`} className="text-display">
             {title}
           </h2>
-          {intro ? (
-            <p className="max-w-3xl text-lg text-muted-foreground sm:text-xl">{intro}</p>
-          ) : null}
+          {intro ? <p className="text-lead max-w-[62ch]">{intro}</p> : null}
         </div>
         {children}
       </div>
@@ -184,276 +179,239 @@ function Section({
   );
 }
 
-/** A hand-drawn lilac underline under one word of a heading, as in the reference. */
-function Scribble({ children }: { children: ReactNode }) {
-  return (
-    <span className="relative whitespace-nowrap">
-      {children}
-      <svg
-        aria-hidden
-        focusable="false"
-        viewBox="0 0 200 16"
-        preserveAspectRatio="none"
-        className="absolute -bottom-[0.12em] left-0 h-[0.16em] w-full"
-      >
-        <path
-          d="M3 9C22 2 30 15 50 8S80 2 100 9S132 15 150 8S182 2 197 8"
-          fill="none"
-          stroke="var(--lilac)"
-          strokeWidth="5"
-          strokeLinecap="round"
-          vectorEffect="non-scaling-stroke"
-        />
-      </svg>
-    </span>
-  );
-}
+/** The real data behind the results, drifting past on the keylime panel. */
+const SOURCES = [
+  "HDFS, labelled by experts",
+  "BlueGene/L alert tags",
+  "Thunderbird",
+  "Hadoop jobs made to fail",
+  "OpenStack fault injection",
+  "ServiceNow tickets",
+  "GitLab.com incidents",
+  "Cloud post-mortems",
+  "GAIA labelled logs",
+  "Prompt-injection benchmarks",
+];
 
-const HERO_SCENE = "mx-auto mt-6 block h-[19rem] w-full max-w-[72rem] sm:h-auto sm:px-2";
+/** The protocols and providers ARIA speaks, as a quiet row of names. */
+const SPEAKS = [
+  "Model Context Protocol",
+  "Agent2Agent",
+  "AG-UI",
+  "LangGraph",
+  "OpenTelemetry",
+  "NVIDIA NIM",
+  "Azure OpenAI",
+];
 
-function Hero() {
-  return (
-    <section
-      aria-labelledby="hero-title"
-      className="relative overflow-hidden bg-grass pt-28 text-pop-ink sm:pt-36 lg:pt-40"
-    >
-      <div className="mx-auto grid max-w-[75rem] justify-items-center gap-6 px-4 text-center sm:px-6">
-        <h1 id="hero-title" className="text-display max-w-[13ch] text-pop-ink">
-          Incident triage that shows its work.
-        </h1>
-        <p className="text-lead max-w-[30ch]">
-          Calibrated severity, a report that cites every claim, and nothing sent until a person
-          approves.
-        </p>
-        <div className="mt-2 flex flex-wrap justify-center gap-3">
-          <Button asChild variant="raised" size="lg" className="pr-2">
-            <Link href="/console" prefetch={false}>
-              Open the console
-              <ArrowCircle />
-            </Link>
-          </Button>
-          <Button
-            asChild
-            variant="ghost"
-            size="lg"
-            className="text-pop-ink hover:bg-pop-ink/8 hover:text-pop-ink"
-          >
-            <a href="#run">
-              Watch a recorded run
-              <ArrowDownIcon aria-hidden />
-            </a>
-          </Button>
-        </div>
-      </div>
-      {/* Each illustration is its own Suspense boundary, so React hydrates it as a separate short
-          task instead of one long one (they hold most of the page's elements). React sends a
-          scene this large after the rest of the page, so the fallback holds its exact box:
-          without it, everything below jumps down when the scene arrives. */}
-      <Suspense fallback={<HeroSceneFrame className={HERO_SCENE} />}>
-        <HeroScene className={HERO_SCENE} />
-      </Suspense>
-    </section>
-  );
-}
-
-function Intro() {
-  return (
-    <section
-      aria-labelledby="story-title"
-      className="mx-auto max-w-[75rem] px-4 pt-20 pb-6 sm:px-6 lg:pt-28"
-    >
-      <h2 id="story-title" className="sr-only">
-        What ARIA does
-      </h2>
-      <p className="text-lead max-w-[38ch]">
-        ARIA reads an alert and its logs, rates severity with calibrated confidence, checks what
-        happened last time and drafts the incident report, so the person on call starts from
-        evidence instead of a wall of logs.
-      </p>
-      <Button asChild variant="raised" size="lg" className="mt-8 pr-2">
-        <a href="#how">
-          How a run works
-          <ArrowCircle />
-        </a>
-      </Button>
-      <div className="mt-16 lg:mt-20">
-        <Story />
-      </div>
-    </section>
-  );
-}
-
-// The README's offline quick start, without keys.
-const QUICKSTART = ["make install", "uv run aria db upgrade && uv run aria seed", "make dev"];
-
-function TryIt() {
-  return (
-    <section aria-labelledby="try-title" className="relative z-10">
-      {/* Cropped from the sides on narrow screens, as the drawing's own "slice" would be. */}
-      <Image
-        src="/art/hills.svg"
-        alt=""
-        width={1440}
-        height={220}
-        unoptimized
-        className="block h-32 w-full object-cover object-bottom sm:h-44 lg:h-52"
-      />
-      <div className="-mt-px rounded-b-sheet bg-grass text-pop-ink">
-        <div className="mx-auto grid max-w-[75rem] justify-items-center gap-8 px-4 pt-6 pb-24 text-center sm:px-6 lg:pb-28">
-          <h2 id="try-title" className="text-display max-w-[11ch] text-pop-ink">
-            Run it on your own logs.
-          </h2>
-          <p className="text-lead max-w-[36ch]">
-            ARIA runs offline with no API key, and switches to NVIDIA NIM, Azure OpenAI or any
-            OpenAI-compatible model when you add one.
-          </p>
-          {/* Long commands wrap (with a hanging indent) rather than scroll, so phones need no
-              sideways scrolling inside the block. */}
-          <pre className="w-full max-w-xl rounded-lg bg-raised px-5 py-4 text-left text-sm leading-relaxed whitespace-pre-wrap text-foreground">
-            <code>
-              {QUICKSTART.map((command) => (
-                <span key={command} className="block pl-[2ch] -indent-[2ch]">
-                  <span aria-hidden className="text-faint select-none">
-                    ${" "}
-                  </span>
-                  {command}
-                </span>
-              ))}
-            </code>
-          </pre>
-          <div className="flex flex-wrap justify-center gap-3">
-            <Button asChild variant="raised" size="lg" className="pr-2">
-              <Link href="/console" prefetch={false}>
-                Open the console
-                <ArrowCircle />
-              </Link>
-            </Button>
-            <Button
-              asChild
-              variant="ghost"
-              size="lg"
-              className="text-pop-ink hover:bg-pop-ink/8 hover:text-pop-ink"
-            >
-              <a href={`${REPO_URL}#quickstart`}>Read the quick start</a>
-            </Button>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
+const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
 
 export default function Landing() {
   const data = replay();
   const facts = runFacts();
   const evals = evaluation();
   const real = realLogs();
+  const datasets = realData();
+  // The HDFS log plus every other real dataset scored on this page.
+  const nDatasets = Object.keys(datasets).length + 1;
   return (
     <>
       <a
         href="#main"
-        className="sr-only z-50 rounded-sm bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:px-3 focus:py-2"
+        className="sr-only z-50 rounded-sm bg-primary px-4 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
       >
         Skip to content
       </a>
       <SiteHeader />
       <main id="main">
-        <Hero />
+        <Hero data={data} />
 
-        {/* The cream page laid over the green hero, its top corners rounded like a sheet. */}
-        <div className="relative z-10 -mt-[50px] rounded-t-sheet bg-background">
-          <Intro />
-
-          <Section
-            id="run"
-            label="Example run"
-            dot="coral"
-            title="One recorded run, start to finish"
-            intro={
-              <>
-                {data.nLines} HDFS log lines (real Loghub lines, arranged into a synthetic
-                incident), triaged offline. One line was planted to test the injection guard. Point
-                at a citation such as <span className="font-mono text-foreground">E2</span> to see
-                the evidence behind a claim.
-              </>
-            }
+        <section
+          aria-labelledby="speaks-title"
+          className="mx-auto max-w-[75rem] px-3 py-14 sm:px-6"
+        >
+          <h2
+            id="speaks-title"
+            className="text-center font-sans text-xs font-normal tracking-normal text-muted-foreground"
           >
-            {/* Suspense boundaries let React hydrate each interactive section as its own, shorter
-                task, so no single task blocks the main thread for long on a slow phone. */}
-            <Suspense>
-              <TriageReplay data={data} />
-            </Suspense>
-          </Section>
+            Speaks the protocols your tools already use
+          </h2>
+          <ul className="mt-6 flex flex-wrap items-center justify-center gap-x-10 gap-y-4">
+            {SPEAKS.map((name) => (
+              <li
+                key={name}
+                className="text-base font-semibold tracking-[-0.01em] text-charcoal dark:text-foreground"
+              >
+                {name}
+              </li>
+            ))}
+          </ul>
+        </section>
 
-          <Section
-            id="real"
-            label="Real logs"
-            dot="sky"
-            title="Tested on a real cluster, against its experts"
-            intro={
-              <>
-                {real.lines.toLocaleString("en")} real lines from a Hadoop cluster of more than 200
-                nodes, and the label Hadoop experts gave each of its{" "}
-                {real.blocks.toLocaleString("en")} storage blocks. ARIA never sees a label, and no
-                line in this log is an error: every failure in it is silent.
-              </>
-            }
-          >
-            <RealProof data={real} />
-            <RealDatasets data={realData()} />
-          </Section>
+        {/* The problem on the cream page, its lines still apart; the answer on sage, where they
+            run together into one. */}
+        <section
+          aria-labelledby="problem-title"
+          className="relative overflow-hidden py-16 lg:py-24"
+        >
+          <div className="mx-auto grid max-w-[75rem] gap-5 px-3 sm:px-6">
+            <span className="tag justify-self-start">The problem</span>
+            <h2 id="problem-title" className="text-statement max-w-[36ch]">
+              An alert arrives with a wall of logs. The person on call has to read them, judge how
+              bad it is and remember what happened last time, often in the middle of the night.
+            </h2>
+          </div>
+          <Converge
+            apart
+            className="mt-10 w-[110%] -translate-x-[6%] text-heading lg:w-full lg:translate-x-0"
+          />
+        </section>
+        <section
+          aria-labelledby="solution-title"
+          className="relative overflow-hidden bg-panel-sage py-16 lg:py-24"
+        >
+          <div className="mx-auto grid max-w-[75rem] gap-5 px-3 sm:px-6">
+            <span className="tag justify-self-start bg-raised">The answer</span>
+            <h2 id="solution-title" className="text-statement max-w-[36ch]">
+              ARIA reads the logs first. It brings back one severity you can check, a report that
+              cites its evidence and the incidents that looked like this before, then waits for you
+              to approve.
+            </h2>
+          </div>
+          <Converge className="mt-10 text-heading" />
+        </section>
 
-          <Section
-            id="how"
-            label="How it works"
-            dot="sky"
-            title="What happens in a run"
-            intro={
-              <>
-                A run is a LangGraph state machine with a checkpoint after every step, so it can
-                stop for a person, carry on after a restart, or be rewound and{" "}
-                <Term name="fork">forked</Term>. The numbers come from the recorded run above. Words
-                with a dotted underline open a short definition.
-              </>
-            }
-          >
-            <Suspense>
-              <RunGraph steps={steps(facts)} />
-            </Suspense>
-          </Section>
+        <section
+          aria-labelledby="proof-title"
+          className="mx-auto grid max-w-[75rem] gap-6 px-3 py-16 sm:px-6 lg:grid-cols-2 lg:gap-12 lg:py-24"
+        >
+          <ProofTicker items={SOURCES} />
+          <div className="grid content-center gap-5">
+            <span className="tag justify-self-start">Tested on real data</span>
+            <h2 id="proof-title" className="text-statement max-w-[30ch]">
+              Measured on public logs, tickets and incidents that their owners labelled, each scored
+              against a simpler baseline.
+            </h2>
+            <dl className="mt-4 flex flex-wrap gap-x-12 gap-y-6">
+              <div className="grid gap-1">
+                <dt className="order-2 max-w-[18ch] text-xs text-muted-foreground">
+                  lines of one supercomputer&apos;s log, scored window by window
+                </dt>
+                <dd className="stat order-1 text-[3rem]">{compact.format(datasets.bgl.lines)}</dd>
+              </div>
+              <div className="grid gap-1">
+                <dt className="order-2 max-w-[18ch] text-xs text-muted-foreground">
+                  real, labelled datasets
+                </dt>
+                <dd className="stat order-1 text-[3rem]">{nDatasets}</dd>
+              </div>
+            </dl>
+          </div>
+        </section>
 
-          <Section
-            id="results"
-            deferred
-            label="Results"
-            dot="lilac"
-            title={
-              <>
-                <Scribble>Measured,</Scribble> caveats included
-              </>
-            }
-            intro="These results come from semi-synthetic incidents: real Loghub log lines, composed into incident windows by ARIA's scenario builder, scored against simpler baselines. Every number here comes from the committed evaluation results."
-          >
-            <Results data={evals} publicAttacks={realData().injection} />
-          </Section>
+        <section
+          aria-labelledby="why-title"
+          className="relative mx-auto max-w-[75rem] px-3 pb-16 sm:px-6 lg:pb-24"
+        >
+          <Rings className="pointer-events-none absolute -top-10 right-0 w-56 text-heading/40 max-lg:hidden" />
+          <div className="mb-10 grid max-w-3xl gap-4">
+            <span className="tag justify-self-start">Why ARIA</span>
+            <h2 id="why-title" className="text-display">
+              A team of agents, working together.
+            </h2>
+          </div>
+          <Why />
+        </section>
 
-          <Section
-            id="standards"
-            deferred
-            label="Standards"
-            dot="sunshine"
-            title="Built on open agent standards"
-            intro="ARIA works with the tools you already have, through protocols other agents and frontends speak."
-          >
-            <Standards />
-          </Section>
+        <Section
+          id="run"
+          tone="sage"
+          tag="Example run"
+          title="One recorded run, start to finish"
+          intro={
+            <>
+              {data.nLines} HDFS log lines (real Loghub lines, arranged into a synthetic incident),
+              triaged offline. One line was planted to test the injection guard. Point at a citation
+              such as <span className="font-mono text-foreground">E2</span> to see the evidence
+              behind a claim.
+            </>
+          }
+        >
+          {/* Suspense boundaries let React hydrate each interactive section as its own, shorter
+              task, so no single task blocks the main thread for long on a slow phone. */}
+          <Suspense>
+            <TriageReplay data={data} />
+          </Suspense>
+        </Section>
 
-          <Section id="limits" label="Limits" dot="coral" title="Where it falls short" deferred>
-            <Limitations />
-          </Section>
-        </div>
+        <div className="h-3" />
 
-        <TryIt />
+        <Section
+          id="real"
+          tone="mint"
+          tag="Real logs"
+          title="Tested on a real cluster, against its experts"
+          intro={
+            <>
+              {real.lines.toLocaleString("en")} real lines from a Hadoop cluster of more than 200
+              nodes, and the label Hadoop experts gave each of its{" "}
+              {real.blocks.toLocaleString("en")} storage blocks. ARIA never sees a label, and no
+              line in this log is an error: every failure in it is silent.
+            </>
+          }
+        >
+          <RealProof data={real} />
+          <RealDatasets data={datasets} />
+        </Section>
+
+        <Section
+          id="how"
+          tag="How it works"
+          title="What happens in a run"
+          intro={
+            <>
+              A run is a LangGraph state machine with a checkpoint after every step, so it can stop
+              for a person, carry on after a restart, or be rewound and{" "}
+              <Term name="fork">forked</Term>. The numbers come from the recorded run above. Words
+              with a dotted underline open a short definition.
+            </>
+          }
+        >
+          <Suspense>
+            <RunGraph steps={steps(facts)} />
+          </Suspense>
+        </Section>
+
+        <Section
+          id="results"
+          tone="keylime"
+          deferred
+          tag="Results"
+          title="Measured, caveats included"
+          intro="These results come from semi-synthetic incidents: real Loghub log lines, composed into incident windows by ARIA's scenario builder, scored against simpler baselines. Every number here comes from the committed evaluation results."
+        >
+          <Results data={evals} publicAttacks={datasets.injection} />
+        </Section>
+
+        <Section
+          id="standards"
+          deferred
+          tag="Standards"
+          title="Built on open agent standards"
+          intro="ARIA works with the tools you already have, through protocols other agents and frontends speak."
+        >
+          <Standards />
+        </Section>
+
+        <section
+          id="faq"
+          aria-labelledby="faq-title"
+          className="mx-auto max-w-[75rem] scroll-mt-20 px-3 pb-16 sm:px-6 lg:pb-24"
+        >
+          <Faq />
+        </section>
+
+        <Closing />
       </main>
       <SiteFooter recordedAt={data.recordedAt} gitSha={data.gitSha} />
     </>

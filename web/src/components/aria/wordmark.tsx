@@ -1,16 +1,23 @@
 import { cn } from "@/lib/utils";
 
 /**
- * ARIA's mark: a grass-green disc holding a single-storey "a" drawn as a lens and its handle, the
- * look-closer step of triage (DESIGN.md). Flat fills only, so it needs no ids and copies of it can
- * sit anywhere on a page.
+ * ARIA's mark: a forest square in which three lines run together into one, the noise of the logs
+ * resolving into a single signal (DESIGN.md). Flat fills that follow the theme (forest on cream,
+ * keylime after dark), so it needs no ids and copies of it can sit anywhere on a page.
  */
 export function Mark({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" className={cn("size-7", className)} aria-hidden>
-      <circle cx="12" cy="12" r="12" fill="#8ed462" />
-      <circle cx="10.4" cy="12.6" r="4.3" fill="none" stroke="#2c2e2a" strokeWidth="2.6" />
-      <path d="M15.2 8.2v9" stroke="#2c2e2a" strokeWidth="2.6" strokeLinecap="round" />
+    <svg viewBox="0 0 32 32" className={cn("size-7", className)} aria-hidden>
+      <rect width="32" height="32" rx="8" fill="var(--primary)" />
+      <g
+        fill="none"
+        stroke="var(--primary-foreground)"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M6.5 10c6 0 7.5 6 12.5 6M6.5 16H19M6.5 22c6 0 7.5-6 12.5-6M19 16h6.5" />
+      </g>
     </svg>
   );
 }
@@ -23,10 +30,12 @@ export function Wordmark({
   withName?: boolean;
 }) {
   return (
-    <span className={cn("inline-flex items-center gap-2.5 font-medium", className)}>
+    <span className={cn("inline-flex items-center gap-2.5", className)}>
       <Mark />
       {withName ? (
-        <span className="text-xl leading-none tracking-[-0.01em] text-heading">ARIA</span>
+        <span className="font-display text-[1.75rem] leading-none font-normal tracking-[-0.03em] text-heading">
+          aria
+        </span>
       ) : null}
     </span>
   );

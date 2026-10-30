@@ -4,7 +4,7 @@ import { ArrowUpRightIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 const LINK =
-  "relative z-10 rounded-sm px-3 py-2 text-base whitespace-nowrap text-foreground transition-colors duration-(--duration-quick) hover:bg-foreground/6 aria-[current=true]:text-pop-ink xl:text-lg";
+  "relative z-10 rounded-sm px-3 py-1.5 text-sm whitespace-nowrap text-charcoal transition-colors duration-(--duration-quick) hover:text-heading aria-[current=true]:text-heading dark:text-foreground";
 
 interface NavLink {
   href: string;
@@ -12,7 +12,7 @@ interface NavLink {
 }
 
 /**
- * The landing page's section links. A grass pill glides to the link of the section being read:
+ * The landing page's section links. A keylime pill glides to the link of the section being read:
  * the one crossing a thin band just above the middle of the screen. Above the first section (the
  * hero) no link is current and the pill is hidden.
  */
@@ -87,12 +87,12 @@ export function SectionNav({ links }: { links: NavLink[] }) {
     <nav
       ref={nav}
       aria-label="Page sections"
-      className="relative hidden items-center gap-0.5 xl:flex"
+      className="relative hidden items-center gap-0.5 lg:flex"
     >
       <span
         ref={pill}
         aria-hidden
-        className="absolute top-0 left-0 origin-left rounded-sm bg-grass opacity-0 transition-[transform,opacity] duration-(--duration-slow) ease-(--ease-out)"
+        className="absolute top-0 left-0 origin-left rounded-sm bg-panel-keylime opacity-0 transition-[transform,opacity] duration-(--duration-slow) ease-(--ease-out)"
       />
       {links.map((link) => (
         <a
