@@ -383,11 +383,32 @@ def _providers(providers: Mapping[str, Mapping[str, Any]]) -> list[str]:
 
 
 def _parsing(section: Mapping[str, Any]) -> list[str]:
+    corrected = section.get("corrected")
+
+    def fixed(r: Mapping[str, Any]) -> str:
+        value = r.get("grouping_accuracy_corrected")
+        return f" {value:.3f} |" if value is not None else " not relabelled |"
+
     rows = [
         f"| {system} | {r['lines']} | {r['events']} | {r['templates']} | "
-        f"{r['grouping_accuracy']:.3f} |"
+        f"{r['grouping_accuracy']:.3f} |" + (fixed(r) if corrected else "")
         for system, r in section["systems"].items()
     ]
+    note = ""
+    if corrected:
+        changed = ", ".join(corrected["changed_systems"]) or "none"
+        note = (
+            f" Against the corrected labels of Loghub-2.0 ({corrected['citation']}), which cover "
+            f"{corrected['n_systems']} of the systems, the mean is "
+            f"{corrected['mean_grouping_accuracy']:.3f}, against "
+            f"{corrected['original_mean_grouping_accuracy']:.3f} with the original labels on the "
+            f"same systems; the corrections change the grouping score for: {changed}."
+        )
+    header = "| System | Lines | True events | Templates found | Grouping accuracy |"
+    rule = "|---|---|---|---|---|"
+    if corrected:
+        header += " Against corrected labels |"
+        rule += "---|"
     return [
         "## Log parsing",
         "",
@@ -396,11 +417,11 @@ def _parsing(section: Mapping[str, Any]) -> list[str]:
             f"from {section['n_systems']} systems, through the production parser (redaction, "
             "injection guard, per-system Drain settings from the Loghub benchmark). Mean "
             f"{section['mean_grouping_accuracy']:.3f}. Real log lines flagged as injection: "
-            f"{section['real_lines_flagged_as_injection']}."
+            f"{section['real_lines_flagged_as_injection']}.{note}"
         ),
         "",
-        "| System | Lines | True events | Templates found | Grouping accuracy |",
-        "|---|---|---|---|---|",
+        header,
+        rule,
         *rows,
         "",
     ]

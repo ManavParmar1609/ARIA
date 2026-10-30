@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import math
 from datetime import UTC, datetime, timedelta
@@ -158,6 +159,28 @@ def test_parsing_suite_scores_every_downloaded_sample() -> None:
     assert 0.0 < summary["mean_grouping_accuracy"] <= 1.0
     assert summary["real_lines_flagged_as_injection"] == 0
     assert ps.system_accuracy(FIXTURES / "Missing", "hdfs") is None
+
+
+def test_parsing_also_scores_loghub2_corrected_labels(tmp_path: Path) -> None:
+    rows = list(csv.DictReader((FIXTURES / "HDFS" / "HDFS_2k.log_structured.csv").open()))
+    first = rows[0]["EventId"]
+    (tmp_path / "HDFS").mkdir()
+    with (tmp_path / "HDFS" / "HDFS_2k.log_structured_corrected.csv").open("w", newline="") as out:
+        writer = csv.DictWriter(out, fieldnames=["LineId", "EventId"])
+        writer.writeheader()
+        for i, row in enumerate(rows):
+            # The relabelling splits the first event in two, which no single template matches.
+            split = row["EventId"] == first and i % 2 == 1
+            writer.writerow(
+                {"LineId": row["LineId"], "EventId": first + "b" if split else row["EventId"]}
+            )
+    result = ps.system_accuracy(FIXTURES / "HDFS", "hdfs", tmp_path)
+    assert result is not None
+    assert result["corrected_events"] == result["events"] + 1
+    assert result["grouping_accuracy_corrected"] < result["grouping_accuracy"]
+    corrected = ps.summarize(FIXTURES, corrected_dir=tmp_path)["corrected"]
+    assert (corrected["n_systems"], corrected["changed_systems"]) == (1, ["hdfs"])
+    assert ps.summarize(FIXTURES, corrected_dir=tmp_path / "missing")["corrected"] is None
 
 
 def test_edge_suite_parses_everything_and_quarantines_attacks() -> None:

@@ -27,7 +27,7 @@ sources:
       - "2k_dataset/*/*_2k.log_templates_corrected.csv"
     license: Loghub license
     citation: "Z. Jiang et al. A Large-scale Evaluation for Log Parsing Techniques: How Far are We? ISSTA 2024."
-    description: Corrected ground-truth templates for the 2k samples. Downloaded but not read yet; the parsing evaluation scores against the original Loghub templates.
+    description: Corrected ground-truth templates for 14 of the 2k samples. The parsing evaluation scores the same parse against these too, joined by line id, beside the original Loghub templates.
 
   hdfs-100k:
     kind: git
