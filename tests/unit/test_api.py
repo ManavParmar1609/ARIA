@@ -238,6 +238,10 @@ async def test_guessed_keys_are_rate_limited_and_huge_bodies_refused(
                 for i in range(4)
             ]
             assert guesses == [401, 401, 401, 429]
+            # /readyz takes no key, but a wrong one spends the same bucket; probes send none.
+            readyz = await c.get("/readyz", headers={"x-api-key": "k-guess"})
+            assert readyz.status_code == 429
+            assert (await c.get("/readyz")).status_code == 200
             big = {"system": "bgl", "logs": ["x" * 100] * 50}
             declared = await c.post("/api/v1/runs", json=big, headers=ANA)
             assert declared.status_code == 413
@@ -252,6 +256,48 @@ async def test_guessed_keys_are_rate_limited_and_huge_bodies_refused(
                 headers={**ANA, "content-type": "application/json"},
             )
             assert streamed.status_code == 413
+
+
+async def test_every_protected_request_leaves_an_access_log_line(
+    api: Api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from aria.api import security
+
+    logs: list[dict[str, Any]] = []
+
+    class Recorder:
+        def info(self, event: str, **fields: Any) -> None:
+            logs.append({"event": event, **fields})
+
+    monkeypatch.setattr(security, "access_log", Recorder())
+    await api.client.get("/api/v1/runs?token=secret-in-query", headers=ANA)
+    await api.client.get("/api/v1/runs", headers={"x-api-key": "wrong"})
+    await api.client.get("/healthz")
+    lines = [e for e in logs if e["event"] == "api.request"]
+    assert [(e["method"], e["path"], e["status"], e["principal"]) for e in lines] == [
+        ("GET", "/api/v1/runs", 200, "ana"),
+        ("GET", "/api/v1/runs", 401, None),
+    ]
+    assert "secret-in-query" not in json.dumps(lines)
+
+
+async def test_a_proxy_prefix_does_not_open_protected_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from aria.api.security import route_path
+
+    assert route_path({"path": "/aria/api/v1/runs", "root_path": "/aria"}) == "/api/v1/runs"
+    assert route_path({"path": "/ariaX/api", "root_path": "/aria"}) == "/ariaX/api"
+    monkeypatch.setenv("ARIA_API_KEYS", "ana:k-ana")
+    reset_caches()
+    init_db(get_engine())
+    app = create_app()
+    async with LifespanManager(app) as manager:
+        transport = httpx.ASGITransport(app=manager.app, root_path="/aria")
+        async with httpx.AsyncClient(transport=transport, base_url="http://localhost:8000") as c:
+            assert (await c.get("/aria/api/v1/runs")).status_code == 401
+            assert (await c.get("/aria/api/v1/settings")).status_code == 401
+            assert (await c.get("/aria/api/v1/runs", headers=ANA)).status_code == 200
 
 
 def test_one_alert_payload_cannot_store_unbounded_alerts_or_labels() -> None:
@@ -297,8 +343,17 @@ def test_production_refuses_to_start_without_keys(monkeypatch: pytest.MonkeyPatc
         create_app(settings=settings)
 
 
+def test_production_refuses_keys_short_enough_to_guess(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ARIA_API_KEYS", f"ana:{'a' * 40},raj:x")
+    reset_caches()
+    settings = get_settings().model_copy(update={"env": Environment.PROD})
+    with pytest.raises(RuntimeError, match="too short: raj") as refused:
+        create_app(settings=settings)
+    assert "x" * 2 not in str(refused.value)  # names the key, never shows a secret
+
+
 def test_production_serves_no_api_docs(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ARIA_API_KEYS", "ana:k-ana")
+    monkeypatch.setenv("ARIA_API_KEYS", f"ana:{'k' * 32}")
     reset_caches()
     prod = create_app(settings=get_settings().model_copy(update={"env": Environment.PROD}))
     dev = create_app(settings=get_settings())
@@ -461,6 +516,16 @@ async def test_review_errors_are_reported_without_losing_the_pause(api: Api) -> 
             f"/api/v1/runs/{run_id}/review", json={"decision": "edit", "edits": edits}
         )
         assert refused.status_code == 422, edits  # refused as sent, not failed when applied
+    # Edits that would be recorded but never applied, and an edit that changes nothing.
+    for body, says in (
+        ({"decision": "approve", "edits": {"severity": "SEV3"}}, 'only with the decision "edit"'),
+        ({"decision": "reject", "edits": {"title": "Not this"}}, 'only with the decision "edit"'),
+        ({"decision": "edit", "edits": {}}, "at least one change"),
+        ({"decision": "edit"}, "at least one change"),
+    ):
+        refused = await api.client.post(f"/api/v1/runs/{run_id}/review", json=body)
+        assert refused.status_code == 422, body
+        assert says in refused.json()["detail"][0]["msg"], body
     assert (await api.client.get(f"/api/v1/runs/{run_id}")).json()["status"] == "awaiting_review"
     rejected = await api.client.post(
         f"/api/v1/runs/{run_id}/review", json={"decision": "reject", "comment": "dup"}
@@ -666,6 +731,14 @@ async def test_reviews_calibration_evaluation_and_tickets(
     assert trained.json()["predicted_priority"] == "1"
     assert trained.json()["severity"] == "SEV1"
     assert "1" in trained.json()["prediction_set"]
+
+    # A run from the ticket alone: no logs to rate, so the ticket's own rating is the floor.
+    created = await api.client.post("/api/v1/runs", json={"system": "generic", "ticket": ticket})
+    assert created.status_code == 202, created.text
+    detail = await wait_for(api, created.json()["run_id"], "awaiting_review")
+    assert detail["severity"] == "SEV1"
+    report = (await api.client.get(f"/api/v1/runs/{detail['id']}/report")).json()
+    assert "Raised to the ticket's rating" in report["markdown"]
 
     monkeypatch.setattr(api.state.services, "tickets", None)
     untrained = await api.client.post("/api/v1/tickets/assess", json=ticket)
@@ -887,6 +960,50 @@ def test_a_worker_keeps_its_claims_alive_while_runs_execute() -> None:
     run = repo.get_run(engine, "run-claim")
     assert run is not None
     assert run["claimed_by"] == "w2"
+
+
+def test_free_runs_are_claimed_past_runs_other_processes_hold() -> None:
+    init_db(get_engine())
+    engine = get_engine()
+    request = TriageRequest(system="bgl", logs=["x"]).model_dump(mode="json")
+    for i in range(6):  # the API is driving the six oldest runs itself
+        repo.create_run(engine, f"run-held-{i}", request=request, system="bgl")
+        assert repo.claim_run(engine, f"run-held-{i}", "api")
+    repo.create_run(engine, "run-free", request=request, system="bgl")
+    assert repo.claim_runs(engine, "w1") == ["run-free"]
+
+
+def test_only_one_process_drives_a_run_until_it_lets_go_or_goes_quiet() -> None:
+    init_db(get_engine())
+    engine = get_engine()
+    request = TriageRequest(system="bgl", logs=["x"]).model_dump(mode="json")
+    repo.create_run(engine, "run-one", request=request, system="bgl")
+    assert repo.claim_run(engine, "run-one", "api")
+    assert repo.claim_run(engine, "run-one", "api")  # its own claim, again
+    assert not repo.claim_run(engine, "run-one", "worker")
+    assert repo.claim_runs(engine, "worker") == []
+    repo.release_run(engine, "run-one", "worker")  # only the holder can let go
+    assert not repo.claim_run(engine, "run-one", "worker")
+    repo.release_run(engine, "run-one", "api")
+    assert repo.claim_run(engine, "run-one", "worker")
+    assert repo.claim_run(engine, "run-one", "api", stale_after_s=0.0)  # the worker went quiet
+
+
+async def test_runs_an_agui_or_a2a_stream_executes_are_never_handed_to_a_worker() -> None:
+    reset_caches()
+    init_db(get_engine())
+    services = await Services.create()
+    try:
+        runner = TriageRunner(services)
+        run_id = runner.submit(TriageRequest(system="bgl", logs=["x"]), trigger="agui", claim=True)
+        assert run_id in runner.held
+        assert repo.claim_runs(services.engine, "worker") == []
+        worker = Worker(runner)
+        first = worker.execute(run_id)
+        assert worker.execute(run_id) is first  # scheduled once, however often it is asked
+        await first
+    finally:
+        await services.aclose()
 
 
 async def test_worker_heartbeat_follows_its_polls(tmp_path: Path) -> None:

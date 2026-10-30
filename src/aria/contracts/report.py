@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import Field, StringConstraints
+from pydantic import Field, StringConstraints, model_validator
 
 from aria.contracts.base import Claim, Contract, Evidence, EvidenceId, JsonDict, Severity, utcnow
 from aria.contracts.retrieval import SimilarIncident, TicketHistoryStats
@@ -108,6 +108,23 @@ class ReportEdits(Contract):
     add_actions: Annotated[list[EditLine], Field(max_length=10)] = Field(default_factory=list)
     note: Annotated[str, StringConstraints(max_length=2_000)] | None = None
 
+    def changes_anything(self) -> bool:
+        return bool(self.title or self.severity or self.summary or self.add_actions or self.note)
+
+
+def review_problem(decision: str, edits: ReportEdits | None) -> str | None:
+    """Why a decision and its edits do not fit together, or None when they do. Edits only apply
+    with "edit"; sent with "approve" or "reject" they would be recorded but never applied."""
+    changes = edits is not None and edits.changes_anything()
+    if decision == "edit" and not changes:
+        return (
+            'an "edit" decision needs at least one change: a title, a severity, a summary, '
+            "actions to add or a note"
+        )
+    if decision != "edit" and changes:
+        return f'edits apply only with the decision "edit"; send "{decision}" without them'
+    return None
+
 
 class ReviewDecision(Contract):
     decision: Literal["approve", "reject", "edit"]
@@ -115,3 +132,9 @@ class ReviewDecision(Contract):
     comment: str | None = None
     edits: ReportEdits | None = None
     approve_actions: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _edits_fit_the_decision(self) -> ReviewDecision:
+        if problem := review_problem(self.decision, self.edits):
+            raise ValueError(problem)
+        return self

@@ -39,6 +39,21 @@ _IMPACT_WORDS = {
 }
 
 
+# A service name as monitoring labels give it: a few words of letters, digits and . _ / -,
+# with no sentence, link or markup in it. Only such a name is written into a message.
+_SERVICE_NAME = re.compile(r"[A-Za-z0-9][\w./-]*(?: [\w./-]+){0,4}")
+_MAX_SERVICE_CHARS = 48
+
+
+def is_service_name(text: str) -> bool:
+    """Whether ``text`` reads as a service name, not a sentence someone slipped into a label."""
+    return (
+        len(text) <= _MAX_SERVICE_CHARS
+        and _SERVICE_NAME.fullmatch(text) is not None
+        and re.search(r"\.(?:\s|$)|://|\bwww\.", text) is None
+    )
+
+
 def action_id(report_id: str, key: str) -> str:
     """Stable per report and audience, so a re-run proposes the same action ids for review."""
     return "act-" + hashlib.sha256(f"{report_id}:{key}".encode()).hexdigest()[:12]

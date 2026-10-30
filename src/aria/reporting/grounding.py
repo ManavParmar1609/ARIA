@@ -243,6 +243,23 @@ _INTERNAL_IDS: dict[str, re.Pattern[str]] = {
     "file_path": re.compile(r"(?<![\w])/(?:[\w.-]+/){2,}[\w.-]*"),
 }
 _SPECULATION = re.compile(r"\b(root cause (?:is|was)|caused by|because of|due to)\b", re.IGNORECASE)
+# Updates outside the team point to nothing: a link or a phone number in one is how a label or a
+# model could send customers somewhere else.
+_LINK = re.compile(r"https?://|\bwww\.|\b[\w-]+\.(?:com|net|org|io|co|example)\b/", re.IGNORECASE)
+_NUMBER_RUN = re.compile(r"\+?\(?\d[\d ().-]{6,}\d")
+_DATE = re.compile(r"\d{4}-\d{2}-\d{2}(?: \d{2})?")
+
+
+def _has_phone_number(text: str) -> bool:
+    """A run of digits dialled as a number: international (+...) or nine digits or more, and
+    not a date."""
+    for match in _NUMBER_RUN.finditer(text):
+        run = match.group().strip()
+        if _DATE.fullmatch(run):
+            continue
+        if run.startswith("+") or sum(c.isdigit() for c in run) >= 9:
+            return True
+    return False
 
 
 def validate_external_text(text: str, *, audience: str) -> list[str]:
@@ -256,6 +273,10 @@ def validate_external_text(text: str, *, audience: str) -> list[str]:
         problems.append("contains a credential")
     if scan_line(text, 0) is not None:
         problems.append("contains instruction-like content")
+    if _LINK.search(text):
+        problems.append("contains a link")
+    if _has_phone_number(text):
+        problems.append("contains a phone number")
     if audience == "customers" and _SPECULATION.search(text):
         problems.append("speculates about the cause in a customer-facing update")
     return problems

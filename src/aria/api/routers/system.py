@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import text
 
 from aria import __version__
@@ -49,6 +50,17 @@ async def readyz(state: State, request: Request, response: Response) -> Health:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     headers = {k.lower(): v for k, v in request.headers.items()}
     detail = state.auth.authenticate(headers) is not None
+    if not detail and ("x-api-key" in headers or "authorization" in headers):
+        # A wrong key spends the caller's address bucket here too, so /readyz is no way around
+        # the limit on guessing keys. Probes send no key and are never limited.
+        client = request.client.host if request.client else "unknown"
+        allowed, retry_after = state.limiter.allow(f"ip:{client}")
+        if not allowed:
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                "rate limit exceeded",
+                headers={"retry-after": str(math.ceil(retry_after))},
+            )
     return Health(
         status="ok" if database and llm else "degraded",
         version=__version__,

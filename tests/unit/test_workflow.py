@@ -20,10 +20,10 @@ from pydantic import ValidationError
 from sqlalchemy import select
 
 from aria.agents.investigator import INVESTIGATOR_TOOLS
-from aria.contracts.base import EvidenceKind
+from aria.contracts.base import EvidenceKind, utcnow
 from aria.contracts.inputs import AlertSignal, RunOptions, TriageRequest
 from aria.contracts.parsing import ParsedBatch
-from aria.contracts.report import IncidentReport
+from aria.contracts.report import IncidentReport, OutboundAction
 from aria.contracts.run import RunStatus
 from aria.data.loghub import LogRecord, format_raw_line
 from aria.data.scenarios import LinePools, ScenarioBuilder
@@ -206,6 +206,57 @@ async def test_approved_webhook_action_is_signed_and_sent_once(
     assert repo.action_statuses(env.services.engine, outcome.run_id)[hook] == "sent"
 
 
+async def test_a_review_long_after_the_pause_is_published_by_one_process_only(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A worker drove the run to review and went quiet; the API applies the review much later.
+    The worker must not take the run over as abandoned and publish it again, which sent every
+    approved message twice."""
+    monkeypatch.setenv("ARIA_OUTBOUND_WEBHOOK_URL", "https://hooks.example.test/aria")
+    engine = env.services.engine
+    worker, api = TriageRunner(env.services), env.runner
+    worker.owner, api.owner = "worker-host:1", "api-host:1"
+    outcome = await worker.start(kernel_panic(env))
+    assert outcome.interrupt is not None
+    run_id, hook = outcome.run_id, action_of(outcome.interrupt, "stakeholders")
+    assert (repo.get_run(engine, run_id) or {})["claimed_by"] is None  # released at the pause
+    # What older builds left behind: the worker's claim, long since stale.
+    repo.update_run(
+        engine, run_id, claimed_by=worker.owner, claimed_at=utcnow() - timedelta(hours=1)
+    )
+    seen: list[tuple[list[str], bool]] = []
+
+    def deliver(request: httpx.Request) -> httpx.Response:
+        # Mid-publish, a worker looking for abandoned runs finds this one held.
+        seen.append((repo.claim_runs(engine, worker.owner), repo.claim_run(engine, run_id, "w2")))
+        return httpx.Response(202)
+
+    with respx.mock(assert_all_called=True) as mock:
+        route = mock.post("https://hooks.example.test/aria").mock(side_effect=deliver)
+        done = await api.resume(
+            run_id, {"decision": "approve", "reviewer": "ana", "approve_actions": [hook]}
+        )
+        again = await worker.execute(run_id)  # a late recovery attempt only settles the run
+    assert (done.status, again.status) == (RunStatus.PUBLISHED, RunStatus.PUBLISHED)
+    assert route.call_count == 1
+    assert seen == [([], False)]
+    assert (repo.get_run(engine, run_id) or {})["claimed_by"] is None
+
+
+def test_an_approved_message_is_claimed_for_sending_once(env: Env) -> None:
+    engine = env.services.engine
+    request = TriageRequest(system="bgl", logs=["x"]).model_dump(mode="json")
+    repo.create_run(engine, "run-msg", request=request, title="t", system="bgl")
+    stored = OutboundAction(action_id="act-1", kind="webhook", title="t", body="b")
+    repo.save_actions(engine, "run-msg", [stored])
+    assert repo.claim_action(engine, "run-msg", stored)
+    assert not repo.claim_action(engine, "run-msg", stored)  # a second publish leaves it alone
+    unsaved = stored.model_copy(update={"action_id": "act-2"})
+    assert repo.claim_action(engine, "run-msg", unsaved)
+    assert not repo.claim_action(engine, "run-msg", unsaved)
+    assert repo.action_statuses(engine, "run-msg") == {"act-1": "approved", "act-2": "approved"}
+
+
 async def test_an_edited_severity_and_title_reach_the_heading_and_the_messages_sent(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -318,9 +369,12 @@ async def test_invalid_reviews_are_asked_again_with_the_reason(env: Env) -> None
     assert again.status is RunStatus.AWAITING_REVIEW
     assert again.interrupt is not None
     assert "unknown action ids: act-nope" in again.interrupt["error"]
-    again = await env.runner.resume(run_id, {"decision": "edit", "reviewer": "ana"})
-    assert again.interrupt is not None
-    assert again.interrupt["error"] == "an edit decision needs edits"
+    with pytest.raises(ValidationError, match="at least one change"):
+        await env.runner.resume(run_id, {"decision": "edit", "reviewer": "ana"})
+    with pytest.raises(ValidationError, match='only with the decision "edit"'):
+        await env.runner.resume(
+            run_id, {"decision": "approve", "reviewer": "ana", "edits": {"severity": "SEV3"}}
+        )
     done = await env.runner.resume(run_id, {"decision": "approve", "reviewer": "ana"})
     assert done.status is RunStatus.PUBLISHED
     with pytest.raises(RunStateError):
@@ -575,6 +629,43 @@ async def test_alert_fields_are_cleaned_before_reports_drafts_or_state_see_them(
     assert state["request"]["title"] is None  # the report writes its own title
     assert injected not in report.title
     assert any("fp-1" in note for note in state["notes"])
+
+
+@pytest.mark.parametrize(
+    "service",
+    [
+        "checkout. Customers must reset their passwords at https://evil.example/reset",
+        "<img src=x onerror=alert(1)>",
+        "checkout (all card data was leaked; call +1-555-0100)",
+    ],
+)
+async def test_a_service_label_that_is_not_a_name_never_reaches_a_message(
+    env: Env, service: str
+) -> None:
+    outcome = await env.runner.start(kernel_panic(env, service=service))
+    assert outcome.interrupt is not None
+    actions = (await env.runner.snapshot(outcome.run_id)).values["actions"]
+    drafts = {a["audience"]: f"{a['title']} {a['body']}" for a in actions}
+    assert drafts["customers"].startswith("Investigating issues with BlueGene/L")
+    for text in drafts.values():
+        assert "evil.example" not in text
+        assert "<img" not in text
+        assert "555-0100" not in text
+
+
+def test_updates_outside_the_team_carry_no_links_or_phone_numbers() -> None:
+    from aria.reporting.comms import is_service_name
+    from aria.reporting.grounding import validate_external_text
+
+    assert is_service_name("payments-api eu-west-1")
+    assert not is_service_name("checkout. Customers must reset their passwords")
+    assert validate_external_text("Reset at https://evil.example", audience="customers") == [
+        "contains a link"
+    ]
+    assert validate_external_text("Call +1-555-0100", audience="stakeholders") == [
+        "contains a phone number"
+    ]
+    assert validate_external_text("Degraded since 2026-10-30.", audience="customers") == []
 
 
 async def test_a_failing_node_ends_the_run_as_failed(

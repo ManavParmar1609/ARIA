@@ -84,6 +84,10 @@ def _allowed_hosts(settings: Settings) -> list[str]:
     return hosts
 
 
+# A guessable key is no key: production refuses secrets shorter than this.
+MIN_PROD_KEY_CHARS = 32
+
+
 def create_app(
     *,
     settings: Settings | None = None,
@@ -97,6 +101,12 @@ def create_app(
     auth = KeyAuth(raw_keys)
     if settings.is_prod and auth.open:
         msg = "ARIA_API_KEYS must be set in production"
+        raise RuntimeError(msg)
+    if settings.is_prod and (short := auth.short_keys(MIN_PROD_KEY_CHARS)):
+        msg = (
+            f"ARIA_API_KEYS: in production every secret needs at least {MIN_PROD_KEY_CHARS} "
+            f"characters (too short: {', '.join(short)}); `openssl rand -hex 32` makes one"
+        )
         raise RuntimeError(msg)
     limiter = RateLimiter(settings.rate_limit_per_minute)
     holder: dict[str, AppState] = {}
@@ -143,6 +153,13 @@ def create_app(
             if state.inprocess:
                 await worker.recover()
                 background.extend(start_background_jobs(svc, run, stop, on_run=worker.execute))
+            # Renew the claims on runs this process holds (an AG-UI or A2A stream, a resumed
+            # review); in process, also take over runs a stopped process left behind.
+            background.append(
+                asyncio.create_task(
+                    worker.keep_claims(stop, recover=state.inprocess), name="aria-claims"
+                )
+            )
             log.info("api.started", version=__version__, worker=settings.worker_mode)
             try:
                 yield
@@ -154,6 +171,8 @@ def create_app(
                 if owned:
                     await svc.aclose()
 
+    # Before the app exists: Azure Monitor instruments FastAPI apps created after it is set up.
+    configure_tracing(settings.otel_exporter, endpoint=settings.otlp_endpoint)
     docs = not settings.is_prod  # production serves no API docs; docs/openapi.json has them
     app = FastAPI(
         title="ARIA",

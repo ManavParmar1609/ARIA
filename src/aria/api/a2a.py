@@ -211,7 +211,9 @@ class AriaExecutor(AgentExecutor):
             await updater.start_work(
                 updater.new_agent_message([new_text_part("ARIA is triaging the incident.")])
             )
-            await asyncio.to_thread(self.runner.submit, request, run_id=run_id, trigger="a2a")
+            await asyncio.to_thread(
+                self.runner.submit, request, run_id=run_id, trigger="a2a", claim=True
+            )
             outcome = await self._gate(self.runner.execute(run_id))
         await self._finish(updater, outcome)
 

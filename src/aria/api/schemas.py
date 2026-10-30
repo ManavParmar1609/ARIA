@@ -5,11 +5,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, StringConstraints, field_validator
+from pydantic import BaseModel, Field, StringConstraints, field_validator, model_validator
 
 from aria.contracts.base import Evidence, Severity
 from aria.contracts.inputs import RunOptions
-from aria.contracts.report import IncidentReport, ReportEdits
+from aria.contracts.report import IncidentReport, ReportEdits, review_problem
 from aria.llm.schemas import ClaimOut
 
 RunId = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9._:-]{1,64}$")]
@@ -91,6 +91,12 @@ class ReviewRequest(BaseModel):
     comment: Annotated[str, StringConstraints(max_length=2_000)] | None = None
     edits: ReportEdits | None = None
     approve_actions: list[str] = Field(default_factory=list, max_length=10)
+
+    @model_validator(mode="after")
+    def _edits_fit_the_decision(self) -> ReviewRequest:
+        if problem := review_problem(self.decision, self.edits):
+            raise ValueError(problem)
+        return self
 
 
 class ForkRequest(BaseModel):

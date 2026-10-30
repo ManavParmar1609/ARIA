@@ -7,10 +7,10 @@ resumed: running a node twice must not duplicate a report, an action or an audit
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import ColumnElement, func, or_, select, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 
@@ -245,6 +245,42 @@ def save_actions(
                 row.executed_at = utcnow()
 
 
+def claim_action(engine: Engine, run_id: str, action: OutboundAction) -> bool:
+    """Mark an approved action as being sent: true for exactly one caller, so it goes out once.
+
+    A proposed action moves to ``approved`` only if it is still proposed. One the comms step never
+    stored (it should have) is stored as approved, and a second caller's insert fails.
+    """
+    with session_scope(engine) as session:
+        taken = session.execute(
+            update(ActionRow)
+            .where(ActionRow.id == action.action_id, ActionRow.status == "proposed")
+            .values(status="approved")
+        )
+        if taken.rowcount == 1:  # type: ignore[attr-defined]
+            return True
+        if session.get(ActionRow, action.action_id) is not None:
+            return False
+    try:
+        with session_scope(engine) as session:
+            session.add(
+                ActionRow(
+                    id=action.action_id,
+                    run_id=run_id,
+                    kind=action.kind,
+                    title=action.title[:300],
+                    body=action.body,
+                    payload={**action.payload, "audience": action.audience},
+                    status="approved",
+                    result={},
+                    created_at=utcnow(),
+                )
+            )
+    except IntegrityError:
+        return False
+    return True
+
+
 def action_statuses(engine: Engine, run_id: str) -> dict[str, str]:
     with session_scope(engine) as session:
         rows = session.execute(
@@ -346,47 +382,88 @@ def mark_feedback_used(engine: Engine, ids: Sequence[int]) -> None:
 # --- the external worker's queue -----------------------------------------------------------------
 
 
+# A claim goes stale after this long without renewal; holders renew every CLAIM_RENEW_S.
+CLAIM_STALE_S = 600.0
+CLAIM_RENEW_S = 60.0
+
+
+def _claimable(now: datetime, stale_after_s: float) -> ColumnElement[bool]:
+    """Free (never claimed, or released) or abandoned (its holder stopped renewing)."""
+    stale = now - timedelta(seconds=stale_after_s)
+    return or_(RunRow.claimed_by.is_(None), RunRow.claimed_at.is_(None), RunRow.claimed_at < stale)
+
+
 def claim_runs(
     engine: Engine,
     worker: str,
     *,
     limit: int = 1,
-    stale_after_s: float = 600.0,
+    stale_after_s: float = CLAIM_STALE_S,
 ) -> list[str]:
-    """Claim queued runs (and runs whose worker went quiet) for ``worker``, oldest first.
+    """Claim queued runs (and runs whose holder went quiet) for ``worker``, oldest first.
 
-    A claim is a conditional update, so two workers never take the same run.
+    Only claimable runs are read, so runs other processes hold never crowd out the free ones,
+    and each claim is a conditional update, so two workers never take the same run.
     """
     now = utcnow()
-    stale = now.timestamp() - stale_after_s
     claimed: list[str] = []
     with session_scope(engine) as session:
-        candidates = session.scalars(
-            select(RunRow)
-            .where(RunRow.status.in_([str(RunStatus.QUEUED), str(RunStatus.RUNNING)]))
+        candidates = session.execute(
+            select(RunRow.id, RunRow.claimed_at)
+            .where(
+                RunRow.status.in_([str(RunStatus.QUEUED), str(RunStatus.RUNNING)]),
+                _claimable(now, stale_after_s),
+            )
             .order_by(RunRow.created_at)
             .limit(limit * 5)
-        )
-        for row in candidates:
+        ).all()
+        for run_id, claimed_at in candidates:
             if len(claimed) >= limit:
                 break
-            free = row.claimed_by is None and row.status == RunStatus.QUEUED
-            abandoned = row.claimed_at is not None and row.claimed_at.timestamp() < stale
-            if not (free or abandoned):
-                continue
             unchanged = (
                 RunRow.claimed_at.is_(None)
-                if row.claimed_at is None
-                else RunRow.claimed_at == row.claimed_at
+                if claimed_at is None
+                else RunRow.claimed_at == claimed_at
             )
             result = session.execute(
                 update(RunRow)
-                .where(RunRow.id == row.id, unchanged)
+                .where(RunRow.id == run_id, unchanged, _claimable(now, stale_after_s))
                 .values(claimed_by=worker, claimed_at=now)
             )
             if result.rowcount == 1:  # type: ignore[attr-defined]
-                claimed.append(row.id)
+                claimed.append(run_id)
     return claimed
+
+
+def claim_run(
+    engine: Engine, run_id: str, owner: str, *, stale_after_s: float = CLAIM_STALE_S
+) -> bool:
+    """Take ``run_id`` for ``owner`` to drive, and mark it running.
+
+    Succeeds when the run is free, already ``owner``'s, or abandoned. Every process that drives a
+    run (the API, a worker, the CLI) claims it first, so two never drive one run at once.
+    """
+    now = utcnow()
+    with session_scope(engine) as session:
+        result = session.execute(
+            update(RunRow)
+            .where(
+                RunRow.id == run_id,
+                or_(RunRow.claimed_by == owner, _claimable(now, stale_after_s)),
+            )
+            .values(claimed_by=owner, claimed_at=now, status=str(RunStatus.RUNNING))
+        )
+        return bool(result.rowcount == 1)  # type: ignore[attr-defined]
+
+
+def release_run(engine: Engine, run_id: str, owner: str) -> None:
+    """Give up ``owner``'s claim once it stops driving the run (paused, finished or failed)."""
+    with session_scope(engine) as session:
+        session.execute(
+            update(RunRow)
+            .where(RunRow.id == run_id, RunRow.claimed_by == owner)
+            .values(claimed_by=None, claimed_at=None)
+        )
 
 
 def renew_claims(engine: Engine, worker: str, run_ids: Sequence[str]) -> None:
@@ -398,20 +475,4 @@ def renew_claims(engine: Engine, worker: str, run_ids: Sequence[str]) -> None:
             update(RunRow)
             .where(RunRow.id.in_(list(run_ids)), RunRow.claimed_by == worker)
             .values(claimed_at=utcnow())
-        )
-
-
-def unfinished_runs(engine: Engine, *, limit: int = 50) -> list[str]:
-    """Runs left queued or running by a stopped in-process worker (never claimed)."""
-    with session_scope(engine) as session:
-        return list(
-            session.scalars(
-                select(RunRow.id)
-                .where(
-                    RunRow.status.in_([str(RunStatus.QUEUED), str(RunStatus.RUNNING)]),
-                    RunRow.claimed_by.is_(None),
-                )
-                .order_by(RunRow.created_at)
-                .limit(limit)
-            )
         )

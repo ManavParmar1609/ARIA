@@ -24,6 +24,10 @@ from typing import Any
 from starlette.exceptions import HTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from aria.observability.logging import get_logger
+
+access_log = get_logger("aria.api.access")
+
 PUBLIC_PATHS = frozenset(
     {"/healthz", "/readyz", "/.well-known/agent-card.json", "/docs", "/openapi.json", "/redoc"}
 )
@@ -58,6 +62,10 @@ class KeyAuth:
     @property
     def open(self) -> bool:
         return not self._keys
+
+    def short_keys(self, minimum: int) -> list[str]:
+        """Names of keys whose secret is shorter than ``minimum`` characters (never the secret)."""
+        return sorted({name for secret, name in self._keys.items() if len(secret) < minimum})
 
     def authenticate(self, headers: dict[str, str]) -> Principal | None:
         if self.open:
@@ -174,8 +182,24 @@ def is_protected(path: str) -> bool:
     return path.startswith(PROTECTED_PREFIXES)
 
 
+def route_path(scope: Scope) -> str:
+    """The path routing matches: behind a proxy prefix (an ASGI ``root_path`` such as
+    ``/aria``), the request path without it, so ``/aria/api/v1/runs`` is checked as the
+    protected ``/api/v1/runs`` it is served as."""
+    path: str = scope["path"]
+    root: str = scope.get("root_path") or ""
+    if root and path.startswith(root) and path[len(root) : len(root) + 1] in ("", "/"):
+        return path[len(root) :] or "/"
+    return path
+
+
 class AuthMiddleware:
-    """Authenticates and rate-limits protected paths; sets ``request.state.principal``."""
+    """Authenticates and rate-limits protected paths; sets ``request.state.principal``.
+
+    Every request to a protected path leaves one access-log line (``api.request``): method,
+    path, status, the key's name and the time taken, so who read or deleted what can be traced.
+    The query string is left out, since callers sometimes put secrets there.
+    """
 
     def __init__(self, app: ASGIApp, *, auth: KeyAuth, limiter: RateLimiter) -> None:
         self.app = app
@@ -183,11 +207,36 @@ class AuthMiddleware:
         self.limiter = limiter
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or not is_protected(scope["path"]):
+        path = route_path(scope) if scope["type"] == "http" else ""
+        if scope["type"] != "http" or not is_protected(path):
             await self.app(scope, receive, send)
             return
-        headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope["headers"]}
-        principal = self.auth.authenticate(headers)
+        started = time.monotonic()
+        status: list[int] = [500]
+
+        async def recorded(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                status[0] = int(message["status"])
+            await send(message)
+
+        principal = self.auth.authenticate(
+            {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope["headers"]}
+        )
+        try:
+            await self._handle(scope, receive, recorded, principal)
+        finally:
+            access_log.info(
+                "api.request",
+                method=scope.get("method"),
+                path=path,
+                status=status[0],
+                principal=principal.name if principal else None,
+                ms=round((time.monotonic() - started) * 1_000, 1),
+            )
+
+    async def _handle(
+        self, scope: Scope, receive: Receive, send: Send, principal: Principal | None
+    ) -> None:
         client = scope.get("client") or ("unknown", 0)
         if principal is None:
             # Failed attempts spend the caller's address bucket, so keys cannot be guessed fast.

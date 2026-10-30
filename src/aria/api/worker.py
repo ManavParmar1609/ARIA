@@ -1,17 +1,17 @@
 """Background execution of runs.
 
 ``inprocess`` (the default): the API process runs triage in background tasks, a few at a time,
-and on startup continues runs a previous process left unfinished. ``external``: the API only
-records runs; ``aria worker`` processes claim them from the database. Either way a review
-decision is applied by whichever process receives it: the checkpoints live in the shared
-database, so any process can resume a paused run.
+and keeps claiming runs a stopped process left unfinished. ``external``: the API only records
+runs; ``aria worker`` processes claim them from the database. Either way a review decision is
+applied by whichever process receives it: the checkpoints live in the shared database, so any
+process can resume a paused run. Whoever drives a run claims it first (``TriageRunner._drive``),
+so two processes never drive one run at once.
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
-import os
 import socket
 import time
 from collections.abc import Awaitable, Callable
@@ -31,6 +31,7 @@ class Worker:
 
     def __init__(self, runner: TriageRunner, *, concurrency: int = 4) -> None:
         self.runner = runner
+        self._capacity = concurrency
         self._slots = asyncio.Semaphore(concurrency)
         self._tasks: dict[asyncio.Task[Any], str] = {}
 
@@ -59,6 +60,9 @@ class Worker:
         return task
 
     def execute(self, run_id: str) -> asyncio.Task[Any]:
+        for task, held in self._tasks.items():
+            if held == run_id:  # already waiting for a slot, or running: once is enough
+                return task
         return self.spawn(run_id, lambda: self.runner.execute(run_id))
 
     async def gated[T](self, job: Awaitable[T]) -> T:
@@ -70,14 +74,32 @@ class Worker:
         async with self._slots:
             return await job
 
-    async def recover(self) -> list[str]:
-        """Continue runs a stopped in-process worker left queued or running."""
-        run_ids = await asyncio.to_thread(repo.unfinished_runs, self.runner.engine)
+    async def recover(self, *, limit: int = 50) -> list[str]:
+        """Claim and continue runs left queued, or held by a process that stopped renewing."""
+        run_ids = await asyncio.to_thread(
+            repo.claim_runs, self.runner.engine, self.runner.owner, limit=limit
+        )
+        self.runner.held.update(run_ids)
         for run_id in run_ids:
             self.execute(run_id)
         if run_ids:
             log.info("worker.recovered", runs=len(run_ids))
         return run_ids
+
+    async def keep_claims(self, stop: asyncio.Event, *, recover: bool) -> None:
+        """Renew this process's claims every ``CLAIM_RENEW_S`` until ``stop``; with ``recover``,
+        also take over runs whose holder stopped (the in-process API has no worker to do it)."""
+        while not stop.is_set():
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(stop.wait(), timeout=repo.CLAIM_RENEW_S)
+            if stop.is_set():
+                break
+            try:
+                await asyncio.to_thread(self.runner.renew_held)
+                if recover:
+                    await self.recover(limit=max(1, self._capacity - self.active))
+            except Exception:  # a database blip: try again on the next round
+                log.exception("worker.claims_failed")
 
     async def drain(self, grace_s: float = 30.0) -> None:
         """Wait for running jobs on shutdown, then cancel what is left."""
@@ -89,14 +111,6 @@ class Worker:
         for task in pending:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
-
-
-# Claims go stale after ten minutes without renewal (repo.claim_runs); renew well before that.
-CLAIM_RENEW_S = 60.0
-
-
-def worker_id() -> str:
-    return f"{socket.gethostname()}:{os.getpid()}"
 
 
 def heartbeat_file(data_dir: Path) -> Path:
@@ -128,11 +142,11 @@ async def poll_forever(
     """The external worker loop: claim runs from the database and execute them, with the
     periodic jobs (the log scan) running beside it.
 
-    Claims on runs still executing are renewed every ``CLAIM_RENEW_S``, so another worker takes
-    a run over only when this one has stopped. After each poll that reaches the database,
+    Claims on runs this process holds are renewed every ``CLAIM_RENEW_S``, so another worker
+    takes a run over only when this one has stopped. After each poll that reaches the database,
     ``heartbeat`` (when given) is touched, so a container health check can tell a live worker
     from a stuck one."""
-    me = worker_id()
+    me = runner.owner
     worker = Worker(runner, concurrency=concurrency)
     stop = stop or asyncio.Event()
     background = start_background_jobs(runner.services, runner, stop)
@@ -143,10 +157,11 @@ async def poll_forever(
             free = max(0, concurrency - worker.active)
             if free:
                 claimed = await asyncio.to_thread(repo.claim_runs, runner.engine, me, limit=free)
+                runner.held.update(claimed)
                 for run_id in claimed:
                     worker.execute(run_id)
-            if time.monotonic() - renewed >= CLAIM_RENEW_S:
-                await asyncio.to_thread(repo.renew_claims, runner.engine, me, worker.run_ids)
+            if time.monotonic() - renewed >= repo.CLAIM_RENEW_S:
+                await asyncio.to_thread(runner.renew_held)
                 renewed = time.monotonic()
             if heartbeat is not None:
                 await asyncio.to_thread(_touch, heartbeat)

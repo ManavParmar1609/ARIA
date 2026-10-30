@@ -250,7 +250,7 @@ Processes log to standard output. With `ARIA_LOG_FORMAT=json`, each line is one 
 
 ### Rotate an API key
 
-`ARIA_API_KEYS` holds `name:secret` pairs, and every valid key has full access. Two secrets may share a name, which keeps reviews and the rate-limit bucket under one label during the overlap.
+`ARIA_API_KEYS` holds `name:secret` pairs, and every valid key has full access. Two secrets may share a name, which keeps reviews and the rate-limit bucket under one label during the overlap. In production each secret needs at least 32 characters (`openssl rand -hex 32` makes one), and a secret must not contain a colon: `a:b` is read as a key named `a`. Every request to a protected path is logged as `api.request` with its method, path, status and key name (never the secret or the query string), so the log shows who read, reviewed or deleted what.
 
 1. Add the new secret beside the old one, for example `ops:<new secret>,ops:<old secret>`, then restart the API and workers.
 2. Move every client to the new secret:
@@ -299,7 +299,7 @@ Changing the embedding provider changes the vector space. Memory re-embeds stale
 - **More workers.** Run more `aria worker` processes against the same database; a claim is a conditional update, so two workers never take the same run. In compose, run `docker compose up -d --scale worker=3`. On Azure, raise the worker app's `minReplicas` (the template allows up to three).
 - **Concurrency.** Set `ARIA_WORKER_CONCURRENCY`, or override it per worker with `aria worker --concurrency N`.
 - **The database.** SQLite serialises writes. For more than a couple of workers, use Azure SQL.
-- **Abandoned runs.** A worker renews its claims every minute while their runs execute. A run whose worker went quiet for 10 minutes is reclaimed by another worker.
+- **Abandoned runs.** Every process that drives a run, a worker or the API applying a review, claims it first and renews the claim every minute; it lets go when the run pauses or ends. A run whose holder went quiet for 10 minutes is reclaimed by another worker (or, in process, by the API). Two processes never drive one run at once, and each approved message is marked as being sent before it goes out, so it goes out once.
 - **Periodic jobs.** Each worker runs the recalibration job against the shared model file; repeating it is harmless, because the same reviews give the same threshold. Configure the log scan on one worker only, or replicas tailing the same files can open duplicate runs.
 - **More API replicas.** Run migrations as a separate step (`aria db upgrade`), and set `ARIA_MIGRATE_ON_START=false`. The rate limiter and the A2A task store live in each process's memory, so each replica keeps its own.
 

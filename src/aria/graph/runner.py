@@ -9,7 +9,10 @@ replay a run's events from any point and then follow it live.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
+import os
+import socket
 import uuid
 from collections import defaultdict
 from collections.abc import Callable, Mapping
@@ -66,7 +69,7 @@ class RunNotFoundError(KeyError):
 
 
 class RunBusyError(RuntimeError):
-    """The run is already executing in this process."""
+    """The run is executing already, in this process or another one."""
 
 
 class RunStateError(ValueError):
@@ -83,6 +86,11 @@ class RunOutcome:
 
 def new_run_id() -> str:
     return f"run-{datetime.now(UTC):%Y%m%d}-{uuid.uuid4().hex[:10]}"
+
+
+def process_owner() -> str:
+    """How this process names itself when it claims a run: one per process, even on one host."""
+    return f"{socket.gethostname()}:{os.getpid()}"
 
 
 def _jsonable(value: Any) -> Any:
@@ -195,6 +203,9 @@ class TriageRunner:
         self.observers: list[Callable[[RunEvent], None]] = []  # e.g. metrics
         self._subscribers: defaultdict[str, set[asyncio.Queue[RunEvent]]] = defaultdict(set)
         self._last_seq: dict[str, int] = {}
+        # Runs this process has claimed: a run it is driving, or one it took and has yet to start.
+        self.owner = process_owner()
+        self.held: set[str] = set()
 
     @staticmethod
     def config(run_id: str, checkpoint_id: str | None = None) -> RunnableConfig:
@@ -295,10 +306,18 @@ class TriageRunner:
         *,
         run_id: str | None = None,
         trigger: str = "manual",
+        claim: bool = False,
         **fields: Any,
     ) -> str:
-        """Record a new run (queued); ``execute`` runs it."""
+        """Record a new run (queued); ``execute`` runs it.
+
+        ``claim`` records the run as this process's from the start, for a run this process will
+        execute itself (an AG-UI or A2A stream), so no external worker takes it meanwhile.
+        """
         run_id = run_id or new_run_id()
+        if claim:
+            fields.update(claimed_by=self.owner, claimed_at=datetime.now(UTC))
+            self.held.add(run_id)
         if trigger != "replay" and request.replay_of is not None:
             # Only the replay endpoint may tie a run to a real incident's expert labels.
             request = request.model_copy(update={"replay_of": None})
@@ -346,6 +365,15 @@ class TriageRunner:
         )
         return await self._drive(run_id, Command(resume=value))
 
+    def renew_held(self) -> None:
+        """Keep this process's claims fresh: on runs it drives and on runs it has yet to start."""
+        repo.renew_claims(self.engine, self.owner, sorted(self.held))
+
+    async def _renew(self, run_id: str) -> None:
+        while True:
+            await asyncio.sleep(repo.CLAIM_RENEW_S)
+            await asyncio.to_thread(repo.renew_claims, self.engine, self.owner, [run_id])
+
     async def _drive(
         self, run_id: str, graph_input: Any, *, config: RunnableConfig | None = None
     ) -> RunOutcome:
@@ -354,26 +382,44 @@ class TriageRunner:
             msg = f"run {run_id} is already running"
             raise RunBusyError(msg)
         async with lock:
-            await asyncio.to_thread(repo.update_run, self.engine, run_id, status=RunStatus.RUNNING)
+            # The claim spans processes: an API resuming a review and a worker recovering a run
+            # it thinks abandoned can never drive the same run, so nothing is sent twice.
+            if not await asyncio.to_thread(repo.claim_run, self.engine, run_id, self.owner):
+                msg = f"run {run_id} is running in another process"
+                raise RunBusyError(msg)
+            self.held.add(run_id)
+            renewal = asyncio.create_task(self._renew(run_id))
             try:
-                async for part in self.graph.astream(
-                    graph_input,
-                    config or self.config(run_id),
-                    context=self.context,
-                    stream_mode=STREAM_MODES,
-                    version="v2",
-                ):
-                    await self._handle(run_id, part)
-            except Exception as exc:  # the graph's own handler covers node errors; this is the rest
-                message = f"{type(exc).__name__}: {exc}"[:2_000]
-                log.exception("runner.failed", run_id=run_id)
-                await asyncio.to_thread(
-                    repo.update_run, self.engine, run_id, status=RunStatus.FAILED, error=message
-                )
-                await self._event(run_id, "error", payload={"error": message})
-                await self._event(run_id, "run_finished", payload={"status": str(RunStatus.FAILED)})
-                return RunOutcome(run_id, RunStatus.FAILED, error=message)
-            return await self._settle(run_id)
+                return await self._stream(run_id, graph_input, config)
+            finally:
+                renewal.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await renewal
+                self.held.discard(run_id)
+                await asyncio.to_thread(repo.release_run, self.engine, run_id, self.owner)
+
+    async def _stream(
+        self, run_id: str, graph_input: Any, config: RunnableConfig | None
+    ) -> RunOutcome:
+        try:
+            async for part in self.graph.astream(
+                graph_input,
+                config or self.config(run_id),
+                context=self.context,
+                stream_mode=STREAM_MODES,
+                version="v2",
+            ):
+                await self._handle(run_id, part)
+        except Exception as exc:  # the graph's own handler covers node errors; this is the rest
+            message = f"{type(exc).__name__}: {exc}"[:2_000]
+            log.exception("runner.failed", run_id=run_id)
+            await asyncio.to_thread(
+                repo.update_run, self.engine, run_id, status=RunStatus.FAILED, error=message
+            )
+            await self._event(run_id, "error", payload={"error": message})
+            await self._event(run_id, "run_finished", payload={"status": str(RunStatus.FAILED)})
+            return RunOutcome(run_id, RunStatus.FAILED, error=message)
+        return await self._settle(run_id)
 
     async def _settle(self, run_id: str) -> RunOutcome:
         snapshot = await self.graph.aget_state(self.config(run_id))

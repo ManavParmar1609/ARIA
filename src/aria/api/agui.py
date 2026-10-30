@@ -256,7 +256,9 @@ async def _stream(
                     "send log lines as a user message, or forwardedProps.request", "no_input"
                 )
                 return
-            await asyncio.to_thread(runner.submit, request, run_id=run_id, trigger="agui")
+            await asyncio.to_thread(
+                runner.submit, request, run_id=run_id, trigger="agui", claim=True
+            )
             job = runner.execute(run_id)
         else:
             job = runner.execute(run_id)  # continue, or report where the run already stands

@@ -60,7 +60,7 @@ from sqlalchemy.exc import OperationalError
 
 from aria.agents.investigator import INVESTIGATOR_TOOLS, InvestigationInputs, Investigator
 from aria.config import BudgetConfig, Settings
-from aria.contracts.base import EvidenceKind, Severity
+from aria.contracts.base import Claim, EvidenceKind, Severity
 from aria.contracts.inputs import TriageRequest
 from aria.contracts.parsing import ParsedBatch
 from aria.contracts.report import IncidentReport, OutboundAction, ReviewDecision
@@ -86,7 +86,7 @@ from aria.parsing.signals import (
     signal_templates,
     warning_count,
 )
-from aria.reporting.comms import AUDIENCE, action_id, draft_comms, redraft
+from aria.reporting.comms import AUDIENCE, action_id, draft_comms, is_service_name, redraft
 from aria.reporting.composer import SYSTEM_NAMES, ReportContext
 from aria.reporting.grounding import validate_report
 from aria.reporting.markdown import render_markdown
@@ -157,10 +157,35 @@ def run_link(settings: Settings, run_id: str) -> str:
     return f"{settings.public_base_url.rstrip('/')}/api/v1/runs/{run_id}"
 
 
+def ticket_floor(
+    assessment: SeverityAssessment, severity: Severity, priority: str, evidence_id: str
+) -> SeverityAssessment:
+    """The ticket's own rating as a floor: quiet logs (or none) never rate a ticket below what
+    its fields say. Over-triage beats under-triage, and a person confirms either way."""
+    claim = Claim(
+        text=f"The ticket model rates this priority {priority} ({severity}) from the ticket's "
+        f"fields, more severe than the logs alone ({assessment.severity}).",
+        evidence_ids=[evidence_id],
+    )
+    return assessment.model_copy(
+        update={
+            "severity": severity,
+            "floor": severity,
+            "prediction_set": [s for s in assessment.prediction_set if s.rank <= severity.rank]
+            or [severity],
+            "decided_by": "model",
+            "auditable": True,
+            "needs_review": True,
+            "rationale": [claim, *assessment.rationale],
+        }
+    )
+
+
 def service_name(request: TriageRequest) -> str:
     """What messages call the affected service: its display name ("HDFS", not "hdfs"), and never
-    the "generic" log format's name."""
-    if request.service:
+    the "generic" log format's name. A service label that does not read as a name (a sentence,
+    a link, markup) is never written into a message: the system's name stands in for it."""
+    if request.service and is_service_name(request.service):
         return request.service
     if request.system == "generic":
         return "our service"
@@ -464,11 +489,11 @@ async def severity(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
             model_version=services.tickets.version,
         )
         if prediction.severity.rank < assessment.severity.rank:
-            assessment = assessment.model_copy(update={"needs_review": True})
             notes.append(
                 f"the ticket model rates this {prediction.severity}, more severe than the "
-                f"log-based {assessment.severity}; flagged for review"
+                f"log-based {assessment.severity}; ARIA takes the more severe and asks for review"
             )
+            assessment = ticket_floor(assessment, prediction.severity, prediction.priority, eid)
 
     corrections = await _reviewer_corrections(runtime.store, request.system, assessment.severity)
     if corrections:
@@ -929,6 +954,11 @@ async def publish(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
             action = proposal.model_copy(update={"status": "rejected"})
         elif already.get(proposal.action_id) == "sent":
             action = proposal.model_copy(update={"status": "sent"})
+        elif not await _db(repo.claim_action, services.engine, run_id, proposal):
+            # Another drive of this run took it first. Run claims should make that impossible;
+            # this keeps a message from going out twice even if they fail.
+            actions.append(proposal.model_copy(update={"status": "approved"}))
+            continue
         else:
             action = await send_action(
                 proposal.model_copy(update={"status": "approved"}),

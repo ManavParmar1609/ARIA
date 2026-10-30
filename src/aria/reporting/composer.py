@@ -212,9 +212,19 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
                 f" (on its own, the model gave {model_top} a probability of "
                 f"{sev.probabilities[model_top]:.2f})"
             )
-    summary.append(
-        _claim(f"{severity_text}.", model_ev, floor_ev or (rule_evs[0] if rule_evs else None))
-    )
+    ticket_ev = ctx.find(EvidenceKind.MODEL, source="severity.ticket_model")
+    if ticket_ev is not None and any(ticket_ev.id in c.evidence_ids for c in sev.rationale):
+        # The ticket's own fields set this rating above what the logs show.
+        severity_text = (
+            f"{sev.severity}: {SEVERITY_DESCRIPTIONS[sev.severity]} Raised to the ticket's "
+            f"rating: the ticket model gives priority {ticket_ev.data.get('priority')} from its "
+            "fields, above what the logs alone show, and a person confirms"
+        )
+        summary.append(_claim(f"{severity_text}.", ticket_ev, model_ev))
+    else:
+        summary.append(
+            _claim(f"{severity_text}.", model_ev, floor_ev or (rule_evs[0] if rule_evs else None))
+        )
     if window is not None and features.n_events:
         warnings = features.level_counts.get("WARN", 0)
         scale = (
