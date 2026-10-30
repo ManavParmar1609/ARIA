@@ -315,6 +315,69 @@ review of it showed that clock skew between replicas could defeat that, so the d
 enforces the rule instead. Left on purpose: a run recovered after its process stopped before the
 first checkpoint records a second start, because it did start again.
 
+## The second audit
+
+After the redesign as a greenhouse on cream paper and the addition of Google Gemini, a second round
+ran five sweeps the same way: aesthetics and layout (every route at phone to wide desktop widths,
+both themes, every state), every functional flow against its own instances, gaps and weak spots
+from a fresh clone, motion and performance, and leftovers and stale docs. The same round published
+the first live evaluation on Gemini and restyled the explainer video.
+
+### Functional
+
+- **A wrong cause, stated with confidence.** For a web app's NullPointerException, the offline
+  investigator offered a supercomputer's past kernel panic as the cause, and every generic check
+  (example lines, a busy timeline) seemed to bear it out. A past incident from another system with
+  no component in common is no longer tested as a cause, named in a title or written to memory
+  (0e6c0da).
+- **ARIA's own report failed its own checks.** A timeline line cut inside "50010" left "500", which
+  no evidence holds, and redacting a quote of already redacted evidence flagged `[REDACTED]` as a
+  credential. Text is now cut between words, and redaction finds nothing new in redacted text
+  (0e6c0da).
+- **Simultaneous reviews.** Approve and reject sent at once all answered "published". The run is
+  now re-checked under its claim, so only the first review counts and the rest get 409 (0e6c0da).
+- **Smaller fixes.** The approval switch follows the server's rule (a6589b4); chat samples are
+  recorded as semi-synthetic; memory keeps plain titles and Ask ARIA says a learned incident's
+  steps were approved, not that they fixed it; a run naming an unknown or unconfigured provider
+  gets 422; `aria providers models` explains a provider that is not set up; titles on unnamed
+  systems name the failing component (0e6c0da). Blank-only logs are refused, the MCP prompt takes
+  only a plain system name, the A2A card names the address ARIA serves on, approved deliveries
+  with no receiver keep their approver, and a system name fits the database column (ec76e30).
+
+### Gaps and weak spots
+
+- **Untested safety paths, now tested:** publishing retries after a message went out and still
+  sends it once; card numbers that need the Luhn check; severity properties (always inside the
+  prediction set, never under the floor) and the contract's backstops; a stream following a run
+  another process drives (0e6c0da).
+- **Upgrades.** A recalibration of the previous release's severity model, left on the shared
+  volume, overrode a newly shipped model for good. It is now ignored at start and on reload
+  (ec76e30), and the runbook has an upgrade procedure (ca01617).
+- **Azure** could not send approved messages: the templates passed no webhook settings. They are
+  now optional Key Vault secrets (ceb5b34).
+- **Docs and setup:** the self-hosted NIM's chat model is documented and checked; compose forwards
+  either spelling of the Gemini key; `.env.example` names every setting the code reads; the
+  runbook covers tenancy, key rotation and token streaming with a separate worker; CI runs the
+  fast tests on Python 3.12 (320afe1, ca01617, ceb5b34).
+- **Recorded rather than built:** the planner does not replan on a failed validation or low
+  severity confidence, and the AG-UI endpoint sends state snapshots, never deltas (README
+  limitations). The FAQ no longer says lines are redacted before storage (a6589b4).
+
+### Aesthetics, motion and cleanliness
+
+- **Layout:** memory rows and the example run's claims wrap on phones; chart and graph labels are
+  readable on a phone, measured on the built page; skeletons show in both themes; the hero splits
+  into two panels only where its cards fit (7fa271f, 48fdfe9, 0ed9407).
+- **Type and colour:** small headings use Inter and page titles the light serif; "Needs review"
+  uses the forest pill of the main action; night selections show; risk no longer borrows the
+  severity colours (7fa271f, 48fdfe9).
+- **Motion:** the rule trace fades in place instead of animating its height; rolling numbers drop
+  their soft edges at rest; the phone landing page loads lighter fonts (ea9f4dc, 7fa271f). Pulses
+  that run while work is under way stay on purpose: they stop when the work ends, and under
+  reduced motion.
+- **Leftovers:** unused hooks, UI parts and tokens, two settings nothing could use, a dead
+  backdrop colour and provider lists that predated Gemini (d893898, ec76e30).
+
 ## What was left
 
 These are recorded rather than fixed, because each needs a design change, infrastructure or an
@@ -341,12 +404,18 @@ owner's decision. The [threat model](threat-model.md) lists the security residua
   a new evaluation); the web CSP needs `'unsafe-inline'` for prerendered pages; MCP log search
   scans without an index; and images are pinned by tag, not digest.
 - **Smaller UI items:** "incident" names both the list of triage runs and the past incidents in
-  memory (renaming the list is a product decision); chart text inside the landing page's drawings
-  is small on phones; and on a 1440 × 900 screen the hero's illustration starts near the bottom of
-  the first view, because the headline owns it (shrinking either is a design decision).
-- **For the owner:** run the live LLM evaluation (`aria eval run --suite pipeline --llm`, which
-  spends provider credits), and, with access to Zenodo, add more real labelled logs from pinned
-  sources. The build brief's checklist is the owner's specification, so it was left as written.
+  memory (renaming the list is a product decision).
+- **From the second audit:** some 422 answers name only the request body, not the field; a title
+  that reads like an instruction is dropped without a note (alerts and tickets get one); a refused
+  review's reason stays on the run until the next review; searches in non-Latin scripts find
+  nothing, because the index splits ASCII words; Azure SQL and Azure OpenAI with managed identity
+  run only in deployments, not in CI; and the graph's retry and timeout policies, the router's
+  rerank failover and A2A cancel have no tests.
+- **For the owner:** the live LLM evaluation ran on Gemini's free tier; a larger run on a paid
+  plan would give steadier numbers. Zenodo and Hugging Face are reachable now: the
+  [data card](data-card.md#found-later-for-the-next-round) lists the sources to add next, with
+  their checksums. The build brief's checklist is the owner's specification, so it was left as
+  written, though the build has drifted from it (light, hex colours rather than dark-first OKLCH).
 
 ## How to run the checks again
 
