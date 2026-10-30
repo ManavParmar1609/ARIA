@@ -279,6 +279,27 @@ Ten are fixed, each with a regression test (f5b6e83); one is left on purpose.
 - **Left on purpose:** a worker driving a run renews its claim twice a minute, once for the drive
   and once with the other runs it holds. That is one extra update a minute, and it changes nothing.
 
+A second review, of those fixes, found ten more problems. Nine are fixed, each with a regression
+test (5f5d310); one is left.
+
+- **Claims.** A run a worker recovered with nothing left to drive (it had reached review, or
+  ended) kept its claim for good, so a review applied from another process was refused: the claim
+  is now let go. Giving a claim up waits a moment for a resend or a delete that holds the run, a
+  streamed run in a slot counts as busy, and a runner's name fits the claim column however long
+  the host name is.
+- **Memory.** Writing an embedding back no longer counts as an edit, so processes on different
+  embedding models no longer reload, and re-embed, each other's rows every minute. Changes are
+  found from every incident's ID and update time together, so an edit made by a process with a
+  slow clock is not missed.
+- **Messages and reviews.** An e-mail address is redacted whatever the length of its local part,
+  still in linear time. Publishing an edit that changes nothing says so in the dialog instead of
+  sending a request the server refuses. The resendable states and the store's namespace separator
+  are each defined once.
+- **Left:** resending a message still marked as being sent relies on the run's claim. The process
+  sending a message renews that claim every minute and each send has a timeout, so a resend can
+  overlap a send only if the sending process freezes for five minutes; the resend's idempotency
+  key covers that case for receivers that honour it.
+
 ## What was left
 
 These are recorded rather than fixed, because each needs a design change, infrastructure or an
