@@ -68,3 +68,14 @@ def test_triage_asks_for_the_database_to_be_set_up_first(
     result = CliRunner().invoke(app, ["triage", str(logs)])
     assert result.exit_code == 1
     assert "aria db upgrade" in result.output
+
+
+def test_serve_asks_for_the_database_to_be_set_up_first(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ARIA_DATABASE_URL", f"sqlite:///{tmp_path / 'fresh.db'}")
+    reset_caches()
+    result = CliRunner().invoke(app, ["serve"])
+    assert result.exit_code == 1
+    assert "aria db upgrade" in result.output
+    assert "Traceback" not in result.output

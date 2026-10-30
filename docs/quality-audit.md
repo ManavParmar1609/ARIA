@@ -173,7 +173,10 @@ Checked: a fresh clone through the README's quickstart, and every frame of the e
 
 Fixed (c5343d9, b8d33e0): a fresh install no longer warns about skipped build scripts (they are
 skipped on purpose and now listed as such), and each scene's title waits for the crossfade instead
-of overlapping the previous title.
+of overlapping the previous title. Later, `make dev` applies the database migrations before it
+starts, `aria serve` on a database that is not set up says what to run instead of stopping with a
+traceback (unless the deployment migrates on start, as on Azure), and SQLite's write-ahead files
+are ignored by git.
 
 ## What was left
 

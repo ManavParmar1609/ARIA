@@ -309,6 +309,11 @@ def serve(
     """Run the API: REST and SSE, MCP at /mcp, A2A at /a2a and AG-UI at /agui."""
     import uvicorn
 
+    from aria.config import get_settings
+
+    # Started before `aria db upgrade`, the API would stop on its first query with a traceback.
+    if not get_settings().migrate_on_start:
+        _require_database()
     uvicorn.run(
         "aria.api.app:create_app",
         factory=True,

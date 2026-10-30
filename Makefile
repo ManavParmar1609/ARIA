@@ -86,7 +86,8 @@ web: ## Run the web app dev server on :3000
 	pnpm --dir $(WEB) dev
 
 .PHONY: dev
-dev: ## Run API and web together (Ctrl-C stops both)
+dev: ## Migrate the database, then run API and web together (Ctrl-C stops both)
+	@$(UV) run aria db upgrade
 	@trap 'kill 0' INT TERM EXIT; $(UV) run aria serve --reload & pnpm --dir $(WEB) dev & wait
 
 .PHONY: openapi
