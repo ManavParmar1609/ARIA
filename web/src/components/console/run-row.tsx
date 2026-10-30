@@ -20,7 +20,7 @@ export function RunRow({ run, action }: { run: RunSummary; action?: "review" | "
     <li className="group relative flex overflow-hidden rounded-lg bg-raised transition-colors duration-(--duration-quick) focus-within:ring-2 focus-within:ring-ring hover:bg-raised/80">
       <div
         className={cn(
-          "tabular flex w-14 shrink-0 items-start justify-center pt-4 text-xs font-medium tracking-[0.04em]",
+          "tabular flex w-11 shrink-0 items-start justify-center pt-4 text-xs font-medium sm:w-14",
           sev ? cn(SEVERITY_BG[sev], "text-sev-ink") : "bg-sunken text-faint",
         )}
       >
@@ -30,7 +30,7 @@ export function RunRow({ run, action }: { run: RunSummary; action?: "review" | "
         <div className="grid min-w-0 gap-0.5">
           <Link
             href={href as never}
-            className="truncate font-medium text-heading outline-none after:absolute after:inset-0 after:content-['']"
+            className="line-clamp-2 font-medium text-heading outline-none after:absolute after:inset-0 after:content-[''] sm:line-clamp-1"
           >
             {runTitle(run)}
           </Link>

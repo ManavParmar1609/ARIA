@@ -109,8 +109,25 @@ def _claim(text: str, *items: Evidence | None) -> ClaimOut | None:
     return ClaimOut(text=text[:600], evidence_ids=ids) if ids else None
 
 
+# Failure modes as people write them; the rest read fine with spaces for underscores.
+_MODE_WORDS = {
+    "auth_failures": "authentication failures",
+    "bruteforce": "brute-force attempts",
+    "dns_resolution": "DNS resolution failures",
+    "hdfs_lease_renewal": "HDFS lease renewal failures",
+    "mod_jk_worker_error": "worker errors in mod_jk",
+    "psu_failure": "PSU failure",
+    "resourcemanager_unreachable": "ResourceManager unreachable",
+}
+
+
 def _mode_words(mode: str) -> str:
-    return mode.replace("_", " ").strip()
+    return _MODE_WORDS.get(mode, mode.replace("_", " ").strip())
+
+
+def _sentence(text: str) -> str:
+    """Capitalise the first letter only, so "DNS" and "ResourceManager" keep their case."""
+    return text[:1].upper() + text[1:]
 
 
 def _own_evidence(ctx: ReportContext, template: TemplateStat) -> Evidence | None:
@@ -133,7 +150,7 @@ def compose_title(ctx: ReportContext) -> str:
         where = "" if kind.lower().startswith(ctx.system_name.lower()) else f" in {ctx.system_name}"
         return f"{ctx.severity.severity} · {kind}s stopping partway{where}"[:140]
     if lead is not None:
-        what = _mode_words(lead.failure_mode).capitalize()
+        what = _sentence(_mode_words(lead.failure_mode))
     elif top is not None and top.score > 0:
         what = f"Suspected {_mode_words(top.failure_mode)}"
     elif features.error_events:

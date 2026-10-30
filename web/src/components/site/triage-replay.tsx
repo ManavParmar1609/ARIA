@@ -155,7 +155,7 @@ export function TriageReplay({ data }: { data: Replay }) {
                 ) : null}
                 <span
                   className={cx(
-                    "grid grid-cols-[2.25rem_3rem_1fr] items-baseline gap-2 border-l-2 px-4 transition-colors duration-(--duration-quick)",
+                    "grid grid-cols-[2.25rem_1fr] items-baseline gap-2 border-l-2 px-4 transition-colors duration-(--duration-quick) sm:grid-cols-[2.25rem_3rem_1fr]",
                     isLit
                       ? "thread-lit border-primary text-highlight-foreground [&>span]:text-highlight-foreground"
                       : "border-transparent",
@@ -168,12 +168,18 @@ export function TriageReplay({ data }: { data: Replay }) {
                   }
                 >
                   <span className="tabular text-right text-faint">{line.lineNo}</span>
-                  <span className={cx(line.level === "WARN" ? "text-sev2-fg" : "text-faint")}>
+                  {/* On a phone the level gives way, so the line itself has room to be read. */}
+                  <span
+                    className={cx(
+                      "hidden sm:inline",
+                      line.level === "WARN" ? "text-sev2-fg" : "text-faint",
+                    )}
+                  >
                     {line.level}
                   </span>
                   <span
                     className={cx(
-                      "truncate",
+                      "break-all sm:truncate",
                       line.quarantined && "line-through decoration-danger/70",
                     )}
                   >
@@ -183,7 +189,7 @@ export function TriageReplay({ data }: { data: Replay }) {
                 {line.quarantined ? (
                   <span
                     data-anim="flag"
-                    className="mx-4 mt-1 mb-1 ml-[6.75rem] inline-flex items-center gap-1.5 rounded-xs border border-danger/60 px-1.5 font-sans text-[0.6875rem] font-medium text-danger"
+                    className="mx-4 mt-1 mb-1 ml-[3.25rem] inline-flex items-center gap-1.5 rounded-xs border border-danger/60 px-1.5 font-sans text-[0.6875rem] font-medium text-danger sm:ml-[6.75rem]"
                   >
                     Quarantined: reads like an instruction, not a log
                   </span>

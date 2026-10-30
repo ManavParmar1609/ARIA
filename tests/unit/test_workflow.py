@@ -612,3 +612,10 @@ def test_a_request_can_tighten_its_budgets_but_never_raise_them() -> None:
     )
     assert frugal.max_tokens == 500
     assert frugal.max_cost_usd == config.budgets.max_cost_usd
+
+
+def test_messages_name_the_system_as_people_write_it() -> None:
+    name = workflow.service_name
+    assert name(TriageRequest(system="hdfs", logs=["x"])) == "HDFS"
+    assert name(TriageRequest(system="generic", logs=["x"])) == "our service"
+    assert name(TriageRequest(system="hdfs", logs=["x"], service="checkout")) == "checkout"

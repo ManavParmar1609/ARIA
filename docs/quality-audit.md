@@ -138,6 +138,16 @@ landing page, the story cards stack below 1024 px, the standards links line up, 
 has no empty bands under reduced motion, the risk chart is centred, the median time appears once,
 and the closing promises that repeated the hero are gone.
 
+Last: on a phone, a tapped citation offers "Back to the claim", run rows keep more of their title,
+progress chips show whole step names, and the landing page's log lines wrap instead of stopping
+after a few words; on wide screens the chips wrap evenly. Identifiers became words: step names on
+the evaluation page, checkpoint labels, provider chains grouped by role, evidence data, failure
+modes in titles ("DNS resolution failures", not "Dns resolution"), and "1 node" and "1 shard".
+Table row headers read like their rows, the lifecycle check's two settings have plain names, and
+the Ask page's suggestions are chips in their own row. An offline run says "offline mode: no LLM"
+rather than counting the deterministic provider's calls as model calls (the overview stops
+counting its tokens too), and message drafts name the system as people write it ("HDFS").
+
 ### Animation
 
 Checked: each of the six chosen animations for distraction, legibility, layout shift, reduced motion
@@ -179,12 +189,13 @@ owner's decision. The [threat model](threat-model.md) lists the security residua
   traffic, for example) are rated by the rules and confirmed by a person until the model is
   retrained on the deployment's own windows.
 - **Smaller issues:** the injection detector misses some spaced-out, homoglyph and role-play
-  variants; the console's benign Cocoa sample is rated SEV2; the web CSP needs `'unsafe-inline'` for
-  prerendered pages; MCP log search scans without an index; images are pinned by tag, not digest.
-- **Smaller UI items:** what "incident" means in two places, raw identifiers in a few labels, chart
-  text that is small on phones, the Ask page's suggestion chips, data-table row headers, run progress
-  chips and run rows on phones, landing log lines on phones, and a phone tap on a citation that
-  jumps far down the page.
+  variants; the console's benign Cocoa sample is rated SEV2, because a `CrashReporter` file path
+  matches the crash keyword (fixing the keyword changes a model feature, so it needs retraining and
+  a new evaluation); the web CSP needs `'unsafe-inline'` for prerendered pages; MCP log search
+  scans without an index; images are pinned by tag, not digest.
+- **Smaller UI items:** "incident" names both the list of triage runs and the past incidents in
+  memory (renaming the list is a product decision), and chart text inside the landing page's
+  drawings is small on phones.
 - **For the owner:** rotate the NVIDIA key in the git-ignored `.env` (it notes it was shared in a
   chat); run the live LLM evaluation (`aria eval run --suite pipeline --llm`, which spends provider
   credits); and, with access to Zenodo, add more real labelled logs from pinned sources.

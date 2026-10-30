@@ -32,11 +32,17 @@ export function TableRow({ className, ...props }: ComponentProps<"tr">) {
   return <tr className={cn("border-b border-rule transition-colors", className)} {...props} />;
 }
 
-export function TableHead({ className, ...props }: ComponentProps<"th">) {
+export function TableHead({ className, scope, ...props }: ComponentProps<"th">) {
   return (
     <th
+      scope={scope}
       className={cn(
-        "h-10 px-3 text-left align-middle text-xs font-medium whitespace-nowrap text-muted-foreground",
+        "px-3 text-left align-middle",
+        // A row header names its row, so it reads like the cells beside it; a column header is
+        // the small grey label above a column.
+        scope === "row"
+          ? "py-3 text-sm font-normal text-foreground"
+          : "h-10 text-xs font-medium whitespace-nowrap text-muted-foreground",
         className,
       )}
       {...props}

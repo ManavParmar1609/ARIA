@@ -1,6 +1,6 @@
 "use client";
 
-import { PinIcon, XIcon } from "lucide-react";
+import { ArrowUpIcon, PinIcon, XIcon } from "lucide-react";
 import {
   createContext,
   useCallback,
@@ -38,8 +38,10 @@ interface EvidenceState {
   events: LogEvent[];
   active: string | null;
   pinned: string | null;
+  /** The citation that pinned the evidence, so a phone reader can get back to the claim. */
+  origin: HTMLElement | null;
   hover: (id: string | null) => void;
-  pin: (id: string | null) => void;
+  pin: (id: string | null, from?: HTMLElement | null) => void;
   linesFor: (id: string) => LogEvent[];
 }
 
@@ -60,6 +62,11 @@ export function EvidenceProvider({
 }) {
   const [hovered, setHovered] = useState<string | null>(null);
   const [pinned, setPinned] = useState<string | null>(null);
+  const [origin, setOrigin] = useState<HTMLElement | null>(null);
+  const pin = useCallback((id: string | null, from: HTMLElement | null = null) => {
+    setPinned(id);
+    setOrigin(id ? from : null);
+  }, []);
   const byId = useMemo(() => new Map(evidence.map((e) => [e.id, e])), [evidence]);
   const byTemplate = useMemo(() => {
     const map = new Map<string, LogEvent[]>();
@@ -86,11 +93,12 @@ export function EvidenceProvider({
       events,
       active: hovered ?? pinned,
       pinned,
+      origin,
       hover: setHovered,
-      pin: setPinned,
+      pin,
       linesFor,
     }),
-    [byId, events, hovered, pinned, linesFor],
+    [byId, events, hovered, pinned, origin, pin, linesFor],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -147,6 +155,9 @@ function revealPanel() {
   }
 }
 
+// The citation "Back to the claim" hands focus back to; its preview card stays shut for that focus.
+let returning: HTMLElement | null = null;
+
 /**
  * A citation. Hovering shows the evidence beside it; focusing or hovering also fills the
  * evidence panel (announced to screen readers); a click pins it there.
@@ -173,13 +184,19 @@ export function EvidenceChip({ id }: { id: string }) {
         hover(null);
         quiet.current = false;
       }}
-      onFocus={() => hover(id)}
+      onFocus={(event) => {
+        hover(id);
+        if (event.currentTarget === returning) {
+          quiet.current = true;
+          returning = null;
+        }
+      }}
       onBlur={() => {
         hover(null);
         quiet.current = false;
       }}
-      onClick={() => {
-        pin(pinned === id ? null : id);
+      onClick={(event) => {
+        pin(pinned === id ? null : id, event.currentTarget);
         quiet.current = true; // the panel shows it now; a card on top would repeat it
         setPreview(false);
         requestAnimationFrame(() => revealPanel());
@@ -223,6 +240,23 @@ export function Citations({ ids, className }: { ids: string[]; className?: strin
   );
 }
 
+/** A value as text: "INFO 55, WARN 25" rather than {"INFO":55,"WARN":25}. */
+function show(value: unknown): string {
+  const flat = (v: unknown) => v === null || typeof v !== "object";
+  const num = (v: unknown) =>
+    typeof v === "number" && !Number.isInteger(v) ? String(+v.toFixed(3)) : String(v);
+  if (Array.isArray(value)) {
+    return value.every(flat) ? value.map(num).join(", ") : JSON.stringify(value);
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value);
+    return entries.every(([, v]) => flat(v))
+      ? entries.map(([k, v]) => `${k} ${num(v)}`).join(", ")
+      : JSON.stringify(value);
+  }
+  return num(value);
+}
+
 function DataTable({ data }: { data: Record<string, unknown> }) {
   const entries = Object.entries(data).filter(
     ([, v]) => v !== null && v !== "" && !(Array.isArray(v) && v.length === 0),
@@ -232,10 +266,10 @@ function DataTable({ data }: { data: Record<string, unknown> }) {
     <dl className="grid grid-cols-[minmax(0,9rem)_1fr] gap-x-3 gap-y-1 text-xs">
       {entries.slice(0, 14).map(([key, value]) => (
         <div key={key} className="contents">
-          <dt className="truncate text-muted-foreground">{key.replaceAll("_", " ")}</dt>
-          <dd className="min-w-0 font-mono break-words">
-            {typeof value === "object" ? JSON.stringify(value) : String(value)}
-          </dd>
+          <dt className="truncate text-muted-foreground">
+            {key.replace(/^n_/, "").replaceAll("_", " ")}
+          </dt>
+          <dd className="min-w-0 font-mono break-words">{show(value)}</dd>
         </div>
       ))}
     </dl>
@@ -312,8 +346,16 @@ export function LogLines({
 
 /** The evidence behind whatever citation the reader is pointing at. */
 export function EvidencePanel({ className }: { className?: string }) {
-  const { active, pinned, byId, pin, linesFor } = useEvidence();
+  const { active, pinned, origin, byId, pin, linesFor } = useEvidence();
   const evidence = active ? byId.get(active) : undefined;
+  // In one column the page scrolled down to this panel; this takes the reader back up.
+  const backToClaim = () => {
+    if (!origin?.isConnected) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    origin.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
+    returning = origin;
+    origin.focus({ preventScroll: true });
+  };
   return (
     <section
       id="evidence-panel"
@@ -351,6 +393,17 @@ export function EvidencePanel({ className }: { className?: string }) {
               </Button>
             )}
           </div>
+          {pinned === evidence.id && origin ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="-my-1 -ml-2 justify-self-start xl:hidden"
+              onClick={backToClaim}
+            >
+              <ArrowUpIcon aria-hidden />
+              Back to the claim
+            </Button>
+          ) : null}
           {evidence.detail ? (
             <pre
               tabIndex={0}

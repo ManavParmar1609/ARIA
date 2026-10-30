@@ -1,6 +1,5 @@
 "use client";
 
-import { MessageSquareTextIcon } from "lucide-react";
 import { useId, useRef, useState, type FormEvent } from "react";
 
 import { AguiChat } from "@/components/console/agui-chat";
@@ -155,7 +154,7 @@ function Questions() {
             </Select>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <Button
             type="submit"
             variant="primary"
@@ -163,30 +162,34 @@ function Questions() {
           >
             Ask ARIA
           </Button>
-          {SUGGESTIONS.map((s) => (
-            <Button
-              key={s}
-              size="sm"
-              variant="ghost"
-              // Questions are long: let them wrap on a phone rather than widen the page.
-              className="h-auto min-h-8 shrink py-1.5 text-left whitespace-normal"
-              onClick={() => send(s)}
-            >
-              {s}
-            </Button>
-          ))}
+          <p className="text-sm text-muted-foreground">
+            Answers come only from incident memory, runbooks and the chosen run&apos;s evidence, and
+            every statement cites what it rests on.
+          </p>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Answers come only from incident memory, runbooks and the chosen run&apos;s evidence, and
-          every statement cites what it rests on.
-        </p>
       </form>
 
       {turns.length === 0 ? (
-        <div className="flex items-center gap-3 rounded-lg bg-sunken p-6 text-sm text-muted-foreground">
-          <MessageSquareTextIcon aria-hidden className="size-5 text-faint" />
-          Ask about past incidents, fixes or runbooks. Try one of the questions above.
-        </div>
+        <section aria-labelledby={`${id}-try`} className="grid gap-2">
+          <h2 id={`${id}-try`} className="text-sm font-medium">
+            Not sure what to ask? Try one of these
+          </h2>
+          <ul className="flex flex-wrap gap-2">
+            {SUGGESTIONS.map((s) => (
+              <li key={s} className="min-w-0">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  // Questions are long: let them wrap on a phone rather than widen the page.
+                  className="h-auto min-h-9 py-1.5 text-left whitespace-normal"
+                  onClick={() => send(s)}
+                >
+                  {s}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : (
         <ol className="grid gap-8">
           {turns.map((turn) => (

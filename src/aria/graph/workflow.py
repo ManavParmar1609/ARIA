@@ -87,7 +87,7 @@ from aria.parsing.signals import (
     warning_count,
 )
 from aria.reporting.comms import AUDIENCE, action_id, draft_comms, redraft
-from aria.reporting.composer import ReportContext
+from aria.reporting.composer import SYSTEM_NAMES, ReportContext
 from aria.reporting.grounding import validate_report
 from aria.reporting.markdown import render_markdown
 from aria.reporting.review import apply_review
@@ -158,10 +158,13 @@ def run_link(settings: Settings, run_id: str) -> str:
 
 
 def service_name(request: TriageRequest) -> str:
-    """What messages call the affected service; never the "generic" log format's name."""
+    """What messages call the affected service: its display name ("HDFS", not "hdfs"), and never
+    the "generic" log format's name."""
     if request.service:
         return request.service
-    return "our service" if request.system == "generic" else request.system
+    if request.system == "generic":
+        return "our service"
+    return SYSTEM_NAMES.get(request.system, request.system)
 
 
 def report_id_for(run_id: str) -> str:
@@ -286,7 +289,7 @@ async def plan(state: TriageState, runtime: Runtime[TriageContext]) -> Command[A
         fanout_shards=shards,
         retrieval_k=services.config.retrieval.k,
         retrieval_candidates=services.config.retrieval.candidates,
-        notes=[f"{len(lines)} input lines in {shards} shard(s)"]
+        notes=[f"{len(lines)} input lines in {shards} {'shard' if shards == 1 else 'shards'}"]
         + (
             [f"{dropped} lines over the {guard_cfg.max_lines}-line limit dropped"]
             if dropped

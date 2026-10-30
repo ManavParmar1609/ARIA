@@ -24,23 +24,9 @@ import type { RunEvent } from "@/lib/api/types";
 import { duration } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-import { Citations } from "./evidence";
+import { NODE_LABEL } from "@/lib/steps";
 
-export const NODE_LABEL: Record<string, string> = {
-  plan: "Plan",
-  parse_shard: "Parse",
-  merge: "Merge",
-  severity: "Severity",
-  recall: "Recall",
-  investigate: "Investigate",
-  assess: "Assess",
-  widen: "Widen search",
-  report: "Report",
-  comms: "Messages",
-  review: "Review",
-  publish: "Publish",
-  reject: "Reject",
-};
+import { Citations } from "./evidence";
 
 const PATH = [
   "plan",
@@ -97,7 +83,7 @@ export function GraphProgress({
   return (
     <ol
       aria-label="Run progress"
-      className="grid grid-cols-3 gap-1.5 sm:grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))]"
+      className="grid grid-cols-2 gap-1.5 min-[25rem]:grid-cols-3 sm:grid-cols-4 lg:grid-cols-6"
     >
       {path.map((node) => {
         const s = state[node] ?? "pending";

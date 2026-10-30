@@ -133,6 +133,9 @@ export function Overview() {
   const finished = (runs.data?.runs ?? []).filter((r) => r.status !== "awaiting_review");
   const live =
     providers.data?.filter((p) => p.enabled && p.kind !== "fake" && p.kind !== "local") ?? [];
+  // Offline, the deterministic provider still counts tokens; they are not LLM use.
+  const offline = providers.isSuccess && live.length === 0;
+  const tokens = offline ? 0 : stats.tokens;
 
   return (
     <div className="grid gap-10">
@@ -225,9 +228,9 @@ export function Overview() {
               />
               <Fact
                 label="LLM tokens used"
-                value={stats.tokens ? stats.tokens.toLocaleString("en") : "None"}
+                value={tokens ? tokens.toLocaleString("en") : "None"}
                 note={
-                  stats.tokens
+                  tokens
                     ? stats.cost
                       ? `${money(stats.cost)} spent`
                       : "no spend recorded"

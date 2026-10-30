@@ -108,9 +108,7 @@ export function Results({ data }: { data: Evaluation }) {
             quiet windows raised a false alarm
           </Stat>
           {/* The median is a headline above; the tail is what this row adds. */}
-          <Stat value={`${p.p95s.toFixed(2)} s`}>
-            95th percentile time until a report is ready (median {p.p50s.toFixed(2)} s)
-          </Stat>
+          <Stat value={`${p.p95s.toFixed(2)} s`}>95th percentile time to review, offline</Stat>
         </dl>
         <p className="max-w-3xl text-sm text-muted-foreground">
           These runs use the deterministic offline path (no LLM). Past incidents in memory are

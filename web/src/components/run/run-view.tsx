@@ -43,7 +43,16 @@ import { AgentTeam } from "./team";
 
 const ACTIVE = new Set(["queued", "running", "awaiting_review"]);
 
-function Header({ run, severity }: { run: RunDetail; severity: string | null | undefined }) {
+function Header({
+  run,
+  severity,
+  offline,
+}: {
+  run: RunDetail;
+  severity: string | null | undefined;
+  /** The deterministic offline provider served the run: its calls are not LLM use. */
+  offline: boolean;
+}) {
   const sev = isSeverity(severity) ? severity : null;
   const budget = (run.budget ?? {}) as Record<string, unknown>;
   const llmCalls = Number(budget.llm_calls ?? 0);
@@ -79,7 +88,7 @@ function Header({ run, severity }: { run: RunDetail; severity: string | null | u
             <span>report ready after {duration(run.latency_ms)}</span>
           ) : null}
           <span>
-            {llmCalls
+            {llmCalls && !offline
               ? `${llmCalls} model calls, ${((run.tokens_in ?? 0) + (run.tokens_out ?? 0)).toLocaleString("en")} tokens`
               : "offline mode: no LLM"}
           </span>
@@ -162,7 +171,7 @@ function RunSkeleton() {
       <span className="sr-only">Loading the run</span>
       <Skeleton className="h-8 w-64 max-w-full" />
       <Skeleton className="h-32 w-full" />
-      <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))]">
+      <div className="grid grid-cols-2 gap-1.5 min-[25rem]:grid-cols-3 sm:grid-cols-4 lg:grid-cols-6">
         {Array.from({ length: 11 }, (_, i) => (
           <Skeleton key={i} className="h-8" />
         ))}
@@ -279,7 +288,11 @@ export function RunView({ runId }: { runId: string }) {
           </div>
         </div>
 
-        <Header run={detail} severity={severity?.severity ?? detail.severity} />
+        <Header
+          run={detail}
+          severity={severity?.severity ?? detail.severity}
+          offline={/fake/.test(report?.model ?? "")}
+        />
 
         <GraphProgress events={timeline.events} finalStatus={detail.status} />
 

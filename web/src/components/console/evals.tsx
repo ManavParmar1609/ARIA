@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/table";
 import { SEVERITIES } from "@/lib/api/types";
 import { EVAL_DOC_URL, type Evaluation, type RealLogs } from "@/lib/site-data";
+import { NODE_LABEL } from "@/lib/steps";
 import { systemName } from "@/lib/systems";
 import { cn } from "@/lib/utils";
 
@@ -95,7 +96,7 @@ function Confusion({ matrix }: { matrix: number[][] }) {
       <Table aria-label="Confusion matrix: rows are the true severity, columns what ARIA decided">
         <TableHeader>
           <TableRow>
-            <TableHead className="w-24">True \ ARIA</TableHead>
+            <TableHead className="w-24">Labelled</TableHead>
             {SEVERITIES.map((s) => (
               <TableHead key={s} className="text-center">
                 {s}
@@ -251,14 +252,16 @@ function RealSection({ real }: { real: RealLogs }) {
         </TableBody>
       </Table>
       <p className="max-w-3xl text-sm text-muted-foreground">
-        And with the two settings of the check (ARIA uses {real.minSupport} and{" "}
-        {real.settleQuantile}, chosen on this log with its labels in view):
+        And with the check&apos;s two settings: how often two steps&apos; counts must agree before
+        they count as a pair (ARIA uses {pct(real.minSupport, 0)}), and how long it waits before
+        judging a block, as the share of healthy blocks finished by then (ARIA uses{" "}
+        {pct(real.settleQuantile)}). Both were chosen on this log with its labels in view:
       </p>
       <Table aria-label="How the real-log result depends on ARIA's two settings">
         <TableHeader>
           <TableRow>
-            <TableHead>Pair support</TableHead>
-            <TableHead>Settle quantile</TableHead>
+            <TableHead>Pair agreement</TableHead>
+            <TableHead>Healthy blocks finished</TableHead>
             <TableHead className="text-right">Judged</TableHead>
             <TableHead className="text-right">Precision</TableHead>
             <TableHead className="text-right">Recall</TableHead>
@@ -275,8 +278,8 @@ function RealSection({ real }: { real: RealLogs }) {
                   "bg-highlight/40",
               )}
             >
-              <TableCell className="tabular">{row.min_support}</TableCell>
-              <TableCell className="tabular">{row.settle_quantile}</TableCell>
+              <TableCell className="tabular">{pct(row.min_support, 0)}</TableCell>
+              <TableCell className="tabular">{pct(row.settle_quantile)}</TableCell>
               <TableCell className="tabular text-right">
                 {row.judged.toLocaleString("en")}
               </TableCell>
@@ -296,7 +299,9 @@ export function Evals({ data, real }: { data: Evaluation; real?: RealLogs }) {
   const p = data.pipeline;
   const r = data.robustness;
   const live = data.live;
-  const stages = Object.entries(p.stageP50).sort((a, b) => b[1] - a[1]);
+  const stages = Object.entries(p.stageP50)
+    .map(([step, ms]) => [NODE_LABEL[step] ?? step, ms] as [string, number])
+    .sort((a, b) => b[1] - a[1]);
   return (
     <div className="grid gap-10">
       <PageHeader

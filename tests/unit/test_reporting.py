@@ -500,3 +500,12 @@ def test_rendered_evidence_shows_structured_data() -> None:
         data={"critical_components": ["KERNEL"]},
     )
     assert 'data: {"critical_components": ["KERNEL"]}' in render_evidence([item])
+
+
+def test_failure_modes_read_as_words_and_keep_their_capitals() -> None:
+    from aria.reporting.composer import _mode_words, _sentence
+
+    assert _sentence(_mode_words("dns_resolution")) == "DNS resolution failures"
+    assert _sentence(_mode_words("resourcemanager_unreachable")) == "ResourceManager unreachable"
+    assert _sentence(_mode_words("bruteforce")) == "Brute-force attempts"
+    assert _sentence(_mode_words("quorum_connection_loss")) == "Quorum connection loss"

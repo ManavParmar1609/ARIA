@@ -43,9 +43,17 @@ const STANDARDS = [
   },
 ];
 
-/** A name that must not break at its hyphen ("AG-" then "UI" on the next line). */
+/** Text whose acronyms must not break at their hyphen ("AG-" then "UI" on the next line). */
 const whole = (text: string) =>
-  text.includes("-") ? <span className="whitespace-nowrap">{text}</span> : text;
+  text.split(/\b(AG-UI|JSON-RPC)\b/).map((part, i) =>
+    i % 2 === 1 ? (
+      <span key={i} className="whitespace-nowrap">
+        {part}
+      </span>
+    ) : (
+      part
+    ),
+  );
 
 /** The standards ARIA speaks, each linked to the decision record that explains it. */
 export function Standards() {
@@ -58,13 +66,14 @@ export function Standards() {
         >
           {/* Rows: name, text, link; the text row stretches, so links line up across a row. */}
           <h3 className="text-2xl leading-tight tracking-heading">{whole(s.name)}</h3>
-          <p className="text-muted-foreground">{s.what}</p>
+          <p className="text-muted-foreground">{whole(s.what)}</p>
           {/* The whole card is the link's target; the words say where it goes. */}
           <a
             href={s.href}
             className="mt-1 inline-flex items-center gap-3 justify-self-start text-base font-medium text-heading outline-none after:absolute after:inset-0 after:rounded-lg after:content-['']"
           >
-            {"why" in s ? s.why : <>Why ARIA uses {whole(s.short)}</>}
+            {/* One span: the link is a flex row, and loose text would gain its gap. */}
+            <span>{"why" in s ? s.why : <>Why ARIA uses {whole(s.short)}</>}</span>
             <ArrowCircle size="md" />
           </a>
         </li>

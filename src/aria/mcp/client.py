@@ -107,7 +107,8 @@ def summarize(tool: str, args: dict[str, Any], data: dict[str, Any]) -> str:
             for n in nodes[:3]
         )
         erring = sum(1 for n in nodes if n["errors"] or n.get("warnings", 0))
-        return f"{erring} nodes with errors or warnings; top: {top}" if nodes else "no nodes"
+        noun = "node" if erring == 1 else "nodes"
+        return f"{erring} {noun} with errors or warnings; top: {top}" if nodes else "no nodes"
     if "runbooks" in data:
         return "runbooks: " + ", ".join(r["slug"] for r in data["runbooks"][:3])
     if "mitigate" in data:

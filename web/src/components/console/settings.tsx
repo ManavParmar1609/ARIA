@@ -152,19 +152,19 @@ function Configuration({ view }: { view: SettingsView }) {
         <Table aria-label="Provider chain per role">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-40">Role</TableHead>
+              <TableHead className="w-64">Roles</TableHead>
               <TableHead>Providers, in order</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {Object.entries(view.routing).map(([role, chain]) => (
-              <TableRow key={role}>
-                <TableHead scope="row">{role}</TableHead>
-                <TableCell className="font-mono text-xs">{chain.join(" then ")}</TableCell>
+            {chains(view.routing).map(([chain, roles]) => (
+              <TableRow key={chain}>
+                <TableHead scope="row">{roles.map((r) => ROLE[r] ?? r).join(", ")}</TableHead>
+                <TableCell className="font-mono text-xs">{chain}</TableCell>
               </TableRow>
             ))}
             <TableRow>
-              <TableHead scope="row">embeddings</TableHead>
+              <TableHead scope="row">Embeddings</TableHead>
               <TableCell className="font-mono text-xs">{view.embeddings.join(" then ")}</TableCell>
             </TableRow>
           </TableBody>
@@ -172,6 +172,27 @@ function Configuration({ view }: { view: SettingsView }) {
       </Section>
     </>
   );
+}
+
+// What each model role does, in the words the rest of the console uses.
+const ROLE: Record<string, string> = {
+  adjudicator: "Severity choice",
+  investigator: "Investigator",
+  reporter: "Report writer",
+  critic: "Report critic",
+  comms: "Message drafts",
+  ask: "Ask ARIA",
+  default: "Anything else",
+};
+
+/** Roles grouped by the chain they share, so each chain is written once. */
+function chains(routing: Record<string, string[]>): [string, string[]][] {
+  const byChain = new Map<string, string[]>();
+  for (const [role, chain] of Object.entries(routing)) {
+    const key = chain.join(" then ");
+    byChain.set(key, [...(byChain.get(key) ?? []), role]);
+  }
+  return [...byChain];
 }
 
 const DECISION: Record<string, string> = {
