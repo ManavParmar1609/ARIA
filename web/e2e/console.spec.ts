@@ -115,7 +115,7 @@ test.describe("console", () => {
           .click();
         await expect(page).toHaveURL(/#ev-gitlab$/);
         await expect(
-          page.getByRole("heading", { level: 2, name: /Similar past incidents/ }),
+          page.getByRole("heading", { level: 2, name: /Similar past incidents, on GitLab/ }),
         ).toBeInViewport();
       }
     }
