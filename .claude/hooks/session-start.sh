@@ -3,7 +3,10 @@
 #
 # A fresh cloud container gets the same tools as the session that built ARIA:
 #   1. Python dependencies, all groups, from uv.lock into .venv;
-#   2. every agent skill pinned in .claude/skills.lock.tsv, into ~/.claude/skills.
+#   2. every agent skill pinned in .claude/skills.lock.tsv, into ~/.claude/skills;
+#   3. the web app's dependencies, from web/pnpm-lock.yaml;
+#   4. the container's preinstalled Chromium for the end-to-end tests, when the browser build
+#      the pinned Playwright expects is not there (exported through CLAUDE_ENV_FILE).
 # Each step runs only when a file that decides what it installs has changed since it last
 # succeeded (or something it installed is missing), so later session starts are instant.
 # Details go to ~/.cache/aria/session-start.log; stdout carries a one-line summary.
@@ -50,6 +53,25 @@ if ! sha256sum --check --status "$skill_hashes" 2>/dev/null \
   summary+=("skills installed ($(grep -c '^added' "$log" || true) added)")
 else
   summary+=("$(($(wc -l < .claude/skills.lock.tsv) - 1)) skills up to date")
+fi
+
+# 3. Web dependencies. Optional for Python work, so a failure is reported, not fatal.
+web_hashes=web/node_modules/.session-start.sha256
+if command -v pnpm > /dev/null && ! sha256sum --check --status "$web_hashes" 2>/dev/null; then
+  if pnpm --dir web install --frozen-lockfile >> "$log" 2>&1; then
+    sha256sum .claude/hooks/session-start.sh web/pnpm-lock.yaml > "$web_hashes"
+    summary+=("web deps installed")
+  else
+    summary+=("web deps NOT installed (see $log)")
+  fi
+fi
+
+# 4. Playwright's browser. Cloud containers ship one Chromium build; a newer pinned Playwright
+# looks for its own and fails, so point the end-to-end tests at the shipped one.
+shipped=/opt/pw-browsers/chromium
+if [ -x "$shipped" ] && [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -z "${PLAYWRIGHT_CHROMIUM_PATH:-}" ]; then
+  echo "export PLAYWRIGHT_CHROMIUM_PATH=$shipped" >> "$CLAUDE_ENV_FILE"
+  summary+=("e2e browser set")
 fi
 
 echo "ARIA session setup: ${summary[*]}"
