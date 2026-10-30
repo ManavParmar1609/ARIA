@@ -1,7 +1,7 @@
 "use client";
 
 import { PauseIcon, PlayIcon } from "lucide-react";
-import { useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 /**
  * The real data behind the results, as a list that drifts slowly upward on a keylime panel, like
@@ -13,6 +13,16 @@ import { useState, type CSSProperties } from "react";
  */
 export function ProofTicker({ items, seconds = 36 }: { items: string[]; seconds?: number }) {
   const [paused, setPaused] = useState(false);
+  // Off screen, it stops too, so a page left at the top can go idle.
+  const [onScreen, setOnScreen] = useState(true);
+  const panel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = panel.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(([entry]) => setOnScreen(!!entry?.isIntersecting));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   const list = (copy: boolean) =>
     items.map((item) => (
       <li
@@ -24,13 +34,16 @@ export function ProofTicker({ items, seconds = 36 }: { items: string[]; seconds?
       </li>
     ));
   return (
-    <div className="relative h-full min-h-[20rem] overflow-hidden rounded-card bg-panel-keylime has-[.ticker:focus-visible]:outline-2 has-[.ticker:focus-visible]:outline-offset-2 has-[.ticker:focus-visible]:outline-ring">
+    <div
+      ref={panel}
+      className="relative h-full min-h-[20rem] overflow-hidden rounded-card bg-panel-keylime has-[.ticker:focus-visible]:outline-2 has-[.ticker:focus-visible]:outline-offset-2 has-[.ticker:focus-visible]:outline-ring"
+    >
       <div
         tabIndex={0}
         role="region"
         aria-label="Data sources"
         className="ticker absolute inset-0 focus-visible:outline-none"
-        data-paused={paused || undefined}
+        data-paused={paused || !onScreen || undefined}
       >
         <ul className="ticker-track px-6" style={{ "--ticker-s": `${seconds}s` } as CSSProperties}>
           {list(false)}

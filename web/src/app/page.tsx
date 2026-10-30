@@ -279,7 +279,7 @@ export default function Landing() {
               to approve.
             </h2>
           </div>
-          <Converge className="mt-10 text-heading" />
+          <Converge className="mt-10 w-full text-heading" />
         </section>
 
         <section

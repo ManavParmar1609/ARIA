@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, type CSSProperties } from "react";
 
-import { cn } from "@/lib/utils";
+import { cx } from "@/lib/cx";
 
 /*
  * Forest-ink line drawings, as in the reference: many loose lines that run together into one (the
@@ -47,7 +47,7 @@ export function Converge({ className, apart = false }: { className?: string; apa
       ref={ref}
       viewBox="0 0 1200 240"
       preserveAspectRatio="none"
-      className={cn("draw block h-auto w-full overflow-visible", className)}
+      className={cx("draw block h-auto overflow-visible", className)}
       aria-hidden="true"
       focusable="false"
     >
@@ -79,7 +79,7 @@ export function Rings({ className }: { className?: string }) {
     <svg
       ref={ref}
       viewBox="0 0 300 300"
-      className={cn("draw block h-auto w-full", className)}
+      className={cx("draw block h-auto", className)}
       aria-hidden="true"
       focusable="false"
     >

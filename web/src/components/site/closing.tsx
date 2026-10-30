@@ -49,7 +49,7 @@ export function Closing() {
             </code>
           </pre>
         </div>
-        <Converge className="mt-12 -mr-12 text-heading sm:mt-14" />
+        <Converge className="mt-12 -mr-12 w-full text-heading sm:mt-14" />
       </div>
     </section>
   );

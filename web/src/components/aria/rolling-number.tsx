@@ -18,11 +18,23 @@ export function RollingNumber({ value }: { value: string }) {
   useEffect(() => {
     const el = root.current;
     if (!el || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    if (el.getBoundingClientRect().top < window.innerHeight) return; // already seen: leave it
-    el.dataset.roll = "ready";
+    // The observer's first report says where the number is, without forcing a layout during
+    // hydration: one already on (or above) the screen keeps its digits; one below waits at zero.
+    let first = true;
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (!entry?.isIntersecting) return;
+        if (!entry) return;
+        if (first) {
+          first = false;
+          const bottom = entry.rootBounds?.height ?? window.innerHeight;
+          if (entry.boundingClientRect.top < bottom) {
+            observer.disconnect();
+            return;
+          }
+          el.dataset.roll = "ready";
+          return;
+        }
+        if (!entry.isIntersecting) return;
         el.dataset.roll = "go";
         observer.disconnect();
       },
