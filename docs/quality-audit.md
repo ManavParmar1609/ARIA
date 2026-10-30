@@ -273,13 +273,15 @@ owner's decision. The [threat model](threat-model.md) lists the security residua
   variants; the console's benign Cocoa sample is rated SEV2, because a `CrashReporter` file path
   matches the crash keyword (fixing the keyword changes a model feature, so it needs retraining and
   a new evaluation); the web CSP needs `'unsafe-inline'` for prerendered pages; MCP log search
-  scans without an index; images are pinned by tag, not digest.
+  scans without an index; images are pinned by tag, not digest; a message whose sending was cut
+  off by a crash stays "Sending" and cannot be sent again, because only a failed message can.
 - **Smaller UI items:** "incident" names both the list of triage runs and the past incidents in
-  memory (renaming the list is a product decision), and chart text inside the landing page's
-  drawings is small on phones.
+  memory (renaming the list is a product decision); chart text inside the landing page's drawings
+  is small on phones; and on a 1440 × 900 screen the hero's illustration starts near the bottom of
+  the first view, because the headline owns it (shrinking either is a design decision).
 - **For the owner:** run the live LLM evaluation (`aria eval run --suite pipeline --llm`, which
   spends provider credits), and, with access to Zenodo, add more real labelled logs from pinned
-  sources.
+  sources. The build brief's checklist is the owner's specification, so it was left as written.
 
 ## How to run the checks again
 
