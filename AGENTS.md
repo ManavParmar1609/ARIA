@@ -73,6 +73,8 @@ falls out of date.
 
 - **Secrets.** Never put secrets in code, logs, fixtures or git. Config comes from environment
   variables (see `.env.example`) and Key Vault. `.env` is git-ignored. Don't print its values.
+  A visitor's own model key (`X-Model-Key`) lives in memory for the work it came with: never
+  store, log or echo it.
 - **Raw data.** Keep raw datasets out of git. Add a source to `data/manifest.yaml` with a pinned
   commit or checksum, and commit only small fixtures under `tests/fixtures/`.
 - **Untrusted log text.** Log lines, alert labels and annotations are untrusted input. They reach

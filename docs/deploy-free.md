@@ -22,9 +22,10 @@ visitor ──▶ Vercel: landing page, console, /api/* proxy ──▶ Render: 
   up and fast even while the API sleeps.
 - The console reaches the API through Vercel's server. The browser never talks to Render
   directly.
-- The API runs the [demo image](../deploy/demo/Dockerfile). It needs no API key, sends nothing to
-  a model provider (every step runs on ARIA's offline provider) and starts from a demo seeded at
-  build time: past incidents in memory, one approved run and two waiting for review.
+- The API runs the [demo image](../deploy/demo/Dockerfile). It needs no API key and starts from a
+  demo seeded at build time: past incidents in memory, one approved run and two waiting for
+  review. Every step runs on ARIA's offline provider, unless a visitor brings their own model key
+  or you set one (see [Language models on the demo](#language-models-on-the-demo)).
 
 ## Before you start
 
@@ -105,15 +106,54 @@ custom domain later, set `ARIA_WEB_URL` to it and redeploy.
   rebuilds the site. If you push often, turn off Auto-Deploy in the Render service's settings and
   deploy by hand.
 
+## Language models on the demo
+
+Out of the box the demo uses no language model: rules, the calibrated model and the grounded
+report template do the work, and nothing leaves the server. Two ways bring a model in.
+
+### Visitors bring their own key
+
+The demo image sets `ARIA_VISITOR_KEYS=true`, so the console's **Settings** page shows a **Your
+model key** section. A visitor picks Claude, Gemini, OpenAI or NVIDIA NIM, pastes a key and
+chooses **Check and save key**.
+
+- ARIA checks the key with the provider first and keeps only a key the provider accepts.
+- The visitor's browser keeps the key in a cookie that page scripts cannot read, for up to a
+  working day, and sends it only with requests that can call a model.
+- The API uses it for that visitor's runs and questions alone, holds it in memory while they run,
+  and never stores, logs or shows it.
+- Their logs, after ARIA's redaction, go to the provider they chose, and the cost falls on their
+  key, capped per run by ARIA's budget.
+
+Nothing costs you anything. To turn it off, set `ARIA_VISITOR_KEYS=false` in the Render service's
+**Environment** settings.
+
+### You set your own key
+
+Add your key as an environment variable on Render (for example `GEMINI_API_KEY`), then choose
+**Save and deploy**; **Save only** keeps the variable but the running service does not see it
+until its next deploy. Check it in the console under **Settings**, **Model providers**: the
+provider's row should say **Ready**.
+
+Every visitor without a key of their own then uses yours. Before you do this, weigh three things:
+
+- **Cost.** A free-tier key (Google AI Studio without billing, for example) costs nothing: when its
+  daily quota runs out, runs fall back to the offline path until it resets. A key with billing has
+  no total cap: ARIA limits each run's tokens, calls and time, not how many runs visitors start.
+- **Quota.** One busy visitor can use up a free tier's daily requests for everyone.
+- **Privacy.** Visitors' pasted logs, after redaction, go to your provider account. On Gemini's
+  free tier, Google may use prompts to improve its products.
+
 ## What a public demo exposes
 
 - **No sign-in.** Anyone with the address can start runs, review them and delete them. A restart
   puts everything back.
 - **Visitors see each other's runs.** The console asks them to load a sample or paste only logs
   they can share.
-- **Nothing leaves the server.** The demo has no model provider keys and no Slack, Teams or
-  webhook targets. Keep it that way: anyone could spend a provider key on a public demo, and
-  pasted text would go to the provider.
+- **Nothing goes to a model unless someone brings a key.** The demo has no model provider keys
+  of its own and no Slack, Teams or webhook targets. A visitor who saves their own key sends
+  their own runs to their chosen provider; a key you set yourself serves every other visitor
+  (see [Language models on the demo](#language-models-on-the-demo)).
 - **One shared rate limit.** Every console visitor reaches the API through Vercel's servers, so
   they share the limit of 600 requests a minute. If visitors see "rate limit exceeded", raise
   `ARIA_RATE_LIMIT_PER_MINUTE` in the Render service's **Environment** settings.
