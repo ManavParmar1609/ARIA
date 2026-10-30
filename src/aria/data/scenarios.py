@@ -28,6 +28,16 @@ CATALOG_PATH = Path("config/scenarios.yaml")
 SCENARIO_EPOCH = datetime(2026, 3, 2, tzinfo=UTC)
 
 
+_PLURAL_AFTER_ONE = re.compile(r"\b1 ((?:[\w/-]+ )*?)(node|host|peer)s\b")
+
+
+def _counted(template: str, nodes: int) -> str:
+    """A scenario title with its count, singular for one: "1 compute node", not "1 compute
+    nodes"."""
+    title = template.format(nodes=nodes)
+    return _PLURAL_AFTER_ONE.sub(r"1 \1\2", title) if nodes == 1 else title
+
+
 @dataclass(frozen=True)
 class FailureMode:
     key: str
@@ -239,7 +249,7 @@ class ScenarioBuilder:
             id=f"scn-{mode_key.replace('.', '-')}-{seed}",
             failure_mode=mode.name,
             system=mode.system,
-            title=mode.title.format(nodes=len(affected) or nodes),
+            title=_counted(mode.title, len(affected) or nodes),
             severity=severity,
             lines=[format_raw_line(r) for r in records],
             records=records,
