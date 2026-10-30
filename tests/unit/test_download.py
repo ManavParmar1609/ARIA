@@ -254,3 +254,48 @@ def test_tar_archives_cannot_write_outside_the_source_directory(tmp_path: Path) 
     with pytest.raises(tarfile.OutsideDestinationError):
         download(source, tmp_path / "raw")
     assert not (tmp_path / "escape.txt").exists()
+
+
+@respx.mock
+def test_a_gitlab_source_pages_through_the_api_and_records_its_snapshot(tmp_path: Path) -> None:
+    url = "https://gitlab.test/api/v4/projects/1/issues"
+    pages = {
+        "1": [{"iid": 2, "title": "b", "labels": ["incident"], "extra": "dropped"}],
+        "2": [{"iid": 1, "title": "a", "labels": ["incident", "severity::2"]}],
+        "3": [],
+    }
+    route = respx.get(url).mock(
+        side_effect=lambda request: httpx.Response(200, json=pages[request.url.params["page"]])
+    )
+    source = DataSource(
+        name="gitlab",
+        kind="gitlab",
+        url=url,
+        params={"labels": "incident", "created_before": "2026-10-01T00:00:00Z"},
+        license="x",
+        citation="y",
+        description="z",
+    )
+    dest = download(source, tmp_path / "raw")
+    issues = json.loads((dest / "issues.json").read_text())
+    assert [i["iid"] for i in issues] == [1, 2]  # sorted, so the snapshot hashes the same way
+    assert "extra" not in issues[0]
+    snapshot = json.loads((dest / "snapshot.json").read_text())
+    assert snapshot["issues"] == 2
+    assert snapshot["sha256"] == _sha((dest / "issues.json").read_bytes())
+    assert route.calls[0].request.url.params["created_before"] == "2026-10-01T00:00:00Z"
+
+    calls = route.call_count
+    download(source, tmp_path / "raw")  # the same query is not fetched again
+    assert route.call_count == calls
+
+
+@respx.mock
+def test_a_gitlab_page_that_fails_stops_the_download(tmp_path: Path) -> None:
+    url = "https://gitlab.test/api/v4/projects/1/issues"
+    respx.get(url).mock(return_value=httpx.Response(429))
+    source = DataSource(
+        name="gitlab", kind="gitlab", url=url, license="x", citation="y", description="z"
+    )
+    with pytest.raises(DownloadError, match="page 1 returned 429"):
+        download(source, tmp_path / "raw")

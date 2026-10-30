@@ -597,6 +597,70 @@ def _injection(section: Mapping[str, Any]) -> list[str]:
     return lines
 
 
+_RETRIEVAL_METHODS = {
+    "aria": "ARIA (BM25 and embeddings, fused by rank)",
+    "bm25": "BM25 alone",
+    "embeddings": "Embeddings alone",
+    "random": "Three labelled past incidents at random",
+    "commonest_label": "Always the commonest label",
+}
+
+
+def _gitlab(section: Mapping[str, Any]) -> list[str]:
+    lines = ["## Real incidents, similar past incidents", ""]
+    if "missing" in section:
+        return [*lines, f"No results: {section['missing']}.", ""]
+    snap = section.get("snapshot") or {}
+    taken = (
+        f" (snapshot of {snap['downloaded_at'][:10]}, sha256 `{snap['sha256'][:12]}`)"
+        if snap.get("sha256")
+        else ""
+    )
+    lines += [
+        (
+            f"GitLab.com's own production incidents{taken}: {section['incidents']:,} public "
+            "issues, labelled by GitLab's responders with the service that failed and, after "
+            f"review, the root cause. Source: {section['source']}. ARIA's retrieval index holds "
+            f"the {section['memory']:,} incidents opened before {section['cutoff']}, from their "
+            f"titles and descriptions. Each of the {section['later']:,} later incidents asks for "
+            "similar past incidents from its title alone, as a responder would at the start; a "
+            f"hit is a past incident with the same label among the first {section['top']}. "
+            "Labels never enter the index or the query."
+        ),
+        "",
+    ]
+    names = {"service": "same service", "cause": "same root cause"}
+    for key, by in section["by"].items():
+        methods = by["methods"]
+        n = methods["aria"]["queries"]
+        lines += [
+            (
+                f"**{names.get(key, key).capitalize()}** ({n:,} later incidents with a label; "
+                f"{by['labels']} labels among {by['memory_labelled']:,} labelled past incidents):"
+            ),
+            "",
+            "| Method | Hit in the first 3 (95% CI) | Hit first | MRR@10 |",
+            "|---|---|---|---|",
+            *(
+                f"| {label} | {_pct(methods[m]['recall_at_3'])} "
+                f"({_ci(methods[m]['recall_at_3_ci95'])}) | {_pct(methods[m]['recall_at_1'])} | "
+                f"{methods[m]['mrr_at_10']:.3f} |"
+                for m, label in _RETRIEVAL_METHODS.items()
+                if m in methods
+            ),
+            "",
+        ]
+    lines += [
+        (
+            "The issues are a live source: the download keeps the incidents created before a "
+            "fixed date and records the snapshot's checksum, but issues can be edited later, so "
+            "a fresh download may differ slightly."
+        ),
+        "",
+    ]
+    return lines
+
+
 _SLA_BASELINES = {
     "first_assignment_group": "Breach rate of the ticket's first assignment group",
     "category": "Breach rate of the ticket's category",
@@ -649,8 +713,8 @@ def _tickets(section: Mapping[str, Any]) -> list[str]:
         ),
         (
             f"- **Escalations**: {esc['tickets']} tickets were raised after they opened, and ARIA "
-            f"foresaw {esc['foreseen']} of them. Nothing a ticket holds when it opens predicts "
-            "them in this log, and they are most of the severe tickets rated 3 or 4."
+            f"foresaw {esc['foreseen'] or 'none'} of them. Nothing a ticket holds when it opens "
+            "predicts them in this log, and they are most of the severe tickets rated 3 or 4."
         ),
         (
             f"- **Prediction sets** hold the final priority for {_pct(conf['coverage'])} of "
@@ -834,6 +898,8 @@ def render(results: Mapping[str, Any], live: Mapping[str, Any] | None = None) ->
             lines += _hadoop(results["real"]["hadoop"])
         if "uci_tickets" in results["real"]:
             lines += _tickets(results["real"]["uci_tickets"])
+        if "gitlab" in results["real"]:
+            lines += _gitlab(results["real"]["gitlab"])
     if "severity" in results:
         lines += _severity(results["severity"])
     if "pipeline" in results:
@@ -890,9 +956,11 @@ def render(results: Mapping[str, Any], live: Mapping[str, Any] | None = None) ->
             "over-triages rather than under-triages when the model is unsure."
         ),
         (
-            "- The real-log section covers one system (HDFS) and one kind of failure signal: units "
-            "of work that stop partway. Its labels say whether a block failed, not how severe the "
-            "incident was, so it measures detection, not severity."
+            "- The HDFS section measures one kind of failure signal, units of work that stop "
+            "partway, and its labels say whether a block failed, not how severe the incident was. "
+            "The BGL section's severity labels come from the administrators' tags through a "
+            "rubric written for this project. The Hadoop, ticket and incident sections measure "
+            "detection, priority and retrieval, not the reports ARIA writes."
         ),
         *_unmeasured(results.get("real") or {}),
         "",
@@ -1000,6 +1068,29 @@ def _hadoop_summary(section: Mapping[str, Any]) -> list[str]:
     ]
 
 
+def _gitlab_summary(section: Mapping[str, Any]) -> list[str]:
+    if "by" not in section or "service" not in section["by"]:
+        return []
+    methods = section["by"]["service"]["methods"]
+    aria, chance, bm25 = methods["aria"], methods["random"], methods.get("bm25")
+    better = (
+        f" BM25 alone did better, at {_pct(bm25['recall_at_3'])}: the offline embeddings it "
+        "fuses in cost recall here."
+        if bm25 and bm25["recall_at_3"] > aria["recall_at_3"]
+        else ""
+    )
+    return [
+        (
+            f"**Real incidents**: asked from its title alone, ARIA's incident memory put a past "
+            f"GitLab.com incident on the same service among the first three for "
+            f"{_pct(aria['recall_at_3'])} ({_ci(aria['recall_at_3_ci95'])}) of "
+            f"{aria['queries']:,} later incidents, against {_pct(chance['recall_at_3'])} at "
+            f"random.{better}"
+        ),
+        "",
+    ]
+
+
 def _tickets_summary(section: Mapping[str, Any]) -> list[str]:
     if "priority" not in section:
         return []
@@ -1048,6 +1139,7 @@ def _results(results: Mapping[str, Any], live: Mapping[str, Any] | None) -> list
         lines += _bgl_summary(results["real"].get("bgl") or {})
         lines += _hadoop_summary(results["real"].get("hadoop") or {})
         lines += _tickets_summary(results["real"].get("uci_tickets") or {})
+        lines += _gitlab_summary(results["real"].get("gitlab") or {})
     if "severity" in results:
         sev = results["severity"]
         lines += [

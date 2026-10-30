@@ -25,6 +25,7 @@ from aria.data.loghub import iter_structured_csv
 from aria.data.scenarios import LinePools, Scenario, ScenarioBuilder
 from aria.evals import bgl as bg
 from aria.evals import edge as ed
+from aria.evals import gitlab as gl
 from aria.evals import hadoop as hd
 from aria.evals import injection as inj
 from aria.evals import parsing as ps
@@ -146,6 +147,7 @@ async def run(
         )
         results["real"]["uci_tickets"] = tk.summarize(Path(config.severity.ticket_model_file))
         results["real"]["hadoop"] = await _hadoop(builder, loghub_dir, size, workers)
+        results["real"]["gitlab"] = gl.summarize()
     test = sv.held_out(
         builder,
         seeds=size.severity_seeds,

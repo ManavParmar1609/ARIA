@@ -8,6 +8,8 @@ Integrity checks per source kind:
   ``data/checksums.lock`` (trust on first use) and verified on every later download.
 * mirrors: when a source's own host cannot be reached (or serves other bytes), its listed
   mirrors are tried in order, each trusted only if its file matches the sha256 pinned beside it.
+* gitlab: a live issues API, read page by page with fixed parameters. It cannot be pinned (an
+  issue can be edited later), so the snapshot's sha256 and date are recorded beside it.
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ import subprocess
 import tarfile
 import tempfile
 import zipfile
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlsplit
@@ -166,6 +169,66 @@ def download_http(source: DataSource, dest: Path, lockfile: Path) -> Path:
     return dest
 
 
+_ISSUE_FIELDS = (
+    "iid",
+    "title",
+    "description",
+    "labels",
+    "state",
+    "created_at",
+    "closed_at",
+    "web_url",
+)
+_MAX_PAGES = 1_000
+
+
+def download_gitlab(source: DataSource, dest: Path) -> Path:
+    """Every issue the query returns, as ``issues.json``, with ``snapshot.json`` recording it."""
+    if not source.url:
+        msg = f"{source.name}: gitlab sources need the issues API url"
+        raise DownloadError(msg)
+    record = dest / "snapshot.json"
+    if record.exists() and (dest / "issues.json").exists():
+        previous = json.loads(record.read_text(encoding="utf-8"))
+        if previous.get("url") == source.url and previous.get("params") == source.params:
+            log.info("dataset.cached", source=source.name, issues=previous.get("issues"))
+            return dest
+    issues: list[dict[str, Any]] = []
+    with httpx.Client(timeout=_TIMEOUT, follow_redirects=True) as client:
+        for page in range(1, _MAX_PAGES + 1):
+            params = {**source.params, "per_page": "100", "page": str(page)}
+            response = client.get(source.url, params=params)
+            if response.status_code != httpx.codes.OK:
+                msg = f"GET {source.url} page {page} returned {response.status_code}"
+                raise DownloadError(msg)
+            batch = response.json()
+            if not batch:
+                break
+            issues += [{key: item.get(key) for key in _ISSUE_FIELDS} for item in batch]
+        else:
+            msg = f"{source.name}: more than {_MAX_PAGES} pages; narrow the query"
+            raise DownloadError(msg)
+    issues.sort(key=lambda issue: int(issue["iid"]))
+    body = json.dumps(issues, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    (dest / "issues.json").write_bytes(body)
+    record.write_text(
+        json.dumps(
+            {
+                "url": source.url,
+                "params": source.params,
+                "issues": len(issues),
+                "sha256": hashlib.sha256(body).hexdigest(),
+                "downloaded_at": datetime.now(UTC).isoformat(timespec="seconds"),
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    log.info("dataset.fetched", source=source.name, issues=len(issues))
+    return dest
+
+
 def _file_name(url: str) -> str:
     """The file a URL names, decoded: ``.../incident%2Blog.zip`` -> ``incident+log.zip``."""
     return unquote(Path(urlsplit(url).path).name)
@@ -247,6 +310,8 @@ def download(source: DataSource, raw_dir: Path) -> Path:
                 return download_git(source, dest)
             if source.kind == "zenodo":
                 return download_zenodo(source, dest)
+            if source.kind == "gitlab":
+                return download_gitlab(source, dest)
             return download_http(source, dest, raw_dir.parent / "checksums.lock")
         except (DownloadError, httpx.HTTPError, subprocess.CalledProcessError) as exc:
             if not source.mirrors:

@@ -37,7 +37,7 @@ class DataSource(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = ""
-    kind: Literal["git", "zenodo", "uci", "http"]
+    kind: Literal["git", "zenodo", "uci", "http", "gitlab"]
     url: str | None = None
     commit: str | None = None
     paths: list[str] = Field(default_factory=list)
@@ -45,6 +45,8 @@ class DataSource(BaseModel):
     files: list[str] = Field(default_factory=list)
     dataset_id: int | None = None
     fallback_url: str | None = None
+    # Query parameters for an API source (kind "gitlab"): fixed, so the set of records is.
+    params: dict[str, str] = Field(default_factory=dict)
     sha256: str | None = None
     # Tried in order when the source's own host cannot be reached or serves other bytes.
     mirrors: list[Mirror] = Field(default_factory=list)

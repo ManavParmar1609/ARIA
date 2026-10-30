@@ -662,3 +662,52 @@ def test_public_injection_benchmarks_load_hide_and_score_each_source(tmp_path: P
     assert "none of the 1 real log lines" in text
     assert "public benchmarks" in "\n".join(report._injection_summary(result))
     assert "missing" in injection.evaluate(tmp_path / "nothing")
+
+
+def test_similar_incident_search_on_a_tracker_is_scored_by_shared_labels() -> None:
+    from aria.evals import gitlab
+
+    def issue(iid: int, day: str, title: str, service: str, cause: str) -> dict[str, Any]:
+        return {
+            "iid": iid,
+            "title": title,
+            "description": f"{title}. Problem and impact described by the responders.",
+            "labels": ["incident", f"Service::{service}", f"RootCause::{cause}"],
+            "created_at": f"{day}T10:00:00Z",
+        }
+
+    past = [
+        issue(
+            1, "2021-01-01", "Gitaly nodes saturated, git pushes time out", "Gitaly", "Saturation"
+        ),
+        issue(2, "2021-02-01", "Gitaly file server CPU saturation", "Gitaly", "Saturation"),
+        issue(
+            3, "2021-03-01", "Web requests failing after a config change", "Web", "Config-Change"
+        ),
+        issue(
+            4, "2021-04-01", "Postgres replica lag after a migration", "Postgres", "DB-Migration"
+        ),
+        issue(5, "2021-05-01", "Sidekiq queues backing up", "Sidekiq", "Needed"),
+    ]
+    later = [
+        issue(6, "2023-02-01", "Gitaly saturation slows pushes", "Gitaly", "Saturation"),
+        issue(7, "2023-03-01", "Postgres migration causes replica lag", "Postgres", "DB-Migration"),
+    ]
+    result = gitlab.evaluate([*past, *later], {"sha256": "ab" * 32, "downloaded_at": "2026-10-30"})
+    assert (result["memory"], result["later"]) == (5, 2)
+    service = result["by"]["service"]["methods"]
+    assert service["aria"]["queries"] == 2
+    assert service["aria"]["recall_at_3"] == 1.0  # both titles name their service
+    assert service["bm25"]["recall_at_1"] == 1.0
+    # "Needed" says the cause is unknown: such incidents are neither queries nor answers.
+    assert result["by"]["cause"]["memory_labelled"] == 4
+    assert gitlab.label(past[4], "RootCause") is None
+    text = "\n".join(report._gitlab(result))
+    assert "## Real incidents, similar past incidents" in text
+    assert "sha256 `abababababab`" in text
+    summary = "\n".join(report._gitlab_summary(result))
+    assert "Real incidents" in summary
+    assert "BM25 alone did better" not in summary  # level, so no caveat
+    service["aria"]["recall_at_3"] = 0.5
+    assert "BM25 alone did better" in "\n".join(report._gitlab_summary(result))
+    assert "missing" in gitlab.summarize(Path("/nonexistent"))

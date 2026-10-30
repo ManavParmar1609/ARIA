@@ -140,3 +140,18 @@ sources:
     license: MIT
     citation: "X. Shen, Z. Chen, M. Backes, Y. Shen, Y. Zhang. \"Do Anything Now\": Characterizing and Evaluating In-The-Wild Jailbreak Prompts on Large Language Models. ACM CCS 2024."
     description: Jailbreak prompts collected from Reddit, Discord, websites and prompt-sharing communities.
+
+  # --- real incidents -----------------------------------------------------------------------------
+  gitlab-incidents:
+    kind: gitlab
+    url: https://gitlab.com/api/v4/projects/7444821/issues
+    params:
+      labels: incident
+      scope: all
+      state: all
+      created_before: "2026-10-01T00:00:00Z"
+      order_by: created_at
+      sort: asc
+    license: Public issues with no licence stated; read only to evaluate, never redistributed
+    citation: "GitLab Inc. GitLab.com production incident tracker, https://gitlab.com/gitlab-com/gl-infra/production/-/issues."
+    description: GitLab.com's production incidents (gitlab-com/gl-infra/production), created before October 2026, with the responders' severity, service and root-cause labels. A live API, so the download records its snapshot's sha256 and date; the memory evaluation asks for similar past incidents from each later incident's title.

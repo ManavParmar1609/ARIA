@@ -223,7 +223,8 @@ def evaluate(raw: Path = RAW, *, real_lines: bool = True) -> dict[str, Any]:
         "by_source": by_source,
         "benign": {
             **_rate(sum(flags), len(harmless)),
-            "groups": {g: _rate(hits[g], n) for g, n in sorted(groups.items())},
+            # In the order NotInject builds them: one, two, then three trigger words.
+            "groups": {g: _rate(hits[g], n) for g, n in groups.items()},
             "examples": [i.text[:160] for i, f in zip(harmless, flags, strict=True) if f][:3],
         }
         if harmless
