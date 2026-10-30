@@ -19,7 +19,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import samples from "@/data/samples.json";
 import { ApiError } from "@/lib/api/client";
-import { useCreateRun } from "@/lib/api/hooks";
+import { useCreateRun, useSettingsView } from "@/lib/api/hooks";
 import { SYSTEM_NAMES } from "@/lib/systems";
 
 const MAX_LINES = 20_000;
@@ -30,12 +30,14 @@ function Toggle({
   hint,
   checked,
   onChange,
+  disabled,
 }: {
   id: string;
   label: string;
   hint: string;
   checked: boolean;
   onChange: (value: boolean) => void;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex items-start justify-between gap-4 border-t border-rule py-3">
@@ -49,6 +51,7 @@ function Toggle({
         id={id}
         checked={checked}
         onCheckedChange={onChange}
+        disabled={disabled}
         aria-describedby={`${id}-hint`}
       />
     </div>
@@ -85,6 +88,8 @@ export function NewRun() {
   const [investigate, setInvestigate] = useState(true);
   const [approval, setApproval] = useState(true);
   const [touched, setTouched] = useState(false);
+  // The server's rule wins: where it requires approval, every run waits for a person.
+  const approvalRequired = useSettingsView().data?.require_approval ?? true;
 
   const lines = useMemo(() => text.split(/\r?\n/).filter((l) => l.trim()), [text]);
   const problem =
@@ -114,7 +119,7 @@ export function NewRun() {
         system,
         logs: lines,
         synthetic: sample !== null,
-        options: { use_llm: useLlm, investigate, require_approval: approval },
+        options: { use_llm: useLlm, investigate, require_approval: approvalRequired || approval },
       },
       {
         onSuccess: (accepted) => {
@@ -226,7 +231,7 @@ export function NewRun() {
             >
               {touched && problem
                 ? problem
-                : "One event per line. IP and e-mail addresses are pseudonymised and secrets redacted before anything is stored or sent to a model."}
+                : "One event per line. IP and e-mail addresses are pseudonymised and secrets redacted before analysis or any model call; the lines you paste stay with the run until you delete it."}
             </p>
           </div>
 
@@ -248,9 +253,14 @@ export function NewRun() {
             <Toggle
               id={`${id}-approval`}
               label="Wait for my approval"
-              hint="Off: the report publishes on its own, and no message is sent anywhere."
-              checked={approval}
+              hint={
+                approvalRequired
+                  ? "This server always waits for a person before a report is published."
+                  : "Off: the report publishes on its own, and no message is sent anywhere."
+              }
+              checked={approvalRequired || approval}
               onChange={setApproval}
+              disabled={approvalRequired}
             />
           </div>
 

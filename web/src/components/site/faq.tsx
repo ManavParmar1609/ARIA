@@ -31,7 +31,7 @@ const QUESTIONS: { q: string; a: ReactNode }[] = [
   },
   {
     q: "What happens to sensitive data in my logs?",
-    a: "Secrets and personal data are redacted before analysis, storage or any model call. IP and e-mail addresses become stable pseudonyms within a run, and lines that read like instructions to a model are quarantined and shown to it only as fenced evidence.",
+    a: "Secrets and personal data are redacted before analysis or any model call, so reports, messages and memory only ever quote redacted text. IP and e-mail addresses become stable pseudonyms within a run, and lines that read like instructions to a model are quarantined and shown to it only as fenced evidence. The lines you send are kept with the run, so it can be replayed, until you delete it.",
   },
   {
     q: "How do you know it works?",
