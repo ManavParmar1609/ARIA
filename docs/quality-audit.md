@@ -379,6 +379,90 @@ the first live evaluation on Gemini and restyled the explainer video.
 - **Leftovers:** unused hooks, UI parts and tokens, two settings nothing could use, a dead
   backdrop colour and provider lists that predated Gemini (d893898, ec76e30).
 
+## The third audit: stress, motion and breaking the UI
+
+Before the public demo went up, a third round pushed every part past its normal load, using
+installed agent skills as the rulebooks:
+- Emil Kowalski's design-engineering skills (`review-animations`, `improve-animations`,
+  `animation-performance`, `break-ui`);
+- Addy Osmani's web quality skills;
+- Vercel's deploy skill.
+
+Each skill is pinned to a reviewed commit in `.claude/skills.lock.tsv`.
+
+### The API under load and hostile input
+
+- **What was tried.** A harness drove the demo image with:
+  - requests at and past every size limit;
+  - NUL, lone-surrogate, right-to-left, emoji and deeply nested bodies;
+  - wrong types and hostile paths;
+  - twenty simultaneous approvals of one run and forty readers on one run's live stream;
+  - malformed MCP, A2A, AG-UI, Ask ARIA and Alertmanager messages;
+  - a burst of reads past the rate limit.
+
+  It ran again inside a free plan's limits: a tenth of a CPU and 512 MB.
+- **What held.**
+  - No request got a server error, and none hung.
+  - Exactly one of the simultaneous approvals won; the rest got 409.
+  - Every stream reader received the whole run, and every 429 said when to retry.
+  - The API stayed healthy throughout.
+- **Fixed: a request is stored no larger than a run reads** (7d1d732). A run reads its first 20,000
+  lines, cut at 2,000 characters, but a request kept every line it was sent, in the run row and in
+  every checkpoint. One oversized request through the API could fill a small server's memory and
+  disk. The runner now trims a request to the per-run cap when it records the run, and the plan
+  still says how many lines came in and how many were dropped.
+- **Fixed: the demo's limits** (474fe75). A request to the public demo may carry at most 8 MB, as
+  through the console, and runs go one at a time, so several large ones arriving together stay
+  inside a free plan's memory.
+
+### Motion, against Emil Kowalski's standards
+
+A review measured every animation at four times CPU slowdown, on a phone and a desktop, with
+reduced motion and with rapid interruption. The six chosen animations stay, retuned:
+
+- **Severity stamp:** a short ease-out press replaces the ease-in fall.
+- **Ghost bloom:** grows quickly from a dot, shrinks back faster and is instant for keyboard focus.
+- **Sliding pills:** each move starts from where the pill is drawn, so a quick second move turns it
+  around instead of jumping.
+- **Landing evidence sweep:** now a transition that reverses mid-way.
+- **Run page's evidence pass:** shorter, with a capped stagger.
+- **Hero entrance:** a tighter stagger, and only on screens wide enough to see it.
+
+Other motion fixes:
+
+- The command palette and shortcuts sheet open without animation, since they open from the
+  keyboard many times a day.
+- Popovers, menus and selects grow from their trigger.
+- The navigation sheet eases like a drawer.
+- Dialog entrances no longer animate `filter`, which kept them off the compositor.
+
+### Breaking the UI with worst-case data
+
+A pass fed the console realistic worst cases at 320, 768 and 1440 px in both themes:
+- titles and log tokens with no spaces (stack frames, URLs);
+- right-to-left text, emoji and zalgo;
+- more than 200 runs;
+- double clicks;
+- an API that stops.
+
+It fixed:
+
+- **Long tokens no longer widen pages.** A run's error, the incident list, memory, Ask ARIA's
+  question and run picker, the evidence panel's title and its unpin button, and run headers now
+  wrap such tokens instead of scrolling sideways. The evidence hover card scrolls within the screen.
+- **Double clicks act once.** Deleting a run, starting a fork and reviewing each send one request
+  however fast the clicks come.
+- **Review outcomes appear.** Approving or rejecting now shows its outcome, including messages that
+  could not be delivered. The review panel closing as the run moved on had swallowed it.
+- **The overview counts past 200 runs.** Runs waiting for review and failed runs are counted by
+  their own queries, and a list that stopped at its limit says "+".
+- **Durations carry over.** For example, "4 min" no longer reads as "3 min 60 s", and long ones read
+  in hours.
+
+What held: escaping (HTML and Markdown show as text everywhere), right-to-left and emoji text, every
+empty state, the new-triage form's limits and double-submit guard, outage and recovery, keyboard
+focus, 200% zoom and reduced motion.
+
 ## What was left
 
 These are recorded rather than fixed, because each needs a design change, infrastructure or an
@@ -412,6 +496,25 @@ owner's decision. The [threat model](threat-model.md) lists the security residua
   run only in deployments, not in CI; and the graph's timeout and cache policies have no tests
   (its retry policy, the router's rerank failover, A2A cancel and the runner's crash handler now
   do).
+- **From the third audit:**
+  - **Edit dialog:** it has no client-side limits, and the server's limit messages read as
+    jargon.
+  - **Focus after dialogs:** closing the edit or reject dialog returns focus to the page, not to
+    the button that opened it.
+  - **API status:** the sidebar's status can lag by up to half a minute.
+  - **Typing after a huge paste:** typing in the log box slows down.
+  - **Command palette:** it searches only the newest runs.
+  - **Evidence chips:** hovering one re-renders every chip.
+  - **Run page's step graph:** it measures on every scroll.
+- **Motion decisions for the owner:**
+  - stamp the severity only when it arrives live or a reviewer corrects it;
+  - drop the rolling numbers on the console's evaluation page;
+  - play the run page's evidence pass once per pinned citation rather than on every hover.
+- **Display decisions for the owner:**
+  - when a refresh fails, keep the last incident list on screen;
+  - tell runs with identical titles apart;
+  - decide whether a confidence of 0.995 should read "100%";
+  - the chat defaults to the HDFS format, while New triage defaults to Generic.
 - **For the owner:** the live LLM evaluation ran on Gemini's free tier; a larger run on a paid
   plan would give steadier numbers. Zenodo and Hugging Face are reachable now: the
   [data card](data-card.md#found-later-for-the-next-round) lists the sources to add next, with
