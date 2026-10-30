@@ -18,6 +18,7 @@ from contextlib import asynccontextmanager
 from typing import Annotated, Any
 
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import BaseModel, Field
 
@@ -237,7 +238,7 @@ def build_server(
         incident = memory.get(incident_id)
         if incident is None:
             msg = f"unknown incident {incident_id}"
-            raise ValueError(msg)
+            raise ToolError(msg)  # ToolError keeps its reason for the caller
         history = memory.history(incident)
         return IncidentDetailOut(
             incident_id=incident.id,
@@ -284,7 +285,7 @@ def build_server(
         runbook = svc().runbooks.get(slug)
         if runbook is None:
             msg = f"unknown runbook {slug}"
-            raise ValueError(msg)
+            raise ToolError(msg)  # ToolError keeps its reason for the caller
 
         def fmt(steps: Any) -> list[str]:
             return [f"{s.text} [risk: {s.risk}]" if s.risk != "low" else s.text for s in steps]

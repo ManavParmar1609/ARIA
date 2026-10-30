@@ -63,6 +63,8 @@ Fixed (287d817, 5d74564):
   (matching its log lines), and a value that reads like an instruction is withheld whole.
 - **Any client could attach a real incident's expert labels to its own logs**; only the replay
   endpoint can now.
+- **Markdown exports passed raw HTML, links and chat mentions from logs through** to whatever they
+  were pasted into; that text is now escaped and stays inert.
 - **Production hardening:** no API docs in production; a keyless readiness check says only whether
   ARIA is ready; HSTS over HTTPS; on Azure the API trusts only the private addresses its ingress
   forwards from (trusting every address would let a caller write its own); the rate limiter forgets
@@ -91,6 +93,10 @@ Fixed (287d817, a9f2d9e):
 - **The external worker died mid-run on SIGTERM,** leaving runs claimed until the claim expired. It
   now stops claiming, finishes the runs in hand and exits.
 - **Pinning a citation jumped the page** and left the evidence below the fold (a9f2d9e).
+- **Rough edges for people using it** (83d8936 and after): the CLI answers a missing or empty log
+  file, an unknown scenario, suite, provider or source, and a database that is not set up with a
+  sentence saying what to do; MCP tells a caller why an incident or runbook ID is unknown; an event
+  stream ends when its run is deleted.
 
 ### Data and evidence
 
@@ -153,19 +159,17 @@ owner's decision. The [threat model](threat-model.md) lists the security residua
   cannot be deleted. The worker would need to reclaim them, or these transports would need to queue.
 - **Forks** from some checkpoints of a published run fail or start nowhere, and a fork at review has
   no stored report until it is approved.
-- **Streams and slow clients.** Event streams have no per-caller cap or maximum lifetime, a stream on
-  a deleted run keeps sending pings, and slow-header connections are held open. Front the API with a
-  proxy that enforces these limits.
+- **Streams and slow clients.** Event streams have no per-caller cap, and slow-header connections
+  are held open. Front the API with a proxy that enforces these limits. (A stream now ends when its
+  run is deleted, and after an hour.)
 - **Stored raw input.** The run record and its first checkpoint keep the request as sent, and nothing
   purges old runs. Store only the redacted batch, or encrypt the request, and add a retention job.
 - **The model's training range.** Windows much busier than the scenarios it learned from (real HDFS
   traffic, for example) are rated by the rules and confirmed by a person until the model is
   retrained on the deployment's own windows.
-- **Smaller issues:** CLI errors print tracebacks; MCP hides why an ID is unknown; the injection
-  detector misses some spaced-out, homoglyph and role-play variants; Markdown exports pass raw HTML
-  through (the console does not render it); the console's benign Cocoa sample is rated SEV2; the web
-  CSP needs `'unsafe-inline'` for prerendered pages; MCP log search scans without an index; images
-  are pinned by tag, not digest.
+- **Smaller issues:** the injection detector misses some spaced-out, homoglyph and role-play
+  variants; the console's benign Cocoa sample is rated SEV2; the web CSP needs `'unsafe-inline'` for
+  prerendered pages; MCP log search scans without an index; images are pinned by tag, not digest.
 - **Smaller UI items:** what "incident" means in two places, raw identifiers in a few labels, chart
   text that is small on phones, the Ask page's suggestion chips, data-table row headers, run progress
   chips and run rows on phones, landing log lines on phones, vague error states, the landing page

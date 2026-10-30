@@ -166,7 +166,11 @@ async def test_bad_arguments_are_rejected_by_the_server(services: tuple[Services
     async with Client(build_server(svc)) as client:
         assert (await client.call_tool("search_incidents", {"query": "x" * 400})).is_error
         assert (await client.call_tool("get_runbook", {"slug": "../../etc/passwd"})).is_error
-        assert (await client.call_tool("get_incident", {"incident_id": "nope"})).is_error
+        unknown = await client.call_tool("get_incident", {"incident_id": "nope"})
+        assert unknown.is_error
+        assert "unknown incident nope" in str(unknown.content)  # the caller learns why
+        missing = await client.call_tool("get_runbook", {"slug": "no-such-runbook"})
+        assert "unknown runbook no-such-runbook" in str(missing.content)
         assert (await client.call_tool("search_logs", {"query": "a%", "limit": 500})).is_error
 
 

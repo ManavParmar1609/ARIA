@@ -6,21 +6,29 @@ from aria.contracts.base import Claim
 from aria.contracts.report import IncidentReport
 from aria.reporting.writer import cited_evidence
 
+# Report text quotes log lines, which anyone can write. The exports are pasted into other tools,
+# so HTML, links, images and chat mentions (<!channel>) in that text must stay inert text.
+_INERT = str.maketrans({"&": "&amp;", "<": "&lt;", ">": "&gt;", "[": "\\[", "]": "\\]"})
+
+
+def _safe(text: str) -> str:
+    return text.translate(_INERT)
+
 
 def _cite(ids: list[str]) -> str:
     return "".join(f"[{e}]" for e in ids)
 
 
 def _claims(claims: list[Claim]) -> list[str]:
-    return [f"- {c.text} {_cite(c.evidence_ids)}" for c in claims] or ["- _None._"]
+    return [f"- {_safe(c.text)} {_cite(c.evidence_ids)}" for c in claims] or ["- _None._"]
 
 
 def _cell(text: str) -> str:
-    return " ".join(text.replace("|", "\\|").split())
+    return " ".join(_safe(text).replace("|", "\\|").split())
 
 
 def render_markdown(report: IncidentReport, *, decided_by: str | None = None) -> str:
-    lines = [f"# {report.title}", ""]
+    lines = [f"# {_safe(report.title)}", ""]
     meta = [
         f"**Severity:** {report.severity}",
         f"**Status:** {report.status}",
@@ -79,10 +87,12 @@ def render_markdown(report: IncidentReport, *, decided_by: str | None = None) ->
         for action in report.actions:
             risk = f"risk: {action.risk}" + (", needs approval" if action.risk != "low" else "")
             runbook = f" · runbook `{action.runbook_slug}`" if action.runbook_slug else ""
-            lines.append(f"- [ ] {action.text} ({risk}{runbook}) {_cite(action.evidence_ids)}")
+            lines.append(
+                f"- [ ] {_safe(action.text)} ({risk}{runbook}) {_cite(action.evidence_ids)}"
+            )
         lines.append("")
     if report.open_questions:
-        lines += ["## Open questions", *[f"- {q}" for q in report.open_questions], ""]
+        lines += ["## Open questions", *[f"- {_safe(q)}" for q in report.open_questions], ""]
 
     cited = cited_evidence(report)
     if cited:
@@ -106,7 +116,7 @@ def render_postmortem(report: IncidentReport) -> str:
     """A blameless postmortem skeleton pre-filled from the report; people write the rest."""
     todo = "_To be completed by the incident team._"
     lines = [
-        f"# Postmortem: {report.title}",
+        f"# Postmortem: {_safe(report.title)}",
         "",
         f"**Severity:** {report.severity} · **Report:** `{report.report_id}` · **Run:** `{report.run_id}`",
         "",
@@ -119,7 +129,7 @@ def render_postmortem(report: IncidentReport) -> str:
         "## Timeline",
     ]
     lines += [
-        f"- {e.ts:%Y-%m-%d %H:%M} UTC: {e.text} {_cite(e.evidence_ids)}"
+        f"- {e.ts:%Y-%m-%d %H:%M} UTC: {_safe(e.text)} {_cite(e.evidence_ids)}"
         for e in report.timeline
         if e.ts
     ] or [todo]

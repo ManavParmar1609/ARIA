@@ -369,6 +369,20 @@ async def test_markdown_and_postmortem_render_with_citations(builder: ScenarioBu
     assert "## What went well" in post
     assert "To be completed by the incident team" in post
 
+    hostile = "<script>x()</script> <img src=x onerror=y> [link](javascript:z) <!channel>"
+    quoted = report.model_copy(
+        update={
+            "title": f"SEV2 · {hostile}",
+            "summary": [report.summary[0].model_copy(update={"text": hostile})],
+        }
+    )
+    for out in (render_markdown(quoted), render_postmortem(quoted)):
+        assert "<script>" not in out
+        assert "<img" not in out
+        assert "[link](javascript:" not in out  # escaped brackets cannot form a link
+        assert "<!channel>" not in out
+        assert "&lt;script&gt;" in out  # still readable, as text
+
 
 # --- comms -------------------------------------------------------------------------------------
 
