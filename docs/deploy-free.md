@@ -54,6 +54,14 @@ visitor ──▶ Vercel: landing page, console, /api/* proxy ──▶ Render: 
 2. Import the ARIA repository.
 3. Set **Root Directory** to `web`. Vercel detects Next.js; leave the build and install commands
    as they are.
+   - Beside the `web` folder, Vercel may say "No services detected". That is expected: the folder
+     holds one app, so there is nothing to combine into services. Keep the framework on Next.js.
+   - If you leave the root directory at the repository root instead, the root
+     [vercel.json](../vercel.json) points Vercel at `web/` as its one service. Without it, Vercel
+     would find the Python API and `render.yaml` there and stop.
+   - Fixing a project you already imported: change its root directory in **Settings**, then
+     deploy the newest commit on `main`. **Redeploy** on an older deployment rebuilds that
+     deployment's commit.
 4. Add these environment variables:
 
    | Name | Value | Why |
