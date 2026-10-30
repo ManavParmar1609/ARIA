@@ -17,7 +17,14 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 
 import { Wordmark } from "@/components/aria/wordmark";
 import { ConsoleCommands, useCommands } from "@/components/console/command-palette";
@@ -253,7 +260,7 @@ function SessionFooter() {
               Signed in as <span className="font-medium text-foreground">{session.name}</span>
             </>
           ) : session?.authRequired === false ? (
-            "Open API: no key needed"
+            "No key needed: this API is open"
           ) : null}
         </p>
         <div className="flex items-center">
@@ -274,8 +281,29 @@ function SessionFooter() {
   );
 }
 
+// Pages that need no live API: the evaluation reads the committed results, and the guide is
+// mostly words. They stay readable while the API is down, and before anyone signs in.
+const WITHOUT_API = new Set(["/console/evals", "/console/guide"]);
+
+/** Once the page's content is in, scroll to the link's #section: it was not there on load. */
+function useHashOnArrival(ready: boolean) {
+  const done = useRef(false);
+  useEffect(() => {
+    if (!ready || done.current) return;
+    done.current = true;
+    const id = decodeURIComponent(window.location.hash.slice(1));
+    if (id) document.getElementById(id)?.scrollIntoView();
+  }, [ready]);
+}
+
 function Gate({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const session = useSession();
+  const open = WITHOUT_API.has(pathname);
+  const reachable = !session.isError && Boolean(session.data?.reachable);
+  const signedOut = Boolean(session.data?.authRequired && !session.data.signedIn);
+  useHashOnArrival(open || (reachable && !signedOut));
+  if (open) return <>{children}</>;
   if (session.isPending) {
     return (
       <div role="status" className="grid gap-4">
@@ -287,15 +315,28 @@ function Gate({ children }: { children: ReactNode }) {
   }
   if (session.isError || !session.data?.reachable) {
     return (
-      <ErrorState
-        title="The console cannot reach the ARIA API"
-        error={
-          new Error(
-            "Start the API (make dev, or docker compose up) and check that this web server's ARIA_API_URL points at it.",
-          )
-        }
-        onRetry={() => void session.refetch()}
-      />
+      <div className="grid gap-4">
+        <ErrorState
+          title="ARIA's API is not answering"
+          error={
+            new Error(
+              "Runs, reviews and incident memory need it. If you run ARIA yourself, start it with make dev or docker compose up, and check that this web server's ARIA_API_URL points at it.",
+            )
+          }
+          onRetry={() => void session.refetch()}
+        />
+        <p className="text-sm text-muted-foreground">
+          These work without it:{" "}
+          <Link href="/console/evals" className="underline decoration-control underline-offset-4">
+            the evaluation
+          </Link>{" "}
+          and{" "}
+          <Link href="/console/guide" className="underline decoration-control underline-offset-4">
+            how to use ARIA
+          </Link>
+          .
+        </p>
+      </div>
     );
   }
   if (session.data.authRequired && !session.data.signedIn) return <SignIn />;
@@ -309,7 +350,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
       <ConsoleCommands>
         <a
           href="#console-main"
-          className="sr-only z-50 rounded-sm bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
+          className="sr-only z-50 rounded-sm bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:px-3 focus:py-2"
         >
           Skip to content
         </a>
@@ -348,7 +389,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
                     <SessionFooter />
                   </SheetContent>
                 </Dialog>
-                <Link href="/console" className="rounded-sm" aria-label="Console overview">
+                <Link href="/console" className="rounded-sm" aria-label="ARIA console overview">
                   <Wordmark />
                 </Link>
                 <div className="flex items-center">

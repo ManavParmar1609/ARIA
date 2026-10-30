@@ -214,7 +214,7 @@ export function Ask() {
       <Tabs defaultValue="ask">
         <TabsList aria-label="Ask ARIA modes">
           <TabsTrigger value="ask">Ask about incidents</TabsTrigger>
-          <TabsTrigger value="chat">Triage in chat (AG-UI)</TabsTrigger>
+          <TabsTrigger value="chat">Triage in chat</TabsTrigger>
         </TabsList>
         <TabsContent value="ask">
           <Questions />

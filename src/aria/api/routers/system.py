@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import os
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -15,6 +16,7 @@ from aria.api.schemas import Health, Me, ProviderOut, SettingsOut
 from aria.api.security import Principal
 from aria.api.state import AppState, app_state, current_principal
 from aria.db.engine import session_scope
+from aria.notify import channel_env
 
 router = APIRouter(tags=["system"])
 State = Annotated[AppState, Depends(app_state)]
@@ -111,4 +113,8 @@ async def settings_view(state: State) -> SettingsOut:
         routing=config.llm.routing,
         embeddings=config.llm.embeddings,
         safety=config.llm.safety,
+        channels={
+            kind: bool(os.environ.get(channel_env(kind, config.comms), "").strip())
+            for kind in ("slack", "teams", "webhook", "status_page", "ticket_draft")
+        },
     )

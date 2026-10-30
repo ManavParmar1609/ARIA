@@ -6,7 +6,7 @@ import Link from "next/link";
 import { SeverityBadge } from "@/components/aria/severity";
 import type { Claim, IncidentReport } from "@/lib/api/types";
 import { isSeverity } from "@/lib/api/types";
-import { clockTime, percent, stripSeverity } from "@/lib/format";
+import { clockTime, percent, stripSeverity, writtenOffline } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import { Citations } from "./evidence";
@@ -65,7 +65,7 @@ export function ReportView({
           </span>
           <span>
             written by{" "}
-            {report.generated_by !== "llm" || /fake/.test(report.model ?? "")
+            {writtenOffline(report)
               ? "ARIA's evidence template (offline mode)"
               : `the LLM (${report.model ?? "model"})`}
           </span>

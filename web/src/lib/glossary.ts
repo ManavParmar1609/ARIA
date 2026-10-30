@@ -30,7 +30,7 @@ export const GLOSSARY = {
   "prediction-set": {
     term: "Prediction set",
     definition:
-      "The severities ARIA cannot rule out, built by conformal prediction so that it holds the true severity 90% of the time. One severity in the set: ARIA decides alone. More than one: a model may choose among them, or ARIA takes the most severe and asks a person.",
+      "The severities ARIA cannot rule out. Conformal prediction builds it to hold the true severity 90% of the time on windows like its calibration set; other logs can fall short. One severity and a confident model: ARIA decides alone. Otherwise a model picks within the set, or a person decides.",
   },
   "safety-floor": {
     term: "Safety floor",

@@ -107,8 +107,8 @@ export function RealProof({ data }: { data: RealLogs }) {
           <p className="text-muted-foreground">
             A block written to three datanodes should be received three times and confirmed three
             times. ARIA learns from each window which steps come in equal numbers, then flags the
-            blocks whose steps don&rsquo;t add up. It needs no labels and no training. The failures
-            it misses take exactly the steps of a common healthy block.
+            blocks whose steps don&rsquo;t add up. There are no labels to collect and no model to
+            train. The failures it misses take exactly the steps of a common healthy block.
           </p>
           {data.topPattern ? (
             <p className="text-muted-foreground">
@@ -122,7 +122,9 @@ export function RealProof({ data }: { data: RealLogs }) {
             {data.head
               ? ` The sample is the log's first ${n(data.head.lines)} lines plus later lines of the same blocks; on those ${n(data.head.lines)} lines alone, ARIA flags ${n(data.head.flagged)} blocks with ${n(data.head.falseAlarms)} false alarms.`
               : ""}{" "}
-            The lifecycle check is measured on this one log. Labels: {data.citation}
+            The lifecycle check is measured on this one log, and its two settings were chosen on it
+            with the labels in view; the evaluation shows how the result moves at other settings.
+            Labels: {data.citation}
           </p>
           <div className="flex flex-wrap gap-3">
             <Button asChild variant="raised" size="md" className="pr-1.5">

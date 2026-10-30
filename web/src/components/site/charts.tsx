@@ -30,15 +30,17 @@ export function BaselineChart({
           <span
             role="columnheader"
             aria-hidden
-            className="relative hidden h-4 text-xs text-faint sm:block"
+            className="@container relative hidden h-4 text-xs text-faint sm:block"
           >
             {[0, 25, 50, 75, 100].map((tick) => (
               <span
                 key={tick}
-                // the end ticks sit inside the track, so "100%" never runs into "Accuracy"
+                // the end ticks sit inside the track, so "100%" never runs into "Accuracy"; a
+                // narrow track keeps only the ticks that fit (0, 50 and 100%)
                 className={cn(
                   "tabular absolute",
                   tick === 0 ? "" : tick === 100 ? "-translate-x-full" : "-translate-x-1/2",
+                  tick % 50 ? "hidden @3xs:inline" : "",
                 )}
                 style={{ left: `${tick}%` }}
               >

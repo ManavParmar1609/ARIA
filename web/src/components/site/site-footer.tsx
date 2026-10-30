@@ -15,8 +15,9 @@ export function SiteFooter({ recordedAt, gitSha }: { recordedAt: string; gitSha:
         <div className="grid max-w-xl content-start gap-4">
           <Wordmark className="[&_span]:text-pop-ink" />
           <p className="text-lg">
-            Open source under the MIT licence. Logs from Loghub (real, public); incident windows and
-            memory are synthetic and labelled so.
+            Open source under the MIT licence. Measured on real, public logs, tickets and incidents
+            (Loghub, a ServiceNow desk, GitLab.com) and on semi-synthetic windows built from real
+            lines; every synthetic incident is marked as synthetic.
           </p>
           <p className="text-sm">
             Replay recorded {recordedAt.slice(0, 10)} at commit {gitSha}.

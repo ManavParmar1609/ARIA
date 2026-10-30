@@ -28,7 +28,8 @@ function cards(data: RealData): Card[] {
       what: `${n(bgl.lines)} BlueGene/L lines over ${Math.round(bgl.days)} days, cut into ${n(bgl.windows)} windows and labelled by the administrators' alert tags, which ARIA never sees.`,
       stat: `${n(bgl.aria.severeMissed)} of ${n(bgl.severe)}`,
       statLabel: "Severe windows rated as minor",
-      compare: `A keyword rule misses ${n(bgl.keyword.severeMissed)}. ARIA paged on ${n(bgl.aria.quietPaged)} of ${n(bgl.quiet)} quiet windows.`,
+      // Against the strong baselines, not the weakest: the highest level and ARIA's own rules.
+      compare: `ARIA's rules alone miss ${n(bgl.rules.severeMissed)}, and the highest log level misses ${n(bgl.highestLevel.severeMissed)}. ARIA paged on ${n(bgl.aria.quietPaged)} of ${n(bgl.quiet)} quiet windows; the highest level, on ${n(bgl.highestLevel.quietPaged)}.`,
       caveat: rulesWin
         ? "Here ARIA's rules alone did better than its rules and model together: the model learned from semi-synthetic windows."
         : "The model learned from semi-synthetic windows, not from this log.",
@@ -40,7 +41,7 @@ function cards(data: RealData): Card[] {
       what: `Every container log of ${hadoop.jobs} MapReduce jobs. In ${failedJobs} of them a machine was shut down, the network cut or a disk filled while they ran.`,
       stat: `${hadoop.aria.caught} of ${hadoop.aria.failed}`,
       statLabel: "Failed jobs flagged",
-      compare: `A rule on ERROR lines flags ${hadoop.anyError.caught}. ARIA also flagged ${hadoop.aria.falseAlarms} of ${hadoop.aria.healthy} healthy jobs.`,
+      compare: `A rule on ERROR lines flags ${hadoop.anyError.caught}, and ${hadoop.anyError.falseAlarms} of the ${hadoop.aria.healthy} healthy jobs; ARIA flags ${hadoop.aria.falseAlarms} of them.`,
       caveat: "ARIA has no failure mode for a full disk.",
       anchor: "real-failures-a-hadoop-clusters-jobs",
     },
@@ -50,7 +51,7 @@ function cards(data: RealData): Card[] {
       what: `One company's service desk. The ticket model trains on the oldest tickets and is scored on the newest ${n(tickets.test)}.`,
       stat: pct(tickets.aria.accuracy),
       statLabel: "Final priority right",
-      compare: `${tickets.aria.accuracy >= tickets.atOpen.accuracy ? "Level with" : "Below"} the priority each ticket opened with. Its SLA risk ranks breaches at AUROC ${tickets.sla.auroc.toFixed(2)}, against ${tickets.sla.bestBaseline.toFixed(2)} for the best single field.`,
+      compare: `${tickets.aria.accuracy >= tickets.atOpen.accuracy ? "Level with" : "Below"} the priority each ticket opened with. Its SLA risk ranks a breached ticket above one that held its SLA ${pct(tickets.sla.auroc, 0)} of the time (AUROC ${tickets.sla.auroc.toFixed(2)}, where 0.50 is chance), against ${tickets.sla.bestBaseline.toFixed(2)} for the best single field.`,
       caveat:
         tickets.foreseen === 0
           ? `None of the ${tickets.escalated} tickets raised after they opened was foreseen.`
@@ -63,10 +64,10 @@ function cards(data: RealData): Card[] {
       what: `GitLab runs GitLab.com in the open. Incident memory holds the ${n(gitlab.memory)} opened before ${gitlab.cutoff.slice(0, 4)}; each of the ${n(gitlab.later)} later ones asks for similar past incidents from its title alone.`,
       stat: pct(memory.aria.hit3),
       statLabel: `Same service among the first ${count(gitlab.top)}`,
-      compare: `Past incidents picked at random: ${pct(memory.random.hit3)}. BM25 alone: ${pct(memory.bm25.hit3)}.`,
+      compare: `Past incidents picked at random: ${pct(memory.random.hit3)}. Keyword search alone (BM25): ${pct(memory.bm25.hit3)}.`,
       caveat:
         memory.bm25.hit3 > memory.aria.hit3
-          ? "Here BM25 alone did better: the offline embeddings fused in cost recall."
+          ? "Here keyword search alone did better: the offline embeddings fused in cost recall."
           : "The embeddings are the offline ones, fitted on these incidents' own words.",
       anchor: "real-incidents-similar-past-incidents",
     },
@@ -108,7 +109,9 @@ export function RealDatasets({ data }: { data: RealData }) {
         {all.map((card, i) => (
           <li
             key={card.key}
-            className={`grid content-start gap-4 rounded-lg bg-raised p-5 sm:p-7 ${span(i, all.length)}`}
+            // A row subgrid: the names, numbers, comparisons and links of cards side by side line
+            // up, however long each card's text runs.
+            className={`row-span-5 grid grid-rows-subgrid gap-4 rounded-lg bg-raised p-5 sm:p-7 ${span(i, all.length)}`}
           >
             <div className="grid gap-1.5">
               <h4 className="text-lg leading-snug tracking-heading">{card.name}</h4>
@@ -124,7 +127,7 @@ export function RealDatasets({ data }: { data: RealData }) {
             <p className="text-sm text-faint">{card.caveat}</p>
             <a
               href={`${EVAL_DOC_URL}#${card.anchor}`}
-              className="justify-self-start text-sm text-foreground underline decoration-control underline-offset-4 hover:decoration-foreground"
+              className="self-end justify-self-start text-sm text-foreground underline decoration-control underline-offset-4 hover:decoration-foreground"
             >
               Method and full results<span className="sr-only">: {card.name}</span>
             </a>

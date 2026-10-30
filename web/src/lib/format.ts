@@ -78,6 +78,20 @@ export function median(values: number[]): number | null {
     : ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
 }
 
+/** True when ARIA's evidence template wrote the report: no LLM, or the offline stand-in for one. */
+export function writtenOffline(
+  report: { generated_by?: string | null; model?: string | null } | null | undefined,
+): boolean {
+  return !report || report.generated_by !== "llm" || /^fake\//.test(report.model ?? "");
+}
+
+/** "SEV1", "SEV1 and SEV2", "SEV1, SEV2 and SEV3". */
+export function listed(items: string[]): string {
+  return items.length < 3
+    ? items.join(" and ")
+    : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
 /** Report titles lead with the severity ("SEV3 · ..."); the UI shows severity separately. */
 export function stripSeverity(title: string | null | undefined): string {
   return (title ?? "").replace(/^SEV[1-4]\s*·\s*/, "");

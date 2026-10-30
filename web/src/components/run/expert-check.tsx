@@ -81,7 +81,12 @@ export function ExpertCheck({ runId }: { runId: string }) {
             judges a {check.data.unit} it saw from start to finish.
           </p>
           {check.data.flagged.length ? (
-            <div className="overflow-x-auto rounded-md bg-sunken">
+            <div
+              role="region"
+              tabIndex={0}
+              aria-label="Flagged units and the experts' labels, scrolls sideways"
+              className="overflow-x-auto rounded-md bg-sunken"
+            >
               <table className="w-full min-w-[34rem] text-left text-sm">
                 <caption className="sr-only">
                   Each {check.data.unit} ARIA flagged, why, and the experts&rsquo; label
@@ -94,7 +99,7 @@ export function ExpertCheck({ runId }: { runId: string }) {
                     <th scope="col" className="px-4 py-2.5 font-medium">
                       Why ARIA flagged it
                     </th>
-                    <th scope="col" className="px-4 py-2.5 font-medium">
+                    <th scope="col" className="px-4 py-2.5 font-medium whitespace-nowrap">
                       The experts&rsquo; label
                     </th>
                   </tr>

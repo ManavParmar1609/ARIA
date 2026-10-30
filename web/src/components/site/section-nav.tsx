@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowUpRightIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 const LINK =
@@ -101,6 +102,10 @@ export function SectionNav({ links }: { links: NavLink[] }) {
           className={LINK}
         >
           {link.label}
+          {/* The source leaves the page; every other link stays on it. */}
+          {link.href.startsWith("#") ? null : (
+            <ArrowUpRightIcon aria-hidden className="ml-1 inline size-4 align-[-2px]" />
+          )}
         </a>
       ))}
     </nav>

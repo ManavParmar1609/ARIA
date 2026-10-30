@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ApiError } from "@/lib/api/client";
-import { useReview } from "@/lib/api/hooks";
+import { useReview, useSettingsView } from "@/lib/api/hooks";
 import {
   SEVERITIES,
   type IncidentReport,
@@ -46,10 +46,13 @@ function ActionChoice({
   action,
   checked,
   onChange,
+  ready,
 }: {
   action: OutboundAction;
   checked: boolean;
   onChange: (value: boolean) => void;
+  /** Whether the channel's webhook is set; unknown until the settings load. */
+  ready: boolean | undefined;
 }) {
   const [open, setOpen] = useState(false);
   const id = useId();
@@ -68,6 +71,11 @@ function ActionChoice({
             {KIND[action.kind] ?? action.kind} to {action.audience}
           </span>
           <span className="truncate text-muted-foreground">{action.title}</span>
+          {ready === false ? (
+            <span className="text-xs text-muted-foreground">
+              This channel has no webhook set, so the message would be skipped.
+            </span>
+          ) : null}
         </label>
         <Button
           size="icon-sm"
@@ -110,6 +118,7 @@ export function ReviewPanel({
 }) {
   const id = useId();
   const review = useReview(runId);
+  const settings = useSettingsView();
   const [send, setSend] = useState<Set<string>>(new Set());
   const [comment, setComment] = useState("");
   const [editing, setEditing] = useState(false);
@@ -222,6 +231,7 @@ export function ReviewPanel({
               <ActionChoice
                 key={action.action_id}
                 action={action}
+                ready={settings.data?.channels?.[action.kind]}
                 checked={send.has(action.action_id)}
                 onChange={(on) =>
                   setSend((current) => {

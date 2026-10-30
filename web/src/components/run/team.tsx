@@ -15,7 +15,7 @@ import {
 import { useMemo, type ReactNode } from "react";
 
 import type { Hypothesis, RunEvent, RunStateValues, SeverityAssessment } from "@/lib/api/types";
-import { duration } from "@/lib/format";
+import { duration, listed, writtenOffline } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import { Citations } from "./evidence";
@@ -54,27 +54,36 @@ const STATUS_WORD: Record<Hypothesis["status"], string> = {
 const n = (value: number) => value.toLocaleString("en");
 const pct = (p: number | undefined) => `${Math.round(100 * (p ?? 0))}%`;
 
+// Parallel shards run one node several times at once, and a resumed review starts its node
+// again, so each node counts the runs still going rather than starts against finishes.
 function progress(events: RunEvent[], nodes: string[]) {
-  let starts = 0;
-  let finishes = 0;
+  let started = false;
   let paused = false;
   let took = 0;
-  const open: Record<string, number> = {};
+  const running: Record<string, number> = {};
+  const since: Record<string, number> = {};
+  const settle = (node: string, t: number) => {
+    running[node] = Math.max(0, (running[node] ?? 0) - 1);
+    if (running[node] === 0) took += t - (since[node] ?? t);
+  };
   for (const e of events) {
     const node = e.node ?? "";
     if (!nodes.includes(node)) continue;
     const t = new Date(e.ts ?? 0).getTime();
     if (e.kind === "node_started") {
-      starts += 1;
-      open[node] = t;
+      started = true;
+      paused = false; // a review resumes by starting its node again
+      if (!running[node]) since[node] = t;
+      running[node] = (running[node] ?? 0) + 1;
     } else if (e.kind === "node_finished") {
-      finishes += 1;
-      took += t - (open[node] ?? t);
+      settle(node, t);
     } else if (e.kind === "interrupt") {
-      paused = true;
+      paused = true; // the node stops here until a person answers
+      settle(node, t);
     }
   }
-  return { starts, finishes, paused, took };
+  const working = Object.values(running).some((count) => count > 0);
+  return { started, working, paused, took };
 }
 
 function severityLine(sev: SeverityAssessment): ReactNode[] {
@@ -104,7 +113,11 @@ function severityLine(sev: SeverityAssessment): ReactNode[] {
     );
   } else if (sev.decided_by === "fallback") {
     lines.push(
-      `Rated it ${sev.severity}: unsure between ${sev.prediction_set.join(" and ")}, so it took the most severe and flagged it for you.`,
+      sev.set_empty
+        ? `Rated it ${sev.severity}: no severity was likely enough on its own, so it took the most likely and flagged it for you.`
+        : sev.prediction_set.length === 1
+          ? `Rated it ${sev.severity}: only ${sev.severity} remained, but not with enough confidence to decide alone, so it flagged it for you.`
+          : `Rated it ${sev.severity}: unsure between ${listed(sev.prediction_set)}, so it took the most severe and flagged it for you.`,
     );
   } else {
     lines.push(`Rated it ${sev.severity} by its rules (${sev.decided_by}).`);
@@ -128,7 +141,7 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
     if (batch) {
       const f = batch.features;
       parser.push(
-        `Read ${n(batch.n_raw_lines)} lines in ${batch.shards} parallel part${batch.shards === 1 ? "" : "s"} and found ${n(f.n_templates)} message patterns.`,
+        `Read ${n(batch.n_raw_lines)} lines${batch.shards > 1 ? `, split across ${batch.shards} parsers working at once,` : ""} and found ${n(f.n_templates)} message patterns.`,
       );
       const redacted = Object.values(batch.guard.redactions?.counts ?? {}).reduce(
         (a, b) => a + b,
@@ -221,7 +234,7 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
     if (report) {
       const v = report.validation;
       reporter.push(
-        `Wrote the report${report.generated_by === "llm" && !report.model?.startsWith("fake/") ? " with a model" : " from the evidence alone, with no model"}: ${n(v?.checked_claims ?? 0)} claims, ${pct(v?.citation_coverage)} of them citing evidence.`,
+        `Wrote the report${writtenOffline(report) ? " from the evidence alone, with no model" : " with a model"}: ${n(v?.checked_claims ?? 0)} claims, ${pct(v?.citation_coverage)} of them citing evidence.`,
       );
       reporter.push(
         v?.ok
@@ -238,7 +251,7 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
     const you: ReactNode[] = [];
     if (review) {
       you.push(
-        `${review.decision === "approve" ? "Approved" : review.decision === "reject" ? "Rejected" : "Edited"} by ${review.reviewer}.`,
+        `${review.decision === "approve" ? "Approved" : review.decision === "reject" ? "Rejected" : "Edited"} by ${review.reviewer && review.reviewer !== "anonymous" ? review.reviewer : "a reviewer"}.`,
       );
     } else if (report) {
       you.push("Waiting for you: approve, edit first, or reject. Nothing has been sent.");
@@ -307,14 +320,13 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
     <ol aria-label="How the agents worked" className="grid wrap-anywhere">
       {turns.map((turn, i) => {
         const p = progress(events, turn.nodes);
-        const state: TurnState =
-          p.paused && p.finishes < p.starts
-            ? "yours"
-            : p.starts && p.finishes >= p.starts
-              ? "done"
-              : p.starts
-                ? "working"
-                : "waiting";
+        const state: TurnState = p.paused
+          ? "yours"
+          : p.started && !p.working
+            ? "done"
+            : p.started
+              ? "working"
+              : "waiting";
         const Icon = turn.icon;
         return (
           <li key={turn.id} className="grid grid-cols-[2.75rem_1fr] gap-x-4">

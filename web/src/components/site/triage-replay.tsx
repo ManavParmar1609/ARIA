@@ -260,6 +260,17 @@ export function TriageReplay({ data }: { data: Replay }) {
               </li>
             ))}
           </ul>
+          {/* On a phone the log, and its evidence line, sit far above the tag, so a tapped
+              citation shows its evidence here too. Screen readers already hear the log's line. */}
+          {evidence ? (
+            <p
+              aria-hidden
+              className="mt-3 rounded-md bg-sunken px-3 py-2 text-sm leading-relaxed text-muted-foreground lg:hidden"
+            >
+              <span className="font-mono text-foreground">{evidence.id}</span>{" "}
+              <span className="text-foreground">{evidence.title}</span>
+            </p>
+          ) : null}
           <div
             data-anim="status"
             className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-rule pt-5"

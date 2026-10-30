@@ -235,6 +235,18 @@ test.describe("console at 320 px", () => {
   });
 });
 
+test.describe("console on a phone", () => {
+  test("meets WCAG 2.2 AA at 375 px", async ({ page }) => {
+    // The phone header shows the wordmark where the sidebar was: its name must include "ARIA".
+    await page.setViewportSize({ width: 375, height: 800 });
+    for (const path of ["/console", "/console/runs", "/console/guide"]) {
+      await page.goto(path);
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      await expectAccessible(page, `${path} at 375 px`);
+    }
+  });
+});
+
 test.describe("console in the dark theme", () => {
   test("meets WCAG 2.2 AA", async ({ page }) => {
     await page.addInitScript(() => localStorage.setItem("theme", "dark"));

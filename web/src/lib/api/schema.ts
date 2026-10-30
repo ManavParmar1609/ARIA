@@ -1625,6 +1625,10 @@ export type components = {
             budgets: {
                 [key: string]: unknown;
             };
+            /** Channels */
+            channels?: {
+                [key: string]: boolean;
+            };
             /** Embeddings */
             embeddings: string[];
             /** Environment */

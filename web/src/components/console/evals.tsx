@@ -45,21 +45,31 @@ function Section({
 }
 
 /** Links to every section: the page is long, real data first, then the semi-synthetic suites. */
-function Contents({ items }: { items: [id: string, label: string][] }) {
+function Contents({ groups }: { groups: [group: string, items: [id: string, label: string][]][] }) {
   return (
-    <nav aria-label="On this page">
-      <ul className="flex flex-wrap gap-2">
-        {items.map(([id, label]) => (
-          <li key={id}>
-            <a
-              href={`#${id}`}
-              className="inline-flex min-h-9 items-center rounded-md bg-raised px-3 text-sm text-foreground transition-colors hover:bg-sunken"
-            >
-              {label}
-            </a>
-          </li>
+    <nav aria-labelledby="ev-contents" className="grid gap-3">
+      <h2 id="ev-contents" className="text-sm font-medium text-foreground">
+        On this page
+      </h2>
+      {groups
+        .filter(([, items]) => items.length)
+        .map(([group, items]) => (
+          <div key={group} className="grid gap-1.5 sm:grid-cols-[9rem_1fr] sm:items-baseline">
+            <p className="text-xs text-muted-foreground">{group}</p>
+            <ul aria-label={group} className="flex flex-wrap gap-2">
+              {items.map(([id, label]) => (
+                <li key={id}>
+                  <a
+                    href={`#${id}`}
+                    className="inline-flex min-h-9 items-center rounded-md bg-raised px-3 text-sm text-foreground transition-colors hover:bg-sunken"
+                  >
+                    {label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
         ))}
-      </ul>
     </nav>
   );
 }
@@ -98,7 +108,8 @@ function Bars({
           key={name}
           className="grid grid-cols-[minmax(0,7rem)_1fr_3.5rem] items-center gap-3 text-sm sm:grid-cols-[minmax(7rem,11rem)_1fr_4rem]"
         >
-          <span className="truncate text-muted-foreground">{name}</span>
+          {/* Labels wrap rather than cut: "First assignment group" must stay readable. */}
+          <span className="text-pretty text-muted-foreground">{name}</span>
           <span className="h-2.5 rounded-xs bg-sunken" aria-hidden>
             <span
               className="block h-2.5 rounded-xs bg-primary/80"
@@ -430,7 +441,7 @@ function MoreRealSections({ more }: { more: RealData }) {
             ["Macro-F1", bgl.aria.macroF1.toFixed(3)],
             ["Severe windows rated minor", `${n(bgl.aria.severeMissed)} of ${n(bgl.severe)}`],
             ["Quiet windows paged", `${n(bgl.aria.quietPaged)} of ${n(bgl.quiet)}`],
-            ["Set coverage", pct(bgl.coverage)],
+            [`Coverage of the ${Math.round(bgl.targetCoverage * 100)}% sets`, pct(bgl.coverage)],
           ]}
         />
         <MethodTable
@@ -644,23 +655,33 @@ export function Evals({
   const p = data.pipeline;
   const r = data.robustness;
   const live = data.live;
-  const contents: [string, string][] = [
-    ...(real ? [["ev-real", "HDFS, expert labels"] as [string, string]] : []),
-    ...(more
-      ? ([
-          ["ev-bgl", "BlueGene/L alert tags"],
-          ["ev-hadoop", "Hadoop jobs"],
-          ["ev-tickets", "ServiceNow tickets"],
-          ["ev-gitlab", "GitLab.com incidents"],
-          ["ev-injection", "Injection benchmarks"],
-        ] as [string, string][])
-      : []),
-    ["ev-severity", "Severity"],
-    ["ev-calibration", "Calibration"],
-    ["ev-systems", "By system"],
-    ["ev-pipeline", "End to end"],
-    ["ev-robustness", "Parsing and injection"],
-    ["ev-live", "Live model"],
+  const contents: [string, [string, string][]][] = [
+    [
+      "Real data",
+      [
+        ...(real ? [["ev-real", "HDFS, expert labels"] as [string, string]] : []),
+        ...(more
+          ? ([
+              ["ev-bgl", "BlueGene/L alert tags"],
+              ["ev-hadoop", "Hadoop jobs"],
+              ["ev-tickets", "ServiceNow tickets"],
+              ["ev-gitlab", "GitLab.com incidents"],
+              ["ev-injection", "Injection benchmarks"],
+            ] as [string, string][])
+          : []),
+      ],
+    ],
+    [
+      "Semi-synthetic",
+      [
+        ["ev-severity", "Severity"],
+        ["ev-calibration", "Calibration"],
+        ["ev-systems", "By system"],
+        ["ev-pipeline", "End to end"],
+        ["ev-robustness", "Parsing and injection"],
+        ["ev-live", "Live model"],
+      ],
+    ],
   ];
   const stages = Object.entries(p.stageP50)
     .map(([step, ms]) => [NODE_LABEL[step] ?? step, ms] as [string, number])
@@ -686,7 +707,7 @@ export function Evals({
           </>
         }
       >
-        <Contents items={contents} />
+        <Contents groups={contents} />
       </PageHeader>
 
       {real ? <RealSection real={real} /> : null}
@@ -926,8 +947,11 @@ export function Evals({
         </Table>
         <p className="max-w-3xl text-sm text-muted-foreground">
           Too few runs to generalise from. Latency depended on the hosted service&apos;s load that
-          day; two runs used up the {live.latencyBudgetS} s budget and finished on the deterministic
-          path, which is why every report still validated.
+          day. {live.exhausted === 1 ? "One run" : `${live.exhausted} runs`} used up the{" "}
+          {live.latencyBudgetS} s budget after the model had written{" "}
+          {live.exhausted === 1 ? "its report" : "their reports"}, so only the steps after it fell
+          back to the deterministic path: every report was written by the model, and every one
+          validated.
         </p>
       </Section>
     </div>

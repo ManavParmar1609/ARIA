@@ -182,23 +182,90 @@ are ignored by git. The recorded run behind the landing page and the video was r
 its message drafts name the system properly, and the README's run and replay screenshots were
 retaken to show the console as it is now.
 
+## The final audit
+
+A last pass ran four independent reviews of the whole branch: security and operations, functional
+behaviour and edge cases, docs and developer experience, and presentation and accessibility in a
+real browser at every width from 320 to 1440 px, in both themes. Each ran offline on its own API and
+database, and each finding was reproduced before it was fixed.
+
+### Security and operations
+
+- **One process drives a run at a time** (0865806). Every drive claims its run and renews the
+  claim; a review applied long after the pause can no longer publish twice, a worker no longer takes
+  over a run another process holds, and each approved message is claimed once before it is sent.
+- **Untrusted text stays fenced** (baa139d). Report drafts, critic claims, hypotheses and queries
+  that quote logs reach a model only inside `untrusted_data` fences. Titles, alert names and ticket
+  fields are cleaned when a run is created or forked, so no checkpoint or run list holds them raw.
+- **Bounded and off the event loop** (e62e14e, baa139d). The console counts request bytes before it
+  reads a body; the e-mail redactor runs in linear time; MCP database tools run off the event loop
+  and log search needs a run or a system; the A2A task store keeps only its newest tasks.
+- **Access and operations** (0865806, baa139d). A proxy prefix no longer opens protected paths;
+  every protected request leaves an access log line; production refuses short API keys; readiness
+  probes spend the rate limit on a wrong key; the worker answers HTTP liveness probes; the image
+  keeps code root-owned; incident memory in each process follows publishes and deletes elsewhere.
+
+### Functional behaviour and edge cases
+
+- **Reviews say what they did** (0865806, 52bea0e). Edits sent with an approve or reject are refused
+  instead of recorded and dropped; a misspelt field is refused; a reviewer's new title reaches the run
+  list; a review or delete that arrives as the run pauses waits for it instead of failing.
+- **Messages** (0865806, 997c040). Alert labels never reach a customer draft verbatim; a link or a
+  phone number in a draft is flagged. An approved message whose delivery failed can be sent again
+  from the run page, once, and nothing else can; the approval toast counts what was delivered.
+- **Clear answers at the edges** (baa139d, 52bea0e). A ticket with a severe model priority sets a
+  floor; an unknown window is a 422; Ask about a queued run is a 409; AG-UI refuses new logs on a
+  finished thread and names what is wrong with a request; A2A, AG-UI, MCP and the CLI report problems
+  in one readable line; MCP resources and prompts name an unknown runbook or incident.
+- **Retrieval** (52bea0e). A similar incident from another system grades lower than the same match
+  on the run's own system, so an analogue no longer outranks the system's own history.
+
+### Docs and developer experience
+
+- `aria train severity` no longer replaces the committed model with one fit on the test fixtures;
+  `make dev` takes `API_PORT` and `WEB_PORT`; `aria providers check NAME` fails for an unconfigured
+  provider; the terminal report is rendered, not HTML-escaped (52bea0e).
+- Offline runs no longer claim a model wrote the report, in the export, the run page or the agent
+  story (baa139d, and the presentation fixes below).
+- ADRs 0003, 0004, 0005 and 0011, the threat model, the data card, the runbook and AGENTS.md match
+  the code again (baa139d), and no doc refers to the machine the project was built on (52bea0e).
+
+### Presentation and accessibility
+
+- **Honest numbers.** The BlueGene/L card and the README's generated sentence set ARIA beside its
+  own rules and the highest log level, not the weakest baseline; the Hadoop card gives the ERROR rule's
+  false alarms; the real-log section says its settings were chosen with the labels in view; the
+  injection headline sits beside the detector's result on public attacks; coverage is stated as the
+  target it is, not a guarantee; the live-model note gives the reason the data supports.
+- **Accessibility.** The phone header's link is named for what it shows (WCAG 2.5.3), with a 375 px
+  axe pass in the end-to-end suite; Markdown task boxes no longer render as unlabelled checkboxes;
+  skip links keep their padding; focus and anchors land clear of the floating nav.
+- **Layout and copy.** The step strip, chart ticks, dataset cards and bar labels fit their width; the
+  green road ends on round caps; a tapped citation on a phone shows its evidence beside the claim;
+  static console pages stay readable while the API is down, and links to a section scroll to it;
+  printed pages show every number; jargon on the landing cards is explained.
+- **Exports.** Emphasis and code marks in log text stay literal, so a template's `<*>` no longer
+  turns the text after it italic.
+
 ## What was left
 
 These are recorded rather than fixed, because each needs a design change, infrastructure or an
 owner's decision. The [threat model](threat-model.md) lists the security residuals in detail.
 
-- **Several API replicas.** A run can be resumed or executed twice when two replicas race, an alert
-  storm delivered concurrently can open several runs, and a delete racing a review can leave
-  checkpoints behind. Fixing these needs database-level claims or locks on runs and alert groups.
-- **External-mode AG-UI and A2A runs** that were running when the API restarted stay "running", and
-  cannot be deleted. The worker would need to reclaim them, or these transports would need to queue.
+- **Alert storms across replicas.** Runs are now claimed across processes, but an alert storm
+  delivered to two API replicas at once can still open two runs: alert groups have no claim yet.
 - **A fork's history** also lists the checkpoints its parent reached after the fork point, because
   the whole thread is copied; copying only the fork point's ancestors needs a checkpointer change.
 - **Streams and slow clients.** Event streams have no per-caller cap, and slow-header connections
   are held open. Front the API with a proxy that enforces these limits. (A stream now ends when its
   run is deleted, and after an hour.)
-- **Stored raw input.** The run record and its first checkpoint keep the request as sent, and nothing
-  purges old runs. Store only the redacted batch, or encrypt the request, and add a retention job.
+- **Stored raw input.** Titles, alert names and ticket fields are cleaned when a run is created, but
+  the run record and its first checkpoint keep the log lines as sent, and nothing purges old runs.
+  Store only the redacted batch, or encrypt the request, and add a retention job.
+- **Decisions for the owner.** A window that matches no rule and sits outside the model's range is
+  rated by the conservative policy, which can mean SEV1 pending review; changing that is a policy
+  choice, not a bug. The Azure SQL free offer pauses the database when its monthly allowance runs
+  out (`ARIA_SQL_FREE_LIMIT`); billing past it instead is a cost choice.
 - **The model's training range.** Windows much busier than the scenarios it learned from (real HDFS
   traffic, for example) are rated by the rules and confirmed by a person until the model is
   retrained on the deployment's own windows.

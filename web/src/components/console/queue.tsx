@@ -206,7 +206,7 @@ export function Queue() {
                       </Link>
                       <span className="block truncate text-xs text-muted-foreground">
                         {systemName(run.system)}, {triggerLabel(run.trigger)}
-                        {run.parent_run_id ? ", forked" : ""}
+                        {run.parent_run_id && run.trigger !== "fork" ? ", forked" : ""}
                       </span>
                     </TableCell>
                     <TableCell>

@@ -179,7 +179,7 @@ lines. With `ARIA_ENV=prod`, every call needs an API key from `ARIA_API_KEYS`.
 | Surface | Where | What it is for |
 |---|---|---|
 | Console | `web/`, http://localhost:3000/console | Queue, live run view with rule trace, prediction set, evidence and cited report; review, time travel, Ask ARIA, evals, memory, settings, a guide with one-click samples, and a command palette with keyboard shortcuts |
-| REST and SSE | `/api/v1/*`, [docs/openapi.json](docs/openapi.json) | Runs, live event stream, report (JSON and Markdown), postmortem draft, review, history, fork |
+| REST and SSE | `/api/v1/*`, [docs/openapi.json](docs/openapi.json) | Runs, live event stream, report (JSON and Markdown), postmortem draft, review, resending a failed message, history, fork |
 | Alert webhooks | `/api/v1/alerts/alertmanager`, `/grafana`, `/alerts` | Turn alert storms into one grouped run |
 | Log scan | `ARIA_SCAN_SOURCES`, `ARIA_SCAN_INTERVAL_S` | Open a run on an error burst no alert caught |
 | CLI | `uv run aria --help` | Triage a file or scenario, train, evaluate, check providers, run the worker |
@@ -187,7 +187,7 @@ lines. With `ARIA_ENV=prod`, every call needs an API key from `ARIA_API_KEYS`.
 | A2A | `/.well-known/agent-card.json`, `/a2a` | Other agents delegate triage; review maps to the `input-required` task state |
 | AG-UI | `/agui` | The event stream the console's chat uses; works with CopilotKit |
 | Ask ARIA | `/api/v1/ask` | Questions about one run's evidence, answered with citations |
-| Notifications | `SLACK_WEBHOOK_URL`, `TEAMS_WEBHOOK_URL` | Posted only after a reviewer approves |
+| Notifications | `SLACK_WEBHOOK_URL`, `TEAMS_WEBHOOK_URL` | Posted only after a reviewer approves; a failed delivery can be sent again from the run page |
 | Metrics and traces | `/metrics`, OTLP | Prometheus metrics; OpenTelemetry GenAI traces to Phoenix, Langfuse, Jaeger or Azure Monitor |
 
 The repo also ships an [Agent Skill](skills/aria-triage/SKILL.md) that teaches other agents to

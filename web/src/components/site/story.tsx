@@ -59,10 +59,12 @@ export function Story() {
         focusable="false"
         viewBox="0 0 1200 2400"
         preserveAspectRatio="none"
+        overflow="visible"
         className="pointer-events-none absolute inset-0 -z-10 hidden h-full w-full lg:block"
       >
+        {/* Both ends sit inside the box, so the road starts and stops on round caps, not cuts. */}
         <path
-          d="M930 -40C930 260 300 300 290 620C280 920 910 900 920 1220C930 1520 290 1500 290 1820C290 2080 600 2140 600 2440"
+          d="M930 70C930 260 300 300 290 620C280 920 910 900 920 1220C930 1520 290 1500 290 1820C290 2080 600 2140 600 2330"
           fill="none"
           stroke="var(--grass)"
           strokeWidth="150"

@@ -3961,6 +3961,13 @@
             },
             "type": "array",
             "title": "Safety"
+          },
+          "channels": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "title": "Channels"
           }
         },
         "type": "object",

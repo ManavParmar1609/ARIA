@@ -227,6 +227,8 @@
     color-scheme: light;
     -webkit-text-size-adjust: 100%;
     text-rendering: optimizeLegibility;
+    /* Anchors and keyboard focus land clear of the landing page's floating nav. */
+    scroll-padding-top: 6rem;
   }
   html.dark {
     color-scheme: dark;
@@ -393,6 +395,16 @@
 }
 [data-roll="go"] .roll-strip {
   transition: transform 1.1s var(--ease-emphasized) calc(var(--roll-i) * 70ms);
+}
+/* On paper there is no scroll to roll a number in: every one prints at its value. */
+@media print {
+  [data-roll] .roll-strip {
+    transform: translateY(calc(var(--roll-to) * -1em));
+    transition: none;
+  }
+  tr {
+    break-inside: avoid;
+  }
 }
 
 /* Severity stamp: the badge comes down like a rubber stamp, leaves a ring of ink that fades, and

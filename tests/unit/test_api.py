@@ -188,6 +188,7 @@ async def test_me_and_settings_show_the_caller_and_limits_without_secrets(api: A
     assert view["guardrails"]["detect_injection"] is True
     assert view["routing"]["reporter"][0] == "nim-local"
     assert "k-ana" not in json.dumps(view)
+    assert view["channels"]["slack"] is False  # no webhook set: its messages would be skipped
 
 
 async def test_rate_limit_answers_429_with_retry_after(monkeypatch: pytest.MonkeyPatch) -> None:

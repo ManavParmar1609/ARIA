@@ -54,7 +54,7 @@ const DECIDED: Record<string, string> = {
   rules: "Rules",
   model: "Model",
   llm: "LLM, within the model's set",
-  fallback: "Unsure, so took the more severe",
+  fallback: "Unsure, flagged for review",
   human: "Reviewer",
 };
 

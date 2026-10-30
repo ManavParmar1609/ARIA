@@ -149,8 +149,8 @@ export function Templates({ batch }: { batch: ParsedBatch }) {
         {Math.round(f.duration_s / 60)} minutes ({f.events_per_min.toFixed(1)} a minute).{" "}
         {f.error_events} errors ({percent(f.error_ratio, 1)})
         {f.level_counts.WARN ? ` and ${f.level_counts.WARN} warnings` : ""}
-        {f.distinct_nodes ? ` across ${f.distinct_nodes} nodes` : ""}. Parsed in {batch.shards}{" "}
-        {batch.shards === 1 ? "shard" : "shards"}
+        {f.distinct_nodes ? ` across ${f.distinct_nodes} nodes` : ""}.{" "}
+        {batch.shards > 1 ? `Parsed by ${batch.shards} parsers at once` : "Parsed in one pass"}
         {batch.template_history ? `, judged against ${batch.template_history} known templates` : ""}
         .
       </p>

@@ -28,7 +28,7 @@ import { ApiError } from "@/lib/api/client";
 import { useDeleteRun, useRun, useRunState } from "@/lib/api/hooks";
 import { useRunTimeline } from "@/lib/api/stream";
 import { isSeverity, type ReviewPrompt, type RunDetail } from "@/lib/api/types";
-import { absoluteTime, duration, relativeTime, stripSeverity } from "@/lib/format";
+import { absoluteTime, duration, relativeTime, stripSeverity, writtenOffline } from "@/lib/format";
 import { systemName, triggerLabel } from "@/lib/systems";
 
 import { Activity, GraphProgress } from "./activity";
@@ -68,7 +68,8 @@ function Header({
           <RunStatus status={run.status} />
         </div>
         <p className="text-sm text-muted-foreground">
-          {systemName(run.system)}, {triggerLabel(run.trigger)},{" "}
+          {/* A fork says so once, with a link to the run it came from (below). */}
+          {systemName(run.system)}, {run.parent_run_id ? "" : `${triggerLabel(run.trigger)}, `}
           <time dateTime={run.created_at} title={absoluteTime(run.created_at)}>
             {relativeTime(run.created_at)}
           </time>
@@ -172,7 +173,7 @@ function RunSkeleton() {
       <span className="sr-only">Loading the run</span>
       <Skeleton className="h-8 w-64 max-w-full" />
       <Skeleton className="h-32 w-full" />
-      <div className="grid grid-cols-2 gap-1.5 min-[25rem]:grid-cols-3 sm:grid-cols-4 lg:grid-cols-6">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(min(9.5rem,45%),1fr))] gap-1.5">
         {Array.from({ length: 11 }, (_, i) => (
           <Skeleton key={i} className="h-8" />
         ))}
@@ -202,6 +203,10 @@ export function RunView({ runId }: { runId: string }) {
   const evidence = useMemo(() => values?.evidence ?? values?.report?.evidence ?? [], [values]);
   const events = useMemo(() => values?.batch?.events ?? [], [values]);
   const cited = useMemo(() => new Set((values?.report?.evidence ?? []).map((e) => e.id)), [values]);
+  const messageTitles = useMemo(
+    () => Object.fromEntries((values?.actions ?? []).map((a) => [a.action_id, a.title])),
+    [values],
+  );
 
   // One placeholder in the page's final shape until the run and its state are both in, so the
   // page does not jump as each part arrives. A running run shows at once: it changes as it goes.
@@ -244,6 +249,7 @@ export function RunView({ runId }: { runId: string }) {
   const prompt =
     detail.status === "awaiting_review" ? (detail.review as ReviewPrompt | null) : null;
   const report = values?.report;
+  const offline = report ? writtenOffline(report) : false;
   const severity = values?.severity;
   const liveText = timeline.liveText.report ?? "";
   const viewing = checkpoint ? state.data : null;
@@ -289,11 +295,7 @@ export function RunView({ runId }: { runId: string }) {
           </div>
         </div>
 
-        <Header
-          run={detail}
-          severity={severity?.severity ?? detail.severity}
-          offline={/fake/.test(report?.model ?? "")}
-        />
+        <Header run={detail} severity={severity?.severity ?? detail.severity} offline={offline} />
 
         <GraphProgress events={timeline.events} finalStatus={detail.status} />
 
@@ -393,7 +395,7 @@ export function RunView({ runId }: { runId: string }) {
                       : "Connecting to the run's event stream."}
               </p>
             ) : null}
-            <Activity events={timeline.events} />
+            <Activity events={timeline.events} offline={offline} titles={messageTitles} />
           </TabsContent>
           <TabsContent value="evidence">
             {evidence.length ? (

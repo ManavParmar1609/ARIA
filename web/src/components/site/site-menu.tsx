@@ -1,6 +1,6 @@
 "use client";
 
-import { EqualIcon, XIcon } from "lucide-react";
+import { ArrowUpRightIcon, EqualIcon, XIcon } from "lucide-react";
 import { useRef } from "react";
 
 import { ThemeSwitch } from "@/components/theme-switch";
@@ -52,6 +52,9 @@ export function SiteMenu({ links }: { links: { href: string; label: string }[] }
                 className="flex h-12 items-center rounded-md px-3 text-lg text-heading transition-colors duration-(--duration-quick) hover:bg-foreground/6"
               >
                 {link.label}
+                {link.href.startsWith("#") ? null : (
+                  <ArrowUpRightIcon aria-hidden className="ml-1.5 size-5" />
+                )}
               </a>
             </li>
           ))}

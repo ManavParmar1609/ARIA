@@ -30,7 +30,14 @@ function Headline({ value, label, note }: { value: string; label: string; note: 
 
 const CARD = "rounded-lg bg-raised p-5 sm:p-8";
 
-export function Results({ data }: { data: Evaluation }) {
+export function Results({
+  data,
+  publicAttacks,
+}: {
+  data: Evaluation;
+  /** The detector on public benchmarks it was never tuned on: the honest counterweight. */
+  publicAttacks: { rate: number; attacks: number };
+}) {
   const s = data.severity;
   const p = data.pipeline;
   const r = data.robustness;
@@ -59,7 +66,7 @@ export function Results({ data }: { data: Evaluation }) {
         <Headline
           value={pct(r.attackRecall)}
           label="Injections quarantined"
-          note={`of ${r.attacks.toLocaleString("en")} attacks; an upper bound`}
+          note={`of ${r.attacks.toLocaleString("en")} attacks written for it; ${pct(publicAttacks.rate)} of ${publicAttacks.attacks.toLocaleString("en")} public ones`}
         />
       </dl>
 
@@ -131,7 +138,9 @@ export function Results({ data }: { data: Evaluation }) {
           </p>
           <p className="text-sm text-muted-foreground">
             The project wrote both the attacks and the detector, and tuned one on the other, so
-            treat that recall as an upper bound.
+            treat that recall as an upper bound. On {publicAttacks.attacks.toLocaleString("en")}{" "}
+            attacks from public benchmarks it was never tuned on, it caught{" "}
+            {pct(publicAttacks.rate)}. Fencing, the prediction set and approval do not rely on it.
           </p>
         </div>
         <div className="grid content-start gap-4">

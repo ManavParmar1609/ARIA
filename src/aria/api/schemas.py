@@ -287,6 +287,8 @@ class SettingsOut(BaseModel):
     routing: dict[str, list[str]]
     embeddings: list[str]
     safety: list[str]
+    # Per message kind: whether its webhook URL is set. True or false only, never the URL.
+    channels: dict[str, bool] = Field(default_factory=dict)
 
 
 class ReviewOut(BaseModel):

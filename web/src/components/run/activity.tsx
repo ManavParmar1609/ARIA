@@ -83,7 +83,7 @@ export function GraphProgress({
   return (
     <ol
       aria-label="Run progress"
-      className="grid grid-cols-2 gap-1.5 min-[25rem]:grid-cols-3 sm:grid-cols-4 lg:grid-cols-6"
+      className="grid grid-cols-[repeat(auto-fill,minmax(min(9.5rem,45%),1fr))] gap-1.5"
     >
       {path.map((node) => {
         const s = state[node] ?? "pending";
@@ -141,7 +141,14 @@ interface Row {
   node?: string | null;
 }
 
-function rows(events: RunEvent[]): Row[] {
+const MESSAGE_OUTCOME: Record<string, string> = {
+  sent: "Sent",
+  failed: "Not delivered",
+  skipped: "Not sent, channel not set up",
+  approved: "Sending",
+};
+
+function rows(events: RunEvent[], { offline = false, titles = {} }: RowOptions = {}): Row[] {
   const start = events[0] ? new Date(events[0].ts ?? 0).getTime() : 0;
   const tools = new Map<string, RunEvent>();
   const out: Row[] = [];
@@ -240,7 +247,7 @@ function rows(events: RunEvent[]): Row[] {
           t,
           icon: GaugeIcon,
           title: `Ready for review after ${duration(Number(p.latency_ms ?? 0))}`,
-          detail: `${Number(p.llm_calls ?? 0)} model calls, ${Number(p.tool_calls ?? 0)} tool calls${Array.isArray(p.exhausted) && p.exhausted.length ? `; budget exhausted: ${(p.exhausted as string[]).join(", ")}` : ""}`,
+          detail: `${offline ? "" : `${Number(p.llm_calls ?? 0)} model calls, `}${Number(p.tool_calls ?? 0)} tool calls${Array.isArray(p.exhausted) && p.exhausted.length ? `; budget exhausted: ${(p.exhausted as string[]).join(", ")}` : ""}`,
           tone: Array.isArray(p.exhausted) && p.exhausted.length ? "warn" : undefined,
         });
         break;
@@ -258,8 +265,8 @@ function rows(events: RunEvent[]): Row[] {
           key,
           t,
           icon: SendIcon,
-          tone: p.status === "failed" ? "bad" : "good",
-          title: `Message ${String(p.action_id)}: ${String(p.status)}`,
+          tone: p.status === "failed" ? "bad" : p.status === "sent" ? "good" : undefined,
+          title: `${MESSAGE_OUTCOME[String(p.status)] ?? String(p.status)}${p.resent_by ? ` (sent again by ${String(p.resent_by)})` : ""}: ${titles[String(p.action_id)] ?? "a message"}`,
         });
         break;
       case "error":
@@ -296,8 +303,15 @@ const TONE: Record<string, string> = {
 };
 
 /** Everything the agents did, in order, from the run's event stream. */
-export function Activity({ events }: { events: RunEvent[] }) {
-  const list = useMemo(() => rows(events), [events]);
+interface RowOptions {
+  /** The offline stand-in served the run: its calls are not model use. */
+  offline?: boolean;
+  /** Message titles by action id, so a message reads as what it says, not its id. */
+  titles?: Record<string, string>;
+}
+
+export function Activity({ events, offline, titles }: { events: RunEvent[] } & RowOptions) {
+  const list = useMemo(() => rows(events, { offline, titles }), [events, offline, titles]);
   if (list.length === 0) return <p className="text-sm text-muted-foreground">No activity yet.</p>;
   // Rows present on first render stay put; rows that arrive while the run is live slide in.
   return (

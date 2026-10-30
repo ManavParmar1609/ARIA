@@ -56,7 +56,8 @@ function steps(f: RunFacts): GraphStep[] {
         <>
           Rules and a <Term name="calibrated">calibrated</Term> model score the window. Conformal
           prediction turns the model&apos;s probabilities into a{" "}
-          <Term name="prediction-set">set</Term> that holds the true severity 90% of the time, and{" "}
+          <Term name="prediction-set">set</Term> built to hold the true severity 90% of the time on
+          windows like the ones it was calibrated on, and{" "}
           <Term name="safety-floor">safety floors</Term> stop a dangerous pattern being rated too
           low. Meanwhile hybrid search finds similar past incidents.
         </>
@@ -69,9 +70,12 @@ function steps(f: RunFacts): GraphStep[] {
       body: (
         <>
           An agent proposes hypotheses and tests them through ARIA&apos;s{" "}
-          <Term name="mcp">MCP server</Term>: example lines for a template, a component&apos;s
-          timeline, which nodes are affected, incident search, runbooks. Every result becomes{" "}
-          <Term name="evidence">evidence</Term> a claim can cite.
+          <span className="whitespace-nowrap">
+            <Term name="mcp">MCP server</Term>:
+          </span>{" "}
+          example lines for a template, a component&apos;s timeline, which nodes are affected,
+          incident search, runbooks. Every result becomes <Term name="evidence">evidence</Term> a
+          claim can cite.
         </>
       ),
       fact: `${f.toolCalls} tool calls; the leading hypothesis is supported at ${Math.round((f.leadingConfidence ?? 0) * 100)}%.`,
@@ -348,7 +352,7 @@ export default function Landing() {
     <>
       <a
         href="#main"
-        className="sr-only z-50 rounded-sm bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
+        className="sr-only z-50 rounded-sm bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:px-3 focus:py-2"
       >
         Skip to content
       </a>
@@ -430,7 +434,7 @@ export default function Landing() {
             }
             intro="These results come from semi-synthetic incidents: real Loghub log lines, composed into incident windows by ARIA's scenario builder, scored against simpler baselines. Every number here comes from the committed evaluation results."
           >
-            <Results data={evals} />
+            <Results data={evals} publicAttacks={realData().injection} />
           </Section>
 
           <Section
