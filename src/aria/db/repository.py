@@ -13,6 +13,7 @@ from typing import Any
 from sqlalchemy import ColumnElement, func, or_, select, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import defer
 
 from aria.contracts.base import utcnow
 from aria.contracts.report import IncidentReport, OutboundAction
@@ -45,22 +46,29 @@ def create_run(
     status: RunStatus = RunStatus.QUEUED,
     **fields: Any,
 ) -> None:
-    """Insert a run, or leave an existing one as it is (safe to call twice)."""
-    with session_scope(engine) as session:
-        if session.get(RunRow, run_id) is not None:
-            return
-        extra = {k: v for k, v in fields.items() if k in _RUN_FIELDS}
-        session.add(
-            RunRow(
-                id=run_id,
-                status=str(status),
-                trigger=trigger,
-                title=title,
-                system=system,
-                request=request,
-                **extra,
+    """Insert a run, or leave an existing one as it is (safe to call twice, even at once: two
+    AG-UI requests on a new thread both create it, and the second leaves the first's)."""
+    try:
+        with session_scope(engine) as session:
+            if session.get(RunRow, run_id) is not None:
+                return
+            extra = {k: v for k, v in fields.items() if k in _RUN_FIELDS}
+            session.add(
+                RunRow(
+                    id=run_id,
+                    status=str(status),
+                    trigger=trigger,
+                    title=title,
+                    system=system,
+                    request=request,
+                    **extra,
+                )
             )
-        )
+    except IntegrityError:
+        with session_scope(engine) as session:
+            created = session.scalar(select(RunRow.id).where(RunRow.id == run_id))
+        if created is None:
+            raise  # some other constraint, not a run created meanwhile
 
 
 def update_run(engine: Engine, run_id: str, **fields: Any) -> None:
@@ -78,8 +86,8 @@ def update_run(engine: Engine, run_id: str, **fields: Any) -> None:
         row.updated_at = utcnow()
 
 
-def run_dict(row: RunRow) -> dict[str, Any]:
-    out = {c.name: getattr(row, c.name) for c in RunRow.__table__.columns}
+def run_dict(row: RunRow, *, skip: frozenset[str] = frozenset()) -> dict[str, Any]:
+    out = {c.name: getattr(row, c.name) for c in RunRow.__table__.columns if c.name not in skip}
     for key, value in out.items():
         if isinstance(value, datetime):
             out[key] = value.isoformat()
@@ -99,13 +107,22 @@ def list_runs(
     status: str | None = None,
     before: datetime | None = None,
 ) -> list[dict[str, Any]]:
+    """The newest runs, without their stored request: a list never needs the raw input, and
+    loading it made the list slower as runs piled up."""
     with session_scope(engine) as session:
-        stmt = select(RunRow).order_by(RunRow.created_at.desc(), RunRow.id.desc())
+        stmt = (
+            select(RunRow)
+            .options(defer(RunRow.request))
+            .order_by(RunRow.created_at.desc(), RunRow.id.desc())
+        )
         if status:
             stmt = stmt.where(RunRow.status == status)
         if before is not None:
             stmt = stmt.where(RunRow.created_at < before)
-        return [run_dict(row) for row in session.scalars(stmt.limit(limit))]
+        return [run_dict(row, skip=_LIST_SKIP) for row in session.scalars(stmt.limit(limit))]
+
+
+_LIST_SKIP = frozenset({"request"})
 
 
 def latest_run(engine: Engine, *, trigger: str, system: str) -> dict[str, Any] | None:
@@ -436,14 +453,23 @@ def claim_runs(
 
 
 def claim_run(
-    engine: Engine, run_id: str, owner: str, *, stale_after_s: float = CLAIM_STALE_S
+    engine: Engine,
+    run_id: str,
+    owner: str,
+    *,
+    stale_after_s: float = CLAIM_STALE_S,
+    status: RunStatus | None = RunStatus.RUNNING,
 ) -> bool:
-    """Take ``run_id`` for ``owner`` to drive, and mark it running.
+    """Take ``run_id`` for ``owner`` to drive, and mark it ``status`` (running; None leaves it,
+    for a delete).
 
     Succeeds when the run is free, already ``owner``'s, or abandoned. Every process that drives a
     run (the API, a worker, the CLI) claims it first, so two never drive one run at once.
     """
     now = utcnow()
+    values: dict[str, Any] = {"claimed_by": owner, "claimed_at": now}
+    if status is not None:
+        values["status"] = str(status)
     with session_scope(engine) as session:
         result = session.execute(
             update(RunRow)
@@ -451,7 +477,7 @@ def claim_run(
                 RunRow.id == run_id,
                 or_(RunRow.claimed_by == owner, _claimable(now, stale_after_s)),
             )
-            .values(claimed_by=owner, claimed_at=now, status=str(RunStatus.RUNNING))
+            .values(**values)
         )
         return bool(result.rowcount == 1)  # type: ignore[attr-defined]
 

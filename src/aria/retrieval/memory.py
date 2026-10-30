@@ -21,7 +21,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 import numpy as np
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.engine import Engine
 
 from aria.contracts.base import Severity
@@ -140,6 +140,7 @@ class IncidentMemory:
         self.index = HybridIndex([], rrf_k=rrf_k)
         self._lock = asyncio.Lock()
         self._groups: dict[tuple[str, str], list[MemoryIncident]] = {}
+        self._seen: tuple[int, str | None] | None = None  # what the last refresh loaded
 
     @property
     def embedding_model(self) -> str | None:
@@ -152,6 +153,7 @@ class IncidentMemory:
                 rows = list(session.scalars(select(IncidentRow).order_by(IncidentRow.id)))
                 incidents = [MemoryIncident.from_row(r) for r in rows]
                 stored = {r.id: (r.embedding, r.embedding_model) for r in rows}
+                self._seen = (len(rows), rows[-1].id if rows else None)
             vectors = await self._vectors(incidents, stored)
             self.incidents = {i.id: i for i in incidents}
             self.index = HybridIndex(
@@ -164,6 +166,20 @@ class IncidentMemory:
             for incident in incidents:
                 groups[(incident.system, incident.failure_mode)].append(incident)
             self._groups = dict(groups)
+
+    def _signature(self) -> tuple[int, str | None]:
+        with session_scope(self.engine) as session:
+            count, newest = session.execute(select(func.count(), func.max(IncidentRow.id))).one()
+        return int(count), newest
+
+    async def refresh_if_changed(self) -> bool:
+        """Reload when another process added or removed incidents: the API publishes a run a
+        worker will search, or deletes one it must stop serving. A count and the newest ID are
+        cheap to read, so this can run every minute."""
+        if await asyncio.to_thread(self._signature) == self._seen:
+            return False
+        await self.refresh()
+        return True
 
     async def _vectors(
         self,

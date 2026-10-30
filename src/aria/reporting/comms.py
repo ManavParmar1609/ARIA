@@ -131,19 +131,22 @@ async def draft_comms(
     known = {e.id for e in report.evidence}
     outcome = CommsOutcome(actions=[])
     if use_llm and router is not None and router.chain("comms"):
-        facts = {
-            "title": report.title,
-            "severity": str(report.severity),
-            "service": service,
-            "summary": [c.model_dump() for c in report.summary],
-            "actions": [a.text for a in report.actions[:3]],
+        facts = {"severity": str(report.severity)}
+        # The report and drafts quote logs and alert labels: they go to the model fenced.
+        quoted = {
+            "report": {
+                "title": report.title,
+                "service": service,
+                "summary": [c.model_dump() for c in report.summary],
+                "actions": [a.text for a in report.actions[:3]],
+            },
             "drafts": {k: v.model_dump() for k, v in drafts.items()},
         }
         try:
             result = await router.structured(
                 "comms",
                 "comms",
-                build_messages("comms", facts, cited_evidence(report)[:12]),
+                build_messages("comms", facts, cited_evidence(report)[:12], untrusted_data=quoted),
                 CommsOutput,
                 budget=budget,
                 temperature=0.3,

@@ -31,6 +31,7 @@ from aria.contracts.report import ReviewDecision
 from aria.contracts.run import RunEvent, RunStatus
 from aria.db import repository as repo
 from aria.graph.runner import RunBusyError, RunNotFoundError, RunStateError
+from aria.graph.workflow import window_exists
 from aria.reporting.markdown import render_postmortem
 
 router = APIRouter(prefix="/api/v1/runs", tags=["runs"])
@@ -60,6 +61,14 @@ def _public_state(values: dict[str, Any]) -> dict[str, Any]:
 @router.post("", status_code=status.HTTP_202_ACCEPTED, response_model=RunAccepted)
 async def create_run(request: TriageRequest, state: State, caller: Caller) -> RunAccepted:
     """Start triage. The run continues in the background; follow it on ``links.stream``."""
+    if request.window_id and not request.logs:
+        engine = state.services.engine
+        if not await asyncio.to_thread(window_exists, engine, request.window_id):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                f"no stored window {request.window_id!r}: load it with `aria data ingest`, "
+                "or send the log lines",
+            )
     trigger = "api" if caller.authenticated else "manual"
     run_id = await asyncio.to_thread(state.runner.submit, request, trigger=trigger)
     if state.inprocess:
@@ -252,4 +261,7 @@ async def delete_run(run_id: RunId, state: State) -> None:
     run = await _run_or_404(state, run_id)
     if run["status"] in (RunStatus.RUNNING, RunStatus.QUEUED):
         raise HTTPException(status.HTTP_409_CONFLICT, "the run is still in progress")
-    await state.runner.delete(run_id)
+    try:
+        await state.runner.delete(run_id)
+    except RunBusyError as exc:  # a review is being applied right now
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc

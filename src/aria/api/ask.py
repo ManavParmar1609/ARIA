@@ -115,15 +115,20 @@ async def answer(
     known = {item.id: item for item in ranked}
     router = services.router
     if use_llm and router.has_real_llm("ask") and ranked:
-        facts = {
-            "ranked_evidence": [{"id": e.id, "summary": e.title} for e in ranked],
-            "evidence_count": len(evidence),
-        }
+        facts = {"evidence_count": len(evidence)}
+        # Evidence titles quote log templates and alert names, so they travel fenced.
+        quoted = {"ranked_evidence": [{"id": e.id, "summary": e.title} for e in ranked]}
         try:
             result = await router.structured(
                 "ask",
                 "answer",
-                build_messages("answer", facts, ranked, untrusted={"question": question}),
+                build_messages(
+                    "answer",
+                    facts,
+                    ranked,
+                    untrusted={"question": question},
+                    untrusted_data=quoted,
+                ),
                 AnswerOutput,
                 validator=lambda output: check_answer(output, known),
                 budget=BudgetGuard(ASK_BUDGET),

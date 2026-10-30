@@ -221,7 +221,7 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
     if (report) {
       const v = report.validation;
       reporter.push(
-        `Wrote the report${report.generated_by === "llm" ? " with a model" : " from the evidence alone, with no model"}: ${n(v?.checked_claims ?? 0)} claims, ${pct(v?.citation_coverage)} of them citing evidence.`,
+        `Wrote the report${report.generated_by === "llm" && !report.model?.startsWith("fake/") ? " with a model" : " from the evidence alone, with no model"}: ${n(v?.checked_claims ?? 0)} claims, ${pct(v?.citation_coverage)} of them citing evidence.`,
       );
       reporter.push(
         v?.ok

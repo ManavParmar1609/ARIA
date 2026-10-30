@@ -36,7 +36,7 @@ is spent.
   over when they send nothing for `stall_timeout_s`.
 - **Budgets.** [`BudgetGuard`](../../src/aria/llm/budget.py) checks tokens, cost, LLM calls, tool
   calls, steps and wall-clock time before each call, against limits in config that a run can
-  lower or raise for tokens and cost. A spent budget raises `BudgetExceededError`; the agent falls
+  only lower, for tokens and cost. A spent budget raises `BudgetExceededError`; the agent falls
   back to its deterministic path, so the run degrades to rules and templates instead of failing.
 - **The fake provider** ([`fake.py`](../../src/aria/llm/fake.py)) answers deterministically from
   the same context a real model receives, so offline runs exercise the real prompt contract,

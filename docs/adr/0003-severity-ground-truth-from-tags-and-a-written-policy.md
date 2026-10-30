@@ -35,9 +35,8 @@ scoring the rules against them would be circular.
 ## Alternatives considered
 
 - **Label windows with ARIA's rules or an LLM.** Circular: it grades the system against itself.
-- **Use only the contiguous BGL log.** It is in the [data manifest](../../data/manifest.yaml), but
-  it could not be downloaded in the build environment, so no results on it are reported (see the
-  [evaluation's limitations](../evaluation.md#limitations)).
+- **Use only the contiguous BGL log.** It has the administrators' tags but only one system, and
+  its windows are not independent; it is better as a real-data check than as the only labels.
 - **Hand-label windows.** Not feasible at the size of the evaluation, and still one team's
   judgement.
 
@@ -49,3 +48,10 @@ scoring the rules against them would be circular.
   in a real fleet, and a policy label is easier to learn than a real severity.
 - Changing the policy or the rubric changes the labels. Both are versioned files, and the model's
   metadata records the label sources, seeds and rules version it was trained on.
+
+**Update, 2026-10-30.** The full BlueGene/L log now comes from a checksum-pinned public copy, and
+ARIA is also scored on its contiguous windows, labelled by the same rubric
+([evaluation.md](../evaluation.md#real-logs-a-supercomputers-alert-tags)). On that real log the
+rules alone did better than the rules and the model trained on these semi-synthetic windows, so
+the semi-synthetic results above are not a promise about real fleets. The decision stands for
+training: real tags label the BGL scenarios, and a written policy labels the rest.

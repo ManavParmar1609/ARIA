@@ -36,9 +36,9 @@ def render_markdown(report: IncidentReport, *, decided_by: str | None = None) ->
     ]
     if decided_by:
         meta.insert(1, f"**Decided by:** {decided_by}")
-    source = (
-        "deterministic template" if report.generated_by == "template" else f"LLM ({report.model})"
-    )
+    # The offline fake stands in for a model without keys: what it writes is the template.
+    offline = report.generated_by == "template" or (report.model or "").startswith("fake/")
+    source = "ARIA's evidence template (no LLM)" if offline else f"LLM ({report.model})"
     meta.append(f"**Written by:** {source}")
     lines += [" · ".join(meta), ""]
 

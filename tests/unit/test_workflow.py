@@ -32,7 +32,7 @@ from aria.db.engine import get_engine, init_db, session_scope
 from aria.db.models import FeedbackRow, LogEventRow
 from aria.evidence import EvidenceStore
 from aria.graph import workflow
-from aria.graph.runner import RunNotFoundError, RunStateError, TriageRunner
+from aria.graph.runner import RunBusyError, RunNotFoundError, RunStateError, TriageRunner
 from aria.graph.workflow import run_salt
 from aria.notify import sign
 from aria.parsing.parser import parse_lines
@@ -682,6 +682,21 @@ async def test_a_failing_node_ends_the_run_as_failed(
     events = repo.list_events(env.services.engine, outcome.run_id)
     assert any(e.kind == "error" and e.node == "recall" for e in events)
     assert events[-1].payload == {"status": "failed"}
+
+
+async def test_a_run_is_not_deleted_while_another_process_drives_it(env: Env) -> None:
+    outcome = await env.runner.start(kernel_panic(env))
+    engine = env.services.engine
+    # A review is being applied in another process: it holds the run.
+    assert repo.claim_run(engine, outcome.run_id, "api-elsewhere:1")
+    with pytest.raises(RunBusyError):
+        await env.runner.delete(outcome.run_id)
+    assert repo.get_run(engine, outcome.run_id) is not None  # nothing half-deleted
+    repo.release_run(engine, outcome.run_id, "api-elsewhere:1")
+    await env.runner.delete(outcome.run_id)
+    assert repo.get_run(engine, outcome.run_id) is None
+    with pytest.raises(RunNotFoundError):  # a review that comes after finds no run
+        await env.runner.resume(outcome.run_id, {"decision": "approve", "reviewer": "ana"})
 
 
 async def test_delete_removes_the_run_everywhere(env: Env) -> None:

@@ -117,9 +117,9 @@ Fixed (23d7f36, 409db39, and the results regenerated after 03af0b8):
   labelled failure beside recall over the failures a window could judge, the share judged, four
   standard unsupervised detectors on the same blocks, a window-length sweep, and a replay of the log
   from its start. A claim of beating the detectors appears only when the measured F1 supports it.
-- The docs call the scenario results semi-synthetic everywhere, and say which limits are real: one
-  real log from one system, no untouched test set for the scenario suite, rules and features that
-  mirror the generator.
+- The docs call the scenario results semi-synthetic everywhere, and say which limits are real: at
+  the time, one real log from one system (the final audit below adds five more real datasets), no
+  untouched test set for the scenario suite, rules and features that mirror the generator.
 - The explainer video's measured scene adds the real-log result, read from the generated results.
 
 ### Aesthetic and copy
@@ -250,5 +250,6 @@ make audit
 
 `make eval` rewrites every published number and the blocks quoted in the README and the model card;
 commit what it rewrote. `make web-e2e` includes axe in both themes, the 320 px reflow check and the
-frozen-frame check of the severity stamp. CI runs all of these on every push, with the Lighthouse gate and the
-video render.
+frozen-frame check of the severity stamp. CI runs all of these except `make eval` on every pull
+request and every push to main, with the Lighthouse gate and the video render; `make eval` runs by
+hand, and CI's smoke gate checks the published thresholds.

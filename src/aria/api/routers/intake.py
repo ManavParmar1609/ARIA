@@ -22,7 +22,8 @@ Payload = Annotated[dict[str, Any], Body()]
 
 
 async def _accept(state: AppState, payload: dict[str, Any], source: str) -> AlertAccepted:
-    key, alerts, common = intake.normalize(payload, source=source)
+    # Cleaning hundreds of alerts is CPU work: off the event loop, so other requests go on.
+    key, alerts, common = await asyncio.to_thread(intake.normalize, payload, source=source)
     if not alerts:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "the payload has no alerts")
     system = intake.system_for(common, alerts)

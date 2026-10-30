@@ -58,6 +58,6 @@ whichever process handles them.
 - The guarantee is only as good as the reviews. Approvals count as confirmations, so
   rubber-stamped approvals make the sets look better calibrated than they are.
 - Nothing happens below 10 reviews: at `alpha` 0.1 the conformal quantile is not finite on fewer.
-- In `external` mode each worker recalibrates its own copy of the model file from the same
-  reviews. The API process does not run the job, so the calibration that `/api/v1/feedback`
-  reports comes from the API's own copy, which stays as trained unless both read the same file.
+- In `external` mode the worker runs the recalibration job and writes the model file; the API
+  reloads the calibration that `/api/v1/feedback` reports from that shared file (see
+  [ADR 0013](0013-run-background-jobs-where-runs-execute.md)).

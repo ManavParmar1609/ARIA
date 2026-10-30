@@ -258,7 +258,7 @@ def check_gate(results: dict[str, Any], suite: str, path: Path = THRESHOLDS) -> 
     if results.get("data", {}).get("fixtures"):
         failures.append(
             "the thresholds are set on the Loghub 2k samples, but this ran on the test fixtures; "
-            "download the samples first (make data)"
+            "download them first: uv run aria data download --source loghub-2k"
         )
     for dotted, bound in spec.items():
         value = _lookup(results, dotted)

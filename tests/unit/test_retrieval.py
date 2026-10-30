@@ -16,7 +16,7 @@ from aria.contracts.inputs import TicketContext
 from aria.contracts.retrieval import Hypothesis
 from aria.data.scenarios import LinePools, ScenarioBuilder
 from aria.db.engine import get_engine, init_db, session_scope
-from aria.db.models import ItsmIncidentRow
+from aria.db.models import IncidentRow, ItsmIncidentRow
 from aria.evidence import EvidenceStore
 from aria.llm.local_embed import HashingEmbedder, LocalEmbeddingProvider
 from aria.parsing.parser import parse_lines
@@ -179,6 +179,31 @@ async def test_remember_adds_an_incident_and_reembeds_on_model_change(
     await memory.refresh()
     assert memory.index.vectors is not None
     assert memory.index.vectors.shape == (len(seeded) + 1, 32)
+
+
+async def test_memory_in_another_process_follows_publishes_and_deletes(
+    memory: IncidentMemory,
+) -> None:
+    other = IncidentMemory(memory.engine, LocalEmbeddingProvider(model_path=None))
+    await other.refresh()
+    assert not await other.refresh_if_changed()  # nothing new: no reload
+    published = MemoryIncident(
+        id="run-elsewhere",
+        title="ZooKeeper quorum lost after a network partition",
+        system="zookeeper",
+        failure_mode="quorum_loss",
+        severity=Severity.SEV2,
+        summary="Followers lost the leader.",
+        resolution="Healed the partition.",
+        source="run",
+    )
+    await memory.remember(published)  # the API publishes a run
+    assert await other.refresh_if_changed()  # a worker sees it within a round
+    assert other.get("run-elsewhere") is not None
+    with session_scope(memory.engine) as session:  # the API deletes the run
+        session.delete(session.get(IncidentRow, "run-elsewhere"))
+    assert await other.refresh_if_changed()
+    assert other.get("run-elsewhere") is None
 
 
 # --- ticket history ----------------------------------------------------------------------------

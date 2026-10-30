@@ -46,8 +46,15 @@ param openAiChatModelVersion string = ''
 @description('Capacity of the chat deployment, in thousands of tokens per minute.')
 param openAiChatCapacity int = 10
 
-@description('Use the Azure SQL Database free offer (one per subscription); pauses when used up.')
+@description('Use the Azure SQL Database free offer (one per subscription). The worker polls the database, so it never idles long enough to auto-pause, and the monthly free vCore-seconds last about two and a half days.')
 param useFreeSqlOffer bool = true
+
+@description('What the free offer does once its monthly allowance is used: AutoPause (no charge; the database stays paused until next month) or BillOverUsage (keeps running and bills the excess).')
+@allowed([
+  'AutoPause'
+  'BillOverUsage'
+])
+param sqlFreeLimitBehavior string = 'AutoPause'
 
 var tags = {
   'azd-env-name': environmentName
@@ -77,6 +84,7 @@ module resources 'resources.bicep' = {
     openAiChatModelVersion: openAiChatModelVersion
     openAiChatCapacity: openAiChatCapacity
     useFreeSqlOffer: useFreeSqlOffer
+    sqlFreeLimitBehavior: sqlFreeLimitBehavior
   }
 }
 

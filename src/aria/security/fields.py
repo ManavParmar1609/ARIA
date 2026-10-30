@@ -20,6 +20,9 @@ from aria.security.redaction import Redactor, is_secret_name
 WITHHELD = "(withheld)"
 _SURROGATES = re.compile("[\ud800-\udfff]")
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
+# Bidirectional overrides and isolates make text read in a different order than it is stored
+# (a title that reads backwards in a chat message), so short fields drop them.
+_BIDI = re.compile("[\u202a-\u202e\u2066-\u2069]")
 
 
 def sanitize(text: str) -> str:
@@ -40,8 +43,17 @@ def clean_map(values: Mapping[str, str], clean: Callable[[str], str]) -> dict[st
     return {sanitize(k): "[REDACTED]" if is_secret_name(k) else clean(v) for k, v in values.items()}
 
 
+def one_line(text: str) -> str:
+    """A field shown on one line (a title, a service name, an alert name) as one plain line: no
+    line breaks for a heading to break on, and no bidirectional controls to reorder it."""
+    return " ".join(_BIDI.sub("", text).split())
+
+
 class _Cleaner:
-    """Cleans one request's fields with the run's redactor, remembering what it withheld."""
+    """Cleans one request's fields with the run's redactor, remembering what it withheld.
+
+    Cleaning is idempotent: a request cleaned when its run was created comes through the plan
+    step unchanged, and a withheld value is still reported as withheld."""
 
     def __init__(self, guard: GuardrailConfig, salt: bytes) -> None:
         self.guard = guard
@@ -49,7 +61,10 @@ class _Cleaner:
         self.withheld = False
 
     def __call__(self, text: str) -> str:
-        text = sanitize(text)
+        if text == WITHHELD:
+            self.withheld = True
+            return text
+        text = _BIDI.sub("", sanitize(text))
         if self.guard.detect_injection and scan_line(text, 0) is not None:
             self.withheld = True
             return WITHHELD
@@ -69,7 +84,7 @@ def clean_request(
         alerts.append(
             alert.model_copy(
                 update={
-                    "name": clean(alert.name),
+                    "name": one_line(clean(alert.name)),
                     "labels": clean_map(alert.labels, clean),
                     "annotations": clean_map(alert.annotations, clean),
                 }
@@ -79,15 +94,29 @@ def clean_request(
             notes.append(f"alert {alert.fingerprint}: instruction-like text withheld")
 
     def optional(text: str | None) -> str | None:
-        value = clean(text) if text else text
-        return None if value == WITHHELD else value
+        value = one_line(clean(text)) if text else text
+        return None if value in (WITHHELD, "") else value
 
+    ticket = request.ticket
+    if ticket is not None:
+        # Ticket fields are typed by people too: a location or symptom can hold a password.
+        clean.withheld = False
+        ticket = ticket.model_copy(
+            update={
+                name: optional(value)
+                for name, value in ticket.model_dump().items()
+                if isinstance(value, str)
+            }
+        )
+        if clean.withheld:
+            notes.append("ticket: instruction-like text withheld")
     cleaned = request.model_copy(
         update={
             "title": optional(request.title),
             "service": optional(request.service),
             "environment": optional(request.environment),
             "alerts": alerts,
+            "ticket": ticket,
         }
     )
     return cleaned, notes

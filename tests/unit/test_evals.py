@@ -248,7 +248,7 @@ def test_gate_refuses_results_from_the_test_fixtures(tmp_path: Path) -> None:
     assert ev.is_fixtures(FIXTURES)
     failures = ev.check_gate({"data": {"fixtures": True}}, "smoke", spec)
     assert len(failures) == 1
-    assert "make data" in failures[0]
+    assert "aria data download --source loghub-2k" in failures[0]
 
 
 def test_sample_covers_every_failure_mode_before_repeating(builder: ScenarioBuilder) -> None:

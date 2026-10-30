@@ -79,17 +79,19 @@ RUN groupadd --system --gid 10001 aria \
     && mkdir -p /var/lib/aria/data /var/lib/aria/models \
     && chown -R aria:aria /var/lib/aria
 WORKDIR /app
-COPY --from=build --chown=aria:aria /app/.venv /app/.venv
-COPY --chown=aria:aria config ./config
-COPY --chown=aria:aria runbooks ./runbooks
+# Code, config and the shipped models stay owned by root: the aria user can read them but not
+# change them. What it writes (the database, data, recalibrated models) lives in /var/lib/aria.
+COPY --from=build /app/.venv /app/.venv
+COPY config ./config
+COPY runbooks ./runbooks
 # The trained models: log severity, and the ticket priority and SLA models (UCI log).
-COPY --chown=aria:aria models/severity_log.json models/severity_log.report.json \
+COPY models/severity_log.json models/severity_log.report.json \
      models/severity_ticket.json ./models/
 # The evaluation results released with this build, served at /api/v1/eval.
-COPY --chown=aria:aria docs/eval-results.json ./docs/eval-results.json
+COPY docs/eval-results.json ./docs/eval-results.json
 # Small public Loghub samples: `aria seed` falls back to them when the full set is not downloaded.
-COPY --chown=aria:aria tests/fixtures/loghub ./tests/fixtures/loghub
-COPY --chown=aria:aria tests/fixtures/real ./tests/fixtures/real
+COPY tests/fixtures/loghub ./tests/fixtures/loghub
+COPY tests/fixtures/real ./tests/fixtures/real
 USER aria
 VOLUME ["/var/lib/aria"]
 

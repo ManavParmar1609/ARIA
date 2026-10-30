@@ -18,7 +18,7 @@ from typing import Any
 from aria.config import ProviderKind
 from aria.contracts.base import Severity
 from aria.llm.base import Message, ProviderError, TokenCallback, Usage, estimate_tokens
-from aria.llm.prompts import parse_context, parse_evidence_block
+from aria.llm.prompts import parse_context, parse_evidence_block, parse_untrusted_data
 
 Responder = Callable[[dict[str, Any]], dict[str, Any]]
 _WORD = re.compile(r"[a-z0-9_]{3,}")
@@ -192,7 +192,7 @@ def _comms(ctx: dict[str, Any]) -> dict[str, Any]:
     drafts = ctx.get("drafts") or {}
     ids = _ids(ctx)[:2]
     fallback = {
-        "title": ctx.get("title", "Incident update"),
+        "title": (ctx.get("report") or {}).get("title", "Incident update"),
         "body": "We are investigating an incident.",
         "evidence_ids": ids,
     }
@@ -287,7 +287,7 @@ class FakeProvider:
             if responder is None:
                 msg = f"fake provider has no responder for task {schema_name!r}"
                 raise ProviderError(msg, status=400)
-            ctx = parse_context(messages)
+            ctx = {**parse_context(messages), **parse_untrusted_data(messages)}
             ctx["_evidence_block"] = parse_evidence_block(messages)
             text = json.dumps(responder(ctx), ensure_ascii=False)
         if on_token is not None:

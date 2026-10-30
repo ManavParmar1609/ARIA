@@ -115,7 +115,7 @@ az containerapp job start -g "$(azd env get-value AZURE_RESOURCE_GROUP)" -n "$(a
 Optional settings:
 
 - `ARIA_DEPLOY_OPENAI`, with `AZURE_OPENAI_CHAT_MODEL` and `AZURE_OPENAI_CHAT_MODEL_VERSION`, adds an Azure OpenAI deployment.
-- `ARIA_SQL_FREE_OFFER` picks the Azure SQL free offer (on by default).
+- `ARIA_SQL_FREE_OFFER` picks the Azure SQL free offer (on by default). The worker polls the database every few seconds, so a serverless database never sits idle long enough to auto-pause, and the offer's monthly free vCore-seconds last about two and a half days. After that, with `ARIA_SQL_FREE_LIMIT=AutoPause` (the default, no charge), the database stays paused until the next month and ARIA stops; `ARIA_SQL_FREE_LIMIT=BillOverUsage` keeps it running and bills the excess. For anything longer than a demo, choose one of those, or set `ARIA_SQL_FREE_OFFER=false`.
 - `make bicep` compiles the templates first.
 - The manual [Deploy to Azure](../.github/workflows/deploy.yml) workflow does the same as `azd up`, through OpenID Connect. Its header lists the GitHub environment variables and secrets it needs.
 
@@ -148,7 +148,9 @@ Both are read when a process starts, so restart after a change. `GET /api/v1/set
 | `ARIA_REQUIRE_APPROVAL` | On by default. When off, runs that also ask for no approval publish without review and send nothing outbound. |
 | `ARIA_RATE_LIMIT_PER_MINUTE` | Requests per minute for each key name |
 | `ARIA_CORS_ORIGINS` | Browser origins allowed to call the API directly. The console goes through its own server and does not need this. |
-| `ARIA_PUBLIC_BASE_URL` | The API's public URL, used in links in outbound messages and as an allowed host for `/mcp` |
+| `ARIA_PUBLIC_BASE_URL` | The API's public URL: an allowed host for `/mcp`, the address the A2A agent card advertises (`<url>/a2a`), and where messages link when `ARIA_CONSOLE_URL` is unset |
+| `ARIA_CONSOLE_URL` | Where people open a run (the web console). Messages link to `<url>/console/runs/<run id>` when it is set. |
+| `ARIA_WORKER_HEALTH_PORT` | A port where `aria worker` answers HTTP liveness probes from its heartbeat (Container Apps ignores the image's health check). Unset: no endpoint. |
 | `ARIA_PSEUDONYM_KEY` | Keys the per-run pseudonyms for IP and e-mail addresses. Set the same value on every process. Without it, each process picks its own random key at start, so a run that is retried or forked in another process gets different pseudonyms. |
 | `ARIA_LOG_LEVEL`, `ARIA_LOG_FORMAT` | Log level, and `json` or `console` output |
 | `ARIA_OTEL_EXPORTER`, `ARIA_OTLP_ENDPOINT` | Trace export: `none`, `console`, `otlp` (to `ARIA_OTLP_ENDPOINT`) or `azure` |

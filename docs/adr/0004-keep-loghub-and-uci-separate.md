@@ -41,7 +41,11 @@ The datasets are never linked. Each answers its own question:
 ## Consequences
 
 - No result mixes the datasets, and every source is cited for what it actually contains.
-- Ticket triage depends on the UCI download, which could not be fetched in the build environment.
-  The ticket model is therefore not trained in this build: `POST /api/v1/tickets/assess` returns
-  503 ([`learning.py`](../../src/aria/api/routers/learning.py)) and runs skip the ticket model
-  until `aria data ingest` and `aria train tickets` have run.
+- Ticket triage depends on the UCI download. Without it, `POST /api/v1/tickets/assess` returns
+  503 ([`learning.py`](../../src/aria/api/routers/learning.py)) and runs skip the ticket model.
+
+**Update, 2026-10-30.** The UCI log now comes from checksum-pinned public copies when UCI's own
+site cannot be reached. The ticket models are trained on it and ship in
+[`models/severity_ticket.json`](../../models/severity_ticket.json), so `/api/v1/tickets/assess`
+answers, and their results are in [evaluation.md](../evaluation.md#real-tickets-a-servicenow-service-desk).
+The decision stands: the datasets are still never joined.

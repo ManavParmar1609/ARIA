@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import Field, StringConstraints, model_validator
+from pydantic import Field, StringConstraints, field_validator, model_validator
 
 from aria.contracts.base import Contract
 
@@ -21,6 +22,26 @@ class AlertSignal(Contract):
     annotations: dict[str, str] = Field(default_factory=dict)
     starts_at: datetime | None = None
     ends_at: datetime | None = None
+
+
+# Impact and urgency as ServiceNow writes them; a bare digit or the word maps onto them.
+_LEVELS = {"1": "1 - High", "2": "2 - Medium", "3": "3 - Low"}
+_LEVEL_WORDS = {"high": "1", "medium": "2", "low": "3"}
+_LEVEL_FORM = re.compile(r"([123])(?: - .+)?")  # the level digit is what the model reads
+
+
+def _ticket_level(value: str | None) -> str | None:
+    """'1 - High', '1' and 'High' -> '1 - High'; blank -> None; anything else is refused, so a
+    level the model never learned is a 422, not a confident lowest priority."""
+    text = " ".join((value or "").split())
+    if not text:
+        return None
+    match = _LEVEL_FORM.fullmatch(text)
+    digit = _LEVEL_WORDS.get(text.lower()) or (match.group(1) if match else None)
+    if digit is None:
+        msg = "must be 1 - High, 2 - Medium or 3 - Low (or 1, 2, 3, or High, Medium, Low)"
+        raise ValueError(msg)
+    return _LEVELS[digit]
 
 
 class TicketContext(Contract):
@@ -39,6 +60,11 @@ class TicketContext(Contract):
     opened_at: datetime | None = None
     knowledge: bool | None = None
     priority_confirmation: bool | None = None
+
+    @field_validator("impact", "urgency")
+    @classmethod
+    def _known_level(cls, value: str | None) -> str | None:
+        return _ticket_level(value)
 
 
 class RunOptions(Contract):

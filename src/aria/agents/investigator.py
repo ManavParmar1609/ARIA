@@ -387,8 +387,6 @@ class Investigator:
             "severity": str(loop.inputs.severity.severity),
             "allowed_actions": allowed,
             "tools": [spec.brief() for spec in loop.belt.specs()],
-            "hypotheses": hypotheses,
-            "observations": [o.brief() for o in loop.observations[-6:]],
             "candidate_hypotheses": []
             if loop.hypotheses
             else [c.model_dump() for c in candidate_hypotheses(loop.inputs)],
@@ -399,7 +397,18 @@ class Investigator:
             result = await self.router.structured(
                 "investigator",
                 "investigator_step",
-                build_messages("investigator_step", facts, cited, detail_chars=260, data_chars=180),
+                build_messages(
+                    "investigator_step",
+                    facts,
+                    cited,
+                    # Hypotheses an LLM wrote and tool observations both quote logs: fenced.
+                    untrusted_data={
+                        "hypotheses": hypotheses,
+                        "observations": [o.brief() for o in loop.observations[-6:]],
+                    },
+                    detail_chars=260,
+                    data_chars=180,
+                ),
                 InvestigatorStep,
                 json_schema=schema,
                 validator=check,

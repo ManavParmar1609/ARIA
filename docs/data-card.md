@@ -111,6 +111,9 @@ In git:
   - UCI and plain HTTP files are checked against a pinned sha256. Where none is pinned, the
     first download records one in `data/checksums.lock`, and every later download is checked
     against it.
+  - Mirrors are trusted only by their own pinned sha256 or commit.
+  - The GitLab.com incident tracker is a live API and cannot be pinned: the download records the
+    snapshot's sha256 and date beside it instead.
 - [`tests/fixtures/loghub/`](../tests/fixtures/loghub/): small subsets of the 2k samples for 13
   systems, with rows unmodified. For each system they keep every BGL alert line, up to 40 lines
   per failure mode and up to 120 background lines. They are rebuilt with

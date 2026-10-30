@@ -34,6 +34,9 @@
     },
     "useFreeSqlOffer": {
       "value": "${ARIA_SQL_FREE_OFFER=true}"
+    },
+    "sqlFreeLimitBehavior": {
+      "value": "${ARIA_SQL_FREE_LIMIT=AutoPause}"
     }
   }
 }

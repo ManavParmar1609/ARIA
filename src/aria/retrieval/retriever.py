@@ -147,10 +147,10 @@ class Retriever:
     ) -> tuple[str, str | None]:
         if not (use_llm and self.router is not None):
             return deterministic_rewrite(query), None
-        facts = {
+        facts = {"system": query.system, "failure_mode_hints": query.failure_mode_hints}
+        # The query, its terms and earlier attempts come from log text: fenced, not context.
+        quoted = {
             "query": query.text,
-            "system": query.system,
-            "failure_mode_hints": query.failure_mode_hints,
             "components": query.components,
             "keywords": query.keywords,
             "template_terms": query.template_terms,
@@ -160,7 +160,7 @@ class Retriever:
             result = await self.router.structured(
                 "retriever",
                 "query_rewrite",
-                build_messages("query_rewrite", facts),
+                build_messages("query_rewrite", facts, untrusted_data=quoted),
                 QueryRewrite,
                 budget=budget,
                 max_tokens=300,

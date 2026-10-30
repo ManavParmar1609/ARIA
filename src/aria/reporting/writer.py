@@ -99,7 +99,7 @@ class ReportWriter:
 
     # --- LLM narrative -------------------------------------------------------------------------
 
-    def _facts(self, ctx: ReportContext, draft: NarrativeOutput) -> dict[str, Any]:
+    def _facts(self, ctx: ReportContext) -> dict[str, Any]:
         runbooks = []
         for ref in ctx.retrieval.runbooks:
             runbook = self.runbooks.get(ref.slug)
@@ -119,7 +119,6 @@ class ReportWriter:
             "decided_by": sev.decided_by,
             "needs_review": sev.needs_review,
             "prediction_set": [str(s) for s in sev.prediction_set],
-            "draft": draft.model_dump(),
             "runbooks": runbooks,
             "rules": [
                 "Keep the severity exactly as given.",
@@ -152,7 +151,12 @@ class ReportWriter:
             result = await self.router.structured(
                 "reporter",
                 "narrative",
-                build_messages("narrative", self._facts(ctx, draft), ctx.evidence),
+                build_messages(
+                    "narrative",
+                    self._facts(ctx),
+                    ctx.evidence,
+                    untrusted_data={"draft": draft.model_dump()},  # it quotes log templates
+                ),
                 NarrativeOutput,
                 validator=check,
                 budget=budget,
@@ -183,7 +187,7 @@ class ReportWriter:
         ]
         cited = sorted({e for c in claims for e in c["evidence_ids"]})
         evidence = [e for e in ctx.evidence if e.id in cited]
-        messages = build_messages("critic", {"claims": claims}, evidence)
+        messages = build_messages("critic", {}, evidence, untrusted_data={"claims": claims})
         if use_llm and self.router is not None and self.router.has_real_llm("critic"):
             try:
                 result = await self.router.structured(
@@ -199,9 +203,13 @@ class ReportWriter:
             except (BudgetExceededError, LLMError):
                 pass
         from aria.llm.fake import RESPONDERS  # noqa: PLC0415 - the offline lexical critic
-        from aria.llm.prompts import parse_context, parse_evidence_block  # noqa: PLC0415
+        from aria.llm.prompts import (  # noqa: PLC0415
+            parse_context,
+            parse_evidence_block,
+            parse_untrusted_data,
+        )
 
-        ctx_facts = parse_context(messages)
+        ctx_facts = {**parse_context(messages), **parse_untrusted_data(messages)}
         ctx_facts["_evidence_block"] = parse_evidence_block(messages)
         return CriticOutput.model_validate(RESPONDERS["critic"](ctx_facts)), "offline"
 

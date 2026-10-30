@@ -257,6 +257,9 @@ class Settings(BaseSettings):
     # replica while a release migrates, or run `aria db upgrade` as a job instead.
     migrate_on_start: bool = False
     worker_concurrency: int = Field(default=4, ge=1, le=64)
+    # An HTTP port where `aria worker` answers liveness probes from its heartbeat (Container Apps
+    # probes over HTTP and ignores the image's HEALTHCHECK). Unset: no endpoint.
+    worker_health_port: int | None = Field(default=None, ge=1, le=65_535)
     require_approval: bool = True
     rate_limit_per_minute: int = Field(default=120, ge=1)
     # Largest request body the API reads; 20,000 lines of 2,000 characters fit with room to spare.

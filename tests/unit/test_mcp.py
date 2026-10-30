@@ -172,6 +172,12 @@ async def test_bad_arguments_are_rejected_by_the_server(services: tuple[Services
         missing = await client.call_tool("get_runbook", {"slug": "no-such-runbook"})
         assert "unknown runbook no-such-runbook" in str(missing.content)
         assert (await client.call_tool("search_logs", {"query": "a%", "limit": 500})).is_error
+        # A search across every run's lines is refused; one with no searchable term finds nothing.
+        unbounded = await client.call_tool("search_logs", {"query": "panic"})
+        assert unbounded.is_error
+        assert "give a run_id" in str(unbounded.content)
+        empty = await client.call_tool("search_logs", {"query": "!! ?", "system": "bgl"})
+        assert empty.structured_content == {"lines": [], "truncated": False}
 
 
 async def test_tool_belt_enforces_allowlist_budget_and_audit(

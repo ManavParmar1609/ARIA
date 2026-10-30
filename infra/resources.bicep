@@ -20,6 +20,7 @@ param openAiChatModel string
 param openAiChatModelVersion string
 param openAiChatCapacity int
 param useFreeSqlOffer bool
+param sqlFreeLimitBehavior string
 
 var token = toLower(uniqueString(subscription().id, resourceGroup().id, environmentName))
 // Until `azd deploy` pushes ARIA's images, the apps run a public placeholder.
@@ -212,7 +213,7 @@ resource database 'Microsoft.Sql/servers/databases@2023-08-01-preview' = {
     useFreeSqlOffer
       ? {
           useFreeLimit: true
-          freeLimitExhaustionBehavior: 'AutoPause'
+          freeLimitExhaustionBehavior: sqlFreeLimitBehavior
         }
       : {}
   )
@@ -503,11 +504,30 @@ resource worker 'Microsoft.App/containerApps@2024-03-01' = {
         {
           name: 'worker'
           image: placeholderImage
-          env: sharedEnv
+          // The worker answers liveness probes on this port from its heartbeat: Container Apps
+          // ignores the image's HEALTHCHECK, so without it a hung worker would never restart.
+          env: concat(sharedEnv, [
+            {
+              name: 'ARIA_WORKER_HEALTH_PORT'
+              value: '8001'
+            }
+          ])
           resources: {
             cpu: json('1.0')
             memory: '2Gi'
           }
+          probes: [
+            {
+              type: 'Liveness'
+              httpGet: {
+                path: '/healthz'
+                port: 8001
+              }
+              initialDelaySeconds: 30
+              periodSeconds: 30
+              failureThreshold: 4
+            }
+          ]
         }
       ]
       scale: {

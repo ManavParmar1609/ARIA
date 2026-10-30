@@ -12,6 +12,7 @@ Transports: in-process (``mcp.Client(server)``, used by ARIA's own agents), stdi
 
 from __future__ import annotations
 
+import asyncio
 import re
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
@@ -311,7 +312,7 @@ def build_server(
     ) -> TicketHistoryOut:
         """SLA-breach, reopen and resolution-time statistics of similar ITSM tickets (UCI log)."""
         ticket = TicketContext(category=category, subcategory=subcategory, symptom=symptom)
-        stats = ticket_history(svc().engine, ticket)
+        stats = await asyncio.to_thread(ticket_history, svc().engine, ticket)
         return TicketHistoryOut(found=stats is not None, stats=stats)
 
     @server.tool(annotations=READ_ONLY)
@@ -322,10 +323,23 @@ def build_server(
         errors_only: bool = False,
         limit: Annotated[int, Field(ge=1, le=50)] = 20,
     ) -> LogSearchOut:
-        """Log lines containing every term of the query, from a run or from the datasets."""
+        """Log lines containing every term of the query, from one run or one system's datasets.
+
+        Give a run_id or a system: a search across every run's lines scans the whole table."""
+        if run_id is None and system is None:
+            msg = "give a run_id, or a system to search its datasets"
+            raise ToolError(msg)
         terms = _TERM.findall(query)[:6]
-        lines, truncated = runlog.search_lines(
-            svc().engine, terms, run_id=run_id, system=system, limit=limit, errors_only=errors_only
+        if not terms:  # "!!" or "a b c": nothing to match, so no arbitrary lines either
+            return LogSearchOut(lines=[], truncated=False)
+        lines, truncated = await asyncio.to_thread(
+            runlog.search_lines,
+            svc().engine,
+            terms,
+            run_id=run_id,
+            system=system,
+            limit=limit,
+            errors_only=errors_only,
         )
         return LogSearchOut(lines=[LogLineOut(**line) for line in lines], truncated=truncated)
 
@@ -336,13 +350,17 @@ def build_server(
         limit: Annotated[int, Field(ge=1, le=20)] = 5,
     ) -> LogSearchOut:
         """Example lines for one mined log template in a run."""
-        lines = runlog.template_examples(svc().engine, run_id, template_id, limit=limit)
+        lines = await asyncio.to_thread(
+            runlog.template_examples, svc().engine, run_id, template_id, limit=limit
+        )
         return LogSearchOut(lines=[LogLineOut(**line) for line in lines], truncated=False)
 
     @server.tool(annotations=READ_ONLY)
     async def component_timeline(run_id: RunId, component: Identifier) -> TimelineOut:
         """Per-minute line and error counts for one component in a run."""
-        buckets = runlog.component_timeline(svc().engine, run_id, component)
+        buckets = await asyncio.to_thread(
+            runlog.component_timeline, svc().engine, run_id, component
+        )
         return TimelineOut(component=component, buckets=[TimelineBucket(**b) for b in buckets])
 
     @server.tool(annotations=READ_ONLY)
@@ -350,7 +368,7 @@ def build_server(
         run_id: RunId, component: Identifier | None = None
     ) -> NodeBreakdownOut:
         """Errors and lines per node in a run, optionally for one component."""
-        nodes = runlog.node_breakdown(svc().engine, run_id, component)
+        nodes = await asyncio.to_thread(runlog.node_breakdown, svc().engine, run_id, component)
         return NodeBreakdownOut(nodes=[NodeCount(**n) for n in nodes])
 
     @server.resource(

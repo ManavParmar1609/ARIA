@@ -23,6 +23,12 @@ uv sync --all-groups --all-extras
 pnpm --dir web install --frozen-lockfile
 ```
 
+`make eval-smoke` needs the Loghub samples (a few MB, unlike `make data`'s full download):
+
+```bash
+uv run aria data download --source loghub-2k
+```
+
 Python 3.12+ with uv, Node 22.13+ with pnpm. In Claude Code cloud sessions,
 `.claude/hooks/session-start.sh` does this for you.
 
@@ -52,7 +58,8 @@ must never need a network call or a real key. Contract tests mock HTTP.
 | `docs/evaluation.md`, `docs/eval-results.json` | `make eval` |
 | Blocks between `<!-- generated:NAME -->` and `<!-- /generated:NAME -->` in `README.md` and `docs/model-card.md` | `make eval` |
 | `docs/eval-live.json` | `uv run aria eval run --suite pipeline --llm` (makes paid or rate-limited provider calls; ask first) |
-| `web/src/data/eval-results.json`, `web/src/data/eval-live.json` | `pnpm --dir web sync:data` |
+| `web/src/data/eval-results.json`, `web/src/data/eval-live.json`, `web/src/data/llms.json` | `pnpm --dir web sync:data` |
+| `web/src/data/samples.json` | `uv run python -I scripts/export_web_samples.py` |
 | `web/src/data/demo-run.json` | `uv run python -I scripts/record_demo_run.py` (the landing page and `video/` both read it) |
 | `docs/openapi.json`, `web/src/lib/api/schema.ts` | `make openapi` |
 | `models/*.json`, `models/*.npz` | `make train` and `aria seed` |

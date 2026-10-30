@@ -36,12 +36,13 @@ from aria.db.models import FeedbackRow, IncidentRow, LogEventRow, RunRow, ToolCa
 from aria.graph.checkpoint import SqlCheckpointSaver
 from aria.graph.state import Json
 from aria.graph.store import SqlStore
-from aria.graph.workflow import TriageContext, build_graph, rekey_for_fork
+from aria.graph.workflow import TriageContext, build_graph, rekey_for_fork, run_salt
 from aria.mcp.client import Target
 from aria.observability.logging import get_logger
 from aria.reporting.markdown import render_markdown
 from aria.retrieval import runlog
 from aria.retrieval.memory import run_incident_id
+from aria.security.fields import clean_request
 from aria.services import Services
 
 log = get_logger(__name__)
@@ -321,6 +322,7 @@ class TriageRunner:
         if trigger != "replay" and request.replay_of is not None:
             # Only the replay endpoint may tie a run to a real incident's expert labels.
             request = request.model_copy(update={"replay_of": None})
+        request = self._cleaned(request, run_id)
         repo.create_run(
             self.engine,
             run_id,
@@ -332,6 +334,16 @@ class TriageRunner:
             **fields,
         )
         return run_id
+
+    def _cleaned(self, request: TriageRequest, run_id: str) -> TriageRequest:
+        """The request with its title, service, alerts and ticket cleaned with the run's key,
+        before anything stores it: the run row, the run list and the first checkpoint (which the
+        state endpoint can show) never hold a raw secret or instruction. The plan step cleans
+        them again, which changes nothing."""
+        cleaned, _ = clean_request(
+            request, self.services.config.guardrails, run_salt(self.services.settings, run_id)
+        )
+        return cleaned
 
     async def execute(self, run_id: str) -> RunOutcome:
         """Run a submitted run, or continue one that stopped (for example after a restart)."""
@@ -556,6 +568,7 @@ class TriageRunner:
             return await self.execute(new_id) if execute else RunOutcome(new_id, RunStatus.QUEUED)
 
         new_id = new_run_id()
+        request = self._cleaned(request, new_id)  # a new title is as untrusted as any
         await self.checkpointer.acopy_thread(run_id, new_id)
         update = rekey_for_fork(snapshot.values, new_id)
         update["request"] = request.model_dump(mode="json")
@@ -594,7 +607,25 @@ class TriageRunner:
         return await self._drive(new_id, None, config=forked)
 
     async def delete(self, run_id: str) -> None:
-        """Remove a run everywhere: checkpoints, lines, events, report, actions, audit, memory."""
+        """Remove a run everywhere: checkpoints, lines, events, report, actions, audit, memory.
+
+        It holds the run as a drive would, so a review applied at the same moment is refused
+        (409) instead of failing halfway and writing checkpoints for a run that is gone."""
+        lock = self._locks[run_id]
+        if lock.locked():
+            msg = f"run {run_id} is running"
+            raise RunBusyError(msg)
+        async with lock:
+            took = await asyncio.to_thread(
+                repo.claim_run, self.engine, run_id, self.owner, status=None
+            )
+            if not took:
+                msg = f"run {run_id} is running in another process"
+                raise RunBusyError(msg)
+            await self._purge(run_id)
+        self._locks.pop(run_id, None)
+
+    async def _purge(self, run_id: str) -> None:
         await self.checkpointer.adelete_thread(run_id)
         for item in await self.store.asearch(("feedback",), filter={"run_id": run_id}, limit=100):
             await self.store.adelete(item.namespace, item.key)

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import socket
 import time
 from collections.abc import Awaitable, Callable
@@ -98,6 +99,8 @@ class Worker:
                 await asyncio.to_thread(self.runner.renew_held)
                 if recover:
                     await self.recover(limit=max(1, self._capacity - self.active))
+                # Incidents another process published or deleted reach this one's memory.
+                await self.runner.services.memory.refresh_if_changed()
             except Exception:  # a database blip: try again on the next round
                 log.exception("worker.claims_failed")
 
@@ -131,6 +134,39 @@ def heartbeat_age(path: Path) -> float | None:
         return None
 
 
+async def serve_health(
+    port: int,
+    heartbeat: Path,
+    *,
+    max_age_s: float = 60.0,
+    host: str = "0.0.0.0",  # noqa: S104 - a container probe reaches it from outside the loopback
+) -> asyncio.Server:
+    """A minimal HTTP liveness endpoint for platforms that probe over HTTP: any request gets 200
+    while the worker polled within ``max_age_s`` (or is still starting), and 503 once it stops,
+    so the platform restarts a hung worker."""
+    started = time.monotonic()
+
+    async def answer(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        with contextlib.suppress(Exception):
+            await asyncio.wait_for(reader.readline(), timeout=5)  # the request line is enough
+            age = heartbeat_age(heartbeat)
+            starting = age is None and time.monotonic() - started < 2 * max_age_s
+            ok = starting or (age is not None and age <= max_age_s)
+            body = json.dumps(
+                {"status": "ok" if ok else "stale", "heartbeat_age_s": age, "starting": starting}
+            ).encode()
+            status = "200 OK" if ok else "503 Service Unavailable"
+            head = (
+                f"HTTP/1.1 {status}\r\nContent-Type: application/json\r\n"
+                f"Content-Length: {len(body)}\r\nConnection: close\r\n\r\n"
+            )
+            writer.write(head.encode() + body)
+            await writer.drain()
+        writer.close()
+
+    return await asyncio.start_server(answer, host=host, port=port)
+
+
 async def poll_forever(
     runner: TriageRunner,
     *,
@@ -162,6 +198,8 @@ async def poll_forever(
                     worker.execute(run_id)
             if time.monotonic() - renewed >= repo.CLAIM_RENEW_S:
                 await asyncio.to_thread(runner.renew_held)
+                # Incidents the API published or deleted reach this worker's memory.
+                await runner.services.memory.refresh_if_changed()
                 renewed = time.monotonic()
             if heartbeat is not None:
                 await asyncio.to_thread(_touch, heartbeat)

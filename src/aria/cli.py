@@ -345,7 +345,7 @@ def worker(
     interval: Annotated[float, typer.Option(help="Seconds between queue polls.")] = 2.0,
 ) -> None:
     """Run queued triage runs from the database (for ARIA_WORKER_MODE=external)."""
-    from aria.api.worker import heartbeat_file, poll_forever
+    from aria.api.worker import heartbeat_file, poll_forever, serve_health
     from aria.config import get_settings
     from aria.graph.runner import TriageRunner
     from aria.observability.logging import configure_logging
@@ -364,15 +364,23 @@ def worker(
         for signum in (signal.SIGTERM, signal.SIGINT):
             with contextlib.suppress(NotImplementedError):  # no signal handlers on Windows
                 asyncio.get_running_loop().add_signal_handler(signum, stop.set)
+        beat = heartbeat_file(settings.data_dir)
+        health = (
+            await serve_health(settings.worker_health_port, beat)
+            if settings.worker_health_port
+            else None
+        )
         try:
             await poll_forever(
                 TriageRunner(services),
                 concurrency=concurrency or settings.worker_concurrency,
                 interval_s=interval,
                 stop=stop,
-                heartbeat=heartbeat_file(settings.data_dir),
+                heartbeat=beat,
             )
         finally:
+            if health is not None:
+                health.close()
             await services.aclose()
 
     asyncio.run(main())

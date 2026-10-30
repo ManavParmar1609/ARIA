@@ -344,6 +344,17 @@ async def test_the_critic_removes_claims_its_evidence_does_not_support(
     assert outcome.report.validation.ok
 
 
+async def test_the_report_writer_sends_its_draft_fenced(builder: ScenarioBuilder) -> None:
+    ctx = await _context(builder)
+    first = compose_draft(ctx).summary[0].text
+    fake = FakeProvider()
+    await ReportWriter(_router(fake, "reporter"), RUNBOOKS).write(ctx, report_id="rep-f")
+    user = next(c for c in fake.calls if c["task"] == "narrative")["messages"][1].content
+    context = user[user.index("<aria_context>") : user.index("</aria_context>")]
+    assert first not in context  # the draft quotes logs, so it is not trusted context
+    assert "<untrusted_draft>" in user
+
+
 # --- rendering ---------------------------------------------------------------------------------
 
 

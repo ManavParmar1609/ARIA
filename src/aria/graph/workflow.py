@@ -196,6 +196,21 @@ def report_id_for(run_id: str) -> str:
     return f"rpt-{run_id}"
 
 
+def window_exists(engine: Engine, window_id: str) -> bool:
+    """Whether a stored dataset window by this ID has any lines."""
+    with session_scope(engine) as session:
+        return (
+            session.scalar(
+                select(LogEventRow.id)
+                .where(
+                    LogEventRow.window_id == window_id, LogEventRow.dataset != runlog.RUN_DATASET
+                )
+                .limit(1)
+            )
+            is not None
+        )
+
+
 def load_window_lines(engine: Engine, window_id: str, system: str) -> list[str]:
     """Re-render a stored dataset window as raw lines for the parser."""
     with session_scope(engine) as session:

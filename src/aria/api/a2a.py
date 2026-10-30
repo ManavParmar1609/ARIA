@@ -14,6 +14,7 @@ The Agent Card is served at ``/.well-known/agent-card.json`` and the JSON-RPC en
 from __future__ import annotations
 
 import asyncio
+from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -43,6 +44,7 @@ from a2a.types.a2a_pb2 import (
     SecurityRequirement,
     SecurityScheme,
     StringList,
+    Task,
 )
 from a2a.utils.errors import TaskNotCancelableError
 from pydantic import ValidationError
@@ -260,6 +262,37 @@ class AriaExecutor(AgentExecutor):
         await updater.cancel()
 
 
+class BoundedTaskStore(InMemoryTaskStore):
+    """The in-memory task store, keeping only the newest tasks: at most ``max_tasks``, and at most
+    ``max_bytes`` of them in all, so a stream of large requests cannot fill the API's memory. A
+    task's run stays in the database, so a client whose old task was forgotten still finds the
+    run and its report through the REST API."""
+
+    def __init__(self, *, max_tasks: int = 500, max_bytes: int = 64 * 1024 * 1024) -> None:
+        super().__init__()
+        self.max_tasks = max_tasks
+        self.max_bytes = max_bytes
+        self._held: OrderedDict[str, tuple[int, ServerCallContext]] = OrderedDict()
+
+    @property
+    def held_bytes(self) -> int:
+        return sum(size for size, _ in self._held.values())
+
+    async def save(self, task: Task, context: ServerCallContext) -> None:
+        await super().save(task, context)
+        self._held[task.id] = (task.ByteSize(), context)
+        self._held.move_to_end(task.id)
+        while len(self._held) > 1 and (
+            len(self._held) > self.max_tasks or self.held_bytes > self.max_bytes
+        ):
+            old_id, (_, old_context) = self._held.popitem(last=False)
+            await super().delete(old_id, old_context)
+
+    async def delete(self, task_id: str, context: ServerCallContext) -> None:
+        await super().delete(task_id, context)
+        self._held.pop(task_id, None)
+
+
 def a2a_routes(
     get_runner: Callable[[], TriageRunner],
     settings: Settings,
@@ -271,7 +304,7 @@ def a2a_routes(
     card = agent_card(settings, secured=secured)
     handler = DefaultRequestHandler(
         agent_executor=AriaExecutor(get_runner, gate),
-        task_store=InMemoryTaskStore(),
+        task_store=BoundedTaskStore(),
         agent_card=card,
     )
     return list(create_agent_card_routes(card)), list(
