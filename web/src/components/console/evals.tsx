@@ -394,9 +394,9 @@ export function Evals({ data, real }: { data: Evaluation; real?: RealLogs }) {
           />
           <div className="grid content-start gap-3 text-sm">
             <p>
-              ARIA decided <strong>{pct(s.autoDecided)}</strong> of windows alone, at{" "}
-              {pct(s.accuracyWhenAuto)} accuracy. Of the rest, which it sent to review, its own
-              guess was right {pct(s.accuracyWhenFlagged)} of the time.
+              ARIA decided <span className="font-medium text-foreground">{pct(s.autoDecided)}</span>{" "}
+              of windows alone, at {pct(s.accuracyWhenAuto)} accuracy. Of the rest, which it sent to
+              review, its own guess was right {pct(s.accuracyWhenFlagged)} of the time.
             </p>
             <Bars
               label="Who decided"
