@@ -57,7 +57,7 @@ model is unavailable or a budget is spent.
 ## Consequences
 
 - Switching provider is a configuration change. The adapter is contract-tested against mocked
-  HTTP for NIM, Azure OpenAI and OpenAI-compatible endpoints.
+  HTTP for Gemini, NIM, Azure OpenAI and OpenAI-compatible endpoints.
 - Fallback hides provider trouble from the run, not from operators: `aria providers check` checks
   keys, catalogs and model IDs, `/api/v1/providers` reports breaker state, and every LLM call is a
   run event.

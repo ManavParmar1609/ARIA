@@ -2,7 +2,7 @@
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { apiFetch, apiText, postJson } from "./client";
+import { apiFetch, postJson } from "./client";
 import type { Session } from "./session";
 import type {
   AskRequest,
@@ -12,11 +12,9 @@ import type {
   Health,
   IncidentOut,
   ProviderOut,
-  ReportOut,
   ReviewRequest,
   RunAccepted,
   RunDetail,
-  RunEvent,
   RunPage,
   RunState,
   RunStatus,
@@ -39,9 +37,6 @@ export const keys = {
   run: (id: string) => ["run", id] as const,
   state: (id: string, checkpoint?: string | null) =>
     ["run", id, "state", checkpoint ?? "head"] as const,
-  events: (id: string) => ["run", id, "events"] as const,
-  report: (id: string) => ["run", id, "report"] as const,
-  postmortem: (id: string) => ["run", id, "postmortem"] as const,
   history: (id: string) => ["run", id, "history"] as const,
   incidents: ["incidents"] as const,
   incident: (id: string) => ["incidents", id] as const,
@@ -121,29 +116,6 @@ export function useRunState(id: string, checkpoint?: string | null, enabled = tr
     queryFn: () => apiFetch<RunState>(runPath(id, `/state${search}`)),
     enabled,
     placeholderData: checkpoint ? keepPreviousData : undefined,
-  });
-}
-
-export function useRunEvents(id: string) {
-  return useQuery({
-    queryKey: keys.events(id),
-    queryFn: () => apiFetch<RunEvent[]>(runPath(id, "/events?limit=5000")),
-  });
-}
-
-export function useReport(id: string, enabled = true) {
-  return useQuery({
-    queryKey: keys.report(id),
-    queryFn: () => apiFetch<ReportOut>(runPath(id, "/report")),
-    enabled,
-  });
-}
-
-export function usePostmortem(id: string, enabled: boolean) {
-  return useQuery({
-    queryKey: keys.postmortem(id),
-    queryFn: () => apiText(runPath(id, "/postmortem.md")),
-    enabled,
   });
 }
 

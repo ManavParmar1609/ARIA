@@ -1,4 +1,5 @@
-"""Provider-agnostic LLM access: NVIDIA NIM, Azure OpenAI, OpenAI-compatible and offline fake."""
+"""Provider-agnostic LLM access: Google Gemini, NVIDIA NIM, Azure OpenAI, OpenAI-compatible
+endpoints and the offline fake."""
 
 from aria.llm.base import (
     BudgetExceededError,

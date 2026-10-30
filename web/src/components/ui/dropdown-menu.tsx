@@ -34,13 +34,6 @@ export function DropdownMenuContent({
 const item =
   "relative flex h-9 cursor-default items-center gap-2 rounded-sm px-2 text-sm outline-none select-none data-[disabled]:opacity-50 data-[highlighted]:bg-sunken [&_svg]:size-4 [&_svg]:text-muted-foreground";
 
-export function DropdownMenuItem({
-  className,
-  ...props
-}: ComponentProps<typeof MenuPrimitive.Item>) {
-  return <MenuPrimitive.Item className={cn(item, className)} {...props} />;
-}
-
 export function DropdownMenuRadioItem({
   className,
   children,
@@ -56,23 +49,4 @@ export function DropdownMenuRadioItem({
       {children}
     </MenuPrimitive.RadioItem>
   );
-}
-
-export function DropdownMenuLabel({
-  className,
-  ...props
-}: ComponentProps<typeof MenuPrimitive.Label>) {
-  return (
-    <MenuPrimitive.Label
-      className={cn("px-2 py-1.5 text-xs font-medium text-muted-foreground", className)}
-      {...props}
-    />
-  );
-}
-
-export function DropdownMenuSeparator({
-  className,
-  ...props
-}: ComponentProps<typeof MenuPrimitive.Separator>) {
-  return <MenuPrimitive.Separator className={cn("my-1 h-px bg-rule", className)} {...props} />;
 }

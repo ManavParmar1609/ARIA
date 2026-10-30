@@ -29,7 +29,7 @@ export function SiteMenu({ links }: { links: { href: string; label: string }[] }
         id="site-menu"
         popover="auto"
         aria-label="Menu"
-        className="backdrop:bg-ink/25 inset-x-3 top-3 bottom-auto m-0 h-auto max-h-[calc(100dvh-1.5rem)] w-auto overflow-y-auto rounded-card border border-rule bg-elevated p-4 text-foreground sm:top-24 sm:right-6 sm:left-auto sm:w-80"
+        className="inset-x-3 top-3 bottom-auto m-0 h-auto max-h-[calc(100dvh-1.5rem)] w-auto overflow-y-auto rounded-card border border-rule bg-elevated p-4 text-foreground backdrop:bg-black/45 sm:top-24 sm:right-6 sm:left-auto sm:w-80"
       >
         <div className="flex items-center justify-between">
           <span className="pl-3 text-sm font-medium text-muted-foreground">Menu</span>

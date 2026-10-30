@@ -69,13 +69,6 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   return body as T;
 }
 
-export async function apiText(path: string): Promise<string> {
-  const response = await fetch(path, { cache: "no-store" });
-  const text = await response.text();
-  if (!response.ok) throw new ApiError(response.status, describe(response.status, undefined));
-  return text;
-}
-
 export function postJson<T>(path: string, body: unknown): Promise<T> {
   return apiFetch<T>(path, { method: "POST", body: JSON.stringify(body) });
 }

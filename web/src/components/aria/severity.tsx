@@ -10,13 +10,6 @@ export const SEVERITY_BG: Record<Severity, string> = {
   SEV4: "bg-sev4",
 };
 
-export const SEVERITY_FG: Record<Severity, string> = {
-  SEV1: "text-sev1-fg",
-  SEV2: "text-sev2-fg",
-  SEV3: "text-sev3-fg",
-  SEV4: "text-sev4-fg",
-};
-
 const SHORT: Record<Severity, string> = {
   SEV1: "Critical",
   SEV2: "High",
