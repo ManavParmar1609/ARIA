@@ -210,9 +210,9 @@ owner's decision. The [threat model](threat-model.md) lists the security residua
 - **Smaller UI items:** "incident" names both the list of triage runs and the past incidents in
   memory (renaming the list is a product decision), and chart text inside the landing page's
   drawings is small on phones.
-- **For the owner:** rotate the NVIDIA key in the git-ignored `.env` (it notes it was shared in a
-  chat); run the live LLM evaluation (`aria eval run --suite pipeline --llm`, which spends provider
-  credits); and, with access to Zenodo, add more real labelled logs from pinned sources.
+- **For the owner:** run the live LLM evaluation (`aria eval run --suite pipeline --llm`, which
+  spends provider credits), and, with access to Zenodo, add more real labelled logs from pinned
+  sources.
 
 ## How to run the checks again
 
