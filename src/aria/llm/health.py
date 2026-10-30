@@ -80,6 +80,9 @@ async def check_provider(
             report.models[field_name] = model in catalog
             if model not in catalog and field_name == "chat_model":
                 report.problems.append(f"{model} is not in {name}'s model catalog")
+    if not cfg.chat_model and not (cfg.embedding_model or cfg.rerank_model):
+        # It answered its catalog, but every chat request would fail over to the next provider.
+        report.problems.append("no chat model configured, so it cannot answer chat requests")
     if not probe:
         return report
     started = time.perf_counter()

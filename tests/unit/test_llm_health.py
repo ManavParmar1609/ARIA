@@ -55,6 +55,19 @@ async def test_healthy_provider_passes(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @respx.mock
+async def test_a_provider_with_no_chat_model_is_not_reported_ok(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A self-hosted NIM set up with only its URL failed every call, yet the check said ok."""
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test")
+    _mock_nim(["meta/llama-4-scout"])
+    cfg = _cfg(chat_model=None, embedding_model=None)
+    report = await check_provider("nim-local", cfg, OpenAICompatibleProvider("nim-local", cfg))
+    assert not report.ok
+    assert "no chat model configured" in "; ".join(report.problems)
+
+
+@respx.mock
 async def test_the_safety_model_id_is_checked_but_optional(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test")
     _mock_nim(["openai/gpt-oss-20b", "nvidia/nemotron-3.5-embed-1b"])

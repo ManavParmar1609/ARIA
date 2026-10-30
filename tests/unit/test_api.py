@@ -29,12 +29,14 @@ from aria.api.app import create_app
 from aria.api.state import AppState
 from aria.api.worker import Worker, heartbeat_age, poll_forever
 from aria.config import Environment, get_settings, reset_caches
+from aria.contracts.base import EvidenceKind
 from aria.contracts.inputs import AlertSignal, TriageRequest
 from aria.contracts.run import RunStatus
 from aria.data.scenarios import LinePools, ScenarioBuilder
 from aria.db import repository as repo
 from aria.db.engine import dispose_engines, get_engine, init_db, session_scope
 from aria.db.models import AlertGroupRow, RunRow
+from aria.evidence import EvidenceStore
 from aria.graph.runner import RunBusyError, TriageRunner
 from aria.mcp.client import remote_target
 from aria.mcp.server import TOOL_NAMES
@@ -1501,6 +1503,38 @@ async def test_a_stream_ends_when_its_run_is_deleted_or_runs_too_long(api: Api) 
     assert await asyncio.wait_for(stream, timeout=5) == []  # it ends instead of pinging forever
 
 
+async def test_a_stream_follows_a_run_another_process_drives_to_its_end(api: Api) -> None:
+    """Compose and Azure run jobs in a worker process, so the API's stream sees their events
+    only in the database. It must pick each one up once, in order, and stop at the end."""
+    from aria.api.sse import run_events
+
+    runner, engine = api.state.runner, api.state.services.engine
+    queued = runner.submit(TriageRequest(system="bgl", logs=logs(api)))  # never executed here
+    repo.update_run(engine, queued, status=RunStatus.RUNNING)
+    await asyncio.to_thread(repo.append_event, engine, queued, "run_started")
+
+    async def worker() -> None:  # writes straight to the database, as another process would
+        for kind, payload in (("node_started", None), ("run_finished", {"status": "published"})):
+            await asyncio.sleep(0.05)
+            await asyncio.to_thread(repo.append_event, engine, queued, kind, payload=payload)
+
+    elsewhere = asyncio.create_task(worker())
+    messages = await asyncio.wait_for(
+        _collect(run_events(runner, queued, poll_s=0.01, max_s=5)), timeout=10
+    )
+    await elsewhere
+    assert [m["event"] for m in messages] == ["run_started", "node_started", "run_finished"]
+    assert [m["id"] for m in messages] == ["0", "1", "2"]
+    # A reconnect with Last-Event-ID gets only what came after it, and ends at the finish.
+    resumed = await _collect(run_events(runner, queued, after=0, poll_s=0.01, max_s=5))
+    assert [m["event"] for m in resumed] == ["node_started", "run_finished"]
+    await runner.delete(queued)
+
+
+async def _collect(stream: AsyncIterator[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [message async for message in stream]
+
+
 async def test_a_run_that_has_not_started_has_an_empty_state_not_a_404(api: Api) -> None:
     runner = api.state.runner
     queued = runner.submit(TriageRequest(system="bgl", logs=logs(api)))  # never executed here
@@ -1536,3 +1570,68 @@ async def test_streamed_runs_wait_for_a_worker_slot() -> None:
     results = await asyncio.gather(*(worker.gated(job()) for _ in range(6)))
     assert results == [1] * 6
     assert peak == 2
+
+
+def test_ask_says_a_learned_incident_lists_approved_steps_not_its_fix() -> None:
+    """ARIA's own proposed next steps were quoted back as how a past incident "was resolved"."""
+    from aria.api.ask import _plain
+
+    store = EvidenceStore()
+    data = {"title": "SSH brute force", "resolution": "Block the source address"}
+    learned = store.add(
+        EvidenceKind.INCIDENT,
+        "Past incident",
+        source="memory.search",
+        data={**data, "source": "run"},
+    )
+    curated = store.add(
+        EvidenceKind.INCIDENT,
+        "Past incident",
+        source="memory.search",
+        data={**data, "source": "curated"},
+    )
+    by_id = {item.id: item for item in store.all()}
+    assert "approved these next steps: Block the source address" in _plain(by_id[learned])
+    assert "resolved this way: Block the source address" in _plain(by_id[curated])
+
+
+def test_a_sample_sent_from_the_chat_is_marked_semi_synthetic() -> None:
+    """Chat samples were stored in memory as real incidents."""
+    from ag_ui.core import RunAgentInput, UserMessage
+
+    from aria.api.agui import triage_request_from
+
+    def sent(props: dict[str, Any]) -> TriageRequest | None:
+        return triage_request_from(
+            RunAgentInput(
+                thread_id="chat-1",
+                run_id="r1",
+                state={},
+                messages=[UserMessage(id="m1", role="user", content="ERROR app: boom")],
+                tools=[],
+                context=[],
+                forwarded_props=props,
+            )
+        )
+
+    sample, pasted = sent({"system": "hdfs", "synthetic": True}), sent({"system": "hdfs"})
+    assert sample is not None
+    assert pasted is not None
+    assert (sample.synthetic, pasted.synthetic) == (True, False)
+
+
+async def test_a_run_that_names_a_provider_this_server_lacks_is_refused(api: Api) -> None:
+    """An unknown or unconfigured provider was ignored without a word, and the run used another."""
+    body = {"system": "bgl", "logs": logs(api)}
+    unknown = await api.client.post(
+        "/api/v1/runs", json={**body, "options": {"provider": "nosuch"}}
+    )
+    assert unknown.status_code == 422
+    assert "unknown provider 'nosuch'" in unknown.json()["detail"]
+    keyless = await api.client.post(
+        "/api/v1/runs", json={**body, "options": {"provider": "gemini"}}
+    )
+    assert keyless.status_code == 422
+    assert "not set up" in keyless.json()["detail"]
+    offline = await api.client.post("/api/v1/runs", json={**body, "options": {"provider": "fake"}})
+    assert offline.status_code == 202

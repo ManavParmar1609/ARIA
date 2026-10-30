@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime
 from typing import Literal
 
@@ -29,6 +30,13 @@ class SimilarIncident(Contract):
     mttr_minutes: float | None = Field(default=None, ge=0)
     source: Literal["memory", "curated", "run"]
     evidence_id: EvidenceId | None = None
+
+    def applies_to(self, system: str, components: Iterable[str]) -> bool:
+        """Whether this past incident can stand for a cause here: it comes from the same system,
+        or its signal was on a component this window logs. A kernel panic on a supercomputer
+        explains nothing about a web app's errors, however close the words or the vectors."""
+        present = set(components)
+        return self.system == system or any(c in present for c in self.components)
 
 
 class TicketHistoryStats(Contract):

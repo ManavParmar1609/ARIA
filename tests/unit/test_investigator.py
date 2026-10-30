@@ -255,6 +255,30 @@ async def test_parallel_rounds_need_few_decisions(
     assert result.stopped_reason == "finished"
 
 
+async def test_another_systems_incident_is_no_cause_to_test(
+    setup: tuple[Services, InvestigationInputs, EvidenceStore],
+) -> None:
+    """Every generic check (example lines, a busy timeline) seemed to bear out a past kernel
+    panic as the cause of a web app's errors."""
+    services, bgl, _ = setup
+    assert any(h.failure_mode == "kernel_panic" for h in candidate_hypotheses(bgl))
+    evidence = EvidenceStore()
+    lines = [
+        f"2026-10-30 10:00:0{i} ERROR c.s.checkout.CheckoutController: NullPointerException"
+        for i in range(1, 4)
+    ]
+    out = parse_lines(lines, system="generic", guard=GuardrailConfig(), evidence=evidence)
+    severity = await services.severity.assess(
+        out.batch.features, system="generic", evidence=evidence, use_llm=False
+    )
+    # Retrieval falls back to analogues on other systems: here, the past kernel panic.
+    analogues = [i for i in bgl.similar if i.failure_mode == "kernel_panic"]
+    assert analogues
+    inputs = InvestigationInputs("run-web", "generic", out.batch, severity.assessment, analogues)
+    assert [h.failure_mode for h in candidate_hypotheses(inputs)] == [GENERIC_CAUSE]
+    assert all(step["tool"] != "get_runbook" for step in suggested_plan(inputs))
+
+
 def test_quarantined_lines_never_choose_the_component(
     setup: tuple[Services, InvestigationInputs, EvidenceStore],
 ) -> None:

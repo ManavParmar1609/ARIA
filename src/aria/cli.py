@@ -147,7 +147,10 @@ def _loghub_dir(*, fixtures: bool = True) -> Path:
             "--fixtures to replace it with a model fit on the test fixtures."
         )
         raise typer.Exit(code=1)
-    console.print("[yellow]data/raw/loghub-2k not found (make data); using the test fixtures[/]")
+    console.print(
+        "[yellow]data/raw/loghub-2k not found (uv run aria data download --source loghub-2k);"
+        " using the test fixtures[/]"
+    )
     return FIXTURES_DIR
 
 
@@ -657,10 +660,17 @@ def providers_check(
 @providers_app.command("models")
 def providers_models(name: str) -> None:
     """List the models a provider serves (reads its /models endpoint)."""
+    from aria.llm.base import LLMError
     from aria.llm.router import get_router
 
     router = get_router()
     _require_provider(router.config.providers, name)
+    if not router.config.providers[name].is_enabled():
+        # An endpoint without its key answers 401 or 404, and one without a URL cannot be asked.
+        console.print(
+            f"{name} is not set up: run `aria providers check {name}` to see what it needs"
+        )
+        raise typer.Exit(code=1)
     provider = router.provider(name)
     if not hasattr(provider, "list_models"):
         console.print(f"{name} has no model catalog")
@@ -673,5 +683,10 @@ def providers_models(name: str) -> None:
         finally:
             await router.aclose()
 
-    for model in asyncio.run(fetch()):
+    try:
+        found = asyncio.run(fetch())
+    except LLMError as exc:
+        console.print(f"{name} did not list its models: {exc}")
+        raise typer.Exit(code=1) from None
+    for model in found:
         console.print(model)

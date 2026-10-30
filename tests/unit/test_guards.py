@@ -28,6 +28,10 @@ from aria.security.redaction import Redactor
         ("postgres://admin:s3cr3t@db.internal:5432/app", "url_credentials"),
         ("password=hunter2 user=bob", "assigned_secret"),
         ("card 4111 1111 1111 1111 declined", "payment_card"),
+        # Mastercard, Amex and Discover test numbers: each needs the Luhn check's doubled digits.
+        ("card 5555555555554444 declined", "payment_card"),
+        ("amex 378282246310005 on file", "payment_card"),
+        ("discover 6011-1111-1111-1117 used", "payment_card"),
     ],
 )
 def test_secrets_are_removed(text: str, kind: str) -> None:
@@ -35,6 +39,44 @@ def test_secrets_are_removed(text: str, kind: str) -> None:
     out = redactor.redact(text)
     assert redactor.counts.get(kind) == 1
     assert "[REDACTED]" in out
+
+
+@pytest.mark.parametrize("number", ["4111111111111112", "5555555555554445", "378282246310006"])
+def test_card_shaped_numbers_that_fail_the_luhn_check_are_kept(number: str) -> None:
+    redactor = Redactor()
+    assert redactor.redact(f"request {number} took 3 ms") == f"request {number} took 3 ms"
+    assert redactor.counts == {}
+
+
+_SECRETISH = (
+    "password=hunter2",
+    "token: abc123",
+    "api_key='zzz111'",
+    "x-api-key: abcdef123456",
+    "Authorization: Bearer abcdefghijklmnopqrstuvwxyz0123",
+    "card 4111 1111 1111 1111",
+    "postgres://admin:s3cr3t@db:5432/app",
+    "password=<*>",
+    "user=bob",
+    "connection failed",
+)
+
+
+@given(
+    st.lists(st.sampled_from(_SECRETISH), min_size=1, max_size=6),
+    st.sampled_from(["", '"', "'"]),
+)
+def test_redacting_redacted_text_finds_nothing_new(parts: list[str], quote: str) -> None:
+    """A report quotes evidence that was already redacted; checking it again must not flag the
+    [REDACTED] markers themselves as credentials."""
+    once = Redactor(pseudonymize_ips=False).redact(" ".join(f"{quote}{p}{quote}" for p in parts))
+    again = Redactor(pseudonymize_ips=False)
+    assert again.redact(once) == once
+    assert again.counts == {}
+
+
+def test_a_wildcard_in_front_of_a_secret_does_not_hide_it() -> None:
+    assert Redactor().redact("password=<*>hunter2") == "password=[REDACTED]"
 
 
 def test_assigned_secret_keeps_the_key_name() -> None:

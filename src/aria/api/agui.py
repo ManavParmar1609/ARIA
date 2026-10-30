@@ -98,7 +98,11 @@ def triage_request_from(run_input: RunAgentInput) -> TriageRequest | None:
         return None
     props = run_input.forwarded_props if isinstance(run_input.forwarded_props, dict) else {}
     lines = [line for line in text.splitlines() if line.strip()]
-    return TriageRequest(system=str(props.get("system") or "generic"), logs=lines)
+    return TriageRequest(
+        system=str(props.get("system") or "generic"),
+        logs=lines,
+        synthetic=props.get("synthetic") is True,  # a sample the console loaded
+    )
 
 
 async def pending_interrupt(runner: TriageRunner, run_id: str) -> tuple[str, Any] | None:

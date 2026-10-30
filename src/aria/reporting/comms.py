@@ -28,6 +28,7 @@ from aria.llm.schemas import CommsOutput, MessageDraft
 from aria.reporting.grounding import validate_external_text
 from aria.reporting.writer import cited_evidence
 from aria.security.safety import check_text
+from aria.text import headline
 
 AUDIENCE = {"responders": "responders", "stakeholders": "stakeholders", "status_page": "customers"}
 KIND = {"responders": "slack", "stakeholders": "webhook", "status_page": "status_page"}
@@ -68,14 +69,6 @@ class CommsOutcome:
     actions: list[OutboundAction]
     polished_by: str | None = None
     rejected: dict[str, list[str]] = field(default_factory=dict)
-
-
-_SEVERITY_PREFIX = re.compile(r"^SEV[1-4]\s*·\s*")
-
-
-def headline(title: str) -> str:
-    """A report title without the severity it leads with ("SEV3 · ")."""
-    return _SEVERITY_PREFIX.sub("", title)
 
 
 def deterministic_drafts(

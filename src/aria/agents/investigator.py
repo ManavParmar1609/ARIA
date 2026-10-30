@@ -42,6 +42,7 @@ from aria.llm.schemas import (
 from aria.mcp.client import ToolBelt, ToolNotAllowedError
 from aria.parsing.flows import load_flow_settings
 from aria.parsing.signals import signal_components, signal_templates
+from aria.text import clip
 
 INVESTIGATOR_TOOLS = (
     "search_logs",
@@ -175,6 +176,10 @@ def candidate_hypotheses(inputs: InvestigationInputs, *, limit: int = 3) -> list
     for incident in inputs.similar:
         if incident.failure_mode in seen or incident.failure_mode == "none":
             continue
+        # Another system's incident with nothing in common is no cause to test: every generic
+        # check (example lines, a busy timeline) would seem to bear it out.
+        if not incident.applies_to(inputs.system, batch.features.components):
+            continue
         seen.add(incident.failure_mode)
         label = incident.failure_mode.replace("_", " ")
         out.append(
@@ -190,7 +195,7 @@ def candidate_hypotheses(inputs: InvestigationInputs, *, limit: int = 3) -> list
         where = top.components[0] if top.components else component
         out.append(
             NewHypothesis(
-                statement=f'{where} is failing: "{top.template[:80]}" repeats {top.count} times',
+                statement=f'{where} is failing: "{clip(top.template, 80)}" repeats {top.count} times',
                 failure_mode=GENERIC_CAUSE,
                 component=where,
             )
@@ -226,7 +231,14 @@ def suggested_plan(inputs: InvestigationInputs) -> list[dict[str, Any]]:
         words = " ".join(_WORDS.findall(signal[0].template.lower())[:8])
         if len(words) >= 2:
             plan.append({"tool": "search_incidents", "arguments": {"query": words, "limit": 3}})
-    runbook = next((i.runbook_slug for i in inputs.similar if i.runbook_slug), None)
+    runbook = next(
+        (
+            i.runbook_slug
+            for i in inputs.similar
+            if i.runbook_slug and i.applies_to(inputs.system, inputs.batch.features.components)
+        ),
+        None,
+    )
     if runbook and runbook != lifecycle_runbook:
         plan.append({"tool": "get_runbook", "arguments": {"slug": runbook}})
     # A rival cause on another component gets its own timeline, so the two can be told apart.

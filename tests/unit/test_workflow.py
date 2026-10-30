@@ -19,6 +19,7 @@ import pytest
 import respx
 from pydantic import ValidationError
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 
 from aria.agents.investigator import INVESTIGATOR_TOOLS
 from aria.contracts.base import EvidenceKind, utcnow
@@ -161,7 +162,9 @@ async def test_run_pauses_for_review_then_publishes_a_cited_report(env: Env) -> 
     statuses = repo.action_statuses(engine, run_id)
     assert statuses[responders] == "skipped"  # approved, but no Slack webhook is configured
     assert sorted(s for a, s in statuses.items() if a != responders) == ["rejected", "rejected"]
-    assert env.services.memory.get(run_incident_id(run_id)) is not None
+    remembered = env.services.memory.get(run_incident_id(run_id))
+    assert remembered is not None
+    assert not remembered.title.startswith("SEV")  # the severity has a field of its own
     learned = await env.runner.store.asearch(("templates", "bgl"), limit=500)
     assert learned  # routine templates teach the history what normal looks like
     batch = ParsedBatch.model_validate((await env.runner.snapshot(run_id)).values["batch"])
@@ -205,6 +208,39 @@ async def test_approved_webhook_action_is_signed_and_sent_once(
     stamp = sent.headers["X-ARIA-Timestamp"]
     assert sent.headers["X-ARIA-Signature"] == sign("s3cret", stamp, sent.content)
     assert repo.action_statuses(env.services.engine, outcome.run_id)[hook] == "sent"
+
+
+async def test_a_database_error_after_a_send_never_sends_the_message_twice(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Publishing retries on a transient database error. If the error comes after a message went
+    out, the retry must find it claimed and leave it alone."""
+    monkeypatch.setenv("ARIA_OUTBOUND_WEBHOOK_URL", "https://hooks.example.test/aria")
+    engine = env.services.engine
+    save = repo.save_actions
+    failed: list[str] = []
+
+    def flaky(engine: Any, run_id: str, actions: Any, **kwargs: Any) -> None:
+        if not failed and any(a.status == "sent" for a in actions):
+            failed.append(run_id)
+            raise OperationalError("UPDATE actions", {}, Exception("database is locked"))
+        save(engine, run_id, actions, **kwargs)
+
+    with respx.mock(assert_all_called=True) as mock:
+        route = mock.post("https://hooks.example.test/aria").mock(return_value=httpx.Response(202))
+        outcome = await env.runner.start(kernel_panic(env))
+        assert outcome.interrupt is not None
+        hook = action_of(outcome.interrupt, "stakeholders")
+        monkeypatch.setattr(repo, "save_actions", flaky)
+        done = await env.runner.resume(
+            outcome.run_id, {"decision": "approve", "reviewer": "ana", "approve_actions": [hook]}
+        )
+    assert done.status is RunStatus.PUBLISHED
+    assert failed == [outcome.run_id]  # the error happened, after the send
+    assert route.call_count == 1
+    # The retry cannot tell the send went out, so it stays claimed rather than marked sent: a
+    # person may send it again, and the receiver drops the repeat by its Idempotency-Key.
+    assert repo.action_statuses(engine, outcome.run_id)[hook] in {"sent", "approved"}
 
 
 async def test_a_failed_delivery_can_be_sent_again_and_nothing_else_can(
@@ -389,6 +425,91 @@ async def test_rejected_run_sends_nothing_and_records_feedback(env: Env) -> None
         assert [(r.author, r.value["decision"]) for r in rows] == [("raj", "reject")]
     items = await env.runner.store.asearch(("feedback", "bgl"), filter={"run_id": outcome.run_id})
     assert len(items) == 1
+
+
+async def test_of_reviews_sent_at_once_only_the_first_is_applied(env: Env) -> None:
+    """Reviewers who press at the same moment: one decision is applied and the rest are refused,
+    so nobody is told their reject went through on a run another reviewer published."""
+    engine = env.services.engine
+    outcome = await env.runner.start(kernel_panic(env))
+    run_id = outcome.run_id
+    decisions = ["approve", "reject", "approve", "reject"]
+    results = await asyncio.gather(
+        *(
+            env.runner.resume(run_id, {"decision": d, "reviewer": f"reviewer-{i}"})
+            for i, d in enumerate(decisions)
+        ),
+        return_exceptions=True,
+    )
+    applied = [r for r in results if not isinstance(r, BaseException)]
+    refused = [r for r in results if isinstance(r, RunStateError | RunBusyError)]
+    assert (len(applied), len(refused)) == (1, 3)
+    assert (repo.get_run(engine, run_id) or {})["status"] == str(applied[0].status)
+    kinds = [e.kind for e in repo.list_events(engine, run_id)]
+    assert kinds.count("run_finished") == 1
+    assert kinds.count("interrupt") == 1
+
+
+@pytest.mark.parametrize(
+    ("system", "lines"),
+    [
+        (  # a long line, cut where it quotes a port
+            "hdfs",
+            [
+                (
+                    "081109 204015 308 WARN dfs.DataNode$DataXceiver: 10.251.71.16:50010:Got "
+                    "exception while serving blk_-1608999687919862906 to /10.251.71.16:"
+                ),
+                (
+                    "081109 204106 329 ERROR dfs.DataNode$DataXceiver: 10.251.71.16:50010:"
+                    "DataXceiver: java.io.IOException: Block blk_-1608999687919862906 is valid, "
+                    "and cannot be written to. on 10.251.71.16:50010 size 67108864"
+                ),
+            ],
+        ),
+        (  # a credential, redacted before ARIA quotes the line back
+            "generic",
+            [
+                f"2026-10-30 10:00:0{i} ERROR db.pool: connection failed user=app password=s3cr3t"
+                for i in range(1, 4)
+            ],
+        ),
+    ],
+)
+async def test_the_offline_report_passes_its_own_checks(
+    env: Env, system: str, lines: list[str]
+) -> None:
+    request = TriageRequest(
+        system=system, logs=lines, synthetic=True, options=RunOptions(use_llm=False)
+    )
+    outcome = await env.runner.start(request)
+    stored = repo.get_report(env.services.engine, f"rpt-{outcome.run_id}")
+    assert stored is not None
+    assert stored[0].validation.errors == []
+    assert "s3cr3t" not in stored[1]
+
+
+async def test_unrelated_logs_never_borrow_another_systems_cause(env: Env) -> None:
+    """A web app's NullPointerException was titled and explained as a supercomputer's kernel
+    panic from memory, at 95% confidence."""
+    lines = [
+        f"2026-10-30 10:00:0{i} ERROR c.s.checkout.CheckoutController: "
+        'java.lang.NullPointerException: Cannot invoke "Cart.getItems()" because "cart" is null'
+        for i in range(1, 4)
+    ]
+    request = TriageRequest(
+        system="generic", logs=lines, synthetic=True, options=RunOptions(use_llm=False)
+    )
+    outcome = await env.runner.start(request)
+    stored = repo.get_report(env.services.engine, f"rpt-{outcome.run_id}")
+    assert stored is not None
+    report = stored[0]
+    assert "generic" not in report.title
+    assert "c.s.checkout.CheckoutController" in report.title
+    causes = " ".join(c.text for c in report.suspected_cause).lower()
+    for borrowed in ("kernel", "panic", "brute", "past incident"):
+        assert borrowed not in causes
+    assert report.validation.errors == []
 
 
 async def test_edit_makes_severity_a_human_decision_that_cites_the_review(env: Env) -> None:

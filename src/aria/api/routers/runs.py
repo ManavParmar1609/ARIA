@@ -62,6 +62,15 @@ def _public_state(values: dict[str, Any]) -> dict[str, Any]:
 @router.post("", status_code=status.HTTP_202_ACCEPTED, response_model=RunAccepted)
 async def create_run(request: TriageRequest, state: State, caller: Caller) -> RunAccepted:
     """Start triage. The run continues in the background; follow it on ``links.stream``."""
+    wanted = request.options.provider
+    if wanted is not None and not state.services.router.is_set_up(wanted):
+        known = state.services.router.config.providers
+        detail = (
+            f"provider {wanted!r} is not set up on this server: `aria providers check` says why"
+            if wanted in known
+            else f"unknown provider {wanted!r}; this server knows {', '.join(known)}"
+        )
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail)
     if request.window_id and not request.logs:
         engine = state.services.engine
         if not await asyncio.to_thread(window_exists, engine, request.window_id):

@@ -76,6 +76,8 @@ export function AguiChat() {
   const awaiting = items.some((i) => i.kind === "review" && !i.answered);
   const [system, setSystem] = useState("hdfs");
   const [text, setText] = useState("");
+  // A loaded sample is semi-synthetic, so its run never counts as a real incident in memory.
+  const [sample, setSample] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const agentRef = useRef<HttpAgent | null>(null);
 
@@ -169,7 +171,7 @@ export function AguiChat() {
     agent.addMessage({ id: uid(), role: "user", content: lines.join("\n") });
     setRunning(true);
     try {
-      await agent.runAgent({ forwardedProps: { system } }, subscriber);
+      await agent.runAgent({ forwardedProps: { system, synthetic: sample !== null } }, subscriber);
     } catch (error) {
       push({
         kind: "error",
@@ -397,6 +399,7 @@ export function AguiChat() {
                 variant="ghost"
                 className="h-auto min-h-8 shrink py-1.5 text-left whitespace-normal"
                 onClick={() => {
+                  setSample(s.id);
                   setSystem(s.system);
                   setText(s.lines.join("\n"));
                 }}

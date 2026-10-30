@@ -397,7 +397,7 @@ class TriageRunner:
             if isinstance(decision, ReviewDecision)
             else ReviewDecision.model_validate(decision).model_dump(mode="json")
         )
-        return await self._drive(run_id, Command(resume=value))
+        return await self._drive(run_id, Command(resume=value), review=True)
 
     def renew_held(self) -> None:
         """Keep this process's claims fresh: on runs it drives and on runs it has yet to start."""
@@ -444,16 +444,35 @@ class TriageRunner:
         *,
         config: RunnableConfig | None = None,
         started: Json | None = None,
+        review: bool = False,
     ) -> RunOutcome:
         async with self._holding(run_id):
             # The claim spans processes: an API resuming a review and a worker recovering a run
-            # it thinks abandoned can never drive the same run, so nothing is sent twice.
-            if not await asyncio.to_thread(repo.claim_run, self.engine, run_id, self.owner):
+            # it thinks abandoned can never drive the same run, so nothing is sent twice. A
+            # review claims without marking the run running until it knows the review counts.
+            claimed = await asyncio.to_thread(
+                repo.claim_run,
+                self.engine,
+                run_id,
+                self.owner,
+                status=None if review else RunStatus.RUNNING,
+            )
+            if not claimed:
                 msg = f"run {run_id} is running in another process"
                 raise RunBusyError(msg)
             self.held.add(run_id)
             renewal = asyncio.create_task(self._renew(run_id))
             try:
+                if review:
+                    # Checked again under the claim: of reviews sent at once, the first decides
+                    # and the rest find nothing waiting, so a late reject is refused rather
+                    # than reported as the outcome of a run another reviewer published.
+                    if not _interrupts(await self.graph.aget_state(self.config(run_id))):
+                        msg = f"run {run_id} is not waiting for a review"
+                        raise RunStateError(msg)
+                    await asyncio.to_thread(
+                        repo.update_run, self.engine, run_id, status=RunStatus.RUNNING
+                    )
                 if started is not None:  # only the process that won the run says it started
                     await self._event(run_id, "run_started", payload=started)
                 return await self._stream(run_id, graph_input, config)

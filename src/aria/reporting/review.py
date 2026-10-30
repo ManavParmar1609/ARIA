@@ -14,7 +14,7 @@ from aria.contracts.base import Claim, EvidenceKind
 from aria.contracts.report import ActionItem, IncidentReport, ReportEdits, ReviewDecision
 from aria.contracts.severity import SeverityAssessment
 from aria.evidence import EvidenceStore
-from aria.reporting.comms import headline
+from aria.text import headline
 
 
 def review_evidence(

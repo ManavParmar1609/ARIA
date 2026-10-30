@@ -20,6 +20,7 @@ from aria.llm.prompts import build_messages
 from aria.llm.schemas import AnswerOutput, ClaimOut
 from aria.reporting.grounding import ungrounded_numbers
 from aria.services import Services
+from aria.text import headline
 
 _TERM = re.compile(r"[a-z0-9][a-z0-9_.-]{2,}")
 _STOP = frozenset(
@@ -66,8 +67,9 @@ async def memory_evidence(services: Services, question: str, *, limit: int = 6) 
             f"Summary: {incident.summary}",
             data={
                 "incident_id": incident.id,
-                "title": incident.title,
+                "title": headline(incident.title),
                 "resolution": incident.resolution,
+                "source": incident.source,
                 "failure_mode": incident.failure_mode,
                 "runbook": incident.runbook_slug,
                 "score": round(hit.score, 4),
@@ -93,6 +95,11 @@ def _plain(item: Evidence) -> str:
     """An answer line without a model: what the evidence says, in words a responder can act on."""
     data = item.data or {}
     if item.kind is EvidenceKind.INCIDENT and data.get("title") and data.get("resolution"):
+        if data.get("source") == "run":  # ARIA's own report: what was approved, not what fixed it
+            return (
+                f"A similar past incident, {data['title']}, was triaged by ARIA; the reviewer "
+                f"approved these next steps: {data['resolution']}"
+            )
         return (
             f"A similar past incident, {data['title']}, was resolved this way: {data['resolution']}"
         )

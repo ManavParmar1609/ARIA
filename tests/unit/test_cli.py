@@ -58,6 +58,15 @@ def test_mistakes_get_a_clear_message_not_a_traceback(args: list[str], says: str
     assert "Traceback" not in result.output
 
 
+@pytest.mark.parametrize("name", ["gemini", "nim-local", "azure"])
+def test_listing_models_of_a_provider_not_set_up_says_so(name: str) -> None:
+    """It sent a keyless request (a 404 traceback) or failed on a missing URL (ValueError)."""
+    result = CliRunner().invoke(app, ["providers", "models", name])
+    assert result.exit_code == 1
+    assert f"{name} is not set up" in " ".join(result.output.split())
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+
+
 def test_triage_asks_for_the_database_to_be_set_up_first(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -10,11 +10,15 @@ from typing import Any
 
 import numpy as np
 import pytest
+from hypothesis import assume, given
+from hypothesis import strategies as st
+from pydantic import ValidationError
 
 from aria.config import LLMConfig, ProviderConfig, ProviderKind, SeverityConfig
 from aria.contracts.base import SEVERITY_ORDER, EvidenceKind, Severity
 from aria.contracts.inputs import AlertSignal
 from aria.contracts.parsing import WindowFeatures
+from aria.contracts.severity import SeverityAssessment
 from aria.data.scenarios import LinePools, ScenarioBuilder
 from aria.evidence import EvidenceStore
 from aria.llm.fake import FakeProvider
@@ -266,6 +270,61 @@ def _pre(
 
 
 P = {Severity.SEV1: 0.05, Severity.SEV2: 0.10, Severity.SEV3: 0.80, Severity.SEV4: 0.05}
+
+
+_SEVERITIES = st.sampled_from(list(SEVERITY_ORDER))
+
+
+@st.composite
+def _cases(draw: st.DrawFn) -> tuple[Preliminary, Severity | None]:
+    """Any model output, conformal set and floor, and any LLM pick from inside the set."""
+    weights = draw(st.lists(st.floats(0.01, 1.0), min_size=4, max_size=4))
+    probs = {s: w / sum(weights) for s, w in zip(SEVERITY_ORDER, weights, strict=True)}
+    raw = draw(st.lists(_SEVERITIES, min_size=1, max_size=4, unique=True))
+    pre = _pre(probs, raw, floor=draw(st.none() | _SEVERITIES))
+    return pre, draw(st.none() | st.sampled_from(pre.prediction_set))
+
+
+@given(_cases(), st.floats(0.5, 0.99))
+def test_every_decision_stays_in_the_set_and_never_under_the_floor(
+    case: tuple[Preliminary, Severity | None], gate: float
+) -> None:
+    pre, choice = case
+    assessment = decide(pre, gate=gate, llm_choice=choice)
+    assert assessment.severity in assessment.prediction_set
+    if pre.floor is not None:
+        assert assessment.severity.rank <= pre.floor.rank
+    if assessment.decided_by == "llm":
+        assert not assessment.auditable
+    if assessment.decided_by == "fallback":  # unsure with no adjudicator: the cautious choice
+        assert assessment.severity == assessment.prediction_set[0]
+        assert assessment.needs_review
+
+
+@given(_cases())
+def test_an_llm_pick_outside_the_set_is_refused(case: tuple[Preliminary, Severity | None]) -> None:
+    pre, _ = case
+    outside = [s for s in SEVERITY_ORDER if s not in pre.prediction_set]
+    assume(outside and len(pre.prediction_set) > 1)  # one class decides itself, with no LLM
+    with pytest.raises(ValueError, match="outside the prediction set"):
+        decide(pre, gate=0.99, llm_choice=outside[0])
+
+
+@pytest.mark.parametrize(
+    ("change", "says"),
+    [
+        ({"probabilities": dict.fromkeys(SEVERITY_ORDER, 0.5)}, "must sum to 1"),
+        ({"floor": Severity.SEV2, "severity": Severity.SEV4}, "below the safety floor"),
+        ({"decided_by": "llm", "auditable": True}, "not auditable"),
+    ],
+)
+def test_the_severity_contract_refuses_unsafe_assessments(
+    change: dict[str, Any], says: str
+) -> None:
+    """The last line of defence, whatever produced the assessment."""
+    valid = decide(_pre(P, [Severity.SEV3]), gate=0.5).model_dump()
+    with pytest.raises(ValidationError, match=says):
+        SeverityAssessment.model_validate({**valid, **change})
 
 
 def test_floor_removes_less_severe_classes() -> None:

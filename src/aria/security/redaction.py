@@ -59,6 +59,10 @@ _SECRET_NAME = re.compile(
 # ":" after it, quoted as in JSON (also escaped, as in a JSON log message), or a --flag.
 _NAME_SEP = re.compile(r"(?<![\w.-])-*([A-Za-z_][\w.-]{0,127}+)(\\?[\"']?\s*[=:]\s*)")
 _VALUE = re.compile(r"\\\"[^\"\\]*\\\"|\"[^\"]*\"|'[^']*'|[^\s,;]+")
+# A value already hidden and nothing else: redacted, or a parser template's wildcard, in quotes
+# or before closing punctuation. Redacting text that was redacted before (a report quoting its
+# evidence) finds nothing new, while "<*>hunter2" is still a secret.
+_HIDDEN_VALUE = re.compile(r"[\\\"']*(?:\[REDACTED\]|<\*>)[\\\"').\]]*")
 _KEY_BEGIN = re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----")
 _KEY_END = re.compile(r"-----END [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----")
 _KEY_LINE = re.compile(r"\s*[A-Za-z0-9+/]+={0,2}\s*")  # a whole line of a key's base64 body
@@ -238,7 +242,7 @@ class Redactor:
             if match.start() < done or not _SECRET_NAME.search(match.group(1)):
                 continue
             value = _VALUE.match(text, match.end())
-            if value is None or value.group(0) == "[REDACTED]":
+            if value is None or _HIDDEN_VALUE.fullmatch(value.group(0)):
                 continue
             parts += [text[done : match.end()], "[REDACTED]"]
             done = value.end()

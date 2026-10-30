@@ -524,6 +524,21 @@ def test_rendered_evidence_shows_structured_data() -> None:
     assert 'data: {"critical_components": ["KERNEL"]}' in render_evidence([item])
 
 
+def test_cut_text_never_ends_on_part_of_a_number() -> None:
+    """A cut inside "50010" left "500", which no evidence holds, so ARIA's own draft failed
+    its grounding check."""
+    from aria.text import clip
+
+    text = "IOException: Block <*> is valid, and cannot be written to. on <*>:50010 size 67108864"
+    whole = {n.value for n in numbers_in(text)}
+    assert clip(text, len(text)) == text
+    for limit in range(12, len(text)):
+        cut = clip(text, limit)
+        assert len(cut) <= limit
+        assert cut.endswith("…")
+        assert {n.value for n in numbers_in(cut)} <= whole, cut
+
+
 def test_failure_modes_read_as_words_and_keep_their_capitals() -> None:
     from aria.reporting.composer import _mode_words, _sentence
 

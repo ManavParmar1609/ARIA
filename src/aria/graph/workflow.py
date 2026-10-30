@@ -97,6 +97,7 @@ from aria.retrieval.memory import MemoryIncident, run_incident_id
 from aria.retrieval.retriever import build_query
 from aria.security.fields import clean_request
 from aria.services import Services
+from aria.text import headline
 
 SHARD_LINES = 4_000  # fan parsing out above this many lines
 MAX_SHARDS = 8
@@ -848,19 +849,22 @@ def _memory_incident(
     leading = next(
         (h for h in investigation.hypotheses if h.id == investigation.leading_hypothesis), None
     )
-    failure_mode = (
-        leading.failure_mode
-        if leading
-        else retrieval.incidents[0].failure_mode
-        if retrieval.incidents
-        else "unknown"
+    # Without a lead, only a past incident that applies here may lend its cause to memory.
+    analogue = next(
+        (
+            i.failure_mode
+            for i in retrieval.incidents[:1]
+            if i.applies_to(request.system, batch.features.components)
+        ),
+        "unknown",
     )
+    failure_mode = leading.failure_mode if leading else analogue
     errors = [t.template for t in batch.templates if t.error_like][:3]
     runbook = next((a.runbook_slug for a in incident.actions if a.runbook_slug), None)
     resolution = "; ".join(a.text for a in incident.actions[:3]) or "See the published report."
     return MemoryIncident(
         id=run_incident_id(state["run_id"]),
-        title=incident.title,
+        title=headline(incident.title),  # its severity has a field of its own
         system=request.system,
         failure_mode=failure_mode,
         severity=assessment.severity,

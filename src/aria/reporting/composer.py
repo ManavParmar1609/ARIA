@@ -19,8 +19,9 @@ from aria.contracts.report import ActionItem, TimelineEntry
 from aria.contracts.retrieval import Hypothesis, Investigation, RetrievalResult
 from aria.contracts.severity import SeverityAssessment
 from aria.llm.schemas import ActionOut, ClaimOut, NarrativeOutput
-from aria.parsing.signals import signal_templates
+from aria.parsing.signals import signal_components, signal_templates
 from aria.retrieval.runbooks import Runbook
+from aria.text import clip, headline
 
 DECIDED_BY_TEXT = {
     "rules": "Decided by rules",
@@ -106,7 +107,7 @@ def _ids(*items: Evidence | None) -> list[str]:
 
 def _claim(text: str, *items: Evidence | None) -> ClaimOut | None:
     ids = _ids(*items)
-    return ClaimOut(text=text[:600], evidence_ids=ids) if ids else None
+    return ClaimOut(text=clip(text, 600), evidence_ids=ids) if ids else None
 
 
 # Failure modes as people write them; the rest read fine with spaces for underscores.
@@ -139,16 +140,24 @@ def _own_evidence(ctx: ReportContext, template: TemplateStat) -> Evidence | None
 
 def compose_title(ctx: ReportContext) -> str:
     if ctx.title_hint:
-        return f"{ctx.severity.severity} · {ctx.title_hint}"[:140]
+        return clip(f"{ctx.severity.severity} · {ctx.title_hint}", 140)
     features = ctx.batch.features
     lead = ctx.leading
-    top = ctx.retrieval.incidents[0] if ctx.retrieval.incidents else None
+    top = next(
+        (
+            i
+            for i in ctx.retrieval.incidents[:1]
+            if i.applies_to(ctx.system, ctx.batch.features.components)
+        ),
+        None,
+    )
     broken = ctx.batch.flows.examples
     if broken and (lead is None or lead.failure_mode == "unfinished_work"):
         # Work that stopped partway names itself: "HDFS blocks stopping partway".
         kind = broken[0].kind
-        where = "" if kind.lower().startswith(ctx.system_name.lower()) else f" in {ctx.system_name}"
-        return f"{ctx.severity.severity} · {kind}s stopping partway{where}"[:140]
+        named = ctx.system != "generic" and not kind.lower().startswith(ctx.system_name.lower())
+        where = f" in {ctx.system_name}" if named else ""
+        return clip(f"{ctx.severity.severity} · {kind}s stopping partway{where}", 140)
     if lead is not None:
         what = _sentence(_mode_words(lead.failure_mode))
     elif top is not None and top.score > 0:
@@ -159,10 +168,15 @@ def compose_title(ctx: ReportContext) -> str:
         what = "New warnings"
     else:
         what = "Log anomaly check"
-    where = f"{ctx.system_name}" + (f" ({ctx.service})" if ctx.service else "")
+    if ctx.system == "generic":  # no named system: say what failed rather than "generic"
+        component = lead.component if lead is not None else None
+        where = ctx.service or component or next(iter(signal_components(ctx.batch, 1)), "")
+    else:
+        where = ctx.system_name + (f" ({ctx.service})" if ctx.service else "")
+    place = f" in {where}" if where else ""
     affected = features.error_nodes or features.warn_nodes
     nodes = f" on {affected} nodes" if affected > 1 else ""
-    return f"{ctx.severity.severity} · {what} in {where}{nodes}"[:140]
+    return clip(f"{ctx.severity.severity} · {what}{place}{nodes}", 140)
 
 
 def compose_draft(ctx: ReportContext) -> NarrativeOutput:
@@ -264,7 +278,7 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
         on_nodes = f" on {template.nodes} nodes" if template.nodes else ""
         summary.append(
             _claim(
-                f'Most frequent {kind}: "{template.template[:160]}" ({template.count} lines{on_nodes}).',
+                f'Most frequent {kind}: "{clip(template.template, 160)}" ({template.count} lines{on_nodes}).',
                 template_ev,
             )
         )
@@ -278,7 +292,7 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
         where = "" if best in local else f" (an analogue on {best.system}, another system)"
         summary.append(
             _claim(
-                f"Closest past incident{where}: {best.title} ({best.severity}, {seen}).",
+                f"Closest past incident{where}: {headline(best.title)} ({best.severity}, {seen}).",
                 by_id[best.evidence_id or ""],
             )
         )
@@ -413,7 +427,7 @@ def _fallback_claim(ctx: ReportContext) -> ClaimOut:
 
 def compose_timeline(ctx: ReportContext, *, limit: int = 12) -> list[TimelineEntry]:
     events: list[tuple[datetime, str, str]] = [
-        (t.first_ts, f'First "{t.template[:100]}" ({t.count} lines)', t.evidence_id)
+        (t.first_ts, f'First "{clip(t.template, 100)}" ({t.count} lines)', t.evidence_id)
         for t in signal_templates(ctx.batch)
         if t.first_ts and _own_evidence(ctx, t) is not None
     ]
@@ -422,7 +436,7 @@ def compose_timeline(ctx: ReportContext, *, limit: int = 12) -> list[TimelineEnt
             item.ts,
             (
                 f"{'Warning' if item.data.get('level') == 'WARN' else 'Error'} logged: "
-                f"{item.title.split(': ', 1)[-1][:120]}"
+                f"{clip(item.title.split(': ', 1)[-1], 120)}"
             ),
             item.id,
         )
@@ -430,7 +444,7 @@ def compose_timeline(ctx: ReportContext, *, limit: int = 12) -> list[TimelineEnt
         if item.ts is not None
     )
     events.extend(
-        (item.ts, f"Alert fired: {item.title[:120]}", item.id)
+        (item.ts, f"Alert fired: {clip(item.title, 120)}", item.id)
         for item in ctx.all_of(EvidenceKind.ALERT)
         if item.ts is not None
     )

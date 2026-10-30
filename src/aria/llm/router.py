@@ -169,7 +169,9 @@ class LLMRouter:
             )
         return self._breakers[name]
 
-    def is_available(self, name: str) -> bool:
+    def is_set_up(self, name: str) -> bool:
+        """Known, with its endpoint and credential, and allowed here (the offline stand-in only
+        where it may answer), whether or not its breaker has it resting for now."""
         cfg = self.config.providers.get(name)
         if name in self._providers:
             injected_kind = getattr(self._providers[name], "kind", None)
@@ -178,9 +180,10 @@ class LLMRouter:
             return False
         else:
             fake = cfg.kind is ProviderKind.FAKE
-        if fake and not self.allow_fake:
-            return False
-        return self.breaker(name).allow()
+        return not fake or self.allow_fake
+
+    def is_available(self, name: str) -> bool:
+        return self.is_set_up(name) and self.breaker(name).allow()
 
     def provider(self, name: str) -> Any:
         if name not in self._providers:
