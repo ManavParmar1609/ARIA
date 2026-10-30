@@ -516,6 +516,27 @@ async def test_unrelated_logs_never_borrow_another_systems_cause(env: Env) -> No
     assert report.validation.errors == []
 
 
+async def test_a_crash_outside_the_nodes_fails_the_run_and_says_why(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The nodes have their own error handling; this covers what breaks around them, so a run
+    never stays "running" with nobody driving it."""
+
+    def broken(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("checkpoint store unavailable")
+
+    monkeypatch.setattr(env.runner.graph, "astream", broken)
+    outcome = await env.runner.start(kernel_panic(env))
+    assert outcome.status is RunStatus.FAILED
+    assert outcome.error == "RuntimeError: checkpoint store unavailable"
+    engine = env.services.engine
+    run = repo.get_run(engine, outcome.run_id) or {}
+    assert (run["status"], run["claimed_by"]) == ("failed", None)  # and its claim is let go
+    events = repo.list_events(engine, outcome.run_id)
+    assert [e.kind for e in events][-2:] == ["error", "run_finished"]
+    assert events[-1].payload == {"status": "failed"}
+
+
 async def test_edit_makes_severity_a_human_decision_that_cites_the_review(env: Env) -> None:
     outcome = await env.runner.start(kernel_panic(env))
     assert outcome.interrupt is not None

@@ -313,6 +313,50 @@ async def test_embeddings_default_to_local_and_rerank_needs_a_provider() -> None
     assert await router.rerank("q", ["a"]) is None
 
 
+class Reranker:
+    kind = ProviderKind.NVIDIA_NIM
+
+    def __init__(self, name: str, scores: list[float] | None = None) -> None:
+        self.name, self.scores, self.calls = name, scores, 0
+
+    async def rerank(self, query: str, passages: Any) -> list[float]:
+        self.calls += 1
+        if self.scores is None:
+            raise ProviderError(f"{self.name}: HTTP 503", status=503, retryable=True)
+        return self.scores
+
+
+async def test_rerank_fails_over_and_rests_a_provider_that_failed() -> None:
+    def reranking(name: str) -> ProviderConfig:
+        return ProviderConfig(
+            kind=ProviderKind.NVIDIA_NIM,
+            base_url=f"http://{name}/v1",
+            allow_no_key=True,
+            rerank_model="ranker",
+            rerank_url=f"http://{name}/v1/ranking",
+        )
+
+    config = LLMConfig(
+        providers={
+            "chat-only": ProviderConfig(
+                kind=ProviderKind.NVIDIA_NIM, base_url="http://c/v1", allow_no_key=True
+            ),
+            "first": reranking("first"),
+            "second": reranking("second"),
+        },
+        routing={"default": ["chat-only"]},
+        rerank=["chat-only", "first", "second"],
+    )
+    broken, working = Reranker("first"), Reranker("second", [0.2, 0.9])
+    router = LLMRouter(
+        config, providers={"first": broken, "second": working}, clock=Clock(), breaker_threshold=1
+    )
+    assert await router.rerank("disk full", ["a", "b"]) == ("second", [0.2, 0.9])
+    assert (broken.calls, working.calls) == (1, 1)  # a provider with no rerank model is skipped
+    assert await router.rerank("disk full", ["a", "b"]) == ("second", [0.2, 0.9])
+    assert broken.calls == 1  # resting after its failure, so it is not asked again
+
+
 def test_embedding_identity_is_the_embedding_model_not_the_chat_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -1067,6 +1067,28 @@ async def test_a2a_task_pauses_for_review_and_completes(api: Api) -> None:
     assert "pydantic" not in said  # one readable line, not a validation dump
 
 
+async def test_cancelling_an_a2a_task_rejects_its_run_only_while_it_waits(api: Api) -> None:
+    """Cancel rejects a run under review, so nothing is sent; a finished task stays as it is."""
+    headers = {**ANA, "A2A-Version": "1.0"}
+    message = {
+        "messageId": "c1",
+        "role": "ROLE_USER",
+        "parts": [{"text": "\n".join(logs(api))}],
+        "metadata": {"system": "bgl"},
+    }
+    rpc = {"jsonrpc": "2.0", "id": 1, "method": "SendMessage", "params": {"message": message}}
+    task = (await api.client.post("/a2a", json=rpc, headers=headers)).json()["result"]["task"]
+    assert task["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
+    cancel = {"jsonrpc": "2.0", "id": 2, "method": "CancelTask", "params": {"id": task["id"]}}
+    cancelled = (await api.client.post("/a2a", json=cancel, headers=headers)).json()
+    assert cancelled["result"]["status"]["state"] == "TASK_STATE_CANCELED"
+    run = repo.get_run(api.state.services.engine, f"a2a-{task['id']}")
+    assert run is not None
+    assert run["status"] == "rejected"
+    again = (await api.client.post("/a2a", json={**cancel, "id": 3}, headers=headers)).json()
+    assert again["error"]["message"] == "Task cannot be canceled"
+
+
 async def test_agui_streams_a_run_and_resumes_its_interrupt(api: Api) -> None:
     body = {
         "threadId": "thread-ui-1",

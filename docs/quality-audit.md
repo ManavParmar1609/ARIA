@@ -409,8 +409,9 @@ owner's decision. The [threat model](threat-model.md) lists the security residua
   that reads like an instruction is dropped without a note (alerts and tickets get one); a refused
   review's reason stays on the run until the next review; searches in non-Latin scripts find
   nothing, because the index splits ASCII words; Azure SQL and Azure OpenAI with managed identity
-  run only in deployments, not in CI; and the graph's retry and timeout policies, the router's
-  rerank failover and A2A cancel have no tests.
+  run only in deployments, not in CI; and the graph's timeout and cache policies have no tests
+  (its retry policy, the router's rerank failover, A2A cancel and the runner's crash handler now
+  do).
 - **For the owner:** the live LLM evaluation ran on Gemini's free tier; a larger run on a paid
   plan would give steadier numbers. Zenodo and Hugging Face are reachable now: the
   [data card](data-card.md#found-later-for-the-next-round) lists the sources to add next, with
