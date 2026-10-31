@@ -110,9 +110,14 @@ def list_runs(
     limit: int = 50,
     status: str | None = None,
     before: datetime | None = None,
+    seen_by: str | None = None,
 ) -> list[dict[str, Any]]:
     """The newest runs, without their stored request: a list never needs the raw input, and
-    loading it made the list slower as runs piled up."""
+    loading it made the list slower as runs piled up.
+
+    ``seen_by`` keeps one visitor's runs and the examples (runs with no visitor); without it,
+    every run is listed.
+    """
     with session_scope(engine) as session:
         stmt = (
             select(RunRow)
@@ -123,7 +128,15 @@ def list_runs(
             stmt = stmt.where(RunRow.status == status)
         if before is not None:
             stmt = stmt.where(RunRow.created_at < before)
+        if seen_by is not None:
+            stmt = stmt.where(or_(RunRow.visitor.is_(None), RunRow.visitor == seen_by))
         return [run_dict(row, skip=_LIST_SKIP) for row in session.scalars(stmt.limit(limit))]
+
+
+def run_visitor(engine: Engine, run_id: str) -> str | None:
+    """Whose run this is on a server that keeps visitors apart (None: an example, or unknown)."""
+    with session_scope(engine) as session:
+        return session.scalar(select(RunRow.visitor).where(RunRow.id == run_id))
 
 
 _LIST_SKIP = frozenset({"request"})

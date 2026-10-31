@@ -238,6 +238,24 @@
               "title": "X-Model-Key"
             },
             "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true."
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "requestBody": {
@@ -324,6 +342,24 @@
               ],
               "title": "Before"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "responses": {
@@ -367,6 +403,24 @@
               "pattern": "^[A-Za-z0-9._:-]{1,64}$",
               "title": "Run Id"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "responses": {
@@ -409,6 +463,24 @@
               "pattern": "^[A-Za-z0-9._:-]{1,64}$",
               "title": "Run Id"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "responses": {
@@ -462,6 +534,24 @@
               ],
               "title": "Checkpoint Id"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "responses": {
@@ -531,6 +621,24 @@
               "default": 1000,
               "title": "Limit"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "responses": {
@@ -621,6 +729,24 @@
               ],
               "title": "Last-Event-Id"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "responses": {
@@ -662,6 +788,24 @@
               "pattern": "^[A-Za-z0-9._:-]{1,64}$",
               "title": "Run Id"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "responses": {
@@ -705,6 +849,24 @@
               "pattern": "^[A-Za-z0-9._:-]{1,64}$",
               "title": "Run Id"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "responses": {
@@ -748,6 +910,24 @@
               "pattern": "^[A-Za-z0-9._:-]{1,64}$",
               "title": "Run Id"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "responses": {
@@ -792,6 +972,24 @@
               "pattern": "^[A-Za-z0-9._:-]{1,64}$",
               "title": "Run Id"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "requestBody": {
@@ -856,6 +1054,24 @@
               "pattern": "^[A-Za-z0-9._:-]{1,64}$",
               "title": "Action Id"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "responses": {
@@ -912,6 +1128,24 @@
               "default": 100,
               "title": "Limit"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "responses": {
@@ -948,7 +1182,7 @@
           "runs"
         ],
         "summary": "Fork",
-        "description": "Branch a new run from a checkpoint, optionally with different run options.",
+        "description": "Branch a new run from a checkpoint, optionally with different run options. The new run is\nthe caller's own, so forking an example is how a visitor gets a copy to change.",
         "operationId": "fork_api_v1_runs__run_id__fork_post",
         "parameters": [
           {
@@ -996,6 +1230,24 @@
               "title": "X-Model-Key"
             },
             "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true."
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "requestBody": {
@@ -1304,17 +1556,37 @@
         "summary": "Alertmanager",
         "description": "A Prometheus Alertmanager webhook (``webhook_configs``).",
         "operationId": "alertmanager_api_v1_alerts_alertmanager_post",
+        "parameters": [
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
                 "type": "object",
+                "additionalProperties": true,
                 "title": "Payload"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "202": {
@@ -1348,17 +1620,37 @@
         "summary": "Grafana",
         "description": "A Grafana alerting webhook contact point (same alert shape as Alertmanager).",
         "operationId": "grafana_api_v1_alerts_grafana_post",
+        "parameters": [
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
                 "type": "object",
+                "additionalProperties": true,
                 "title": "Payload"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "202": {
@@ -1392,19 +1684,39 @@
         "summary": "Alerts",
         "description": "ARIA's own alert format, for sources without an Alertmanager-style webhook.",
         "operationId": "alerts_api_v1_alerts_post",
+        "parameters": [
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
+                "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/AlertSignal"
                 },
-                "type": "array",
                 "title": "Signals"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "202": {
@@ -1474,6 +1786,24 @@
               "title": "X-Model-Key"
             },
             "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true."
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "requestBody": {
@@ -1701,6 +2031,24 @@
               "title": "X-Model-Key"
             },
             "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true."
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "requestBody": {
@@ -1762,6 +2110,24 @@
               "pattern": "^[A-Za-z0-9._:-]{1,64}$",
               "title": "Run Id"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "responses": {
@@ -1832,6 +2198,24 @@
               "title": "X-Model-Key"
             },
             "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true."
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "responses": {
@@ -3677,6 +4061,11 @@
             "format": "date-time",
             "title": "Updated At"
           },
+          "example": {
+            "type": "boolean",
+            "title": "Example",
+            "default": false
+          },
           "links": {
             "$ref": "#/components/schemas/Links"
           },
@@ -4086,6 +4475,11 @@
             "type": "string",
             "format": "date-time",
             "title": "Updated At"
+          },
+          "example": {
+            "type": "boolean",
+            "title": "Example",
+            "default": false
           }
         },
         "type": "object",
@@ -4270,6 +4664,11 @@
             },
             "type": "array",
             "title": "Visitor Keys"
+          },
+          "visitor_scope": {
+            "type": "boolean",
+            "title": "Visitor Scope",
+            "default": false
           }
         },
         "type": "object",

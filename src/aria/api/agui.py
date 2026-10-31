@@ -52,6 +52,7 @@ from aria.api.keys import VisitorKeyDep
 from aria.api.schemas import ReviewRequest, links_for
 from aria.api.security import Principal
 from aria.api.state import AppState, app_state, current_principal
+from aria.api.visitors import EXAMPLE_STAYS, Viewer, ViewerDep
 from aria.contracts.base import first_problem
 from aria.contracts.inputs import TriageRequest
 from aria.contracts.report import ReviewDecision
@@ -229,7 +230,9 @@ async def _stream(
     run_input: RunAgentInput,
     caller: Principal,
     encoder: EventEncoder,
+    *,
     visitor: VisitorKey | None = None,
+    viewer: Viewer | None = None,
 ) -> AsyncIterator[str]:
     runner = state.runner
     run_id = run_id_for(run_input.thread_id)
@@ -238,7 +241,15 @@ async def _stream(
     def error(message: str, code: str) -> str:
         return encoder.encode(RunErrorEvent(message=message, code=code))
 
+    viewer = viewer or Viewer()
     existing = await asyncio.to_thread(repo.get_run, runner.engine, run_id)
+    if existing is not None and not viewer.can_see(existing):
+        # Another visitor's thread: the same answer as for a thread that never existed.
+        yield error("start a new thread to triage these logs", "thread_taken")
+        return
+    if existing is not None and run_input.resume and viewer.is_example(existing):
+        yield error(EXAMPLE_STAYS, "shared_example")
+        return
     queue = runner.subscribe(run_id)
     try:
         if run_input.resume:
@@ -275,7 +286,12 @@ async def _stream(
                 )
                 return
             await asyncio.to_thread(
-                runner.submit, request, run_id=run_id, trigger="agui", claim=True
+                runner.submit,
+                request,
+                run_id=run_id,
+                trigger="agui",
+                claim=True,
+                visitor=viewer.tag,
             )
             if visitor is not None:
                 runner.keys.hold(run_id, visitor)
@@ -345,6 +361,7 @@ async def agui(
     state: Annotated[AppState, Depends(app_state)],
     caller: Annotated[Principal, Depends(current_principal)],
     visitor: VisitorKeyDep,
+    viewer: ViewerDep,
 ) -> StreamingResponse:
     """Run (or resume) ARIA as an AG-UI agent."""
     try:
@@ -355,7 +372,7 @@ async def agui(
         ) from exc
     encoder = EventEncoder(accept=request.headers.get("accept", "text/event-stream"))
     return StreamingResponse(
-        _stream(state, run_input, caller, encoder, visitor),
+        _stream(state, run_input, caller, encoder, visitor=visitor, viewer=viewer),
         media_type=encoder.get_content_type(),
         headers={"cache-control": "no-cache", "x-accel-buffering": "no"},
     )

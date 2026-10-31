@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 from aria import __version__
 from aria.contracts.inputs import TicketContext
 from aria.contracts.retrieval import TicketHistoryStats
+from aria.db import repository as repo
 from aria.retrieval import runlog
 from aria.retrieval.hybrid import Document, HybridIndex
 from aria.retrieval.tickets import ticket_history
@@ -166,11 +167,14 @@ def build_server(
     *,
     factory: Callable[[], Any] | None = None,
     provider: Callable[[], Services] | None = None,
+    mounted: bool = False,
 ) -> MCPServer:
     """Build the server around ``services``, or create them at startup with ``factory``.
 
     ``provider`` hands the server services owned by someone else (the API mounts the server
-    and shares its own services); the server then neither creates nor closes them.
+    and shares its own services); the server then neither creates nor closes them. ``mounted``
+    marks the API's own /mcp endpoint: on a server that keeps visitors apart, its run tools read
+    the examples' lines only, never a visitor's.
     """
     state: dict[str, Any] = {"services": services}
 
@@ -202,6 +206,14 @@ def build_server(
             msg = "ARIA services are not initialised"
             raise RuntimeError(msg)
         return current  # type: ignore[no-any-return]
+
+    async def readable(run_id: str) -> bool:
+        """Whether this server may show the run's lines: any run, except a visitor's own run on
+        the API's open endpoint when the API keeps visitors apart (an unknown run reads as
+        empty either way)."""
+        if not mounted or not svc().settings.visitor_scope:
+            return True
+        return await asyncio.to_thread(repo.run_visitor, svc().engine, run_id) is None
 
     def runbook_index() -> HybridIndex:
         if "runbook_index" not in state:
@@ -343,6 +355,8 @@ def build_server(
         terms = _TERM.findall(query)[:6]
         if not terms:  # "!!" or "a b c": nothing to match, so no arbitrary lines either
             return LogSearchOut(lines=[], truncated=False)
+        if run_id is not None and not await readable(run_id):
+            return LogSearchOut(lines=[], truncated=False)
         lines, truncated = await asyncio.to_thread(
             runlog.search_lines,
             svc().engine,
@@ -351,6 +365,7 @@ def build_server(
             system=system,
             limit=limit,
             errors_only=errors_only,
+            datasets_only=mounted and svc().settings.visitor_scope,
         )
         return LogSearchOut(lines=[LogLineOut(**line) for line in lines], truncated=truncated)
 
@@ -361,6 +376,8 @@ def build_server(
         limit: Annotated[int, Field(ge=1, le=20)] = 5,
     ) -> LogSearchOut:
         """Example lines for one mined log template in a run."""
+        if not await readable(run_id):
+            return LogSearchOut(lines=[], truncated=False)
         lines = await asyncio.to_thread(
             runlog.template_examples, svc().engine, run_id, template_id, limit=limit
         )
@@ -369,6 +386,8 @@ def build_server(
     @server.tool(annotations=READ_ONLY)
     async def component_timeline(run_id: RunId, component: Identifier) -> TimelineOut:
         """Per-minute line and error counts for one component in a run."""
+        if not await readable(run_id):
+            return TimelineOut(component=component, buckets=[])
         buckets = await asyncio.to_thread(
             runlog.component_timeline, svc().engine, run_id, component
         )
@@ -379,6 +398,8 @@ def build_server(
         run_id: RunId, component: Identifier | None = None
     ) -> NodeBreakdownOut:
         """Errors and lines per node in a run, optionally for one component."""
+        if not await readable(run_id):
+            return NodeBreakdownOut(nodes=[])
         nodes = await asyncio.to_thread(runlog.node_breakdown, svc().engine, run_id, component)
         return NodeBreakdownOut(nodes=[NodeCount(**n) for n in nodes])
 

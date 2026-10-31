@@ -121,7 +121,8 @@ function PaletteIconButton() {
 
 function ReviewCount() {
   const { data } = useRuns("awaiting_review", 50);
-  const n = data?.runs.length ?? 0;
+  // A shared demo's examples wait too, but nobody reviews them: only one's own incidents count.
+  const n = data?.runs.filter((run) => !run.example).length ?? 0;
   if (n === 0) return null;
   return (
     <span className="tabular ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-medium text-primary-foreground">

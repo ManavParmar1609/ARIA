@@ -499,7 +499,8 @@ export type paths = {
         put?: never;
         /**
          * Fork
-         * @description Branch a new run from a checkpoint, optionally with different run options.
+         * @description Branch a new run from a checkpoint, optionally with different run options. The new run is
+         *     the caller's own, so forking an example is how a visitor gets a copy to change.
          */
         post: operations["fork_api_v1_runs__run_id__fork_post"];
         delete?: never;
@@ -1461,6 +1462,11 @@ export type components = {
             errors?: {
                 [key: string]: unknown;
             }[];
+            /**
+             * Example
+             * @default false
+             */
+            example?: boolean;
             /** Forked From Checkpoint */
             forked_from_checkpoint?: string | null;
             /** Id */
@@ -1596,6 +1602,11 @@ export type components = {
             decided_by?: string | null;
             /** Error */
             error?: string | null;
+            /**
+             * Example
+             * @default false
+             */
+            example?: boolean;
             /** Forked From Checkpoint */
             forked_from_checkpoint?: string | null;
             /** Id */
@@ -1699,6 +1710,11 @@ export type components = {
             };
             /** Visitor Keys */
             visitor_keys?: string[];
+            /**
+             * Visitor Scope
+             * @default false
+             */
+            visitor_scope?: boolean;
             /** Worker Mode */
             worker_mode: string;
         };
@@ -2006,6 +2022,8 @@ export interface operations {
                 "X-Model-Key"?: string | null;
                 /** @description The kind of key in X-Model-Key: claude, gemini, openai or nvidia. */
                 "X-Model-Provider"?: string | null;
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -2035,7 +2053,10 @@ export interface operations {
     alerts_api_v1_alerts_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2068,7 +2089,10 @@ export interface operations {
     alertmanager_api_v1_alerts_alertmanager_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2103,7 +2127,10 @@ export interface operations {
     grafana_api_v1_alerts_grafana_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2143,6 +2170,8 @@ export interface operations {
                 "X-Model-Key"?: string | null;
                 /** @description The kind of key in X-Model-Key: claude, gemini, openai or nvidia. */
                 "X-Model-Provider"?: string | null;
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -2392,6 +2421,8 @@ export interface operations {
                 "X-Model-Key"?: string | null;
                 /** @description The kind of key in X-Model-Key: claude, gemini, openai or nvidia. */
                 "X-Model-Provider"?: string | null;
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
             };
             path: {
                 incident_id: string;
@@ -2524,7 +2555,10 @@ export interface operations {
                 limit?: number;
                 status?: components["schemas"]["RunStatus"] | null;
             };
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2558,6 +2592,8 @@ export interface operations {
                 "X-Model-Key"?: string | null;
                 /** @description The kind of key in X-Model-Key: claude, gemini, openai or nvidia. */
                 "X-Model-Provider"?: string | null;
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -2591,7 +2627,10 @@ export interface operations {
     get_run_api_v1_runs__run_id__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -2622,7 +2661,10 @@ export interface operations {
     delete_run_api_v1_runs__run_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -2651,7 +2693,10 @@ export interface operations {
     resend_action_api_v1_runs__run_id__actions__action_id__resend_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path: {
                 action_id: string;
                 run_id: string;
@@ -2686,7 +2731,10 @@ export interface operations {
                 after?: number;
                 limit?: number;
             };
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -2717,7 +2765,10 @@ export interface operations {
     expert_check_api_v1_runs__run_id__expert_check_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -2753,6 +2804,8 @@ export interface operations {
                 "X-Model-Key"?: string | null;
                 /** @description The kind of key in X-Model-Key: claude, gemini, openai or nvidia. */
                 "X-Model-Provider"?: string | null;
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
             };
             path: {
                 run_id: string;
@@ -2790,7 +2843,10 @@ export interface operations {
             query?: {
                 limit?: number;
             };
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -2821,7 +2877,10 @@ export interface operations {
     get_postmortem_api_v1_runs__run_id__postmortem_md_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -2852,7 +2911,10 @@ export interface operations {
     get_report_api_v1_runs__run_id__report_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -2883,7 +2945,10 @@ export interface operations {
     get_report_markdown_api_v1_runs__run_id__report_md_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -2914,7 +2979,10 @@ export interface operations {
     review_api_v1_runs__run_id__review_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -2951,7 +3019,10 @@ export interface operations {
             query?: {
                 checkpoint_id?: string | null;
             };
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -2989,6 +3060,8 @@ export interface operations {
             };
             header?: {
                 "last-event-id"?: string | null;
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
             };
             path: {
                 run_id: string;

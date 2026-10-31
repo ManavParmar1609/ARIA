@@ -66,7 +66,7 @@ function Toggle({
 export function logsHint(problem: string | null, publicDemo: boolean): string {
   if (problem) return problem;
   return publicDemo
-    ? "One event per line. This is a public demo: anyone can open the runs on it, so load a sample or paste only logs you can share."
+    ? "One event per line. On this public demo only you see the incidents you start, but the server is shared: load a sample, or paste only logs you could share."
     : "One event per line. IP and e-mail addresses are pseudonymised and secrets redacted before analysis or any model call; the lines you paste stay with the run until you delete it.";
 }
 

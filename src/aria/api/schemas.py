@@ -74,6 +74,8 @@ class RunSummary(BaseModel):
     error: str | None = None
     created_at: datetime
     updated_at: datetime
+    # On a server that keeps visitors apart: a run every visitor sees and none may change.
+    example: bool = False
 
 
 class Delivery(BaseModel):
@@ -292,6 +294,8 @@ class SettingsOut(BaseModel):
     channels: dict[str, bool] = Field(default_factory=dict)
     # The kinds of model key visitors may bring (X-Model-Provider); none while that is off.
     visitor_keys: list[str] = Field(default_factory=list)
+    # Whether each visitor sees only their own runs and the examples (ARIA_VISITOR_SCOPE).
+    visitor_scope: bool = False
 
 
 class ModelKeyCheck(BaseModel):

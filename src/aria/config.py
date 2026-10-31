@@ -318,6 +318,10 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = Field(default=120, ge=1)
     # Largest request body the API reads; 20,000 lines of 2,000 characters fit with room to spare.
     max_body_bytes: int = Field(default=48 * 1024 * 1024, ge=1024)
+    # For a shared public demo with no API keys: each visitor sees only the incidents they started
+    # (the console sends a private session id as X-Visitor-Id), plus the examples the server was
+    # seeded with, which nobody can change. Callers with an API key still see everything.
+    visitor_scope: bool = False
     public_base_url: str = "http://localhost:8000"
     # Where people open a run (the web console). Messages link there; without it they link to
     # the run in the API.

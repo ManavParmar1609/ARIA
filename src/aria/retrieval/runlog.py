@@ -103,11 +103,16 @@ def search_lines(
     system: str | None = None,
     limit: int = 20,
     errors_only: bool = False,
+    datasets_only: bool = False,
 ) -> tuple[list[dict[str, Any]], bool]:
-    """Lines containing every term (case-insensitive); returns (lines, truncated)."""
+    """Lines containing every term (case-insensitive); returns (lines, truncated).
+
+    ``datasets_only`` leaves runs' own lines out of a search by system."""
     stmt = select(LogEventRow)
     if run_id is not None:
         stmt = stmt.where(LogEventRow.window_id == run_id, LogEventRow.dataset == RUN_DATASET)
+    elif datasets_only:
+        stmt = stmt.where(LogEventRow.dataset != RUN_DATASET)
     if system is not None:
         stmt = stmt.where(LogEventRow.system == system)
     for term in [t for t in terms if t][:6]:

@@ -12,6 +12,7 @@ from aria.api.ask import answer, memory_evidence
 from aria.api.keys import VisitorKeyDep
 from aria.api.schemas import AlertAccepted, AskRequest, AskResponse
 from aria.api.state import AppState, app_state
+from aria.api.visitors import SEES_ALL, Viewer, ViewerDep
 from aria.contracts.base import Evidence
 from aria.contracts.inputs import AlertSignal, TriageRequest
 from aria.db import repository as repo
@@ -22,9 +23,13 @@ State = Annotated[AppState, Depends(app_state)]
 Payload = Annotated[dict[str, Any], Body()]
 
 
-async def _accept(state: AppState, payload: dict[str, Any], source: str) -> AlertAccepted:
+async def _accept(
+    state: AppState, payload: dict[str, Any], source: str, viewer: Viewer
+) -> AlertAccepted:
     # Cleaning hundreds of alerts is CPU work: off the event loop, so other requests go on.
     key, alerts, common = await asyncio.to_thread(intake.normalize, payload, source=source)
+    if viewer.tag is not None:  # one visitor's alerts never join another visitor's incident
+        key = f"{viewer.tag}:{key}"[:256]
     if not alerts:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "the payload has no alerts")
     system = intake.system_for(common, alerts)
@@ -37,7 +42,7 @@ async def _accept(state: AppState, payload: dict[str, Any], source: str) -> Aler
     firing = [a for a in alerts if a.status == "firing"]
     if run_id is None and firing:
         request = intake.triage_request(firing, common, system)
-        run_id, run = await _open_run(state, found, request, source)
+        run_id, run = await _open_run(state, found, request, source, viewer)
     elif run_id is not None:
         run = await asyncio.to_thread(repo.get_run, engine, run_id)
     return AlertAccepted(
@@ -50,7 +55,11 @@ async def _accept(state: AppState, payload: dict[str, Any], source: str) -> Aler
 
 
 async def _open_run(
-    state: AppState, found: intake.Grouping, request: TriageRequest, source: str
+    state: AppState,
+    found: intake.Grouping,
+    request: TriageRequest,
+    source: str,
+    viewer: Viewer = SEES_ALL,
 ) -> tuple[str, dict[str, Any] | None]:
     """Open the group's run, or find the one a racing request opened: every request tries the
     same IDs in the same order and stops at the first that is free or already the group's."""
@@ -63,6 +72,7 @@ async def _open_run(
             run_id=run_id,
             trigger=source,
             alert_group_id=found.group_id,
+            visitor=viewer.tag,
         )
         return given, await asyncio.to_thread(repo.get_run, engine, given)
 
@@ -82,19 +92,19 @@ async def _open_run(
 
 
 @router.post("/alerts/alertmanager", status_code=status.HTTP_202_ACCEPTED)
-async def alertmanager(payload: Payload, state: State) -> AlertAccepted:
+async def alertmanager(payload: Payload, state: State, viewer: ViewerDep) -> AlertAccepted:
     """A Prometheus Alertmanager webhook (``webhook_configs``)."""
-    return await _accept(state, payload, "alertmanager")
+    return await _accept(state, payload, "alertmanager", viewer)
 
 
 @router.post("/alerts/grafana", status_code=status.HTTP_202_ACCEPTED)
-async def grafana(payload: Payload, state: State) -> AlertAccepted:
+async def grafana(payload: Payload, state: State, viewer: ViewerDep) -> AlertAccepted:
     """A Grafana alerting webhook contact point (same alert shape as Alertmanager)."""
-    return await _accept(state, payload, "grafana")
+    return await _accept(state, payload, "grafana", viewer)
 
 
 @router.post("/alerts", status_code=status.HTTP_202_ACCEPTED)
-async def alerts(signals: list[AlertSignal], state: State) -> AlertAccepted:
+async def alerts(signals: list[AlertSignal], state: State, viewer: ViewerDep) -> AlertAccepted:
     """ARIA's own alert format, for sources without an Alertmanager-style webhook."""
     payload: dict[str, Any] = {
         "alerts": [
@@ -111,11 +121,13 @@ async def alerts(signals: list[AlertSignal], state: State) -> AlertAccepted:
     if signals:
         named = [{"alertname": s.name, **s.labels}.items() for s in signals]
         payload["commonLabels"] = dict(set.intersection(*(set(items) for items in named)))
-    return await _accept(state, payload, "webhook")
+    return await _accept(state, payload, "webhook", viewer)
 
 
 @router.post("/ask", response_model=AskResponse)
-async def ask(body: AskRequest, state: State, visitor: VisitorKeyDep) -> AskResponse:
+async def ask(
+    body: AskRequest, state: State, visitor: VisitorKeyDep, viewer: ViewerDep
+) -> AskResponse:
     """Ask about a run (its evidence) or about incident history (memory search)."""
     services = state.services
     evidence: list[Evidence]
@@ -123,7 +135,7 @@ async def ask(body: AskRequest, state: State, visitor: VisitorKeyDep) -> AskResp
         await asyncio.to_thread(repo.get_run, services.engine, body.run_id) if body.run_id else None
     )
     if body.run_id:
-        if run is None:
+        if run is None or not viewer.can_see(run):
             raise HTTPException(status.HTTP_404_NOT_FOUND, f"run {body.run_id} not found")
         try:
             snapshot = await state.runner.snapshot(body.run_id)

@@ -18,6 +18,7 @@ from aria.api.schemas import (
     links_for,
 )
 from aria.api.state import AppState, app_state
+from aria.api.visitors import ViewerDep
 from aria.contracts.inputs import TriageRequest
 from aria.contracts.parsing import FlowCheck
 from aria.contracts.run import RunStatus
@@ -57,7 +58,11 @@ async def list_real_incidents() -> list[RealIncidentOut]:
     "/{incident_id}/replay", status_code=status.HTTP_202_ACCEPTED, response_model=RunAccepted
 )
 async def replay_real_incident(
-    incident_id: str, state: State, visitor: VisitorKeyDep, body: ReplayRequest | None = None
+    incident_id: str,
+    state: State,
+    visitor: VisitorKeyDep,
+    viewer: ViewerDep,
+    body: ReplayRequest | None = None,
 ) -> RunAccepted:
     """Triage a real incident's logs as a normal run; follow it on ``links.stream``."""
     incident = real_incident(incident_id)
@@ -70,7 +75,9 @@ async def replay_real_incident(
         options=(body or ReplayRequest()).options,
         replay_of=incident.id,
     )
-    run_id = await asyncio.to_thread(state.runner.submit, request, trigger="replay")
+    run_id = await asyncio.to_thread(
+        state.runner.submit, request, trigger="replay", visitor=viewer.tag
+    )
     if visitor is not None:
         state.runner.keys.hold(run_id, visitor)
     if state.inprocess:
@@ -79,10 +86,10 @@ async def replay_real_incident(
 
 
 @runs_router.get("/{run_id}/expert-check", response_model=ExpertCheckOut)
-async def expert_check(run_id: RunId, state: State) -> ExpertCheckOut:
+async def expert_check(run_id: RunId, state: State, viewer: ViewerDep) -> ExpertCheckOut:
     """For a replayed real incident: the units ARIA flagged, with the experts' label for each."""
     run = await asyncio.to_thread(repo.get_run, state.services.engine, run_id)
-    if run is None:
+    if run is None or not viewer.can_see(run):
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"run {run_id} not found")
     try:
         values = (await state.runner.snapshot(run_id)).values

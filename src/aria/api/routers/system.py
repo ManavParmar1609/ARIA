@@ -120,6 +120,7 @@ async def settings_view(state: State) -> SettingsOut:
             for kind in ("slack", "teams", "webhook", "status_page", "ticket_draft")
         },
         visitor_keys=accepted_kinds(state),
+        visitor_scope=settings.visitor_scope,
     )
 
 

@@ -76,7 +76,7 @@ describe("forward", () => {
     const response = await forward(
       req("/api/v1/runs?limit=5", {
         headers: {
-          cookie: "aria_key=k-ana",
+          cookie: "aria_key=k-ana; aria_visitor=visitor-0123456789abcdef",
           accept: "application/json",
           "x-forwarded-for": "1.2.3.4",
           authorization: "Bearer stolen",
@@ -90,8 +90,46 @@ describe("forward", () => {
     expect(String(url)).toBe("http://api.internal:8000/api/v1/runs?limit=5");
     const headers = init.headers as Headers;
     expect(headers.get("x-api-key")).toBe("k-ana");
+    expect(headers.get("x-visitor-id")).toBe("visitor-0123456789abcdef");
     expect(headers.get("authorization")).toBeNull();
     expect(headers.get("x-forwarded-for")).toBeNull();
+  });
+
+  it("gives a browser without a session id a new one, kept in an HttpOnly cookie", async () => {
+    const fetch = vi.fn(async () => Response.json({ runs: [] }));
+    vi.stubGlobal("fetch", fetch);
+    for (const cookie of ["", "aria_visitor=short", "aria_visitor=bad%20value%20here!!"]) {
+      fetch.mockClear();
+      const response = await forward(
+        req("/api/v1/runs", { headers: cookie ? { cookie } : {} }),
+        "/api/v1/runs",
+      );
+      const sent = (fetch.mock.calls[0] as unknown as [URL, RequestInit])[1].headers as Headers;
+      const id = sent.get("x-visitor-id") ?? "";
+      expect(id).toMatch(/^[A-Za-z0-9_-]{16,64}$/);
+      const setCookie = response.headers.get("set-cookie") ?? "";
+      expect(setCookie).toContain(`aria_visitor=${id}`);
+      expect(setCookie).toContain("HttpOnly");
+      expect(setCookie).toContain("SameSite=Strict");
+      expect(setCookie).toContain("Path=/api");
+      expect(setCookie).not.toContain("Secure"); // plain http on localhost
+    }
+    const secure = await forward(
+      req("/api/v1/runs", { headers: { "x-forwarded-proto": "https" } }),
+      "/api/v1/runs",
+    );
+    expect(secure.headers.get("set-cookie")).toContain("Secure");
+  });
+
+  it("keeps two browsers' session ids apart", async () => {
+    const fetch = vi.fn(async () => Response.json({ runs: [] }));
+    vi.stubGlobal("fetch", fetch);
+    await forward(req("/api/v1/runs"), "/api/v1/runs");
+    await forward(req("/api/v1/runs"), "/api/v1/runs");
+    const ids = fetch.mock.calls.map((call) =>
+      ((call as unknown as [URL, RequestInit])[1].headers as Headers).get("x-visitor-id"),
+    );
+    expect(ids[0]).not.toBe(ids[1]);
   });
 
   it("passes server-sent events through without buffering", async () => {

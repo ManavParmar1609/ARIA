@@ -931,6 +931,8 @@ async def _record_feedback(
     failure_mode: str,
 ) -> None:
     services = runtime.context.services
+    if await _private(services, state["run_id"]):
+        return
     request = _request(state)
     value = {
         "run_id": state["run_id"],
@@ -959,6 +961,13 @@ async def _record_feedback(
         await runtime.store.aput(("feedback", request.system, failure_mode), state["run_id"], value)
 
 
+async def _private(services: Services, run_id: str) -> bool:
+    """A visitor's run on a server that keeps visitors apart. It stays theirs: it never joins
+    the incident library other visitors search, the templates other runs are compared with, or
+    the reviews that recalibrate the severity model."""
+    return await _db(repo.run_visitor, services.engine, run_id) is not None
+
+
 async def publish(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
     services = runtime.context.services
     request = _request(state)
@@ -985,8 +994,10 @@ async def publish(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
         reviewer=decision.reviewer,
         comment=decision.comment,
     )
+    private = await _private(services, run_id)
     memory = _memory_incident(state, incident, assessment, request.synthetic)
-    await services.memory.remember(memory)
+    if not private:
+        await services.memory.remember(memory)
 
     approved = set(decision.approve_actions)
     already = await _db(repo.action_statuses, services.engine, run_id)
@@ -1019,7 +1030,8 @@ async def publish(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
         actions.append(action)
 
     batch = ParsedBatch.model_validate(state["batch"])
-    await _remember_templates(runtime.store, batch)
+    if not private:
+        await _remember_templates(runtime.store, batch)
     if decision.reviewer != "aria:auto":
         await _record_feedback(
             state,

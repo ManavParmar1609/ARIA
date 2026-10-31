@@ -8,7 +8,7 @@ describe("logsHint", () => {
   });
 
   it("warns on a public demo that every visitor can open the runs", () => {
-    expect(logsHint(null, true)).toContain("public demo: anyone can open the runs");
+    expect(logsHint(null, true)).toContain("only you see the incidents you start");
   });
 
   it("names what is wrong with the lines first", () => {

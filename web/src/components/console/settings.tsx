@@ -322,7 +322,9 @@ export function Settings() {
             {session.data?.signedIn
               ? `Signed in with the key named "${session.data.name}". Reviews you make are recorded under that name.`
               : session.data?.authRequired === false
-                ? "This API is open: it needs no key. Set ARIA_API_KEYS to require one."
+                ? view.data?.visitor_scope
+                  ? "This shared demo needs no key. The incidents you start are yours alone, kept with this browser, and the examples every visitor sees stay as they are."
+                  : "This API is open: it needs no key. Set ARIA_API_KEYS to require one."
                 : "Not signed in."}
           </p>
           {session.data?.signedIn ? (
@@ -441,7 +443,11 @@ export function Settings() {
       <Section
         id="set-learning"
         title="Learning from reviews"
-        intro="Every review records the severity a reviewer settled on. Once enough have gathered, ARIA recalibrates its prediction sets on them, so the sets hold the reviewer's severity on this deployment's own incidents."
+        intro={
+          view.data?.visitor_scope
+            ? "Every review records the severity a reviewer settled on, and once enough have gathered ARIA recalibrates its prediction sets on them. On this shared demo, reviews of your own incidents stay private and never retrain it."
+            : "Every review records the severity a reviewer settled on. Once enough have gathered, ARIA recalibrates its prediction sets on them, so the sets hold the reviewer's severity on this deployment's own incidents."
+        }
       >
         {feedback.isPending ? (
           <LoadingRows rows={3} label="Loading reviews" />

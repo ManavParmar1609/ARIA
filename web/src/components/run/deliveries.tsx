@@ -67,10 +67,13 @@ export function Deliveries({
   runId,
   deliveries,
   ended,
+  readOnly = false,
 }: {
   runId: string;
   deliveries: Delivery[];
   ended: boolean;
+  /** An example on a shared demo: nobody may send its messages again. */
+  readOnly?: boolean;
 }) {
   const resend = useResend(runId);
   if (!deliveries.length) return null;
@@ -113,7 +116,7 @@ export function Deliveries({
               </p>
               <p className="text-sm text-muted-foreground">{outcome(d, ended)}</p>
             </div>
-            {canSendAgain(d, ended) ? (
+            {canSendAgain(d, ended) && !readOnly ? (
               <Button
                 size="sm"
                 variant="secondary"

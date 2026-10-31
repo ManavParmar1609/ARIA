@@ -236,6 +236,10 @@ class RunRow(Base):
     alert_group_id: Mapped[str | None] = mapped_column(String(64))
     claimed_by: Mapped[str | None] = mapped_column(String(64))
     claimed_at: Mapped[datetime | None]
+    # On a server with ARIA_VISITOR_SCOPE, whose run this is: a hash of the visitor's session id
+    # (never the id itself), or "anonymous". None for every run the server started or a key-holder
+    # sent, which every visitor sees as an example.
+    visitor: Mapped[str | None] = mapped_column(String(64), index=True)
 
 
 class RunEventRow(Base):

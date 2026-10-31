@@ -210,6 +210,7 @@ export function Queue() {
                         {runTitle(run)}
                       </Link>
                       <span className="block truncate text-xs text-muted-foreground">
+                        {run.example ? <ExampleTag /> : null}
                         {systemName(run.system)}, {triggerLabel(run.trigger)}
                         {run.parent_run_id && run.trigger !== "fork" ? ", forked" : ""}
                       </span>
@@ -250,6 +251,7 @@ export function Queue() {
                   {runTitle(run)}
                 </Link>
                 <p className="mt-0.5 text-xs text-muted-foreground">
+                  {run.example ? <ExampleTag /> : null}
                   {systemName(run.system)}, {relativeTime(run.created_at)}
                   {run.latency_ms != null ? `, review after ${duration(run.latency_ms)}` : ""}
                 </p>
@@ -268,9 +270,17 @@ export function Queue() {
 }
 
 /** The incidents waiting for a person, as one line above the list, with a way to show only them. */
+/** Marks an incident every visitor of a shared demo sees, which only a copy of one's own changes. */
+function ExampleTag() {
+  return (
+    <span className="mr-1.5 rounded-sm border border-rule px-1 text-muted-foreground">Example</span>
+  );
+}
+
 function Waiting({ onShow }: { onShow: () => void }) {
   const { data } = useRuns("awaiting_review", 50);
-  const n = data?.runs.length ?? 0;
+  // Examples wait for review too, but only on a copy of one's own: they are not "your" review.
+  const n = data?.runs.filter((run) => !run.example).length ?? 0;
   if (n === 0) return null;
   return (
     <p className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-panel-keylime px-4 py-3 text-sm text-heading dark:bg-highlight">

@@ -128,6 +128,22 @@ chooses **Check and save key**.
 Nothing costs you anything. To turn it off, set `ARIA_VISITOR_KEYS=false` in the Render service's
 **Environment** settings.
 
+### Each visitor sees only their own incidents
+
+The demo image also sets `ARIA_VISITOR_SCOPE=true`, so visitors who share the link never see one
+another's work.
+
+- The console gives each browser a private session id, in a cookie page scripts cannot read, and
+  sends it with every request. The API files each new incident under a hash of that id.
+- A visitor's **Incidents** page lists the incidents they started, plus the three examples the
+  image triaged when it was built. The examples are marked **Example**.
+- Nobody can review, send or delete an example, so it is the same for the next visitor. **Make my
+  own copy** on an example gives the visitor a private copy to review.
+- A visitor's incidents never join the incident library, the templates other runs are compared
+  with, or the reviews that recalibrate the severity model.
+- Anyone calling the API directly without a session id shares one anonymous space, and a caller
+  with an API key still sees every incident.
+
 ### You set your own key
 
 Add your key as an environment variable on Render (for example `GEMINI_API_KEY`), then choose

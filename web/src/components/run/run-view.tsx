@@ -25,7 +25,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError } from "@/lib/api/client";
-import { useDeleteRun, useRun, useRunState } from "@/lib/api/hooks";
+import { useDeleteRun, useRun, useRunState, useSettingsView } from "@/lib/api/hooks";
 import { useRunTimeline } from "@/lib/api/stream";
 import { isSeverity, type ReviewPrompt, type RunDetail } from "@/lib/api/types";
 import { absoluteTime, duration, relativeTime, stripSeverity, writtenOffline } from "@/lib/format";
@@ -37,6 +37,7 @@ import { EvidencePanel, EvidenceProvider } from "./evidence";
 import { ExpertCheck } from "./expert-check";
 import { History } from "./history";
 import { LiveDraft, ReportView } from "./report-view";
+import { ExampleNote } from "./example-note";
 import { ReviewPanel } from "./review-panel";
 import { EvidenceTable, Similar, Templates } from "./run-tabs";
 import { SeverityPanel } from "./severity-panel";
@@ -198,6 +199,7 @@ function RunSkeleton() {
 
 export function RunView({ runId }: { runId: string }) {
   const run = useRun(runId);
+  const shared = useSettingsView().data?.visitor_scope ?? false;
   useDocumentTitle(run.data ? runTitle(run.data) : null);
   const [checkpoint, setCheckpoint] = useState<string | null>(null);
   const [tab, setTab] = useState("team");
@@ -223,7 +225,7 @@ export function RunView({ runId }: { runId: string }) {
     if (run.error instanceof ApiError && run.error.status === 404) {
       return (
         <EmptyState
-          title="This run does not exist"
+          title="This incident is not here"
           art={<LostSpot className="h-auto w-full" />}
           action={
             <Button asChild size="sm">
@@ -231,7 +233,9 @@ export function RunView({ runId }: { runId: string }) {
             </Button>
           }
         >
-          It may have been deleted, or the link is wrong.
+          {shared
+            ? "The link may be wrong, or the incident was deleted. On this shared demo, each visitor sees only the incidents they started, so a link from someone else's browser opens nothing here."
+            : "It may have been deleted, or the link is wrong."}
         </EmptyState>
       );
     }
@@ -298,7 +302,7 @@ export function RunView({ runId }: { runId: string }) {
                 ) : null}
               </>
             ) : null}
-            {terminal ? <DeleteRun runId={detail.id} /> : null}
+            {terminal && !detail.example ? <DeleteRun runId={detail.id} /> : null}
           </div>
         </div>
 
@@ -331,7 +335,9 @@ export function RunView({ runId }: { runId: string }) {
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] xl:gap-8">
           <div className="grid min-w-0 content-start gap-6">
-            {prompt && !viewing ? (
+            {detail.example && !viewing && (prompt || (terminal && detail.status !== "failed")) ? (
+              <ExampleNote runId={detail.id} />
+            ) : prompt && !viewing ? (
               <ReviewPanel
                 runId={detail.id}
                 prompt={prompt}
@@ -340,7 +346,12 @@ export function RunView({ runId }: { runId: string }) {
               />
             ) : null}
             {detail.deliveries?.length && !viewing ? (
-              <Deliveries runId={detail.id} deliveries={detail.deliveries} ended={terminal} />
+              <Deliveries
+                runId={detail.id}
+                deliveries={detail.deliveries}
+                ended={terminal}
+                readOnly={detail.example}
+              />
             ) : null}
             {report ? (
               <ReportView

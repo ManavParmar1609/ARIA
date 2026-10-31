@@ -627,12 +627,14 @@ class TriageRunner:
         options: Json | None = None,
         title: str | None = None,
         execute: bool = True,
+        visitor: str | None = None,
     ) -> RunOutcome:
         """Branch a new run from a checkpoint of ``run_id``, optionally with new run options.
 
         The new run gets its own run, report and action ids, its own copy of the run's log lines
         and a fresh budget clock; the original run is not touched. With ``execute=False`` the
-        fork is only prepared (queued); ``execute(new_run_id)`` continues it.
+        fork is only prepared (queued); ``execute(new_run_id)`` continues it. ``visitor`` is whose
+        run the fork is, on a server that keeps visitors apart.
         """
         snapshot = await self.snapshot(run_id, checkpoint_id)
         if not snapshot.next:
@@ -644,7 +646,9 @@ class TriageRunner:
             if earlier is None:
                 msg = f"cannot fork in front of {' and '.join(snapshot.next)}; fork from an earlier step"
                 raise RunStateError(msg)
-            return await self.fork(run_id, earlier, options=options, title=title, execute=execute)
+            return await self.fork(
+                run_id, earlier, options=options, title=title, execute=execute, visitor=visitor
+            )
         stored = snapshot.values.get("request")
         if stored is None:  # the input checkpoint, before the graph has read it
             run = await asyncio.to_thread(repo.get_run, self.engine, run_id)
@@ -660,7 +664,7 @@ class TriageRunner:
             request = request.model_copy(update={"title": title})
         if not snapshot.values.get("plan"):  # nothing has run yet: a fork is simply a new run
             new_id = await asyncio.to_thread(
-                self.submit, request, trigger="fork", parent_run_id=run_id
+                self.submit, request, trigger="fork", parent_run_id=run_id, visitor=visitor
             )
             return await self.execute(new_id) if execute else RunOutcome(new_id, RunStatus.QUEUED)
 
@@ -694,6 +698,7 @@ class TriageRunner:
             status=RunStatus.QUEUED,
             parent_run_id=run_id,
             forked_from_checkpoint=checkpoint_id,
+            visitor=visitor,
         )
         await asyncio.to_thread(self._save_forked_report, update, snapshot.values)
         started = {"forked_from": run_id, "checkpoint_id": checkpoint_id}

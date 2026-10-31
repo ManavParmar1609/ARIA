@@ -116,7 +116,7 @@ def create_app(
             raise RuntimeError(msg)
         return holder["state"]
 
-    mcp = build_server(provider=lambda: current().services)
+    mcp = build_server(provider=lambda: current().services, mounted=True)
     mcp_app = mcp.streamable_http_app(
         streamable_http_path="/mcp",
         stateless_http=True,

@@ -46,12 +46,15 @@ from a2a.types.a2a_pb2 import (
     StringList,
     Task,
 )
-from a2a.utils.errors import TaskNotCancelableError
+from a2a.utils.errors import TaskNotCancelableError, TaskNotFoundError
+from fastapi import HTTPException
 from pydantic import ValidationError
 from starlette.requests import Request
 from starlette.routing import BaseRoute
 
 from aria import __version__
+from aria.api.security import principal_of
+from aria.api.visitors import ANONYMOUS, Viewer, viewer_for
 from aria.config import Settings
 from aria.contracts.base import first_problem
 from aria.contracts.inputs import TriageRequest
@@ -148,19 +151,33 @@ def decision_from(message: Message, reviewer: str) -> ReviewDecision:
 
 
 class PrincipalContextBuilder(DefaultServerCallContextBuilder):
-    """Hands the caller the API key identified (set by the auth middleware) to the executor."""
+    """Hands the executor the caller the API key identified (set by the auth middleware), and
+    whose runs the caller sees on a server that keeps visitors apart."""
+
+    def __init__(self, *, scoped: bool = False) -> None:
+        super().__init__()
+        self.scoped = scoped
 
     def build(self, request: Request) -> ServerCallContext:
         context = super().build(request)
-        principal = getattr(request.state, "principal", None)
-        if principal is not None:
-            context.state["principal"] = principal
+        principal = principal_of(request.state)
+        context.state["principal"] = principal
+        try:
+            viewer = viewer_for(self.scoped, principal, request.headers.get("x-visitor-id"))
+        except HTTPException:  # a malformed session id: the anonymous space, never another's
+            viewer = Viewer(ANONYMOUS)
+        context.state["viewer"] = viewer
         return context
 
 
 def _says(exc: ValueError) -> str:
     """What the client is told about input ARIA could not use: one line, not a pydantic dump."""
     return first_problem(exc) if isinstance(exc, ValidationError) else str(exc)
+
+
+def viewer_of(context: RequestContext) -> Viewer:
+    viewer = context.call_context.state.get("viewer") if context.call_context else None
+    return viewer if isinstance(viewer, Viewer) else Viewer()
 
 
 def reviewer_for(context: RequestContext, claimed: object) -> str:
@@ -204,7 +221,12 @@ class AriaExecutor(AgentExecutor):
         updater = TaskUpdater(event_queue, task.id, task.context_id)
         run_id = self.run_id(task.id)
         metadata = {**dict(message.metadata.items()), **context.metadata}
+        viewer = viewer_of(context)
         run = await asyncio.to_thread(repo.get_run, self.runner.engine, run_id)
+        if run is not None and (not viewer.can_see(run) or viewer.is_example(run)):
+            # Another visitor's task, or an example nobody may change: as missing as no task,
+            # and its owner's task is left as it was.
+            raise TaskNotFoundError
         if run is not None and run["status"] == RunStatus.AWAITING_REVIEW:
             reviewer = reviewer_for(context, metadata.get("reviewer"))
             try:
@@ -223,7 +245,12 @@ class AriaExecutor(AgentExecutor):
                 updater.new_agent_message([new_text_part("ARIA is triaging the incident.")])
             )
             await asyncio.to_thread(
-                self.runner.submit, request, run_id=run_id, trigger="a2a", claim=True
+                self.runner.submit,
+                request,
+                run_id=run_id,
+                trigger="a2a",
+                claim=True,
+                visitor=viewer.tag,
             )
             try:
                 outcome = await self._gate(self.runner.execute(run_id))
@@ -264,7 +291,10 @@ class AriaExecutor(AgentExecutor):
         task_id = context.task_id or ""
         run_id = self.run_id(task_id)
         run = await asyncio.to_thread(repo.get_run, self.runner.engine, run_id)
+        viewer = viewer_of(context)
         if run is None or run["status"] != RunStatus.AWAITING_REVIEW:
+            raise TaskNotCancelableError
+        if not viewer.can_see(run) or viewer.is_example(run):
             raise TaskNotCancelableError
         decision = ReviewDecision(
             decision="reject", reviewer=reviewer_for(context, None), comment="task cancelled"
@@ -320,5 +350,9 @@ def a2a_routes(
         agent_card=card,
     )
     return list(create_agent_card_routes(card)), list(
-        create_jsonrpc_routes(handler, rpc_url=A2A_PATH, context_builder=PrincipalContextBuilder())
+        create_jsonrpc_routes(
+            handler,
+            rpc_url=A2A_PATH,
+            context_builder=PrincipalContextBuilder(scoped=settings.visitor_scope),
+        )
     )

@@ -38,9 +38,10 @@ RUN useradd --create-home --uid 1000 aria
 # on the offline provider unless a visitor brings a key) and no Slack, Teams or webhook targets.
 # Visitors may paste their own Claude, Gemini, OpenAI or NVIDIA key in the console's Settings: it
 # answers only their own runs and questions, sending them to that provider, and is held in memory
-# while they run, never stored. The rate limit is shared, since every console visitor arrives
-# through one proxy, and a request may carry at most 8 MB, as through the console. Runs go one at a
-# time, so a few large ones arriving together stay inside a free plan's 512 MB.
+# while they run, never stored. Each visitor sees only the incidents they started, plus the seeded
+# examples, which nobody can change or delete. The rate limit is shared, since every console
+# visitor arrives through one proxy, and a request may carry at most 8 MB, as through the console.
+# Runs go one at a time, so a few large ones arriving together stay inside a free plan's 512 MB.
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:${PATH}" \
@@ -48,6 +49,7 @@ ENV PYTHONUNBUFFERED=1 \
     ARIA_LOG_FORMAT=json \
     ARIA_WORKER_MODE=inprocess \
     ARIA_VISITOR_KEYS=true \
+    ARIA_VISITOR_SCOPE=true \
     ARIA_WORKER_CONCURRENCY=1 \
     ARIA_RATE_LIMIT_PER_MINUTE=600 \
     ARIA_MAX_BODY_BYTES=8388608 \
