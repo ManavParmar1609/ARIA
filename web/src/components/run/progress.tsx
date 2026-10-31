@@ -32,6 +32,8 @@ export interface Step {
   state: StepState;
   took: number | null;
   note?: string;
+  /** Done in the original incident, before this copy of it began. */
+  copied?: boolean;
 }
 
 const STEPS: { key: string; label: string; nodes: string[] }[] = [
@@ -55,11 +57,19 @@ const ENDED = new Set(["published", "rejected", "failed"]);
 // ARIA's part is over: the run waits for a person's review, or has been decided.
 const FOLDED = new Set(["awaiting_review", "published", "rejected"]);
 
+/** Whether the run is a copy of another incident, which carries over the steps done before it. */
+const isCopy = (events: RunEvent[]) =>
+  events.some((e) => e.kind === "run_started" && e.payload?.["forked_from"] != null);
+
 /** Each step's state from the run's events: the worst of its graph nodes, and what it took. */
 export function progressSteps(events: RunEvent[], status: string): Step[] {
   const { state, took } = stepStates(events);
   const replanned = events.some((e) => e.kind === "replan");
   const started = STEPS.map(({ nodes }) => nodes.some((n) => state[n]));
+  // A copy starts where its original was: the steps before its first are the original's, done.
+  const carried = isCopy(events) ? started.indexOf(true) : -1;
+  // Once ARIA's part is over, a step that a later one passed without running was not needed.
+  const furthest = FOLDED.has(status) || ENDED.has(status) ? started.lastIndexOf(true) : -1;
   const steps = STEPS.map(({ key, label, nodes }, i): Step => {
     const states = nodes.map((n) => state[n]).filter(Boolean);
     // A step with a part still to come (the report, then the messages) is at work until a later
@@ -86,6 +96,11 @@ export function progressSteps(events: RunEvent[], status: string): Step[] {
       took: times.length ? times.reduce((a, b) => a + b, 0) : null,
       note: key === "assess" && replanned ? "looked further" : undefined,
     };
+  });
+  steps.forEach((step, i) => {
+    if (step.state !== "pending") return;
+    if (i < carried) steps[i] = { ...step, state: "done", copied: true, note: "in the original" };
+    else if (i < furthest) steps[i] = { ...step, state: "skipped" };
   });
   if (status === "rejected") {
     steps[steps.length - 1] = { key: "discard", label: "Discard", state: "done", took: null };
@@ -146,7 +161,10 @@ export function usePacedSteps(
         (wasStarted(runId) || status === "queued" || status === "running"),
     );
   }
-  const [shown, setShown] = useState(0);
+  const [played, setShown] = useState(0);
+  // A copy's carried-over steps show at once: only what this run does plays back.
+  const carried = actual.findIndex((step) => !step.copied);
+  const shown = Math.max(played, carried === -1 ? actual.length : carried);
   const [held, setHeld] = useState(false);
   const reached = reachedCount(actual);
   const over = status !== undefined && FOLDED.has(status);
@@ -154,7 +172,7 @@ export function usePacedSteps(
   useEffect(() => {
     if (!pacing) return;
     if (shown < reached) {
-      const next = setTimeout(() => setShown((n) => n + 1), STEP_MS);
+      const next = setTimeout(() => setShown(shown + 1), STEP_MS);
       return () => clearTimeout(next);
     }
     // Nothing to hold before the steps have loaded (a slow connection): the playback waits for

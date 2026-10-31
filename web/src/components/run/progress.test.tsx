@@ -1,9 +1,16 @@
-import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, render, renderHook, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { RunEvent } from "@/lib/api/types";
 
-import { pacedSteps, progressSteps, reachedCount, type Step, Steps } from "./progress";
+import {
+  pacedSteps,
+  progressSteps,
+  reachedCount,
+  type Step,
+  Steps,
+  usePacedSteps,
+} from "./progress";
 
 const event = (seq: number, kind: string, node: string | null, ts: string): RunEvent =>
   ({ seq, kind, node, ts, payload: {} }) as RunEvent;
@@ -67,6 +74,81 @@ describe("progressSteps", () => {
     const steps = progressSteps(reading, "rejected");
     expect(steps.at(-1)).toMatchObject({ label: "Discard", state: "done" });
     expect(steps[3]?.state).toBe("skipped");
+  });
+
+  it("marks steps a run waiting for review passed without running as not needed", () => {
+    const steps = progressSteps(
+      [
+        ...reading,
+        event(7, "node_started", "report", "2026-10-01T00:00:00.060Z"),
+        event(8, "node_finished", "report", "2026-10-01T00:00:00.070Z"),
+        event(9, "node_started", "review", "2026-10-01T00:00:00.081Z"),
+        event(10, "interrupt", "review", "2026-10-01T00:00:00.082Z"),
+      ],
+      "awaiting_review",
+    );
+    expect(steps.map((s) => s.state)).toEqual([
+      "done",
+      "skipped",
+      "skipped",
+      "skipped",
+      "skipped",
+      "done",
+      "paused",
+      "pending",
+    ]);
+  });
+
+  it("counts the steps a copy carried over from its original as done there", () => {
+    const steps = progressSteps(copied, "awaiting_review");
+    expect(steps.map((s) => s.state)).toEqual([
+      "done",
+      "done",
+      "done",
+      "done",
+      "done",
+      "done",
+      "paused",
+      "pending",
+    ]);
+    expect(steps[0]).toMatchObject({ copied: true, note: "in the original", took: null });
+    expect(steps[6]?.copied).toBeUndefined();
+  });
+});
+
+// A copy of an incident that waited for review: it starts at the review, with nothing before it.
+const copied = [
+  {
+    ...event(1, "run_started", null, "2026-10-01T00:00:00.000Z"),
+    payload: { forked_from: "run-original", checkpoint_id: "c1" },
+  },
+  event(2, "node_started", "review", "2026-10-01T00:00:00.010Z"),
+  event(3, "interrupt", "review", "2026-10-01T00:00:00.020Z"),
+];
+
+describe("usePacedSteps", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("finishes the playback of a copy, whose earlier steps it never ran", () => {
+    vi.useFakeTimers();
+    const { result, rerender } = renderHook(
+      ({ events, status }: { events: RunEvent[]; status: string }) =>
+        usePacedSteps("run-copy", events, status),
+      { initialProps: { events: [] as RunEvent[], status: "running" } },
+    );
+    rerender({ events: copied, status: "awaiting_review" });
+    // The carried-over steps show at once; only the review plays, then the strip holds and folds.
+    expect(result.current.steps.slice(0, 6).every((s) => s.state === "done")).toBe(true);
+    // Each step's timer is set once the one before it has rendered.
+    for (const ms of [400, 1_100]) {
+      act(() => {
+        vi.advanceTimersByTime(ms);
+      });
+    }
+    expect(result.current.playing).toBe(false);
+    expect(result.current.steps[6]?.state).toBe("paused");
   });
 });
 

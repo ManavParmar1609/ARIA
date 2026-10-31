@@ -349,13 +349,18 @@ export function AgentTeam({
     <ol aria-label="How the agents worked" className="grid wrap-anywhere">
       {turns.map((turn, i) => {
         const p = progress(events, turn.nodes);
+        // A copy of an incident never runs the steps before it began; their results came with it.
+        // The person's turn is never done by a copy: it is theirs to take.
+        const carried = turn.id !== "you" && turn.said.length > 0;
         const state: TurnState = p.paused
           ? "yours"
           : p.started && !p.working
             ? "done"
             : p.started
               ? "working"
-              : "waiting";
+              : carried
+                ? "done"
+                : "waiting";
         const Icon = turn.icon;
         return (
           <li key={turn.id} className="grid grid-cols-[2.75rem_1fr] gap-x-4">
