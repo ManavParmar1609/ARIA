@@ -518,6 +518,106 @@ sleekness.
 - **Fixed: links that look external.** Header links that stay on the site no longer carry the
   outbound arrow; only the source on GitHub does.
 
+## The fifth audit: six simulated users
+
+The owner asked for research with people of every level of experience, each trying everything
+and judging whether it was easy to find, understandable, useful and good to look at. Three
+reviewers each played two people, on their own offline copy, in a real browser. This is
+simulated research: an AI played each person, and their quotes were invented to show a likely
+reaction. The people:
+
+- a marketing manager who has never heard of incident triage, on a laptop;
+- an engineering manager judging the showcase in five minutes, then checking the proof;
+- a computer-science student on a phone, in the dark theme;
+- an analyst with low vision, using only the keyboard and a screen reader at 200% zoom, with
+  reduced motion;
+- a junior on-call engineer, pasting his own Kubernetes, nginx and odd-format logs;
+- a sceptical senior SRE, probing the evidence, the severity reasoning and hostile input.
+
+### Safety and trust
+
+- **Fixed: a quarantined line kept its secrets.** The excerpt kept from a line set aside as a
+  possible prompt injection was taken before redaction, and reviewers, Ask ARIA and a model's
+  prompt all saw it. It is now redacted like the line. IP addresses written with dots inside a
+  host name, or at the end of a sentence, are pseudonymised too.
+- **Fixed: an empty short list fell back to the most likely level alone.** A crash-looping
+  service the rules rated SEV2 came out SEV4, "no action needed". When no level is likely
+  enough, the model's best guess and the rules' level both stay possible, and ARIA plans for
+  the more serious and asks a person.
+- **Fixed: power-supply failures could be rated SEV3.** A fifth floor keeps a power-supply
+  fault reported as an error at SEV2 or worse. Floors only raise a rating.
+- **Fixed: formats ARIA had no pattern for were misread.** Pipe-separated fields with one-letter
+  levels and epoch times, a level a few fields in (as Kubernetes pods log it), access-log times
+  and 5xx statuses are now read, so such a paste no longer reads as "no errors".
+- **Fixed: a reviewer's new level contradicted the report.** The published summary drops ARIA's
+  line for the old level, and a step the reviewer added is published as theirs.
+- **Fixed: certainty the tool cannot have.** A model's probability reads ">99%", never "100%".
+  When every level is still possible, the incident leads with "Not rated: needs a person"
+  instead of a red SEV1, and the severity panel calls the level a plan until someone decides.
+
+### Understanding
+
+- **Fixed: Ask ARIA answered the wrong question.** About follows the link instead of keeping an
+  earlier incident. "What does SEV1 mean?" is answered from the word list. Words that frame a
+  question ("involved", "mean") are not taken as its subject. Everyday words ("password
+  guesses") reach records written in the trade's words.
+- **Fixed: jargon with nothing to explain it.** The words list now covers the severity levels
+  and the systems the samples come from (HDFS, OpenSSH, ZooKeeper, BlueGene/L, Lustre and
+  more). The home page's example and the sample cards define them where they appear, and both
+  point newcomers to the guide.
+- **Fixed: results without a verdict.** Each test result on Test results, and the results part
+  of How ARIA works, opens with a plain sentence on what it means for the person on call. The
+  sentence is worked out from the published data.
+- **Fixed: titles that said nothing.** An incident ARIA cannot name is titled by the trouble its
+  error lines report ("Resources running out"), not "Error spike".
+
+### Navigation and focus
+
+- **Fixed: focus left behind.** After Next or Previous in How ARIA works, choosing a log or
+  going back to all logs, opening a runbook or using a "g" shortcut, focus moves to the new
+  heading or the page instead of staying on a control that scrolled away or falling to the
+  page body.
+- **Fixed: definitions over the word.** A dotted term opens a small card beside the word,
+  labelled as a dialog, with focus inside it; Escape returns to the word.
+- **Fixed: smaller snags.** The shortcuts sheet takes focus itself rather than a switch below the
+  fold. Typing in search and pressing Enter no longer starts a triage. Tabs show a focus ring only
+  for the keyboard. On a phone, picking a familiar log no longer raises the keyboard. "Check and
+  save key" can always be reached.
+
+### The incident page
+
+- **Fixed: citations that showed nothing.** On a laptop the evidence panel started below the
+  fold; a citation now opens a preview beside it when the panel is out of view.
+- **Fixed: waiting for a replay.** A finished run's steps still play back, but "Show the result
+  now" ends the replay, and the note that it is a replay sits above the steps.
+- **Fixed: a page that disagreed with itself.** The header follows the steps during a replay or a
+  copy and says "As it is now" while History shows an earlier step. Patterns without evidence of
+  their own no longer cite the whole window, and Seen before labels its citations as sightings.
+- **Fixed: on a phone.** The four tabs stay on one row, long titles take a smaller heading and
+  three lines in the list, and the home page's commands no longer overflow their panel.
+
+### What held up
+
+- Nothing is sent before approval; edits are kept exactly; discard asks first.
+- Each visitor sees only their own incidents.
+- HTML, script, emoji and right-to-left text stay text; a double click opens one incident.
+- Time travel, copies and the receipts work.
+- axe found no violations in either theme, with menus, search and dialogs open; nothing moves
+  under reduced motion.
+- Test results say plainly where ARIA falls short.
+
+### Left for later
+
+- A notice when ARIA cannot read most lines' levels or times, so "Validated" is not taken to mean
+  the counts are right.
+- Addresses written with dashes inside host names ("220-135-151-1.example.net"): replacing them
+  changed how lines group into templates, so they stay as they are for now.
+- A few BlueGene/L samples still rate one level higher than their label.
+- The API docs' missing descriptions and auth scheme, real 404 status codes for wrong console
+  addresses, keeping a paste across Back, and a relevance floor for the library's search.
+- Whether the site should follow the device's dark setting by default is the owner's call: light
+  is the default by design.
+
 ## What was left
 
 These are recorded rather than fixed, because each needs a design change, infrastructure or an
