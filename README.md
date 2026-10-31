@@ -244,7 +244,7 @@ optional content-safety check (`guardrails.safety_model`, off by default) asks
 
 | Step | What it does | Why |
 |---|---|---|
-| Rules | Scoring rules read component criticality, bursts and fatal markers; four floors (data risk, a crashing critical component, a critical alert, unfinished work) set a minimum | Transparent: a known-bad pattern is never rated below its floor (SEV2 or SEV3) |
+| Rules | Scoring rules read component criticality, bursts and fatal markers; five floors (data risk, a crashing critical component, a critical alert, a power-supply fault, unfinished work) set a minimum | Transparent: a known-bad pattern is never rated below its floor (SEV2 or SEV3) |
 | Calibrated model | Linear model on window features, temperature-calibrated | Probabilities that mean what they say |
 | Conformal set | Split-conformal (LAC) set at alpha 0.10 | A label set that holds the true severity about 90% of the time on data like the calibration windows (exchangeable), less under a shift |
 | LLM adjudication | Chooses only between labels already in the set | The LLM cannot invent a severity the evidence rules out |

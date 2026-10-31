@@ -264,6 +264,18 @@ rules:
     severity: SEV2
     when: {feature: alerts.critical, op: ">=", value: 1}
 
+  # A failing power supply can take a node down with no other warning. Reported at warning level
+  # or above, it is never rated below SEV2 (it once came out SEV3 on validation windows the
+  # scenario policy rates SEV1 or SEV2).
+  - id: power_fault_floor
+    title: Power-supply faults reported as errors
+    effect: floor
+    severity: SEV2
+    when:
+      all:
+        - {feature: issue_keyword_hits.power, op: ">=", value: 1}
+        - {feature: error_events, op: ">=", value: 1}
+
   # Silent failures log no errors, so the model, trained on windows that do, can read them as
   # noise. Work that broke off partway always gets a person's look.
   - id: unfinished_work_floor
