@@ -24,7 +24,8 @@ visitor ──▶ Vercel: landing page, console, /api/* proxy ──▶ Render: 
   directly.
 - The API runs the [demo image](../deploy/demo/Dockerfile). It needs no API key and starts from a
   demo seeded at build time: past incidents in memory, one approved run and two waiting for
-  review. Every step runs on ARIA's offline provider, unless a visitor brings their own model key
+  review, and each sample's sizes already rated, so the first visitor after a wake-up does not
+  wait for them. Every step runs on ARIA's offline provider, unless a visitor brings their own model key
   or you set one (see [Language models on the demo](#language-models-on-the-demo)).
 
 ## Before you start

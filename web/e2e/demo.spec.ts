@@ -15,9 +15,10 @@ test.describe("public demo", () => {
     await expect(table.getByText("Example", { exact: true })).toHaveCount(2);
     await expect(page.getByText(/waiting for your review/)).toHaveCount(0);
 
-    await page.goto("/console/runs/new");
-    await page.getByRole("button", { name: /ZooKeeper quorum connection loss/ }).click();
-    await page.getByRole("button", { name: "Start triage" }).click();
+    await page.goto("/console/runs/new?source=bigdata");
+    await page
+      .getByRole("button", { name: "Run it: Coordination servers lose touch with each other" })
+      .click();
     await expect(page).toHaveURL(/\/console\/runs\/run-/);
     await expect(page.getByRole("heading", { name: "Waiting for your review" })).toBeVisible();
     const mine = new URL(page.url()).pathname;

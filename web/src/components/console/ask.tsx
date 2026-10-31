@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useId, useRef, useState, type FormEvent } from "react";
 
 import { AguiChat } from "@/components/console/agui-chat";
@@ -84,8 +85,10 @@ function Questions() {
   const id = useId();
   const ask = useAsk();
   const runs = useRuns("all", 30);
+  // An incident page's "Ask about this incident" opens here with that incident chosen.
+  const linked = useSearchParams().get("run");
   const [question, setQuestion] = useState("");
-  const [runId, setRunId] = useState<string>("none");
+  const [runId, setRunId] = useState<string>(linked ?? "none");
   const [turns, setTurns] = useState<Turn[]>([]);
   const counter = useRef(0);
 
@@ -145,6 +148,9 @@ function Questions() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Any incident</SelectItem>
+                {linked && !runs.data?.runs.some((run) => run.id === linked) ? (
+                  <SelectItem value={linked}>This incident</SelectItem>
+                ) : null}
                 {(runs.data?.runs ?? []).map((run) => (
                   <SelectItem key={run.id} value={run.id}>
                     {stripSeverity(run.title) || run.id}

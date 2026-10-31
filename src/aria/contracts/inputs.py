@@ -78,6 +78,14 @@ class RunOptions(Contract):
     max_cost_usd: float | None = Field(default=None, ge=0)
 
 
+class SampleRef(Contract):
+    """The console sample a run's logs were built from, at the sizes chosen (None: no choice)."""
+
+    id: Annotated[str, StringConstraints(min_length=1, max_length=64)]
+    servers: Annotated[int, Field(ge=1, le=64)] | None = None
+    rate: Annotated[int, Field(ge=1, le=1_000)] | None = None
+
+
 class TriageRequest(Contract):
     """Input to a triage run. At least one of logs, window_id, alerts or ticket is required."""
 
@@ -99,6 +107,9 @@ class TriageRequest(Contract):
     # The real incident these logs replay (aria.data.real), so a run can be checked against the
     # labels its experts gave. Set by the replay endpoint.
     replay_of: Annotated[str, StringConstraints(max_length=64)] | None = None
+    # The console sample these logs were built from, so the incident page can offer the next size
+    # and compare the two. Set by the samples endpoint.
+    sample: SampleRef | None = None
     # Lines past the per-run cap. ARIA drops them when it records a run, so they are never stored,
     # and counts them here for the plan's note. It is not part of the published schema.
     logs_dropped: SkipJsonSchema[Annotated[int, Field(ge=0)]] = 0

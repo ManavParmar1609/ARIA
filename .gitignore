@@ -55,8 +55,9 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 
-# Derived from the seeded corpus by `aria seed`
+# Derived by `aria seed`: the offline embedder and the samples' rated sizes
 models/embed_local.npz
+models/sample_sizes.json
 
 # Evaluation output (docs/evaluation.md and docs/eval-results.json are the published copies)
 reports/eval/

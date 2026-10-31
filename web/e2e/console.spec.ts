@@ -12,10 +12,16 @@ test.describe("console", () => {
     await expectAccessible(page, "incidents, empty");
 
     await page.getByRole("link", { name: "New triage" }).first().click();
-    await page.getByRole("button", { name: /ZooKeeper quorum connection loss/ }).click();
-    await expect(page.getByLabel("Log lines")).not.toBeEmpty();
+    // Samples are grouped by where their logs come from; the choice stays in the address.
+    await page
+      .getByRole("navigation", { name: "Where the logs come from" })
+      .getByRole("link", { name: /^Big-data clusters/ })
+      .click();
+    await expect(page).toHaveURL(/\/console\/runs\/new\?source=bigdata$/);
     await expectAccessible(page, "new triage");
-    await page.getByRole("button", { name: "Start triage" }).click();
+    await page
+      .getByRole("button", { name: "Run it: Coordination servers lose touch with each other" })
+      .click();
 
     await expect(page).toHaveURL(/\/console\/runs\/run-/);
     await expect(page.getByRole("heading", { name: "Waiting for your review" })).toBeVisible();
@@ -34,6 +40,14 @@ test.describe("console", () => {
     await page.getByRole("checkbox").first().check();
     await page.getByRole("button", { name: "Approve and send 1" }).click();
     await expect(page.getByText("Published", { exact: true }).first()).toBeVisible();
+    // A sample's page then offers ways to keep exploring.
+    const next = page.locator("section", {
+      has: page.getByRole("heading", { name: "What next?" }),
+    });
+    await expect(next.getByRole("link", { name: "Ask about this incident" })).toHaveAttribute(
+      "href",
+      /\/console\/ask\?run=run-/,
+    );
     await page.getByRole("tab", { name: "Event log" }).click();
     await expect(page.getByText(/Review: approve by/)).toBeVisible();
     await expect(page.getByText(/Run finished: published/)).toBeVisible();
@@ -50,6 +64,112 @@ test.describe("console", () => {
     ).toBeVisible();
     await page.getByRole("button", { name: "Back to now" }).click();
     await expect(page.getByText(/as it was at a past checkpoint/)).toBeHidden();
+  });
+
+  test("runs a sample at a bigger size and shows both ratings", async ({ page }) => {
+    await page.goto("/console/runs/new?source=security");
+    await expect(
+      page
+        .getByRole("navigation", { name: "Where the logs come from" })
+        .getByRole("link", { name: /^Security and sign-ins/ }),
+    ).toHaveAttribute("aria-current", "true");
+    const browse = page.locator("section", {
+      has: page.getByRole("heading", { name: "Where do the logs come from?" }),
+    });
+    const card = browse
+      .getByRole("listitem")
+      .filter({ has: page.getByRole("heading", { name: "Someone keeps guessing passwords" }) });
+    await card.getByText(/^Show \d+ real lines$/).click();
+    await expect(card.locator("pre")).toBeVisible();
+    // Only sizes that change the rating are offered (`aria seed` rated them); the smallest first.
+    const sizes = card.getByRole("radio");
+    await expect(sizes.first()).toBeChecked();
+    const smallest = (await sizes.first().getAttribute("value")) ?? "";
+    const largest = (await sizes.last().getAttribute("value")) ?? "";
+    await card.getByText(`${largest} servers`, { exact: true }).click();
+    await expect(sizes.last()).toBeChecked();
+    await card.getByText(`${smallest} servers`, { exact: true }).click();
+    await card.getByRole("button", { name: "Run it: Someone keeps guessing passwords" }).click();
+
+    await expect(page).toHaveURL(/\/console\/runs\/run-/);
+    const first = new URL(page.url()).pathname;
+    // Rejected, not approved: an approved incident's templates join the server's history and
+    // would change how the next run rates.
+    const reject = async () => {
+      await page.getByRole("button", { name: "Reject", exact: true }).click();
+      await page.getByRole("button", { name: "Reject the report" }).click();
+      await expect(page.getByText("Rejected", { exact: true }).first()).toBeVisible();
+    };
+    await reject();
+    const bigger = page.getByRole("button", { name: /^Run it on \d+ servers$/ });
+    const next = (await bigger.textContent())?.match(/\d+/)?.[0] ?? "";
+    await bigger.click();
+
+    await expect(page).toHaveURL(/\/console\/runs\/run-[^?]+\?compare=run-/);
+    await reject();
+    const compared = page.getByText("The same sample at two sizes").locator("..");
+    const before = compared.getByRole("link", {
+      name: new RegExp(`The first run, on ${smallest} servers`),
+    });
+    await expect(before).toHaveAttribute("href", first);
+    const after = compared.getByText(`This run, on ${next} servers`);
+    await expect(after).toBeVisible();
+    // The bigger size changes the rating: that is why it is offered.
+    const level = /SEV[1-4]/;
+    expect((await after.textContent())?.match(level)?.[0]).not.toBe(
+      (await before.textContent())?.match(level)?.[0],
+    );
+    await expectAccessible(page, "run view, two sizes compared");
+  });
+
+  test("lists each sample once, shows the rest on request and keeps Back working", async ({
+    page,
+  }) => {
+    await page.goto("/console/runs/new");
+    // The featured cards are not repeated in the list below them.
+    await expect(
+      page.getByRole("button", { name: "Run it: Someone keeps guessing passwords" }),
+    ).toHaveCount(1);
+    const browse = page.locator("section", {
+      has: page.getByRole("heading", { name: "Where do the logs come from?" }),
+    });
+    const more = browse.getByRole("button", { name: /^Show \d+ more$/ });
+    const hidden = Number((await more.textContent())?.match(/\d+/)?.[0]);
+    const shown = await browse.getByRole("listitem").count();
+    await more.click();
+    await expect(browse.getByRole("listitem")).toHaveCount(shown + hidden);
+    await expect(more).toHaveCount(0);
+
+    await page
+      .getByRole("navigation", { name: "Where the logs come from" })
+      .getByRole("link", { name: /^False alarms/ })
+      .click();
+    await expect(page).toHaveURL(/\/console\/runs\/new\?source=noise$/);
+    await expect(browse.getByRole("button", { name: /^Run it: / })).toHaveCount(3);
+    await page.goBack();
+    await expect(page).toHaveURL(/\/console\/runs\/new$/);
+  });
+
+  test("triages pasted logs from the Your own logs tab", async ({ page }) => {
+    await page.goto("/console/runs/new");
+    await page.getByRole("tab", { name: "Your own logs" }).click();
+    await expect(page).toHaveURL(/\/console\/runs\/new\?tab=own$/);
+    await page.getByRole("button", { name: "Start a triage" }).click();
+    await expect(page.getByText("Paste at least one log line")).toBeVisible();
+    await page
+      .getByLabel("Log lines")
+      .fill(
+        [
+          "Dec 10 06:55:46 LabSZ sshd[24200]: Failed password for root from 203.0.113.9 port 22 ssh2",
+          "Dec 10 06:55:48 LabSZ sshd[24202]: Failed password for root from 203.0.113.9 port 22 ssh2",
+        ].join("\n"),
+      );
+    await expect(page.getByText("2 lines", { exact: true })).toBeVisible();
+    await expectAccessible(page, "new triage, your own logs");
+    await page.getByRole("button", { name: "Start a triage" }).click();
+    await expect(page).toHaveURL(/\/console\/runs\/run-/);
+    await expect(page.getByRole("heading", { name: "Waiting for your review" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "What next?" })).toHaveCount(0);
   });
 
   test("lists the published run and opens its runbook", async ({ page }) => {

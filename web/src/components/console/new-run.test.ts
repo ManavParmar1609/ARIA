@@ -7,14 +7,15 @@ describe("logsHint", () => {
     expect(logsHint(null, false)).toContain("secrets redacted");
   });
 
-  it("warns on a public demo that every visitor can open the runs", () => {
-    expect(logsHint(null, true)).toContain("only you see the incidents you start");
+  it("says on a public demo that only the visitor sees the incident, on a shared server", () => {
+    const hint = logsHint(null, true);
+    expect(hint).toContain("only you see it");
+    expect(hint).toContain("shared server");
   });
 
   it("names what is wrong with the lines first", () => {
-    expect(logsHint("Paste at least one log line, or load a sample.", true)).toBe(
-      "Paste at least one log line, or load a sample.",
-    );
+    const problem = "Paste at least one log line, or pick a sample on the Samples tab.";
+    expect(logsHint(problem, true)).toBe(problem);
   });
 });
 

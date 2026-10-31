@@ -1686,6 +1686,18 @@ export type components = {
             updated_at: string;
         };
         /**
+         * SampleRef
+         * @description The console sample a run's logs were built from, at the sizes chosen (None: no choice).
+         */
+        SampleRef: {
+            /** Id */
+            id: string;
+            /** Rate */
+            rate?: number | null;
+            /** Servers */
+            servers?: number | null;
+        };
+        /**
          * SampleRunRequest
          * @description How to build a sample: a size it offers (or its default), and the run's options.
          */
@@ -2004,6 +2016,7 @@ export type components = {
             options?: components["schemas"]["RunOptions"];
             /** Replay Of */
             replay_of?: string | null;
+            sample?: components["schemas"]["SampleRef"] | null;
             /** Service */
             service?: string | null;
             /**

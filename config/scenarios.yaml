@@ -105,7 +105,6 @@ failure_modes:
       technology: "ZooKeeper"
       source: "bigdata"
       summary: "The servers that keep a cluster in agreement stop reaching each other, which can stall everything built on them."
-      headline: true
       servers: false
   hadoop.resourcemanager_unreachable:
     system: hadoop

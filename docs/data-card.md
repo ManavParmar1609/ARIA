@@ -451,7 +451,8 @@ Two more properties hold for every window:
   samples always give the same windows.
 
 Every scenario is marked `synthetic=True`. Seeded memory incidents are marked synthetic with
-`source="curated"`.
+`source="curated"`. Their time to resolve is left empty, because the scenarios do not record
+how long a fix took.
 
 ### The console's samples
 
@@ -463,13 +464,17 @@ The console offers every failure mode as a sample, built on the server by
 - **Every chosen server shows the failure.** The sample spreads its first lines over each node it
   names, so the spread its label rests on is the spread the visitor chose. The evaluation's
   windows leave spread to chance, as before.
-- **Sizes only where they matter.** The builder tries each sample at several server counts and
-  rates and offers a choice only where the label changes, smallest first. Formats that name no
-  host, ZooKeeper's thread names and false alarms get no server choice.
+- **Sizes only where they change the rating.** A visitor sees the severity a run gives, not the
+  sample's label, so `aria seed` builds each sample at several server counts and rates and rates
+  each one the way a run without a model does (`src/aria/severity/samples.py`). A sample offers
+  the smallest size, then each size that makes it more serious; a bigger size rated less serious
+  is left out. The result is saved as `models/sample_sizes.json` with a fingerprint of the lines,
+  catalog, rules, model and guardrails it was rated from. When the file is missing or its inputs
+  have changed, the sizes follow the samples' labels until `aria seed` runs again. False alarms
+  get no size.
 - **Plain cards.** Each failure mode's `card` in `config/scenarios.yaml` gives the console a plain
   title, the technology and a one-line summary. One sample, the SSH brute force, carries a line
-  that tries to talk ARIA out of the incident, which the injection guard quarantines. Their time to resolve is left empty, because the scenarios do not record
-how long a fix took.
+  that tries to talk ARIA out of the incident, which the injection guard quarantines.
 
 ### Seeds and splits
 

@@ -3,7 +3,7 @@
 import { CircleHelpIcon, DownloadIcon, HistoryIcon, Trash2Icon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
+import { Suspense, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { TagStrip } from "@/components/aria/severity";
@@ -39,6 +39,7 @@ import { History } from "./history";
 import { LiveDraft, ReportView } from "./report-view";
 import { ExampleNote } from "./example-note";
 import { ReviewPanel } from "./review-panel";
+import { SampleNext, sampleOf } from "./sample-next";
 import { EvidenceTable, Similar, Templates } from "./run-tabs";
 import { SeverityPanel } from "./severity-panel";
 import { AgentTeam } from "./team";
@@ -265,6 +266,7 @@ export function RunView({ runId }: { runId: string }) {
   const liveText = timeline.liveText.report ?? "";
   const viewing = checkpoint ? state.data : null;
   const terminal = !ACTIVE.has(detail.status);
+  const sample = detail.trigger === "sample" ? sampleOf(values?.request) : null;
 
   return (
     <EvidenceProvider evidence={evidence} events={events}>
@@ -372,6 +374,16 @@ export function RunView({ runId }: { runId: string }) {
               </EmptyState>
             )}
             {detail.trigger === "replay" ? <ExpertCheck runId={detail.id} /> : null}
+            {sample && terminal && detail.status !== "failed" && !viewing ? (
+              // It reads ?compare= from the address.
+              <Suspense fallback={null}>
+                <SampleNext
+                  runId={detail.id}
+                  sample={sample}
+                  severity={severity?.severity ?? detail.severity}
+                />
+              </Suspense>
+            ) : null}
           </div>
           <aside className="grid min-w-0 [scrollbar-width:thin] content-start gap-4 xl:sticky xl:top-6 xl:max-h-[calc(100dvh-3rem)] xl:self-start xl:overflow-y-auto">
             {severity ? (

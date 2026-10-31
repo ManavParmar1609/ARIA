@@ -341,6 +341,8 @@ class TriageRunner:
         if trigger != "replay" and request.replay_of is not None:
             # Only the replay endpoint may tie a run to a real incident's expert labels.
             request = request.model_copy(update={"replay_of": None})
+        if trigger != "sample" and request.sample is not None:
+            request = request.model_copy(update={"sample": None})  # only the samples endpoint
         request = self._cleaned(self._capped(request), run_id)
         repo.create_run(
             self.engine,

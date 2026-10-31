@@ -12,6 +12,7 @@ from __future__ import annotations
 import random
 import re
 from collections import defaultdict
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
@@ -250,11 +251,30 @@ def _policy_severity(
     }
 
 
+Rating = Callable[[Scenario], Severity]
+
+
+def _label(scenario: Scenario) -> Severity:
+    return scenario.severity
+
+
 class ScenarioBuilder:
     def __init__(self, pools: LinePools, rubric: AlertRubric | None = None) -> None:
         self.pools = pools
         self.rubric = rubric or load_rubric()
         self._sizes: dict[str, SampleSizes] = {}
+        self._rating: Rating = _label
+
+    def rate_with(self, rating: Rating) -> None:
+        """Choose sample sizes by ``rating``, the severity a run gives a sample, instead of the
+        sample's label: a visitor sees the run's rating, so a size must change that one
+        (``aria.severity.samples``)."""
+        self._rating = rating
+        self._sizes.clear()
+
+    def use_sizes(self, sizes: Mapping[str, SampleSizes]) -> None:
+        """Sizes chosen earlier from the same inputs (``aria seed`` rates them and saves them)."""
+        self._sizes.update(sizes)
 
     def _node_names(self, system: str, count: int, rng: random.Random) -> list[str]:
         known = self.pools.nodes.get(system) or []
@@ -394,12 +414,17 @@ class ScenarioBuilder:
         return self._sizes[mode_key]
 
     def _steps(self, mode_key: str, steps: tuple[int, ...], size: Any) -> SizeChoice | None:
-        """The first of ``steps`` at each severity the sample reaches, or None when one severity
-        covers them all (a choice that changes nothing teaches nothing)."""
-        first: dict[Severity, int] = {}
+        """The smallest of ``steps``, then each step at which the sample becomes more serious; None
+        when none does (a choice that changes nothing teaches nothing). A bigger size rated less
+        serious is left out: offering it would read as a mistake."""
+        kept: list[int] = []
+        worst: Severity | None = None
         for n in steps:
-            first.setdefault(self._sample(mode_key, *size(n)).severity, n)
-        return SizeChoice(tuple(sorted(first.values()))) if len(first) > 1 else None
+            severity = self._rating(self._sample(mode_key, *size(n)))
+            if worst is None or severity.rank < worst.rank:
+                kept.append(n)
+                worst = severity
+        return SizeChoice(tuple(kept)) if len(kept) > 1 else None
 
     def preview(self, mode_key: str, count: int = 3) -> list[str]:
         """A few of the real lines the sample is made of, as the log shows them."""

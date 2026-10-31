@@ -19,8 +19,8 @@ from aria.api.schemas import (
 )
 from aria.api.state import AppState, app_state
 from aria.api.visitors import ViewerDep
-from aria.config import get_settings
-from aria.contracts.inputs import TriageRequest
+from aria.config import get_app_config, get_settings
+from aria.contracts.inputs import SampleRef, TriageRequest
 from aria.contracts.run import RunStatus
 from aria.data.scenarios import (
     SOURCES,
@@ -29,6 +29,10 @@ from aria.data.scenarios import (
     SizeChoice,
     loghub_dir,
 )
+from aria.observability.logging import get_logger
+from aria.severity.samples import saved_sizes
+
+log = get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1/scenarios", tags=["samples"])
 State = Annotated[AppState, Depends(app_state)]
@@ -37,8 +41,20 @@ State = Annotated[AppState, Depends(app_state)]
 @lru_cache(maxsize=1)
 def _builder() -> ScenarioBuilder:
     """The sample builder over this server's Loghub lines (the full samples when downloaded,
-    else the small copies that ship with ARIA). Built once: reading the lines takes a moment."""
-    return ScenarioBuilder(LinePools.from_loghub(loghub_dir(get_settings().data_dir)))
+    else the small copies that ship with ARIA). Built once: reading the lines takes a moment.
+
+    Its sizes are the ones ``aria seed`` rated the way a run rates them; without those (no seed,
+    or the model, rules, catalog or lines changed since) they follow the samples' labels.
+    """
+    settings = get_settings()
+    lines = loghub_dir(settings.data_dir)
+    builder = ScenarioBuilder(LinePools.from_loghub(lines))
+    sizes = saved_sizes(settings, get_app_config(), lines)
+    if sizes is None:
+        log.warning("samples.sizes_unrated", hint="run `aria seed` to rate the samples' sizes")
+    else:
+        builder.use_sizes(sizes)
+    return builder
 
 
 def _choice(
@@ -133,7 +149,15 @@ async def run_scenario(
     rate = _size(sizes.rate, body.rate, "rate")
     scenario = await asyncio.to_thread(builder.sample, scenario_id, servers=servers, rate=rate)
     request = TriageRequest(
-        system=scenario.system, logs=scenario.lines, synthetic=True, options=body.options
+        system=scenario.system,
+        logs=scenario.lines,
+        synthetic=True,
+        options=body.options,
+        sample=SampleRef(
+            id=scenario_id,
+            servers=(servers or sizes.servers.default) if sizes.servers else None,
+            rate=(rate or sizes.rate.default) if sizes.rate else None,
+        ),
     )
     run_id = await asyncio.to_thread(
         state.runner.submit, request, trigger="sample", visitor=viewer.tag
