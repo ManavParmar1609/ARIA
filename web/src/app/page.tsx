@@ -2,115 +2,86 @@ import { Suspense, type ReactNode } from "react";
 
 import { Term } from "@/components/aria/term";
 import { Closing } from "@/components/site/closing";
+import { Explainer } from "@/components/site/explainer";
 import { Faq } from "@/components/site/faq";
 import { Hero } from "@/components/site/hero";
-import { Converge, Rings } from "@/components/site/line-art";
-import { ProofTicker } from "@/components/site/proof-ticker";
-import { RealDatasets } from "@/components/site/real-datasets";
-import { RealProof } from "@/components/site/real-proof";
-import { Results } from "@/components/site/results";
+import { ResultsRow } from "@/components/site/results-row";
 import { RunGraph, type GraphStep } from "@/components/site/run-graph";
 import { SiteFooter } from "@/components/site/site-footer";
 import { SiteHeader } from "@/components/site/site-header";
-import { Standards } from "@/components/site/standards";
 import { TriageReplay } from "@/components/site/triage-replay";
+import { WakeApi } from "@/components/site/wake-api";
 import { Why } from "@/components/site/why";
-import { evaluation, realData, realLogs, replay, runFacts, type RunFacts } from "@/lib/site-data";
+import {
+  evaluation,
+  realData,
+  realLogs,
+  replay,
+  runFacts,
+  type Replay,
+  type RunFacts,
+} from "@/lib/site-data";
 import { cn } from "@/lib/utils";
 
-const ms = (value: number | undefined) =>
-  value == null ? "" : value < 1 ? "under 1 ms" : `${Math.round(value)} ms`;
-
-function steps(f: RunFacts): GraphStep[] {
+/** How a run works, in four steps (item 28), each with what happened in the recorded run. */
+function steps(f: RunFacts, target: number): GraphStep[] {
   return [
     {
-      title: "Plan the run",
-      body: "The supervisor picks a strategy: how many parse workers, whether to investigate, and the run's budget of tokens, cost, steps and time.",
-      fact: `Planned in ${ms(f.stageMs.plan)}.`,
-      nodes: ["plan"],
-    },
-    {
-      title: "Parse and guard the logs",
+      title: "Read the logs",
       body: (
         <>
-          Workers group lines into <Term name="log-template">templates</Term> with Drain,{" "}
-          <Term name="pseudonymise">pseudonymise</Term> IP and e-mail addresses with a keyed hash,
-          and <Term name="quarantine">quarantine</Term> lines that read like instructions to a
-          model. Large inputs fan out across up to 32 workers.
+          ARIA groups the lines into <Term name="log-template">templates</Term>, swaps IP and e-mail
+          addresses for stand-ins (it <Term name="pseudonymise">pseudonymises</Term> them) and sets
+          aside lines that read like instructions to a model (they are{" "}
+          <Term name="quarantine">quarantined</Term>). A large input is split across workers.
         </>
       ),
-      fact: `${f.lines} lines became ${f.templates} templates; ${f.pseudonyms} addresses pseudonymised; ${f.quarantined} line quarantined.`,
-      nodes: ["parse1", "parse2", "parse3", "parse4", "merge"],
+      fact: `${f.lines} lines became ${f.templates} templates; ${f.pseudonyms} addresses replaced; ${f.quarantined} planted line set aside.`,
+      nodes: ["plan", "parse1", "parse2", "parse3", "parse4", "merge"],
     },
     {
-      title: "Rate severity and recall the past, in parallel",
+      title: "Rate how serious it is, and recall the past",
       body: (
         <>
-          Rules and a <Term name="calibrated">calibrated</Term> model score the window. Conformal
-          prediction turns the model&apos;s probabilities into a{" "}
-          <Term name="prediction-set">short list</Term> of levels built to hold the right one 90% of
-          the time on windows like the ones it was calibrated on, and{" "}
-          <Term name="safety-floor">safety floors</Term> stop a dangerous pattern being rated too
-          low. Meanwhile hybrid search finds similar past incidents.
+          Rules and a <Term name="calibrated">calibrated</Term> model score the logs and keep a{" "}
+          <Term name="prediction-set">short list</Term> of levels, built to hold the right one{" "}
+          {Math.round(target * 100)} times in 100. <Term name="safety-floor">Safety floors</Term>{" "}
+          stop a dangerous pattern being rated too low. Meanwhile, search finds similar past
+          incidents.
         </>
       ),
       fact: `${f.severity} at ${Math.round(f.probability * 100)}% probability; ${f.similar} similar past incidents found.`,
       nodes: ["severity", "recall"],
     },
     {
-      title: "Investigate with read-only tools",
+      title: "Investigate and write the report",
       body: (
         <>
-          An agent proposes hypotheses and tests them through ARIA&apos;s{" "}
+          An agent tests its ideas with read-only tools (ARIA&apos;s{" "}
+          <Term name="mcp">MCP server</Term>): example lines, a component&apos;s timeline, past
+          incidents and runbooks. Each result becomes <Term name="evidence">evidence</Term>. The
+          report is written from evidence only, and a check rejects any claim whose source is
+          missing. When the evidence is thin, ARIA widens the search and tries again (a{" "}
           <span className="whitespace-nowrap">
-            <Term name="mcp">MCP server</Term>:
+            <Term name="replan">replan</Term>),
           </span>{" "}
-          example lines for a template, a component&apos;s timeline, which nodes are affected,
-          incident search, runbooks. Every result becomes <Term name="evidence">evidence</Term> a
-          claim can cite.
+          at most twice.
         </>
       ),
-      fact: `${f.toolCalls} tool calls; the leading hypothesis is supported at ${Math.round((f.leadingConfidence ?? 0) * 100)}%.`,
-      nodes: ["investigate"],
+      fact: `${f.toolCalls} tool calls; ${f.claims} claims checked, ${Math.round(f.citationCoverage * 100)}% cited; ${f.actions} messages drafted.`,
+      nodes: ["investigate", "assess", "report", "comms"],
     },
     {
-      title: "Check there is enough to go on",
+      title: "Wait for a person, then remember",
       body: (
         <>
-          If no hypothesis holds up or the matches look weak, the graph widens the search and
-          investigates again (a <Term name="replan">replan</Term>), at most twice. A quiet window
-          with nothing new stops here.
-        </>
-      ),
-      fact:
-        f.replans === 0
-          ? "Enough evidence on the first pass; no replan."
-          : `Replanned ${f.replans} times.`,
-      nodes: ["assess"],
-    },
-    {
-      title: "Write the report and draft the messages",
-      body: "The report is written from evidence only. A validator rejects any claim whose citation is missing or whose numbers disagree with the evidence; with an LLM, a draft that fails falls back to the grounded template. Messages to Slack, Teams or a status page are drafted, never sent.",
-      fact: `${f.claims} claims checked, ${Math.round(f.citationCoverage * 100)}% cited; ${f.actions} messages drafted.`,
-      nodes: ["report", "comms"],
-    },
-    {
-      title: "Wait for a person",
-      body: (
-        <>
-          The graph pauses and keeps its <Term name="checkpoint">checkpoint</Term>, through restarts
-          if need be. A reviewer approves, edits or rejects, and only the messages they approve go
-          out.
+          The run pauses and keeps its <Term name="checkpoint">checkpoint</Term>. A reviewer
+          approves, edits or discards the messages, and only what they approve goes out. The
+          approved incident joins ARIA&apos;s memory, so the next similar alert finds it.
         </>
       ),
       fact: `Ready for review ${(f.timeToReviewMs / 1000).toFixed(1)} s after the logs arrived.`,
-      nodes: ["review"],
-    },
-    {
-      title: "Publish and remember",
-      body: "The approved report is stored, the incident joins memory so the next similar alert finds it, and routine log templates are learned so they stop looking new.",
-      fact: `Published in ${ms(f.stageMs.publish)} after approval.`,
-      nodes: ["publish"],
+      nodes: ["review", "publish"],
     },
   ];
 }
@@ -179,33 +150,12 @@ function Section({
   );
 }
 
-/** The real data behind the results, drifting past on the keylime panel. */
-const SOURCES = [
-  "HDFS, labelled by experts",
-  "BlueGene/L alert tags",
-  "Thunderbird",
-  "Hadoop jobs made to fail",
-  "OpenStack fault injection",
-  "ServiceNow tickets",
-  "GitLab.com incidents",
-  "Cloud post-mortems",
-  "GAIA labelled logs",
-  "Prompt-injection benchmarks",
-];
-
-/** The protocols and providers ARIA speaks, as a quiet row of names. */
-const SPEAKS = [
-  "Model Context Protocol",
-  "Agent2Agent",
-  "AG-UI",
-  "LangGraph",
-  "OpenTelemetry",
-  "Google Gemini",
-  "NVIDIA NIM",
-  "Azure OpenAI",
-];
-
-const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
+/** Who did the model's part of the recorded run, in a sentence. */
+function writtenBy(data: Replay): string {
+  return data.model
+    ? `A language model, ${data.model.service} (${data.model.name}), investigated, chose the level from the short list, and wrote the report and the messages.`
+    : "It ran offline, with no language model.";
+}
 
 export default function Landing() {
   const data = replay();
@@ -213,7 +163,7 @@ export default function Landing() {
   const evals = evaluation();
   const real = realLogs();
   const datasets = realData();
-  // The HDFS log plus every other real dataset scored on this page.
+  // The HDFS log plus every other real dataset on Test results.
   const nDatasets = Object.keys(datasets).length + 1;
   return (
     <>
@@ -224,117 +174,35 @@ export default function Landing() {
         Skip to content
       </a>
       <SiteHeader />
+      <WakeApi />
       <main id="main">
         <Hero data={data} />
 
-        <section
-          aria-labelledby="speaks-title"
-          className="mx-auto max-w-[75rem] px-3 py-14 sm:px-6"
+        <Section
+          id="what"
+          tag="What it does"
+          title="What ARIA does for the person on call"
+          intro="When an alert fires, ARIA has already read the logs. It says how serious the incident is and how sure it is, what changed, what fixed it last time, and drafts the messages for you to approve."
         >
-          <h2
-            id="speaks-title"
-            className="text-center font-sans text-xs font-normal tracking-normal text-muted-foreground"
-          >
-            Speaks the protocols your tools already use
-          </h2>
-          <ul className="mt-6 flex flex-wrap items-center justify-center gap-x-10 gap-y-4">
-            {SPEAKS.map((name) => (
-              <li
-                key={name}
-                className="text-base font-semibold tracking-[-0.01em] text-charcoal dark:text-foreground"
-              >
-                {name}
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        {/* The problem on the cream page, its lines still apart; the answer on sage, where they
-            run together into one. */}
-        <section
-          aria-labelledby="problem-title"
-          className="relative overflow-hidden py-16 lg:py-24"
-        >
-          <div className="mx-auto grid max-w-[75rem] gap-5 px-3 sm:px-6">
-            <span className="tag justify-self-start">The problem</span>
-            <h2 id="problem-title" className="text-statement max-w-[36ch]">
-              An alert arrives with a wall of logs. The person on call has to read them, judge how
-              bad it is and remember what happened last time, often in the middle of the night.
-            </h2>
-          </div>
-          <Converge
-            apart
-            className="mt-10 w-[110%] -translate-x-[6%] text-heading lg:w-full lg:translate-x-0"
-          />
-        </section>
-        <section
-          aria-labelledby="solution-title"
-          className="relative overflow-hidden bg-panel-sage py-16 lg:py-24"
-        >
-          <div className="mx-auto grid max-w-[75rem] gap-5 px-3 sm:px-6">
-            <span className="tag justify-self-start bg-raised">The answer</span>
-            <h2 id="solution-title" className="text-statement max-w-[36ch]">
-              ARIA reads the logs first. It brings back one severity you can check, a report that
-              cites its evidence and the incidents that looked like this before, then waits for you
-              to approve.
-            </h2>
-          </div>
-          <Converge className="mt-10 w-full text-heading" />
-        </section>
-
-        <section
-          aria-labelledby="proof-title"
-          className="mx-auto grid max-w-[75rem] gap-6 px-3 py-16 sm:px-6 lg:grid-cols-2 lg:gap-12 lg:py-24"
-        >
-          <ProofTicker items={SOURCES} />
-          <div className="grid content-center gap-5">
-            <span className="tag justify-self-start">Tested on real data</span>
-            <h2 id="proof-title" className="text-statement max-w-[30ch]">
-              Measured on public logs, tickets and incidents that their owners labelled, each scored
-              against a simpler baseline.
-            </h2>
-            <dl className="mt-4 flex flex-wrap gap-x-12 gap-y-6">
-              <div className="grid gap-1">
-                <dt className="order-2 max-w-[18ch] text-xs text-muted-foreground">
-                  lines of one supercomputer&apos;s log, scored window by window
-                </dt>
-                <dd className="stat order-1 text-[3rem]">{compact.format(datasets.bgl.lines)}</dd>
-              </div>
-              <div className="grid gap-1">
-                <dt className="order-2 max-w-[18ch] text-xs text-muted-foreground">
-                  real, labelled datasets
-                </dt>
-                <dd className="stat order-1 text-[3rem]">{nDatasets}</dd>
-              </div>
-            </dl>
-          </div>
-        </section>
-
-        <section
-          aria-labelledby="why-title"
-          className="relative mx-auto max-w-[75rem] px-3 pb-16 sm:px-6 lg:pb-24"
-        >
-          <Rings className="pointer-events-none absolute -top-10 right-0 w-56 text-heading/40 max-lg:hidden" />
-          <div className="mb-10 grid max-w-3xl gap-4">
-            <span className="tag justify-self-start">Why ARIA</span>
-            <h2 id="why-title" className="text-display">
-              A team of agents, working together.
-            </h2>
-          </div>
           <Why />
-        </section>
+          <Explainer lines={data.fileLines} />
+          <p className="max-w-[62ch] text-[0.9375rem] leading-relaxed text-heading">
+            For people evaluating AI tools: every claim links to its evidence, nothing is sent
+            without a person&apos;s approval, and every test result on this site comes from a
+            published test.
+          </p>
+        </Section>
 
         <Section
           id="run"
           tone="sage"
-          tag="Example run"
-          title="One recorded run, start to finish"
+          tag="Example"
+          title="One incident, start to finish"
           intro={
             <>
-              {data.nLines} HDFS log lines (real Loghub lines, arranged into a synthetic incident),
-              triaged offline. One line was planted to test the injection guard. Point at a citation
-              such as <span className="font-mono text-foreground">E2</span> to see the evidence
-              behind a claim.
+              {data.nLines} real HDFS log lines from Loghub, arranged into an incident, plus one
+              planted line that tries to trick ARIA. {writtenBy(data)} Point at a citation such as{" "}
+              <span className="font-mono text-foreground">E2</span> to see the lines behind a claim.
             </>
           }
         >
@@ -345,41 +213,14 @@ export default function Landing() {
           </Suspense>
         </Section>
 
-        <div className="h-3" />
-
-        <Section
-          id="real"
-          tone="mint"
-          tag="Real logs"
-          title="Tested on a real cluster, against its experts"
-          intro={
-            <>
-              {real.lines.toLocaleString("en")} real lines from a Hadoop cluster of more than 200
-              nodes, and the label Hadoop experts gave each of its{" "}
-              {real.blocks.toLocaleString("en")} storage blocks. ARIA never sees a label, and no
-              line in this log is an error: every failure in it is silent.
-            </>
-          }
-        >
-          <RealProof data={real} />
-          <RealDatasets data={datasets} />
-        </Section>
-
         <Section
           id="how"
           tag="How it works"
-          title="What happens in a run"
-          intro={
-            <>
-              A run is a LangGraph state machine with a checkpoint after every step, so it can stop
-              for a person, carry on after a restart, or be rewound and{" "}
-              <Term name="fork">forked</Term>. The numbers come from the recorded run above. Words
-              with a dotted underline open a short definition.
-            </>
-          }
+          title="Four steps, then a person decides"
+          intro="Each step saves its place, so a run can stop for a person, carry on after a restart, or be rewound and tried another way. The figures come from the example above. Words with a dotted underline open a short definition."
         >
           <Suspense>
-            <RunGraph steps={steps(facts)} />
+            <RunGraph steps={steps(facts, evals.severity.targetCoverage)} />
           </Suspense>
         </Section>
 
@@ -388,31 +229,21 @@ export default function Landing() {
           tone="keylime"
           deferred
           tag="Results"
-          title="Measured, caveats included"
-          intro="These results come from semi-synthetic incidents: real Loghub log lines, composed into incident windows by ARIA's scenario builder, scored against simpler baselines. Every number here comes from the committed evaluation results."
+          title="What the tests show"
+          intro={`ARIA is tested on ${nDatasets} public, labelled datasets, each against a simpler method. Four of the findings, including one where it falls short:`}
         >
-          <Results data={evals} publicAttacks={datasets.injection} />
+          <ResultsRow data={evals} real={real} more={datasets} />
         </Section>
 
-        <Section
-          id="standards"
-          deferred
-          tag="Standards"
-          title="Built on open agent standards"
-          intro="ARIA works with the tools you already have, through protocols other agents and frontends speak."
-        >
-          <Standards />
-        </Section>
+        <Closing />
 
         <section
           id="faq"
           aria-labelledby="faq-title"
-          className="mx-auto max-w-[75rem] px-3 pb-16 sm:px-6 lg:pb-24"
+          className="mx-auto max-w-[75rem] px-3 py-16 sm:px-6 lg:py-24"
         >
           <Faq />
         </section>
-
-        <Closing />
       </main>
       <SiteFooter recordedAt={data.recordedAt} gitSha={data.gitSha} />
     </>

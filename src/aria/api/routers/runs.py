@@ -136,6 +136,8 @@ async def get_run(run_id: RunId, state: State, viewer: ViewerDep) -> RunDetail:
         "links": links_for(run_id),
         "deliveries": _deliveries(rows),
     }
+    if run["status"] == RunStatus.QUEUED:
+        detail["ahead"] = await asyncio.to_thread(repo.runs_ahead, state.services.engine, run_id)
     try:
         snapshot = await state.runner.snapshot(run_id)
     except RunNotFoundError:

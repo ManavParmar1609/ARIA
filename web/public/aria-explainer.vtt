@@ -1,0 +1,37 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:04.750
+ARIA: incident triage that shows its work.
+
+2
+00:00:04.750 --> 00:00:13.250
+An alert fires, and its logs arrive with it. One line is an instruction, not a log: a reviewer sees it, the analysis never does.
+
+3
+00:00:13.250 --> 00:00:21.750
+ARIA groups the lines into templates and marks the ones new to this system.
+
+4
+00:00:21.750 --> 00:00:35.250
+Rules and a calibrated model rate the severity and keep a short list of likely levels.
+
+5
+00:00:35.250 --> 00:00:45.750
+An agent tests its ideas with read-only tools and finds the closest past incidents and the runbook they used.
+
+6
+00:00:45.750 --> 00:00:58.250
+The report cites its evidence for every claim, and a check confirms each citation.
+
+7
+00:00:58.250 --> 00:01:05.750
+The messages wait as drafts until a person approves them. Then the incident is published and joins ARIA's memory.
+
+8
+00:01:05.750 --> 00:01:18.250
+The test results, caveats included.
+
+9
+00:01:18.250 --> 00:01:24.000
+Let ARIA take the first look.

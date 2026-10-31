@@ -50,10 +50,15 @@ export interface Replay {
   hiddenBefore: number;
   claims: ReplayClaim[];
   evidence: Record<string, ReplayEvidence>;
+  /** The lines ARIA read, as its report counts them: the planted line is set aside, not read. */
   nLines: number;
+  /** Every line in the log file, the planted one included. */
+  fileLines: number;
   timeToReviewMs: number;
   recordedAt: string;
   gitSha: string;
+  /** The language model that did the model's part of the run, or null when it ran offline. */
+  model: { service: string; name: string } | null;
 }
 
 const stripSeverity = (title: string) => title.replace(/^SEV[1-4]\s*·\s*/, "");
@@ -146,11 +151,21 @@ export function replay(): Replay {
     hiddenBefore: start - 1,
     claims,
     evidence: replayEvidence,
-    nLines: demo.input.n_lines,
+    nLines: demo.batch.features.n_events,
+    fileLines: demo.input.n_lines,
     timeToReviewMs: demo.timings.time_to_review_ms,
     recordedAt: demo.recorded_at,
     gitSha: demo.git_sha,
+    model: writtenBy(),
   };
+}
+
+/** "gemini-lite/gemini-3.5-flash-lite" as the service and the model, when a model wrote it. */
+function writtenBy(): Replay["model"] {
+  const id = demo.report.model;
+  if (!demo.llm || !id) return null;
+  const [provider = "", ...name] = id.split("/");
+  return { service: PROVIDER_NAMES[provider] ?? "a language model", name: name.join("/") || id };
 }
 
 /** Facts about each graph step of the recorded run, for the "how a run works" section. */
@@ -163,7 +178,8 @@ export function runFacts() {
   const report = demo.report;
   const ms = demo.timings.stage_ms as Record<string, number>;
   return {
-    lines: demo.input.n_lines,
+    // The lines read, as the report counts them; the planted line is counted as quarantined.
+    lines: demo.batch.features.n_events,
     shards: batch.shards,
     templates: batch.templates.length,
     pseudonyms: guard.redactions.pseudonyms,

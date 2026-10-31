@@ -404,28 +404,18 @@
   }
 }
 
-/* Hero entrance (hero.tsx): the three product cards rise into place one after another and the
-   thread joining them draws across. Transform only, never opacity, so every card keeps its full
-   contrast in every frame; the headline (the largest paint) never moves. */
+/* Hero entrance (hero.tsx): the report card rises into place once. Transform only, never
+   opacity, so the card keeps its full contrast in every frame; the headline (the largest paint)
+   never moves. */
 @media (prefers-reduced-motion: no-preference) and (min-width: 640px) {
   .hero-rise {
     animation: hero-rise 600ms var(--ease-out) var(--d, 0ms) both;
-  }
-  .hero-thread {
-    transform-origin: left;
-    animation: hero-thread 600ms var(--ease-out) 200ms both;
   }
 }
 
 @keyframes hero-rise {
   from {
     transform: translateY(28px) scale(0.97);
-  }
-}
-
-@keyframes hero-thread {
-  from {
-    transform: scaleX(0);
   }
 }
 
@@ -440,40 +430,6 @@
   .js .draw[data-drawn] path {
     stroke-dashoffset: 0;
     transition: stroke-dashoffset 1800ms var(--ease-out) calc(var(--i, 0) * 70ms);
-  }
-}
-
-/* Ticker: a list that drifts past (globals: .ticker). It pauses while pointed at or focused, and
-   its button stops it (WCAG 2.2.2); with reduced motion it stands still and scrolls by hand. */
-.ticker {
-  overflow: hidden;
-  mask-image: linear-gradient(transparent, #000 18%, #000 82%, transparent);
-}
-.ticker-track {
-  display: grid;
-}
-@media (prefers-reduced-motion: no-preference) {
-  .ticker-track {
-    animation: ticker var(--ticker-s, 40s) linear infinite;
-  }
-  .ticker:hover .ticker-track,
-  .ticker:focus-within .ticker-track,
-  .ticker[data-paused] .ticker-track {
-    animation-play-state: paused;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .ticker {
-    overflow-y: auto;
-  }
-  .ticker-track > [aria-hidden="true"] {
-    display: none;
-  }
-}
-
-@keyframes ticker {
-  to {
-    transform: translateY(-50%);
   }
 }
 

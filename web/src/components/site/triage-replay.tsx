@@ -134,7 +134,8 @@ export function TriageReplay({ data }: { data: Replay }) {
         <div className="flex items-baseline justify-between gap-4 border-b border-rule px-5 py-3 text-xs text-muted-foreground">
           <span className="font-mono">hdfs.log</span>
           <span className="tabular">
-            lines {firstShown} to {firstShown + 8} and {data.lines.at(-1)?.lineNo} of {data.nLines}
+            lines {firstShown} to {firstShown + 8} and {data.lines.at(-1)?.lineNo} of{" "}
+            {data.fileLines}
           </span>
         </div>
         <ol
@@ -262,9 +263,14 @@ export function TriageReplay({ data }: { data: Replay }) {
               >
                 <span aria-hidden className="mt-2.5 block size-1.5 rounded-full bg-foreground/70" />
                 <span className="wrap-anywhere">
-                  {claim.text}{" "}
-                  <span className="inline-flex flex-wrap gap-1 align-baseline">
-                    {claim.evidence.slice(0, 3).map(chip)}
+                  {claim.text} {/* Two sources per claim, then a count, as on the incident page. */}
+                  <span className="inline-flex flex-wrap items-baseline gap-1 align-baseline">
+                    {claim.evidence.slice(0, 2).map(chip)}
+                    {claim.evidence.length > 2 ? (
+                      <span className="text-xs text-muted-foreground">
+                        +{claim.evidence.length - 2}
+                      </span>
+                    ) : null}
                   </span>
                 </span>
               </li>

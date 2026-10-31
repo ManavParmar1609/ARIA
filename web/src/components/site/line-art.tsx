@@ -71,27 +71,3 @@ export function Converge({ className, apart = false }: { className?: string; apa
     </svg>
   );
 }
-
-/** Rings spreading out from a point at the top left, like a ping. */
-export function Rings({ className }: { className?: string }) {
-  const ref = useDrawn<SVGSVGElement>();
-  return (
-    <svg
-      ref={ref}
-      viewBox="0 0 300 300"
-      className={cx("draw block h-auto", className)}
-      aria-hidden="true"
-      focusable="false"
-    >
-      <g fill="none" stroke="currentColor" strokeWidth="1.25">
-        {[40, 75, 110, 145, 180, 215, 250].map((r, i) => (
-          <path
-            key={r}
-            d={`M${r} 0A${r} ${r} 0 0 1 0 ${r}`}
-            style={stroke(i, Math.ceil(r * 1.6))}
-          />
-        ))}
-      </g>
-    </svg>
-  );
-}

@@ -251,7 +251,8 @@ In git:
 - Results and recordings derived from the data:
   - [`docs/eval-results.json`](eval-results.json) and [`docs/eval-live.json`](eval-live.json):
     evaluation results.
-  - `web/src/data/demo-run.json`: one recorded offline run on a semi-synthetic scenario.
+  - `web/src/data/demo-run.json`: one recorded run on a semi-synthetic scenario, with a language
+    model doing the investigation, the report and the messages (`"llm": true` in the file).
 
 Not in git (see [`.gitignore`](../.gitignore)):
 

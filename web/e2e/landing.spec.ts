@@ -4,14 +4,19 @@ test.describe("landing page", () => {
   test("shows the recorded run and lets a citation reveal its evidence", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "Incident triage that shows its work.",
+      "Turn a wall of logs into a report you can check.",
     );
+    // The hero's report waits for a person; nothing in it can be pressed.
+    await expect(
+      page.getByText("Waiting for a person to approve. Nothing has been sent."),
+    ).toBeVisible();
+    await expect(page.locator("#main video")).toHaveAttribute("preload", "none");
     const tag = page.getByRole("article", { name: /Triage tag/ });
     await expect(tag).toBeVisible();
-    await tag.getByRole("button", { name: "E2", exact: true }).hover();
+    await tag.getByRole("button", { name: "E2", exact: true }).first().hover();
     await expect(page.locator("#replay-evidence")).toContainText("log template");
     await expect(page.getByText("Quarantined: reads like an instruction, not a log")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Measured, caveats included" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "What the tests show" })).toBeVisible();
   });
 
   test("opens a plain-English definition from a dotted term", async ({ page }) => {
@@ -40,16 +45,16 @@ test.describe("landing page", () => {
     await expectAccessible(page, "landing, dark");
   });
 
-  test("switches theme from the menu and remembers it", async ({ page }) => {
+  test("switches theme and remembers it", async ({ page }) => {
+    // On a wide screen the theme button sits in the header: the sections need no menu there.
     await page.goto("/");
     const html = page.locator("html");
     await expect(html).not.toHaveClass(/\bdark\b/);
-    await page.getByRole("button", { name: "Open the menu" }).click();
+    await expect(page.getByRole("button", { name: "Open the menu" })).toBeHidden();
     await page.getByRole("button", { name: "Use the dark theme" }).click();
     await expect(html).toHaveClass(/\bdark\b/);
     await page.reload();
     await expect(html).toHaveClass(/\bdark\b/);
-    await page.getByRole("button", { name: "Open the menu" }).click();
     await page.getByRole("button", { name: "Use the light theme" }).click();
     await expect(html).not.toHaveClass(/\bdark\b/);
   });
@@ -61,30 +66,18 @@ test.describe("landing page", () => {
     await expectNoSidewaysScroll(page, "landing");
   });
 
-  test("proves itself on real logs and links to the replay", async ({ page }) => {
-    await page.goto("/#real");
-    const real = page.locator("section#real");
-    await expect(
-      real.getByRole("heading", { name: "Tested on a real cluster, against its experts" }),
-    ).toBeVisible();
-    await expect(real.getByText("Flags that were real failures")).toBeVisible();
-    await expect(real.getByRole("figure")).toContainText("ARIA, following each block's steps");
-    await expect(
-      real.getByRole("heading", { name: "And on six more real datasets" }),
-    ).toBeVisible();
-    for (const name of [
-      /supercomputer/,
-      /Hadoop jobs/,
-      /OpenStack runs/,
-      /ServiceNow tickets/,
-      /GitLab\.com incidents/,
-      /prompt-injection/,
-    ]) {
-      await expect(real.getByRole("heading", { level: 4, name })).toBeVisible();
-    }
-    await real.getByRole("link", { name: /Replay it yourself/ }).click();
+  test("links the hero to real incidents and each result to its test", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("link", { name: "Try a real incident" }).click();
     await expect(page).toHaveURL(/\/console\/runs\/new\?source=bigdata$/);
     await expect(page.getByRole("button", { name: /^Replay it: / }).first()).toBeVisible();
+    await page.goto("/#results");
+    const results = page.locator("section#results");
+    await expect(results.getByRole("heading", { name: "What the tests show" })).toBeVisible();
+    await expect(results.getByRole("listitem")).toHaveCount(4);
+    await expect(results.getByRole("link", { name: "Where it falls short" })).toBeVisible();
+    await results.getByRole("link", { name: "The real cluster test" }).click();
+    await expect(page).toHaveURL(/\/console\/evals#ev-real$/);
   });
 
   test("reaches every section from the menu on a phone", async ({ page }) => {
@@ -98,16 +91,15 @@ test.describe("landing page", () => {
     await menu.getByRole("link", { name: "Results" }).click();
     await expect(page).toHaveURL(/#results$/);
     await expect(menu).toBeHidden();
-    await expect(
-      page.getByRole("heading", { name: "Measured, caveats included" }),
-    ).toBeInViewport();
+    await expect(page.getByRole("heading", { name: "What the tests show" })).toBeInViewport();
   });
 
   test("shows final states under reduced motion", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/");
-    await expect(page.getByRole("article", { name: /Triage tag/ })).toBeVisible();
-    await expect(page.getByText("Waiting for a person to approve")).toBeVisible();
+    const tag = page.getByRole("article", { name: /Triage tag/ });
+    await expect(tag).toBeVisible();
+    await expect(tag.getByText("Waiting for a person to approve")).toBeVisible();
   });
 
   test("serves llms.txt for agents", async ({ request }) => {

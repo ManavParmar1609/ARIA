@@ -327,7 +327,7 @@ function Gate({ children }: { children: ReactNode }) {
       <div role="status" className="grid gap-4">
         {slow ? (
           <p className="text-sm text-muted-foreground">
-            Still connecting to ARIA&apos;s API. A server waking from sleep can take up to a minute.
+            ARIA&apos;s server is waking up. After a quiet spell this takes up to a minute.
           </p>
         ) : (
           <span className="sr-only">Connecting to ARIA</span>

@@ -11,8 +11,8 @@ const COLUMNS: { title: string; links: { label: string; href: string; internal?:
     title: "Product",
     links: [
       { label: "Console", href: "/console", internal: true },
-      { label: "Example run", href: "#run" },
-      { label: "Real logs", href: "#real" },
+      { label: "What it does", href: "#what" },
+      { label: "Example", href: "#run" },
       { label: "Questions", href: "#faq" },
     ],
   },

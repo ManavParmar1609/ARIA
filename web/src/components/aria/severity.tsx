@@ -186,7 +186,7 @@ export function SeverityScale({
   return (
     <figure
       className={cx("grid gap-1", className)}
-      aria-label={`${rulesOnly ? "Rule scores (the calibrated model was not used)" : "Model probabilities"}: ${described}. ${rulesOnly ? `Levels the rules leave open: ${predictionSet.join(", ")}.` : setEmpty ? `No class is likely enough for the ${coverage}% prediction set.` : `${coverage}% prediction set: ${predictionSet.join(", ")}.`} Decided: ${decided}.${floor ? ` Safety floor: ${floor}.` : ""}`}
+      aria-label={`${rulesOnly ? "Rule scores (the calibrated model was not used)" : "Model probabilities"}: ${described}. ${rulesOnly ? `Levels the rules leave open: ${predictionSet.join(", ")}.` : setEmpty ? `No level is likely enough to make the short list, so the likeliest stands in.` : `Short list, built to hold the right level ${coverage}% of the time: ${predictionSet.join(", ")}.`} Decided: ${decided}.${floor ? ` Safety floor: ${floor}.` : ""}`}
     >
       <div className="relative grid grid-cols-4 gap-1.5" aria-hidden>
         {setIdx.length > 0 ? (
@@ -251,8 +251,8 @@ export function SeverityScale({
           {rulesOnly
             ? "Bars: rule scores, as shares. Bracket: the levels the rules leave open."
             : setEmpty
-              ? `Bars: calibrated model probability. Dashed bracket: no class is likely enough for the ${coverage}% prediction set, so it stands in with the most likely.`
-              : `Bars: calibrated model probability. Bracket: the ${coverage}% prediction set.`}
+              ? `Bars: calibrated model probability. Dashed bracket: no level is likely enough to make the short list, so the likeliest stands in.`
+              : `Bars: calibrated model probability. Bracket: the short list, built to hold the right level ${coverage}% of the time.`}
         </figcaption>
       ) : null}
     </figure>

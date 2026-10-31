@@ -62,6 +62,7 @@ export const assessment = {
   coverage: pct(1 - severity.alpha, 0),
   confidence: severity.confidence,
   decidedBy: severity.decided_by,
+  needsReview: severity.needs_review,
 };
 
 const investigation = demo.investigation;
@@ -102,7 +103,9 @@ export const cited = {
 
 export const review = {
   actions: demo.actions.map((a) => ({ kind: a.kind, title: a.title })),
-  timeToReview: `${demo.timings.time_to_review_ms} ms`,
+  timeToReview: `${(demo.timings.time_to_review_ms / 1000).toFixed(1)} s`,
+  // The recorded run used a language model when the recording says so, else it ran offline.
+  how: demo.llm ? "with a language model" : "offline",
   status: demo.status,
 };
 

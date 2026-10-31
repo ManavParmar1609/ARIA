@@ -936,6 +936,16 @@ async def test_asking_about_a_queued_run_says_it_is_not_ready(api: Api) -> None:
     assert "queued" in queued.json()["detail"]
 
 
+async def test_a_queued_run_says_how_many_triages_are_ahead_of_it(api: Api) -> None:
+    engine = api.state.services.engine
+    request = TriageRequest(system="bgl", logs=["x"]).model_dump(mode="json")
+    for run_id in ("run-first", "run-second"):
+        repo.create_run(engine, run_id, request=request, system="bgl")
+    first = (await api.client.get("/api/v1/runs/run-first")).json()
+    second = (await api.client.get("/api/v1/runs/run-second")).json()
+    assert (first["ahead"], second["ahead"]) == (0, 1)
+
+
 async def test_catalog_lists_incidents_and_runbooks(api: Api) -> None:
     found = (await api.client.get("/api/v1/incidents", params={"q": "kernel panic"})).json()
     assert found[0]["system"] == "bgl"

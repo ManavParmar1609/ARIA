@@ -104,6 +104,25 @@ def get_run(engine: Engine, run_id: str) -> dict[str, Any] | None:
         return run_dict(row) if row is not None else None
 
 
+def runs_ahead(engine: Engine, run_id: str) -> int:
+    """How many runs are waiting or running that started before this one: the triages a queued
+    run waits behind. A count only, so it says nothing about whose they are."""
+    with session_scope(engine) as session:
+        mine = session.get(RunRow, run_id)
+        if mine is None:
+            return 0
+        ahead = session.scalar(
+            select(func.count())
+            .select_from(RunRow)
+            .where(
+                RunRow.status.in_(("queued", "running")),
+                RunRow.created_at < mine.created_at,
+                RunRow.id != run_id,
+            )
+        )
+        return int(ahead or 0)
+
+
 def list_runs(
     engine: Engine,
     *,

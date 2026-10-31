@@ -1,11 +1,16 @@
 """Record one real ARIA run for the landing page and the demo video.
 
     uv run python -I scripts/record_demo_run.py [--mode hdfs.block_serve_exceptions] [--seed 4]
+        [--llm]
 
-The run is offline (deterministic, no LLM) and goes through the full graph: parse, severity,
-retrieval, investigation, report, review (approved here as "demo") and publish. The input is a
-semi-synthetic scenario composed from real Loghub sample lines, plus one planted instruction line
-to show the injection guard; the output says so. Writes web/src/data/demo-run.json.
+The run goes through the full graph: parse, severity, retrieval, investigation, report, review
+(approved here as "demo") and publish. The input is a semi-synthetic scenario composed from real
+Loghub sample lines, plus one planted instruction line to show the injection guard; the output
+says so. Writes web/src/data/demo-run.json.
+
+By default the run is offline (deterministic, no LLM). With ``--llm`` the configured providers
+write the investigation and the report, so this makes paid or rate-limited calls: ask first.
+Search still embeds locally either way, so only the run itself reaches a provider.
 """
 
 from __future__ import annotations
@@ -59,11 +64,13 @@ def _event(e: Any, start: datetime) -> dict[str, Any]:
     return {"seq": e.seq, "t": _ms(e.ts, start), "kind": e.kind, "node": e.node, "payload": payload}
 
 
-async def record(mode: str, seed: int) -> dict[str, Any]:
+async def record(mode: str, seed: int, *, use_llm: bool = False) -> dict[str, Any]:
     builder = ScenarioBuilder(LinePools.from_loghub(_loghub_dir()))
     with tempfile.TemporaryDirectory() as tmp:
         env = await EvalEnvironment.create(builder, db_path=Path(tmp) / "demo.db", workers=1)
         try:
+            if use_llm and not env.services.router.has_real_llm("reporter"):
+                raise SystemExit("--llm needs a provider key for the reporter (see .env.example)")
             scenario = builder.build(
                 mode,
                 seed=seed,
@@ -90,7 +97,7 @@ async def record(mode: str, seed: int) -> dict[str, Any]:
                 system=scenario.system,
                 logs=lines,
                 synthetic=True,
-                options=RunOptions(use_llm=False),
+                options=RunOptions(use_llm=use_llm),
             )
             outcome = await env.runner.start(request, trigger="demo")
             run_id = outcome.run_id
@@ -111,7 +118,7 @@ async def record(mode: str, seed: int) -> dict[str, Any]:
         "recorded_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "git_sha": _git_sha(),
         "aria_version": __version__,
-        "llm": False,
+        "llm": use_llm,
         "source": {
             "system": scenario.system,
             "mode": mode,
@@ -159,8 +166,11 @@ def main() -> None:
     parser.add_argument("--mode", default="hdfs.block_serve_exceptions")
     parser.add_argument("--seed", type=int, default=4)
     parser.add_argument("--out", type=Path, default=OUT)
+    parser.add_argument(
+        "--llm", action="store_true", help="let the configured providers write the report"
+    )
     args = parser.parse_args()
-    data = asyncio.run(record(args.mode, args.seed))
+    data = asyncio.run(record(args.mode, args.seed, use_llm=args.llm))
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     sev = data["severity"]
@@ -168,7 +178,8 @@ def main() -> None:
     print(
         f"wrote {args.out}: {data['source']['title']} | truth {data['source']['truth']} | "
         f"ARIA {sev['severity']} by {sev['decided_by']} ({sev['confidence']:.2f}) | "
-        f"report valid {report.get('validation', {}).get('ok')} | "
+        f"report valid {report.get('validation', {}).get('ok')} by "
+        f"{report.get('generated_by')} {report.get('model') or ''} | "
         f"{len(data['events'])} events | review after {data['timings']['time_to_review_ms']} ms"
     )
 

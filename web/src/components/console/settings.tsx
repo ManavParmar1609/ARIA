@@ -454,8 +454,8 @@ export function Settings() {
         title="Learning from reviews"
         intro={
           view.data?.visitor_scope
-            ? "Every review records the severity a reviewer settled on, and once enough have gathered ARIA recalibrates its prediction sets on them. On this shared demo, reviews of your own incidents stay private and never retrain it."
-            : "Every review records the severity a reviewer settled on. Once enough have gathered, ARIA recalibrates its prediction sets on them, so the sets hold the reviewer's severity on this deployment's own incidents."
+            ? "Every review records the severity a reviewer settled on, and once enough have gathered ARIA recalibrates its short lists on them. On this shared demo, reviews of your own incidents stay private and never retrain it."
+            : "Every review records the severity a reviewer settled on. Once enough have gathered, ARIA recalibrates its short lists on them, so the lists hold the reviewer's severity on this deployment's own incidents."
         }
       >
         {feedback.isPending ? (

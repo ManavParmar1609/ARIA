@@ -4239,6 +4239,17 @@
           "links": {
             "$ref": "#/components/schemas/Links"
           },
+          "ahead": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ahead"
+          },
           "deliveries": {
             "items": {
               "$ref": "#/components/schemas/Delivery"

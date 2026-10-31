@@ -76,7 +76,7 @@ export const Review = () => {
         </Lead>
       </div>
       <Lead style={{ fontSize: 34, ...enter(frame, 60) }}>
-        From the first line to this pause: {review.timeToReview}, offline.
+        From the first line to this pause: {review.timeToReview}, {review.how}.
       </Lead>
       <Rail active="Review" />
     </Stage>

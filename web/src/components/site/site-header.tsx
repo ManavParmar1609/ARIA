@@ -3,14 +3,15 @@ import Link from "next/link";
 import { Wordmark } from "@/components/aria/wordmark";
 import { SectionNav } from "@/components/site/section-nav";
 import { SiteMenu } from "@/components/site/site-menu";
+import { ThemeSwitch } from "@/components/theme-switch";
 import { ArrowCircle } from "@/components/ui/button";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { REPO_URL } from "@/lib/site-data";
 
 // The same names label the sections themselves, so a link and its destination always match.
 export const SECTIONS = [
-  { href: "#run", label: "Example run" },
-  { href: "#real", label: "Real logs" },
+  { href: "#what", label: "What it does" },
+  { href: "#run", label: "Example" },
   { href: "#how", label: "How it works" },
   { href: "#results", label: "Results" },
   { href: "#faq", label: "Questions" },
@@ -19,7 +20,7 @@ export const SECTIONS = [
 /**
  * The navigation, as in the reference: the name on the left, the sections in plain charcoal (a
  * keylime pill marks the one being read), and the console as the forest action on the right.
- * Below the large breakpoint the sections move into a menu.
+ * Below the large breakpoint the sections and the theme move into a menu.
  */
 export function SiteHeader() {
   const links = [...SECTIONS, { href: REPO_URL, label: "GitHub" }];
@@ -44,7 +45,14 @@ export function SiteHeader() {
             </span>
             <ArrowCircle size="sm" />
           </Link>
-          <SiteMenu links={links} />
+          {/* On a wide screen the sections are already in view, so only the theme needs a place;
+              below that, one menu holds both. */}
+          <span className="hidden lg:inline-flex">
+            <ThemeSwitch className="text-heading" />
+          </span>
+          <div className="lg:hidden">
+            <SiteMenu links={links} />
+          </div>
         </div>
       </div>
     </header>

@@ -1475,6 +1475,8 @@ export type components = {
         };
         /** RunDetail */
         RunDetail: {
+            /** Ahead */
+            ahead?: number | null;
             /** Alert Group Id */
             alert_group_id?: string | null;
             /** Auditable */

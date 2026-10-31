@@ -104,7 +104,7 @@ function severityLine(sev: SeverityAssessment): ReactNode[] {
     );
   } else if (sev.decided_by === "llm") {
     lines.push(
-      `Rated it ${sev.severity}: a model chose it from the prediction set {${sev.prediction_set.join(", ")}}.`,
+      `Rated it ${sev.severity}: a language model chose it from the short list (${sev.prediction_set.join(" or ")}).`,
     );
   } else if (sev.decided_by === "fallback") {
     lines.push(
@@ -269,7 +269,7 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
       {
         id: "severity",
         name: "Severity",
-        job: "Rules, a calibrated model and a prediction set",
+        job: "Rules, a calibrated model and a short list",
         icon: GaugeIcon,
         tone: "keylime",
         nodes: ["severity"],

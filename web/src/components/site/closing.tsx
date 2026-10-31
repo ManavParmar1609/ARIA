@@ -19,8 +19,8 @@ export function Closing() {
               Let ARIA take the first look.
             </h2>
             <p className="max-w-[46ch] text-[0.9375rem] leading-relaxed text-heading">
-              It runs offline with no API key, and switches to Gemini, NVIDIA NIM, Azure OpenAI or
-              any OpenAI-compatible model when you add one.
+              Try it here, or on your own machine with these three commands. It works offline with
+              no key, and with one, a language model investigates and writes.
             </p>
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="primary" size="lg">

@@ -94,6 +94,8 @@ class Delivery(BaseModel):
 
 class RunDetail(RunSummary):
     links: Links
+    # For a queued run: how many triages are waiting or running ahead of it (none otherwise).
+    ahead: int | None = None
     deliveries: list[Delivery] = Field(default_factory=list)
     review: dict[str, Any] | None = None
     plan: dict[str, Any] | None = None

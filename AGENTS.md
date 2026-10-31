@@ -60,7 +60,7 @@ must never need a network call or a real key. Contract tests mock HTTP.
 | `docs/eval-live.json` | `uv run aria eval run --suite pipeline --llm` (makes paid or rate-limited provider calls; ask first) |
 | `web/src/data/eval-results.json`, `web/src/data/eval-live.json`, `web/src/data/llms.json` | `pnpm --dir web sync:data` |
 | `web/src/data/samples.json` | `uv run python -I scripts/export_web_samples.py` |
-| `web/src/data/demo-run.json` | `uv run python -I scripts/record_demo_run.py` (the landing page and `video/` both read it) |
+| `web/src/data/demo-run.json` | `uv run python -I scripts/record_demo_run.py --llm` (paid or rate-limited provider calls; ask first; without `--llm` it records offline). The landing page and `video/` both read it |
 | `docs/openapi.json`, `web/src/lib/api/schema.ts` | `make openapi` |
 | `models/*.json`, `models/*.npz` | `make train` and `aria seed` |
 | `uv.lock`, `web/pnpm-lock.yaml` | `uv add` / `uv lock`, `pnpm add` |

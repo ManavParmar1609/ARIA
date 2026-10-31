@@ -675,7 +675,7 @@ function MoreRealSections({ more, data }: { more: RealData; data: Evaluation }) 
         />
         <p className="max-w-prose text-sm text-muted-foreground">
           ARIA was unsure of {n(openstack.unsure)} of the {n(openstack.experiments)} runs and sent
-          them to a reviewer at the most severe label in their prediction set. An AUROC of 0.5 is
+          them to a reviewer at the most serious level on their short list. An AUROC of 0.5 is
           chance. ARIA&apos;s only OpenStack failure mode, from a 2,000-line sample of another
           deployment, is a missing image-cache file, and its model learned from semi-synthetic
           windows rather than from runs like these.

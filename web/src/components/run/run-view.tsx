@@ -35,6 +35,7 @@ import {
 } from "@/lib/api/types";
 import { absoluteTime, relativeTime, stripSeverity, writtenOffline } from "@/lib/format";
 import { shortListText } from "@/lib/levels";
+import { waitingText } from "@/lib/queue";
 import { systemName, triggerLabel } from "@/lib/systems";
 
 import { Activity } from "./activity";
@@ -410,9 +411,7 @@ export function RunView({
             {values?.batch ? (
               <WhatHappened batch={values.batch} timeline={report?.timeline ?? []} />
             ) : detail.status === "queued" ? (
-              <EmptyState title="Waiting for a worker">
-                The run is queued and starts as soon as a worker is free.
-              </EmptyState>
+              <EmptyState title="Waiting to start">{waitingText(detail.ahead)}</EmptyState>
             ) : (
               <LoadingRows rows={4} label="Reading the logs" />
             )}

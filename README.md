@@ -11,7 +11,7 @@ ARIA runs offline with no API keys. Set a Gemini key (free tier available) or an
 and the agents write with hosted models. Azure OpenAI and any OpenAI-compatible server work the
 same way: switching is a config change.
 
-![ARIA's landing page: the headline "Incident triage that shows its work." on a sage-green panel beside three cards from a recorded run (the alert, its severity and the report waiting for approval) on a slate-blue panel.](docs/images/hero.webp)
+![ARIA's home page: the headline "Turn a wall of logs into a report you can check." on a sage-green panel, and beside it, on a slate-blue panel, a report card from a recorded run: the level, a claim with its citation open on the log line it cites, and a note that it is waiting for a person to approve.](docs/images/hero.webp)
 
 > [!IMPORTANT]
 > Several results use **real data with the labels its owners gave it**: a Hadoop cluster's log (the
@@ -47,9 +47,10 @@ same way: switching is a config change.
 7. **Learn.** Approved reports join incident memory. Reviewer corrections go to a feedback
    queue, and once enough gather, the severity model's prediction sets are recalibrated on them.
 
-![A recorded run on the landing page: the HDFS log on the left, with the two lines behind evidence E2 lit up, and the triage tag on the right, whose claims each cite evidence IDs.](docs/images/replay.webp)
+![A recorded run on the home page: the HDFS log on the left, with the lines behind evidence E2 lit up, and the triage tag on the right, whose claims each cite evidence IDs.](docs/images/replay.webp)
 
-*One recorded run. Pointing at a citation on the tag lights up the log lines behind it.*
+*One recorded run, with a language model doing the investigation, the report and the messages.
+Pointing at a citation on the tag lights up the log lines behind it.*
 
 ## Architecture
 

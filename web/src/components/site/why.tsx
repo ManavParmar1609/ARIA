@@ -11,12 +11,12 @@ const POINTS: { icon: LucideIcon; title: string; body: string }[] = [
   {
     icon: GaugeIcon,
     title: "Severity you can check",
-    body: "Rules and a calibrated model agree on a short set of likely severities. Safety floors stop a dangerous pattern from being rated too low.",
+    body: "Rules and a calibrated model agree on a short list of likely levels, and say when they aren't sure. Safety floors stop a dangerous pattern from being rated too low.",
   },
   {
     icon: FileCheck2Icon,
     title: "Every claim cites its evidence",
-    body: "A validator rejects any sentence whose citation is missing or whose numbers disagree with the logs.",
+    body: "A check rejects any sentence whose source is missing or whose numbers disagree with the logs.",
   },
   {
     icon: HistoryIcon,
@@ -26,7 +26,7 @@ const POINTS: { icon: LucideIcon; title: string; body: string }[] = [
   {
     icon: ShieldCheckIcon,
     title: "Nothing goes out without you",
-    body: "Messages for Slack, Teams or a status page wait for a person to approve, edit or reject them.",
+    body: "Messages for Slack, Teams or a status page wait for a person to approve, edit or discard them.",
   },
 ];
 
