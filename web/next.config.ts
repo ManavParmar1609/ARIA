@@ -45,6 +45,11 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
+  // Browsers still ask for /favicon.ico now and then, even with the icon declared: send them to
+  // the mark instead of a 404.
+  async redirects() {
+    return [{ source: "/favicon.ico", destination: "/icon.svg", permanent: true }];
+  },
 };
 
 export default nextConfig;
