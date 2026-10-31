@@ -22,6 +22,7 @@ import { ApiError } from "@/lib/api/client";
 import { useCreateRun, useModelKey, useSettingsView } from "@/lib/api/hooks";
 import { modelKeyLabel } from "@/lib/api/model-key";
 import { MAX_BODY_BYTES } from "@/lib/limits";
+import samples from "@/data/samples.json";
 import { SYSTEM_NAMES } from "@/lib/systems";
 import {
   accessSentence,
@@ -209,6 +210,73 @@ function saveDraft(draft: Draft) {
   }
 }
 
+// Logs most people recognise, from the real-line samples the console ships
+// (scripts/export_web_samples.py): one click fills the box, ready to read, edit or run.
+const FAMILIAR: { id: string; name: string; what: string }[] = [
+  { id: "linux.auth_failures", name: "Linux server", what: "sign-ins keep failing" },
+  { id: "apache.mod_jk_worker_error", name: "Apache web server", what: "it loses its backends" },
+  { id: "openssh.bruteforce", name: "SSH server", what: "someone guesses passwords" },
+  { id: "mac.cocoa_scripting_noise", name: "Mac", what: "harmless app errors" },
+  { id: "android.permission_noise", name: "Android phone", what: "harmless permission warnings" },
+  {
+    id: "openstack.image_cache_missing",
+    name: "OpenStack cloud",
+    what: "servers miss their disk images",
+  },
+  { id: "hdfs.block_serve_exceptions", name: "Hadoop storage", what: "servers stop sending data" },
+  { id: "zookeeper.quorum_connection_loss", name: "ZooKeeper", what: "servers lose touch" },
+];
+
+type FamiliarLog = { title: string; system: string; lines: string[] };
+
+/** One click puts a familiar log in the box: for someone with no logs of their own at hand. */
+function FamiliarLogs({ chosen, onPick }: { chosen: string; onPick: (log: FamiliarLog) => void }) {
+  const id = useId();
+  const byId = new Map(samples.map((sample) => [sample.id, sample]));
+  return (
+    <section
+      aria-labelledby={`${id}-title`}
+      className="grid gap-3 rounded-card border border-rule bg-raised p-5 sm:p-6"
+    >
+      <div className="grid gap-1">
+        <h2 id={`${id}-title`} className="text-lg">
+          No logs at hand? Try a familiar one
+        </h2>
+        <p className="max-w-prose text-sm text-muted-foreground">
+          Each fills the box below with real lines from that kind of log, from the public Loghub
+          collection. Read or edit them, then start the triage.
+        </p>
+      </div>
+      <ul className="flex flex-wrap gap-2">
+        {FAMILIAR.map((log) => {
+          const sample = byId.get(log.id);
+          if (!sample) return null;
+          const text = sample.lines.join("\n");
+          return (
+            <li key={log.id}>
+              <button
+                type="button"
+                aria-pressed={chosen === text}
+                onClick={() =>
+                  onPick({
+                    title: `${log.name}: ${log.what}`,
+                    system: sample.system,
+                    lines: sample.lines,
+                  })
+                }
+                className="inline-flex min-h-10 items-center gap-2 rounded-full border border-rule bg-background px-4 py-1.5 text-left text-sm transition-colors duration-(--duration-quick) hover:border-control aria-pressed:border-primary aria-pressed:bg-highlight"
+              >
+                <span className="font-semibold text-heading">{log.name}</span>
+                <span className="text-muted-foreground">{log.what}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
   const id = useId();
   const router = useRouter();
@@ -275,7 +343,7 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
   const most = Math.min(MAX_BODY_BYTES, settings?.max_body_bytes ?? MAX_BODY_BYTES);
   const problem =
     lines.length === 0
-      ? "Paste at least one log line, or pick a sample on the Samples tab."
+      ? "Paste at least one log line, or try a familiar log above."
       : lines.length > MAX_LINES
         ? `ARIA reads at most ${MAX_LINES.toLocaleString("en")} lines in one triage; this has ${lines.length.toLocaleString("en")}.`
         : bytes > most
@@ -311,8 +379,19 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
     );
   };
 
+  const pick = (log: FamiliarLog) => {
+    setText(log.lines.join("\n"));
+    setSystem(log.system in SYSTEM_NAMES ? log.system : "generic");
+    setTitle(log.title);
+    setTouched(false);
+    // To the lines, so the reader sees what was filled in and the button to start sits below.
+    logsBox.current?.focus({ preventScroll: true });
+    logsBox.current?.scrollIntoView({ block: "nearest" });
+  };
+
   return (
     <div className="grid max-w-4xl gap-10">
+      <FamiliarLogs chosen={text} onPick={pick} />
       <form
         onSubmit={submit}
         className="grid gap-6"

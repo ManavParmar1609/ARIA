@@ -29,7 +29,7 @@ describe("logsHint", () => {
   });
 
   it("names what is wrong with the lines first", () => {
-    const problem = "Paste at least one log line, or pick a sample on the Samples tab.";
+    const problem = "Paste at least one log line, or try a familiar log above.";
     expect(logsHint(problem, true)).toBe(problem);
   });
 });

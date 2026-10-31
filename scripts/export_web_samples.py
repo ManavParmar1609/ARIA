@@ -1,4 +1,4 @@
-"""Write the sample log windows the web console offers on its "New triage" page.
+"""Write the sample log windows the web console offers: in chat, and on "Your own logs".
 
     uv run python -I scripts/export_web_samples.py
 
@@ -22,6 +22,11 @@ SAMPLES = (
     ("openssh.bruteforce", 12, "SSH brute-force attempts"),
     ("zookeeper.quorum_connection_loss", 13, "ZooKeeper quorum connection loss"),
     ("mac.cocoa_scripting_noise", 14, "Benign Cocoa scripting noise"),
+    # Logs most people recognise, offered on "Your own logs" to fill the box in one click.
+    ("linux.auth_failures", 11, "Repeated sign-in failures on Linux servers"),
+    ("apache.mod_jk_worker_error", 12, "An Apache web server losing its backends"),
+    ("android.permission_noise", 13, "Harmless permission warnings on an Android phone"),
+    ("openstack.image_cache_missing", 14, "OpenStack servers missing their disk images"),
 )
 
 

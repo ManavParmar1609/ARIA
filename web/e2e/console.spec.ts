@@ -230,6 +230,11 @@ test.describe("console", () => {
     await expect(page).toHaveURL(/\/console\/runs\/new\?tab=own$/);
     await page.getByRole("button", { name: "Start a triage" }).click();
     await expect(page.getByText("Paste at least one log line")).toBeVisible();
+    // A familiar log fills the box in one click, for someone with no logs at hand.
+    const linux = page.getByRole("button", { name: /^Linux server/ });
+    await linux.click();
+    await expect(linux).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByLabel("Log lines")).not.toHaveValue("");
     await page
       .getByLabel("Log lines")
       .fill(
