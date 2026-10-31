@@ -62,6 +62,15 @@ _TOOL_WORDS = {
     "mcp.get_template_examples": "example examples lines show",
 }
 _REPEATS = frozenset({"mcp.search_incidents", "mcp.get_runbook", "mcp.list_runbooks"})
+# Words that say which kind of answer a question wants rather than what it is about: "has this
+# happened before?" asks for history, "has a disk failed before?" for history about disks.
+_GENERIC = frozenset(" ".join([*_KIND_WORDS.values(), *_TOOL_WORDS.values()]).split()) | {
+    "incident", "incidents", "issue", "issues", "happen", "happens", "past", "ever", "seen",
+    "like", "anything", "something", "time", "times", "last", "aria", "run", "runs", "outage",
+    "outages", "same", "kind", "sort", "type", "again", "occurred", "occur", "been", "being",
+    "will", "would", "could", "can", "our", "your", "you", "some", "here", "now", "today",
+    "yesterday", "ago", "recent", "recently",
+}  # fmt: skip
 # Equal matches go to the kind that answers most directly: a tested cause, then the rating.
 _DIRECTNESS = (
     EvidenceKind.HYPOTHESIS,
@@ -77,14 +86,30 @@ _DIRECTNESS = (
 )
 
 
+def _stem(term: str) -> str:
+    """A word without its plural or tense ending, so "disks" finds "disk" and "failing" "fail"."""
+    for suffix in ("ing", "ed", "es", "s"):
+        if term.endswith(suffix) and len(term) - len(suffix) >= 4:
+            return term[: -len(suffix)]
+    return term
+
+
 def rank(
     question: str, evidence: Sequence[Evidence], *, limit: int = MAX_EVIDENCE
 ) -> list[Evidence]:
     """Evidence ordered by how many of the question's terms it contains. Ties go to the kind of
-    evidence that answers more directly, then keep their order."""
+    evidence that answers more directly, then keep their order.
+
+    A past incident counts only if it mentions what the question is about: the history words
+    alone ("before", "similar") match every incident, and an unrelated one is no answer."""
     wanted = terms(question)
+    about = {_stem(term) for term in wanted - _GENERIC}
     scored = []
     for position, item in enumerate(evidence):
+        if about and item.kind is EvidenceKind.INCIDENT:
+            own = f"{item.title} {item.detail}".lower()
+            if not any(term in own for term in about):
+                continue
         if item.kind is EvidenceKind.TOOL:
             text = _TOOL_WORDS.get(item.source, "")
         else:
@@ -153,7 +178,9 @@ def _claims(ranked: Sequence[Evidence], *, limit: int = 3) -> list[ClaimOut]:
             if item.id in placed:
                 continue
             fixed = _fixed(item)
-            key = f"{(item.data or {}).get('source') == 'run'}:{fixed[1]}" if fixed else item.id
+            # Grouped by the fix's first step: a learned incident and a curated one fixed alike
+            # are said once, not twice with the same steps.
+            key = f"fix:{fixed[1].split(';')[0].lower()}" if fixed else item.id
             if key not in groups:
                 if len(groups) >= limit or (new_kinds_only and item.kind in kinds):
                     continue
@@ -175,7 +202,7 @@ def _plain_group(items: Sequence[Evidence]) -> str:
     if len(items) == 1 or (fixed := _fixed(items[0])) is None:
         return _plain(items[0])
     title, resolution = fixed
-    data = items[0].data or {}
+    learned = sum(1 for item in items if (item.data or {}).get("source") == "run")
     count = _WORDS[len(items) - 2] if len(items) - 2 < len(_WORDS) else str(len(items))
     samples = sum(1 for item in items if (item.data or {}).get("synthetic"))
     built = (
@@ -185,20 +212,37 @@ def _plain_group(items: Sequence[Evidence]) -> str:
         if samples
         else ""
     )
-    if data.get("source") == "run":
+    if learned == len(items):
         return (
             f"{count.capitalize()} similar past incidents, such as {title}, were triaged "
             f"by ARIA; the reviewers approved the same next steps: {resolution}"
         )
+    # ARIA's own reports say what a reviewer approved, not what fixed it: a group that mixes
+    # them with recorded fixes was "handled", not "resolved", the same way.
+    done = "handled" if learned else "resolved"
     return (
         f"{count.capitalize()} similar past incidents{built}, such as {title}, were "
-        f"resolved the same way: {resolution}"
+        f"{done} the same way: {resolution}"
     )
 
 
 # A past incident as the investigation's search cites it, and the fix its detail records.
 _SIMILAR = re.compile(r"^(?:Similar|Past) incident \S+: (?P<title>.+?)(?: \(SEV\d[^)]*\))?$")
 _RESOLUTION = re.compile(r"^Resolution: (?P<fix>.+)$", re.MULTILINE)
+# The seeded history names the runbook it followed; the runbook is cited on its own.
+_FOLLOWED = re.compile(r"^Followed runbook \S+:\s*")
+
+
+def _steps_text(resolution: str) -> str:
+    """A fix as steps a responder reads once: no runbook ID, and no ".;" where steps that end in
+    a full stop were joined."""
+    parts = [
+        p.strip().rstrip(".").strip() for p in _FOLLOWED.sub("", resolution.strip()).split(";")
+    ]
+    parts = [p for p in parts if p]
+    if not parts:
+        return resolution.strip()
+    return "; ".join([parts[0], *(_sentence(p) for p in parts[1:])]) + "."
 
 
 def _fixed(item: Evidence) -> tuple[str, str] | None:
@@ -207,9 +251,9 @@ def _fixed(item: Evidence) -> tuple[str, str] | None:
         return None
     data = item.data or {}
     if data.get("title") and data.get("resolution"):
-        return str(data["title"]), str(data["resolution"])
+        return str(data["title"]), _steps_text(str(data["resolution"]))
     title, fix = _SIMILAR.match(item.title), _RESOLUTION.search(item.detail)
-    return (title["title"], fix["fix"]) if title and fix else None
+    return (title["title"], _steps_text(fix["fix"])) if title and fix else None
 
 
 def _clip(text: str, limit: int) -> str:

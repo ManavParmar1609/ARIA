@@ -28,6 +28,7 @@ from aria import __version__
 from aria.api.a2a import a2a_routes
 from aria.api.agui import router as agui_router
 from aria.api.jobs import start_background_jobs
+from aria.api.keys import may_use_model
 from aria.api.metrics import Metrics
 from aria.api.routers import catalog, intake, learning, replays, runs, scenarios, system
 from aria.api.security import AuthMiddleware, BodyLimit, KeyAuth, RateLimiter
@@ -109,6 +110,8 @@ def create_app(
         )
         raise RuntimeError(msg)
     limiter = RateLimiter(settings.rate_limit_per_minute)
+    site = settings.rate_limit_site_per_minute
+    site_limiter = RateLimiter(site) if site else None
     holder: dict[str, AppState] = {}
 
     def current() -> AppState:
@@ -185,7 +188,7 @@ def create_app(
         redoc_url="/redoc" if docs else None,
         openapi_url="/openapi.json" if docs else None,
     )
-    app.add_middleware(AuthMiddleware, auth=auth, limiter=limiter)
+    app.add_middleware(AuthMiddleware, auth=auth, limiter=limiter, site_limiter=site_limiter)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -213,7 +216,12 @@ def create_app(
         return current().worker.gated(job)
 
     card_routes, rpc_routes = a2a_routes(
-        lambda: current().runner, settings, secured=not auth.open, gate=gate
+        lambda: current().runner,
+        settings,
+        secured=not auth.open,
+        gate=gate,
+        # A task brings no visitor key: the server's model within the daily allowance, or none.
+        may_use_model=lambda tag, wanted: may_use_model(current(), None, tag, wanted),
     )
     add_a2a_routes_to_fastapi(app, agent_card_routes=card_routes, jsonrpc_routes=rpc_routes)
 

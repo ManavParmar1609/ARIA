@@ -53,6 +53,8 @@ INVESTIGATOR_TOOLS = (
     "get_runbook",
 )
 _WORDS = re.compile(r"[a-z][a-z0-9_]{2,}")
+MAX_QUERY = 300  # search_incidents refuses longer queries
+MAX_QUERY_WORD = 40
 GENERIC_CAUSE = "component_errors"  # "<component> is failing": the window's own signal
 LIFECYCLE_CAUSE = "unfinished_work"  # units of work that stop partway (parsing/flows.py)
 Emit = Callable[[str, dict[str, Any]], None]
@@ -228,7 +230,9 @@ def suggested_plan(inputs: InvestigationInputs) -> list[dict[str, Any]]:
         plan.append({"tool": "component_timeline", "arguments": {"component": component}})
         plan.append({"tool": "node_breakdown", "arguments": {"component": component}})
     if signal:
-        words = " ".join(_WORDS.findall(signal[0].template.lower())[:8])
+        # Within the tool's own limits: a log can hold "words" thousands of characters long.
+        found = _WORDS.findall(signal[0].template.lower())[:8]
+        words = " ".join(word[:MAX_QUERY_WORD] for word in found)[:MAX_QUERY].strip()
         if len(words) >= 2:
             plan.append({"tool": "search_incidents", "arguments": {"query": words, "limit": 3}})
     runbook = next(

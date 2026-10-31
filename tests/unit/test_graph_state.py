@@ -16,6 +16,7 @@ from aria.contracts.severity import SeverityAssessment
 from aria.db import repository as repo
 from aria.db.engine import get_engine, init_db
 from aria.evidence import EvidenceStore
+from aria.graph.cache import BoundedCache
 from aria.graph.state import add_usage, merge_evidence, usage_delta
 from aria.graph.store import SqlStore
 from aria.llm.router import LLMRouter
@@ -245,3 +246,31 @@ def test_a_summary_line_the_reviewer_kept_still_cites_its_evidence() -> None:
     out, _ = apply_review(report, assessment, decision, store)
     assert out.summary[0] == report.summary[0]  # kept: still cites the parser's evidence
     assert out.summary[1].evidence_ids == [out.evidence[-1].id]  # new: cites the review
+
+
+def test_the_node_cache_keeps_to_its_budget_and_forgets_expired_entries() -> None:
+    now = [0.0]
+    cache = BoundedCache(max_bytes=3_000, clock=lambda: now[0])
+    shard = ("parse_shard",)
+    value = {"shards": ["x" * 900]}
+    cache.set({(shard, "a"): (value, 60), (shard, "b"): (value, None)})
+    assert cache.get([(shard, "a")]) == {(shard, "a"): value}
+    cache.set({(shard, "c"): (value, None), (shard, "d"): (value, None)})
+    # Past the budget the least recently used goes first: "b", since "a" was just read.
+    assert set(cache.get([(shard, k) for k in "abcd"])) == {
+        (shard, "a"),
+        (shard, "c"),
+        (shard, "d"),
+    }
+    assert cache.size <= 3_000
+    now[0] = 61.0  # "a" has expired: it goes when the cache next writes, read or not
+    cache.set({(shard, "e"): ({"shards": []}, None)})
+    assert (shard, "a") not in cache.get([(shard, "a")])
+    # A value larger than the whole budget is never kept, and nothing is evicted for it.
+    held = cache.size
+    cache.set({(shard, "huge"): ({"shards": ["y" * 5_000]}, None)})
+    assert cache.get([(shard, "huge")]) == {}
+    assert cache.size == held
+    cache.clear([shard])
+    assert cache.size == 0
+    assert cache.get([(shard, "c")]) == {}

@@ -192,15 +192,19 @@ class AriaExecutor(AgentExecutor):
     """Runs A2A tasks as ARIA runs. The runner is looked up per task (it starts with the app).
 
     ``gate`` runs each job in the API worker's slots, so A2A tasks share its concurrency limit.
+    ``may_use_model`` says whether a task from this visitor may use the server's model (its daily
+    allowance, ``keys.may_use_model``); when it may not, the task runs offline.
     """
 
     def __init__(
         self,
         get_runner: Callable[[], TriageRunner],
         gate: Callable[[Awaitable[RunOutcome]], Awaitable[RunOutcome]] | None = None,
+        may_use_model: Callable[[str | None, bool], bool] | None = None,
     ) -> None:
         self._get_runner = get_runner
         self._gate = gate or (lambda job: job)
+        self._may_use_model = may_use_model or (lambda _tag, wanted: wanted)
 
     @property
     def runner(self) -> TriageRunner:
@@ -241,6 +245,10 @@ class AriaExecutor(AgentExecutor):
             except ValueError as exc:
                 await updater.reject(updater.new_agent_message([new_text_part(_says(exc))]))
                 return
+            if not self._may_use_model(viewer.tag, request.options.use_llm):
+                request = request.model_copy(
+                    update={"options": request.options.model_copy(update={"use_llm": False})}
+                )
             await updater.start_work(
                 updater.new_agent_message([new_text_part("ARIA is triaging the incident.")])
             )
@@ -341,11 +349,12 @@ def a2a_routes(
     *,
     secured: bool,
     gate: Callable[[Awaitable[RunOutcome]], Awaitable[RunOutcome]] | None = None,
+    may_use_model: Callable[[str | None, bool], bool] | None = None,
 ) -> tuple[list[BaseRoute], list[BaseRoute]]:
     """The Agent Card routes and the JSON-RPC routes."""
     card = agent_card(settings, secured=secured)
     handler = DefaultRequestHandler(
-        agent_executor=AriaExecutor(get_runner, gate),
+        agent_executor=AriaExecutor(get_runner, gate, may_use_model),
         task_store=BoundedTaskStore(),
         agent_card=card,
     )

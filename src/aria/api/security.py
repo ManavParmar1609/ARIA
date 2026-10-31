@@ -13,9 +13,11 @@ or a gateway in front.
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 import json
 import math
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -32,6 +34,8 @@ PUBLIC_PATHS = frozenset(
     {"/healthz", "/readyz", "/.well-known/agent-card.json", "/docs", "/openapi.json", "/redoc"}
 )
 PROTECTED_PREFIXES = ("/api/", "/mcp", "/a2a", "/agui", "/metrics")
+# A visitor's private session id, as the console sends it in X-Visitor-Id.
+VISITOR_ID = re.compile(r"[A-Za-z0-9_-]{16,64}")
 
 
 @dataclass(frozen=True)
@@ -201,10 +205,18 @@ class AuthMiddleware:
     The query string is left out, since callers sometimes put secrets there.
     """
 
-    def __init__(self, app: ASGIApp, *, auth: KeyAuth, limiter: RateLimiter) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        auth: KeyAuth,
+        limiter: RateLimiter,
+        site_limiter: RateLimiter | None = None,
+    ) -> None:
         self.app = app
         self.auth = auth
         self.limiter = limiter
+        self.site_limiter = site_limiter
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         path = route_path(scope) if scope["type"] == "http" else ""
@@ -219,11 +231,10 @@ class AuthMiddleware:
                 status[0] = int(message["status"])
             await send(message)
 
-        principal = self.auth.authenticate(
-            {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope["headers"]}
-        )
+        headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope["headers"]}
+        principal = self.auth.authenticate(headers)
         try:
-            await self._handle(scope, receive, recorded, principal)
+            await self._handle(scope, receive, recorded, principal, headers.get("x-visitor-id"))
         finally:
             access_log.info(
                 "api.request",
@@ -235,12 +246,18 @@ class AuthMiddleware:
             )
 
     async def _handle(
-        self, scope: Scope, receive: Receive, send: Send, principal: Principal | None
+        self,
+        scope: Scope,
+        receive: Receive,
+        send: Send,
+        principal: Principal | None,
+        visitor: str | None,
     ) -> None:
         client = scope.get("client") or ("unknown", 0)
+        address = f"ip:{client[0]}"
         if principal is None:
             # Failed attempts spend the caller's address bucket, so keys cannot be guessed fast.
-            allowed, retry_after = self.limiter.allow(f"ip:{client[0]}")
+            allowed, retry_after = self.limiter.allow(address)
             if not allowed:
                 await _reject(
                     send, 429, "rate limit exceeded", {"retry-after": str(math.ceil(retry_after))}
@@ -248,8 +265,10 @@ class AuthMiddleware:
                 return
             await _reject(send, 401, "missing or invalid API key", {"www-authenticate": "Bearer"})
             return
-        bucket = principal.name if principal.authenticated else f"ip:{client[0]}"
-        allowed, retry_after = self.limiter.allow(bucket)
+        if principal.authenticated:
+            allowed, retry_after = self.limiter.allow(principal.name)
+        else:
+            allowed, retry_after = self._allow_anonymous(address, visitor)
         if not allowed:
             await _reject(
                 send, 429, "rate limit exceeded", {"retry-after": str(math.ceil(retry_after))}
@@ -257,6 +276,22 @@ class AuthMiddleware:
             return
         scope.setdefault("state", {})["principal"] = principal
         await self.app(scope, receive, send)
+
+    def _allow_anonymous(self, address: str, visitor: str | None) -> tuple[bool, float]:
+        """A caller without a key spends its address's bucket. With a site limit set, a caller
+        that names its visitor (``X-Visitor-Id``) spends that visitor's bucket instead, and then
+        the address's larger site bucket: a web console sends every visitor from one address, so
+        one busy visitor no longer slows the rest, and the site bucket still caps the address."""
+        visitor = (visitor or "").strip()
+        if self.site_limiter is None or not VISITOR_ID.fullmatch(visitor):
+            return self.limiter.allow(address)
+        # A hash, so the limiter holds no id that would let someone act as its visitor.
+        allowed, retry_after = self.limiter.allow(
+            "visitor:" + hashlib.sha256(visitor.encode()).hexdigest()[:32]
+        )
+        if not allowed:
+            return allowed, retry_after
+        return self.site_limiter.allow(address)
 
 
 async def _reject(send: Send, status: int, detail: str, headers: dict[str, str]) -> None:

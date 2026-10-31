@@ -36,7 +36,6 @@ from typing import Any, TypedDict
 
 import httpx
 from langgraph.cache.base import BaseCache
-from langgraph.cache.memory import InMemoryCache
 from langgraph.errors import NodeError
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -72,6 +71,7 @@ from aria.db import repository as repo
 from aria.db.engine import session_scope
 from aria.db.models import LogEventRow
 from aria.evidence import EvidenceStore
+from aria.graph.cache import BoundedCache
 from aria.graph.state import Json, TriageState, dump_evidence, evidence_of, usage_delta
 from aria.llm.budget import BudgetGuard
 from aria.llm.router import LLMRouter
@@ -1156,7 +1156,7 @@ def build_graph(
     return builder.compile(
         checkpointer=checkpointer,
         store=store,
-        cache=cache or InMemoryCache(),
+        cache=cache or BoundedCache(),
         name="aria-triage",
     )
 

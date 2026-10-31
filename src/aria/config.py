@@ -329,6 +329,10 @@ class Settings(BaseSettings):
     worker_health_port: int | None = Field(default=None, ge=1, le=65_535)
     require_approval: bool = True
     rate_limit_per_minute: int = Field(default=120, ge=1)
+    # For a shared demo whose console sends every visitor from one address: above 0, a caller
+    # that names its visitor (X-Visitor-Id) gets rate_limit_per_minute of its own, and this caps
+    # each address. 0 keeps one allowance per address.
+    rate_limit_site_per_minute: int = Field(default=0, ge=0)
     # Largest request body the API reads; 20,000 lines of 2,000 characters fit with room to spare.
     max_body_bytes: int = Field(default=48 * 1024 * 1024, ge=1024)
     # For a shared public demo with no API keys: each visitor sees only the incidents they started

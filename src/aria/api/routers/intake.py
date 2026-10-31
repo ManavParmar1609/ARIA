@@ -9,7 +9,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, status
 
 from aria.api import alerts as intake
 from aria.api.ask import answer, memory_evidence
-from aria.api.keys import VisitorKeyDep, may_use_model
+from aria.api.keys import VisitorKeyDep, may_use_model, offline
 from aria.api.schemas import AlertAccepted, AskRequest, AskResponse
 from aria.api.state import AppState, app_state
 from aria.api.visitors import SEES_ALL, Viewer, ViewerDep
@@ -42,6 +42,10 @@ async def _accept(
     firing = [a for a in alerts if a.status == "firing"]
     if run_id is None and firing:
         request = intake.triage_request(firing, common, system)
+        # An alert carries no visitor key: it may use this server's model only within the daily
+        # allowance, like a visitor's run (``keys.may_use_model``); past it, it runs offline.
+        if not may_use_model(state, None, viewer.tag, request.options.use_llm):
+            request = request.model_copy(update={"options": offline(request.options)})
         run_id, run = await _open_run(state, found, request, source, viewer)
     elif run_id is not None:
         run = await asyncio.to_thread(repo.get_run, engine, run_id)

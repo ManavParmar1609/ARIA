@@ -186,17 +186,21 @@ Before you add your key, weigh three things:
 
 ## What a public demo exposes
 
-- **No sign-in.** Anyone with the address can start runs, review them and delete them. A restart
-  puts everything back.
-- **Visitors see each other's runs.** The console asks them to load a sample or paste only logs
-  they can share.
-- **Nothing goes to a model unless someone brings a key.** The demo has no model provider keys
-  of its own and no Slack, Teams or webhook targets. A visitor who saves their own key sends
-  their own runs to their chosen provider; a key you set yourself serves every other visitor
-  (see [Language models on the demo](#language-models-on-the-demo)).
-- **One shared rate limit.** Every console visitor reaches the API through Vercel's servers, so
-  they share the limit of 600 requests a minute. If visitors see "rate limit exceeded", raise
-  `ARIA_RATE_LIMIT_PER_MINUTE` in the Render service's **Environment** settings.
+- **No sign-in.** Anyone with the address can start triages, review them and delete them. A
+  restart puts everything back.
+- **Each visitor sees only their own incidents.** A visitor is a browser session: it sees the
+  incidents it started, plus the shared examples, which nobody can change or delete. The console
+  still asks visitors to paste only logs they could share, because the server is shared.
+- **Nothing goes to a model unless a key is there.** The demo has no model provider keys of its
+  own and no Slack, Teams or webhook targets. A visitor who saves their own key sends their own
+  triages to their chosen provider. A key you set yourself serves every other visitor within the
+  daily allowance, alerts and agent tasks included, and past it their work runs offline (see
+  [Language models on the demo](#language-models-on-the-demo)).
+- **A rate limit for each visitor, and one for the site.** Each visitor may make 120 requests a
+  minute, and since every console visitor reaches the API through Vercel's servers, all of them
+  together may make 1,800. When either runs out, the console says ARIA is busy and carries on by
+  itself a few seconds later. To allow more, raise `ARIA_RATE_LIMIT_PER_MINUTE` (each visitor) or
+  `ARIA_RATE_LIMIT_SITE_PER_MINUTE` (everyone) in the Render service's **Environment** settings.
 
 ## If something goes wrong
 
@@ -205,7 +209,7 @@ Before you add your key, weigh three things:
 | The Render build fails | Open the deploy's log. If it names a missing branch or file, check that the Blueprint points at the branch you merged into. |
 | The console says "ARIA's API is not answering" | Check that Render shows the service as Live, and that `ARIA_API_URL` starts with `https://` and has no path after the address. Vercel applies changed variables to new deployments only, so redeploy after a change. |
 | The Vercel install fails with `ERR_INVALID_THIS` or a lockfile error | Vercel used its own pnpm instead of `web/vercel.json`'s. Check that the project's root directory is `web` and that no install command override is set, then deploy the newest commit on `main`. |
-| Visitors see "rate limit exceeded" | Raise `ARIA_RATE_LIMIT_PER_MINUTE` on Render. |
+| The console often says ARIA is busy | Raise `ARIA_RATE_LIMIT_SITE_PER_MINUTE` on Render, or `ARIA_RATE_LIMIT_PER_MINUTE` if one visitor sees it alone. |
 | Link previews show no image | Set `ARIA_WEB_URL` to your site's address and redeploy. |
 
 ## Other places to run the API

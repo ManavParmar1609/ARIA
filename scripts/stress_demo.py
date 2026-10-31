@@ -45,6 +45,7 @@ class Tally:
     timings: defaultdict[str, list[float]] = field(default_factory=lambda: defaultdict(list))
     problems: list[str] = field(default_factory=list)
     busy: int = 0
+    gave_up: Counter[str] = field(default_factory=Counter)
     ahead_seen: int = 0
 
     def record(self, name: str, response: httpx.Response, started: float) -> None:
@@ -56,8 +57,11 @@ class Tally:
             self.problems.append(f"{name}: {response.status_code} {response.text[:200]}")
 
     def expect(self, name: str, response: httpx.Response, *wanted: int) -> bool:
-        if response.status_code in wanted or response.status_code == 429:
-            return response.status_code in wanted
+        if response.status_code in wanted:
+            return True
+        if response.status_code == 429:  # still busy after every retry: this visitor gave up
+            self.gave_up[name] += 1
+            return False
         if response.status_code < 500:  # a 5xx is already a problem
             self.problems.append(
                 f"{name}: wanted {' or '.join(map(str, wanted))}, got {response.status_code} "
@@ -235,6 +239,8 @@ def report(tally: Tally, elapsed: float) -> None:
     for name, times in sorted(tally.timings.items()):
         print(f"  {name:<20} {statistics.median(times):6.2f} / {max(times):6.2f}")
     print(f"\nbusy answers (429, retried): {tally.busy}")
+    for name, n in sorted(tally.gave_up.items()):
+        tally.problems.append(f"{name}: still busy after every retry, {n} times")
     print(f"times a queued incident said how many triages were ahead: {tally.ahead_seen}")
     if tally.problems:
         print(f"\n{len(tally.problems)} problems:")

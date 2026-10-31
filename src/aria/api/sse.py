@@ -20,6 +20,11 @@ from aria.graph.runner import TriageRunner
 
 # A stream ends after this long; a browser reconnects with Last-Event-ID, a forgotten tab stops.
 MAX_STREAM_S = 3_600.0
+# While a run waits for a person, nothing happens until they decide, so a stream looks for news
+# this many times less often. A decision taken in this process still arrives at once.
+PAUSED_POLL_FACTOR = 10
+# Events that can follow the pause without ending it: the run's usage summary comes just after.
+_STILL_PAUSED = frozenset({"interrupt", "budget", "checkpoint"})
 
 
 def _message(event: RunEvent) -> dict[str, Any]:
@@ -56,11 +61,13 @@ async def run_events(
             return
         if until_review and run["status"] == RunStatus.AWAITING_REVIEW:
             return
+        paused = run["status"] == RunStatus.AWAITING_REVIEW
         loop = asyncio.get_running_loop()
         ends = loop.time() + max_s
         while loop.time() < ends:
             try:
-                event = await asyncio.wait_for(queue.get(), timeout=poll_s)
+                wait = poll_s * PAUSED_POLL_FACTOR if paused else poll_s
+                event = await asyncio.wait_for(queue.get(), timeout=wait)
             except TimeoutError:
                 stored = await asyncio.to_thread(
                     repo.list_events, runner.engine, run_id, after=last
@@ -68,6 +75,7 @@ async def run_events(
                 for item in stored:
                     yield _message(item)
                     last = item.seq
+                    paused = item.kind in _STILL_PAUSED and (paused or item.kind == "interrupt")
                     if item.kind == "run_finished":
                         return
                 if until_review and any(item.kind == "interrupt" for item in stored):
@@ -83,6 +91,7 @@ async def run_events(
             elif event.seq > last:
                 yield _message(event)
                 last = event.seq
+                paused = event.kind in _STILL_PAUSED and (paused or event.kind == "interrupt")
                 if event.kind == "run_finished":
                     return
                 if until_review and event.kind == "interrupt":

@@ -121,7 +121,7 @@ async def run(
         "llm": use_llm,
         "data": {
             "synthetic": True,
-            "description": "semi-synthetic scenarios composed from real Loghub sample lines",
+            "description": "samples built from real Loghub log lines, arranged into incidents",
             "test_seeds": list(size.severity_seeds),
             "memory_seeds": list(MEMORY_SEEDS),
             "fixtures": is_fixtures(loghub_dir),

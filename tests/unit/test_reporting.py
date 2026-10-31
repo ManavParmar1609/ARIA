@@ -680,14 +680,80 @@ def test_offline_answers_say_a_shared_fix_once_and_cite_every_incident() -> None
     )
     claims = _claims(store.all())
     assert [claim.evidence_ids for claim in claims] == [same, [other]]
+    # The runbook is cited on its own: the fix reads as its steps, without the runbook's ID.
     assert claims[0].text == (
         "Three similar past incidents (built from samples), such as ZooKeeper quorum connection "
-        f"loss across 2 peers, were resolved the same way: {fix}"
+        "loss across 2 peers, were resolved the same way: Restore connectivity between peers "
+        "first."
     )
     assert claims[1].text == (
         "A similar past incident, SSH brute force, was resolved this way: Block the addresses."
     )
     assert _clip("restore connectivity first, then restart", 24) == "restore connectivity…"
+
+
+def test_offline_answers_say_a_learned_fix_and_a_recorded_one_once() -> None:
+    """ARIA's own approved steps and a recorded fix that start alike are one statement, with no
+    runbook ID and no ".;" where steps ending in a full stop were joined."""
+    from aria.api.ask import _claims
+
+    store = EvidenceStore()
+    learned = store.add(
+        EvidenceKind.INCIDENT,
+        "Past incident inc-1: Quorum loss on 3 nodes",
+        source="memory.search",
+        data={
+            "title": "Quorum loss on 3 nodes",
+            "resolution": "Restore connectivity first.; Restart peers one at a time.",
+            "source": "run",
+            "synthetic": True,
+        },
+    )
+    curated = store.add(
+        EvidenceKind.INCIDENT,
+        "Past incident syn-zk-2: Quorum loss across 2 peers",
+        source="memory.search",
+        data={
+            "title": "Quorum loss across 2 peers",
+            "resolution": "Followed runbook zookeeper-quorum-loss: Restore connectivity first; "
+            "Restart peers one at a time.",
+            "source": "curated",
+            "synthetic": True,
+        },
+    )
+    claims = _claims(store.all())
+    assert [claim.evidence_ids for claim in claims] == [[learned, curated]]
+    assert claims[0].text == (
+        "Two similar past incidents (built from samples), such as Quorum loss on 3 nodes, were "
+        "handled the same way: Restore connectivity first; restart peers one at a time."
+    )
+
+
+def test_a_question_about_history_hears_only_of_incidents_that_match_it() -> None:
+    """ "Before" and "similar" match every past incident, so an incident must also mention what
+    the question is about; with none that do, the answer says there is not enough evidence."""
+    from aria.api.ask import _fallback, rank
+
+    store = EvidenceStore()
+    quorum = store.add(
+        EvidenceKind.INCIDENT,
+        "Past incident inc-1: Quorum loss on 3 nodes (SEV2, zookeeper)",
+        source="memory.search",
+        detail="Failure mode: quorum_loss\nResolution: Restore connectivity first.",
+    )
+    store.add(
+        EvidenceKind.INCIDENT,
+        "Past incident inc-2: Kernel panic on a compute node (SEV1, bgl)",
+        source="memory.search",
+        detail="Failure mode: kernel_panic\nResolution: Drain the node and reboot it.",
+    )
+    assert [item.id for item in rank("Has quorum been lost before?", store.all())] == [quorum]
+    assert [item.id for item in rank("Has ZooKeeper failed like this?", store.all())] == [quorum]
+    unrelated = rank("Have disks filled up before?", store.all())
+    assert unrelated == []
+    assert _fallback(unrelated).insufficient_evidence
+    # With nothing named, the question is about history in general: every incident answers.
+    assert len(rank("Has this happened before?", store.all())) == 2
 
 
 def test_offline_answers_find_evidence_from_plain_questions() -> None:

@@ -12,17 +12,15 @@ API key see every run, as on a server without scoping.
 from __future__ import annotations
 
 import hashlib
-import re
 from dataclasses import dataclass
 from typing import Annotated, Any
 
 from fastapi import Depends, Header, HTTPException, status
 
-from aria.api.security import Principal
+from aria.api.security import VISITOR_ID, Principal
 from aria.api.state import AppState, app_state, current_principal
 
 ANONYMOUS = "anonymous"
-_SESSION_ID = re.compile(r"[A-Za-z0-9_-]{16,64}")
 
 EXAMPLE_STAYS = (
     "This example is shared by every visitor, so it stays as it is. "
@@ -65,7 +63,7 @@ def viewer_for(scoped: bool, caller: Principal, session_id: str | None) -> Viewe
     if not scoped or caller.authenticated:
         return Viewer()
     session_id = (session_id or "").strip() or None
-    if session_id is not None and not _SESSION_ID.fullmatch(session_id):
+    if session_id is not None and not VISITOR_ID.fullmatch(session_id):
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "X-Visitor-Id should be 16 to 64 letters, digits, dashes or underscores.",
