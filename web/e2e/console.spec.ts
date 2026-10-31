@@ -4,9 +4,12 @@ test.describe.configure({ mode: "serial" });
 
 test.describe("console", () => {
   test("triages a sample, follows it live, and publishes it after review", async ({ page }) => {
+    // The console opens on New triage, where visitors act.
     await page.goto("/console");
-    await expect(page.getByText("Nothing is waiting for review")).toBeVisible();
-    await expectAccessible(page, "overview, empty");
+    await expect(page).toHaveURL(/\/console\/runs\/new$/);
+    await page.getByRole("link", { name: "Incidents" }).first().click();
+    await expect(page.getByText("No incidents yet.")).toBeVisible();
+    await expectAccessible(page, "incidents, empty");
 
     await page.getByRole("link", { name: "New triage" }).first().click();
     await page.getByRole("button", { name: /ZooKeeper quorum connection loss/ }).click();
@@ -100,8 +103,10 @@ test.describe("console", () => {
 
   test("shows evaluation, runbooks and settings", async ({ page }) => {
     for (const [path, heading] of [
-      ["/console/evals", "Evaluation"],
+      ["/console/evals", "Test results"],
       ["/console/runbooks", "Runbooks"],
+      ["/console/guide/connect", "Connect ARIA to your systems"],
+      // Settings comes last: the checks after this loop run on it.
       ["/console/settings", "Settings"],
     ] as const) {
       await page.goto(path);
@@ -155,14 +160,14 @@ test.describe("console", () => {
     await expectAccessible(page, "keyboard shortcuts");
     await page.keyboard.press("Escape");
     await page.keyboard.press("g");
-    await page.keyboard.press("o");
-    await expect(page).toHaveURL(/\/console$/);
+    await page.keyboard.press("i");
+    await expect(page).toHaveURL(/\/console\/runs$/);
   });
 
   test("guides a first visit and triages a sample in one click", async ({ page }) => {
     await page.goto("/console");
-    await page.getByRole("link", { name: "How to use ARIA" }).first().click();
-    await expect(page.getByRole("heading", { level: 1, name: "How to use ARIA" })).toBeVisible();
+    await page.getByRole("link", { name: "Guide", exact: true }).first().click();
+    await expect(page.getByRole("heading", { level: 1, name: "Guide" })).toBeVisible();
     await expect(page.getByRole("term").filter({ hasText: "Prediction set" })).toBeVisible();
     await expectAccessible(page, "guide");
 

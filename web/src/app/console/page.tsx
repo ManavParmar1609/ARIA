@@ -1,10 +1,6 @@
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import { Overview } from "@/components/console/overview";
-
-// The console layout's "%s | ARIA console" reaches only its child pages, not this one.
-export const metadata: Metadata = { title: { absolute: "Overview | ARIA console" } };
-
-export default function OverviewPage() {
-  return <Overview />;
+// The console opens where visitors act: picking an incident to triage.
+export default function ConsoleHome() {
+  redirect("/console/runs/new");
 }

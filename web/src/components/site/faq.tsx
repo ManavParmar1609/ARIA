@@ -10,7 +10,7 @@ import { EVAL_DOC_URL, REPO_URL } from "@/lib/site-data";
 
 const LIMITS = [
   "Severity labels for most windows come from the scenario generator, not from people. The real-log results above use labels people gave.",
-  "Incident memory ships synthetic. Retrieval looks perfect on it and will not on your own history.",
+  "The incident library ships with incidents built from samples. Finding similar ones looks perfect on it and will not on your own history.",
   "With a hosted model a run takes minutes. The fast numbers on this page are the offline path.",
   "The injection guard matches patterns. It is a first line of defence, not a proof: anything it misses reaches a model only as fenced, untrusted evidence.",
   "ARIA triages and drafts. It does not remediate, and it sends nothing without approval.",

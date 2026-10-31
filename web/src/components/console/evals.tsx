@@ -643,7 +643,7 @@ function MoreRealSections({ more }: { more: RealData }) {
           <>
             GitLab runs GitLab.com in the open: its {n(gitlab.incidents)} production incidents are
             public, labelled by the responders with the service that failed and, after review, the
-            root cause. Incident memory holds the {n(gitlab.memory)} opened before{" "}
+            root cause. The incident library holds the {n(gitlab.memory)} opened before{" "}
             {gitlab.cutoff.slice(0, 4)}, from their titles and descriptions. Each of the{" "}
             {n(gitlab.later)} later incidents asks for similar past ones from its title alone; a hit
             is a past incident with the same label among the first {count(gitlab.top)}. Labels never
@@ -688,8 +688,8 @@ function MoreRealSections({ more }: { more: RealData }) {
         intro={
           <>
             {n(postmortems.postmortems)} public post-mortems ({clouds}), each structured by
-            researchers with its root cause and the fixes that ended it. Incident memory holds the{" "}
-            {n(postmortems.memory)} post-mortems of incidents before{" "}
+            researchers with its root cause and the fixes that ended it. The incident library holds
+            the {n(postmortems.memory)} post-mortems of incidents before{" "}
             {postmortems.cutoff.slice(0, 4)}, from their whole write-ups. Each of the{" "}
             {n(postmortems.later)} later ones asks for similar past incidents from its title and
             summary of impact; a hit is a past incident among the first {count(postmortems.top)}{" "}
@@ -815,7 +815,7 @@ export function Evals({
   return (
     <div className="grid gap-10">
       <PageHeader
-        title="Evaluation"
+        title="Test results"
         description={
           <>
             Severity, end-to-end and robustness results are measured on {data.dataDescription}; the

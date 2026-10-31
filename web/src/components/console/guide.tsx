@@ -231,7 +231,7 @@ export function Guide() {
     <div className="grid gap-14">
       <PageHeader
         eyebrow="Start here"
-        title="How to use ARIA"
+        title="Guide"
         description="ARIA reads an alert and its logs, rates severity, checks what happened last time and drafts a cited report that waits for your approval. The quickest way in is a real incident or a sample: each runs in seconds, and nothing is sent anywhere."
       />
 
@@ -322,8 +322,8 @@ export function Guide() {
           ))}
         </ul>
         <Button asChild variant="ghost" className="justify-self-start">
-          <Link href="/console/runs/new">
-            Connect a source or paste logs
+          <Link href="/console/guide/connect">
+            Connect ARIA to your systems
             <ArrowRightIcon aria-hidden />
           </Link>
         </Button>

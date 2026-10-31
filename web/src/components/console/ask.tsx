@@ -48,7 +48,7 @@ function Answer({ turn }: { turn: Turn }) {
     return (
       <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
         <span aria-hidden className="block size-2 animate-pulse-dot rounded-full bg-primary" />
-        Searching incident memory and runbooks
+        Searching the incident library and runbooks
       </p>
     );
   }
@@ -163,8 +163,8 @@ function Questions() {
             Ask ARIA
           </Button>
           <p className="text-sm text-muted-foreground">
-            Answers come only from incident memory, runbooks and the chosen run&apos;s evidence, and
-            every statement cites what it rests on.
+            Answers come only from the incident library, runbooks and the chosen incident&apos;s
+            evidence, and every statement cites what it rests on.
           </p>
         </div>
       </form>

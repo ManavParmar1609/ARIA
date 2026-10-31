@@ -4,7 +4,6 @@ import {
   BookOpenIcon,
   CompassIcon,
   FlaskConicalIcon,
-  GaugeIcon,
   InboxIcon,
   LibraryIcon,
   LogOutIcon,
@@ -44,28 +43,31 @@ interface NavItem {
   exact?: boolean;
 }
 
+// Three groups with a rule between them: the main tasks, the library, and about ARIA. Each group
+// is named for screen readers only, so the menu reads as one short list.
 const NAV: { label: string; items: NavItem[] }[] = [
   {
     label: "Triage",
     items: [
-      { href: "/console", label: "Overview", icon: GaugeIcon, exact: true },
-      { href: "/console/runs", label: "Incidents", icon: InboxIcon },
       { href: "/console/runs/new", label: "New triage", icon: PlusIcon, exact: true },
+      { href: "/console/runs", label: "Incidents", icon: InboxIcon },
       { href: "/console/ask", label: "Ask ARIA", icon: MessageSquareTextIcon },
     ],
   },
   {
-    label: "Knowledge",
+    label: "Library",
     items: [
-      { href: "/console/memory", label: "Incident memory", icon: LibraryIcon },
+      { href: "/console/memory", label: "Incident library", icon: LibraryIcon },
       { href: "/console/runbooks", label: "Runbooks", icon: BookOpenIcon },
-      { href: "/console/evals", label: "Evaluation", icon: FlaskConicalIcon },
-      { href: "/console/guide", label: "How to use ARIA", icon: CompassIcon },
     ],
   },
   {
-    label: "System",
-    items: [{ href: "/console/settings", label: "Settings", icon: SettingsIcon }],
+    label: "About ARIA",
+    items: [
+      { href: "/console/evals", label: "Test results", icon: FlaskConicalIcon },
+      { href: "/console/guide", label: "Guide", icon: CompassIcon },
+      { href: "/console/settings", label: "Settings", icon: SettingsIcon },
+    ],
   },
 ];
 
@@ -172,11 +174,13 @@ function Nav({ onNavigate }: { onNavigate?: () => void }) {
         aria-hidden
         className="absolute top-0 left-0 rounded-sm bg-panel-keylime opacity-0 transition-[transform,opacity] duration-(--duration-moderate) ease-(--ease-out) dark:bg-highlight"
       />
-      {NAV.map((group) => (
-        <div key={group.label} role="group" aria-labelledby={`nav-${group.label}`}>
-          <p id={`nav-${group.label}`} className="eyebrow mb-1.5 px-3 text-muted-foreground">
-            {group.label}
-          </p>
+      {NAV.map((group, i) => (
+        <div
+          key={group.label}
+          role="group"
+          aria-label={group.label}
+          className={cn(i > 0 && "border-t border-rule pt-4")}
+        >
           <div className="grid gap-0.5">
             {group.items.map((item) => {
               const active = isActive(pathname, item);
@@ -339,7 +343,7 @@ function Gate({ children }: { children: ReactNode }) {
           title="ARIA's API is not answering"
           error={
             new Error(
-              "Runs, reviews and incident memory need it. A server that was asleep wakes within a minute, so try again shortly. If you run ARIA yourself, start it with make dev or docker compose up, and check that this web server's ARIA_API_URL points at it.",
+              "Incidents, reviews and the incident library need it. A server that was asleep wakes within a minute, so try again shortly. If you run ARIA yourself, start it with make dev or docker compose up, and check that this web server's ARIA_API_URL points at it.",
             )
           }
           onRetry={() => void session.refetch()}
@@ -347,11 +351,11 @@ function Gate({ children }: { children: ReactNode }) {
         <p className="text-sm text-muted-foreground">
           These work without it:{" "}
           <Link href="/console/evals" className="underline decoration-control underline-offset-4">
-            the evaluation
+            the test results
           </Link>{" "}
           and{" "}
           <Link href="/console/guide" className="underline decoration-control underline-offset-4">
-            how to use ARIA
+            the guide
           </Link>
           .
         </p>
@@ -407,7 +411,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
                   <SessionFooter />
                 </SheetContent>
               </Dialog>
-              <Link href="/console" className="rounded-sm" aria-label="ARIA console overview">
+              <Link href="/console" className="rounded-sm" aria-label="ARIA console">
                 <Wordmark />
               </Link>
               <div className="flex items-center">

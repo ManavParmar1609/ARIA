@@ -53,13 +53,12 @@ export function isTypingTarget(target: EventTarget | null): boolean {
 
 /** "g" then one of these letters goes to a console page. */
 export const GO_KEYS: { key: string; href: string; label: string }[] = [
-  { key: "o", href: "/console", label: "Overview" },
   { key: "i", href: "/console/runs", label: "Incidents" },
   { key: "n", href: "/console/runs/new", label: "New triage" },
   { key: "a", href: "/console/ask", label: "Ask ARIA" },
-  { key: "m", href: "/console/memory", label: "Incident memory" },
+  { key: "l", href: "/console/memory", label: "Incident library" },
   { key: "r", href: "/console/runbooks", label: "Runbooks" },
-  { key: "e", href: "/console/evals", label: "Evaluation" },
-  { key: "h", href: "/console/guide", label: "How to use ARIA" },
+  { key: "t", href: "/console/evals", label: "Test results" },
+  { key: "h", href: "/console/guide", label: "Guide" },
   { key: "s", href: "/console/settings", label: "Settings" },
 ];

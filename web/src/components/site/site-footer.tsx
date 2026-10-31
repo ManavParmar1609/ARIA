@@ -19,7 +19,7 @@ const COLUMNS: { title: string; links: { label: string; href: string; internal?:
   {
     title: "Evidence",
     links: [
-      { label: "Evaluation", href: EVAL_DOC_URL },
+      { label: "Test results", href: EVAL_DOC_URL },
       { label: "Model card", href: `${DOCS}/model-card.md` },
       { label: "Data card", href: `${DOCS}/data-card.md` },
       { label: "Threat model", href: `${DOCS}/threat-model.md` },

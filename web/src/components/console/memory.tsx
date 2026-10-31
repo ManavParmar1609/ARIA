@@ -70,7 +70,7 @@ export function Memory() {
   return (
     <div className="grid gap-6">
       <PageHeader
-        title="Incident memory"
+        title="Incident library"
         description="Past incidents ARIA searches when a new one comes in, by keyword and by meaning. Each published report adds one."
       >
         <div className="flex flex-wrap items-end gap-3">
@@ -124,15 +124,15 @@ export function Memory() {
       </PageHeader>
 
       {incidents.isPending ? (
-        <LoadingRows rows={6} label="Loading incident memory" />
+        <LoadingRows rows={6} label="Loading the incident library" />
       ) : incidents.isError ? (
         <ErrorState
-          title="Incident memory could not be searched"
+          title="The incident library could not be searched"
           error={incidents.error}
           onRetry={() => void incidents.refetch()}
         />
       ) : !searching && system === "all" && shown.length === 0 ? (
-        <EmptyState icon={LibraryIcon} title="Incident memory is empty">
+        <EmptyState icon={LibraryIcon} title="The incident library is empty">
           Seed it with <code>aria seed</code>, or publish a report: every approved run is
           remembered.
         </EmptyState>

@@ -156,8 +156,8 @@ function DeleteRun({ runId }: { runId: string }) {
   );
 }
 
-/** Where the run sits: the incidents list, then this run's ID. */
-function Crumbs({ runId }: { runId: string }) {
+/** Where the incident sits: the incidents list, then its title (its ID until the title loads). */
+function Crumbs({ runId, title }: { runId: string; title?: string | null }) {
   return (
     <nav aria-label="Breadcrumb" className="text-sm text-muted-foreground">
       <Link href="/console/runs" className="hover:text-foreground">
@@ -166,8 +166,8 @@ function Crumbs({ runId }: { runId: string }) {
       <span aria-hidden className="px-2 text-faint">
         /
       </span>
-      <span aria-current="page" className="font-mono text-xs">
-        {runId}
+      <span aria-current="page" className={title ? undefined : "font-mono text-xs"}>
+        {title || runId}
       </span>
     </nav>
   );
@@ -266,7 +266,7 @@ export function RunView({ runId }: { runId: string }) {
     <EvidenceProvider evidence={evidence} events={events}>
       <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
         <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-3 gap-y-1">
-          <Crumbs runId={detail.id} />
+          <Crumbs runId={detail.id} title={detail.title} />
           <div className="flex flex-wrap gap-1.5">
             <Button asChild size="sm" variant="ghost">
               <Link href="/console/guide#read-a-run">

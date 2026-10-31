@@ -82,7 +82,7 @@ custom domain later, set `ARIA_WEB_URL` to it and redeploy.
 ## Step 3: check it as a visitor would
 
 1. The landing page loads and the replay plays.
-2. **Open the console** shows the overview, with two incidents waiting for review.
+2. **Open the console** opens **New triage**. **Incidents** lists two waiting for review.
 3. In **New triage**, load a sample and choose **Start triage**. The run view follows the run
    live; when it finishes, approve it.
 4. If the console says it is still connecting, the API is waking up. See the next section.

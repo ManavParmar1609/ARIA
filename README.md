@@ -107,7 +107,7 @@ make dev
 ```
 
 Open http://localhost:3000 for the landing page, then **Open the console**. New to ARIA? The
-console's **How to use ARIA** page replays a real incident (ten minutes of a real Hadoop
+console's **Guide** page replays a real incident (ten minutes of a real Hadoop
 cluster's log) or starts a sample triage in one click, and explains how to read a run. A replayed
 run shows the blocks ARIA flagged next to the label Hadoop experts gave each one, and the run
 page's first tab tells the run as each agent's turn. In the console, Ctrl or ⌘ + K opens a

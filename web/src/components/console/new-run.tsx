@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { FileTextIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useId, useMemo, useState, type FormEvent } from "react";
@@ -59,24 +61,6 @@ function Toggle({
     </div>
   );
 }
-
-const SNIPPETS = [
-  {
-    title: "From Alertmanager",
-    body: "Add a webhook receiver; firing alerts that share a group key become one run.",
-    code: "receivers:\n  - name: aria\n    webhook_configs:\n      - url: https://aria.example.com/api/v1/alerts/alertmanager\n        http_config:\n          authorization: { credentials: <api key> }",
-  },
-  {
-    title: "From the command line",
-    body: "Triage a log file end to end and print the report.",
-    code: "aria triage /var/log/app.log --system hdfs",
-  },
-  {
-    title: "From another agent",
-    body: "ARIA is an A2A agent and an AG-UI agent; its MCP tools are read-only.",
-    code: "GET /.well-known/agent-card.json\nPOST /a2a   (JSON-RPC)\nPOST /agui  (AG-UI events)\nPOST /mcp   (MCP, streamable HTTP)",
-  },
-];
 
 /** The hint under the log box: what is wrong with the lines, else what happens to them. */
 export function logsHint(problem: string | null, publicDemo: boolean): string {
@@ -167,7 +151,7 @@ export function NewRun({ publicDemo = false }: { publicDemo?: boolean }) {
         title="New triage"
         description="Paste the logs around an incident. ARIA groups them into templates, rates severity, looks for similar past incidents, investigates and writes a cited report for you to review."
       />
-      <div className="grid gap-10 xl:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid max-w-4xl gap-10">
         <form
           onSubmit={submit}
           className="grid gap-6"
@@ -306,27 +290,14 @@ export function NewRun({ publicDemo = false }: { publicDemo?: boolean }) {
               You can follow the run live as it works.
             </p>
           </div>
+          <p className="text-sm text-muted-foreground">
+            Want alerts to start triages on their own?{" "}
+            <Link href="/console/guide/connect" className="underline underline-offset-4">
+              Connect ARIA to your systems
+            </Link>
+            .
+          </p>
         </form>
-
-        <aside aria-labelledby={`${id}-other`} className="grid content-start gap-4">
-          <h2 id={`${id}-other`} className="font-sans text-base font-semibold">
-            Other ways to start a run
-          </h2>
-          {SNIPPETS.map((s) => (
-            <div key={s.title} className="grid gap-2 border-t border-rule pt-4">
-              <h3 className="font-sans text-sm font-semibold">{s.title}</h3>
-              <p className="text-sm text-muted-foreground">{s.body}</p>
-              <pre
-                tabIndex={0}
-                role="region"
-                aria-label={s.title}
-                className="overflow-x-auto rounded-lg bg-sunken p-4 text-xs leading-5"
-              >
-                <code>{s.code}</code>
-              </pre>
-            </div>
-          ))}
-        </aside>
       </div>
     </div>
   );

@@ -71,7 +71,7 @@ function cards(data: RealData): Card[] {
     {
       key: "gitlab",
       name: `${n(gitlab.incidents)} GitLab.com incidents`,
-      what: `GitLab runs GitLab.com in the open. Incident memory holds the ${n(gitlab.memory)} opened before ${gitlab.cutoff.slice(0, 4)}; each of the ${n(gitlab.later)} later ones asks for similar past incidents from its title alone.`,
+      what: `GitLab runs GitLab.com in the open. The incident library holds the ${n(gitlab.memory)} opened before ${gitlab.cutoff.slice(0, 4)}; each of the ${n(gitlab.later)} later ones asks for similar past incidents from its title alone.`,
       stat: pct(memory.aria.hit3),
       statLabel: `Same service among the first ${count(gitlab.top)}`,
       compare: `Past incidents picked at random: ${pct(memory.random.hit3)}. Keyword search alone (BM25): ${pct(memory.bm25.hit3)}.`,

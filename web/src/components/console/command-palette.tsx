@@ -3,9 +3,9 @@
 import {
   BookOpenIcon,
   CompassIcon,
+  PlugIcon,
   CornerDownLeftIcon,
   FlaskConicalIcon,
-  GaugeIcon,
   HomeIcon,
   InboxIcon,
   KeyboardIcon,
@@ -82,18 +82,11 @@ interface Item {
 const PAGES: { href: string; label: string; hint: string; icon: LucideIcon; keywords?: string }[] =
   [
     {
-      href: "/console",
-      label: "Overview",
-      hint: "What is waiting and how ARIA is doing",
-      icon: GaugeIcon,
-      keywords: "home dashboard",
-    },
-    {
       href: "/console/runs",
       label: "Incidents",
-      hint: "Every triage run, newest first",
+      hint: "Every incident ARIA has triaged, newest first",
       icon: InboxIcon,
-      keywords: "runs queue list",
+      keywords: "run runs queue list triaged",
     },
     {
       href: "/console/runs?status=awaiting_review",
@@ -118,10 +111,10 @@ const PAGES: { href: string; label: string; hint: string; icon: LucideIcon; keyw
     },
     {
       href: "/console/memory",
-      label: "Incident memory",
+      label: "Incident library",
       hint: "Search past incidents by meaning",
       icon: LibraryIcon,
-      keywords: "search history similar",
+      keywords: "memory search history similar past",
     },
     {
       href: "/console/runbooks",
@@ -132,17 +125,24 @@ const PAGES: { href: string; label: string; hint: string; icon: LucideIcon; keyw
     },
     {
       href: "/console/evals",
-      label: "Evaluation",
-      hint: "How well ARIA does, with caveats",
+      label: "Test results",
+      hint: "How ARIA was tested, and where it falls short",
       icon: FlaskConicalIcon,
-      keywords: "accuracy metrics results",
+      keywords: "evaluation accuracy metrics results",
     },
     {
       href: "/console/guide",
-      label: "How to use ARIA",
-      hint: "Samples, how to read a run, the words",
+      label: "Guide",
+      hint: "First steps, how to read an incident, the words",
       icon: CompassIcon,
-      keywords: "help guide tour",
+      keywords: "help how to use tour",
+    },
+    {
+      href: "/console/guide/connect",
+      label: "Connect ARIA to your systems",
+      hint: "Alerts, the command line, other agents, message channels",
+      icon: PlugIcon,
+      keywords: "alertmanager grafana webhook a2a agui mcp cli slack teams integrations",
     },
     {
       href: "/console/settings",

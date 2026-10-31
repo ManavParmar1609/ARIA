@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api/client";
+import { useRuns } from "@/lib/api/hooks";
 import {
   isSeverity,
   type RunPage,
@@ -34,7 +35,7 @@ import { cn } from "@/lib/utils";
 
 const FILTERS: { value: Status | "all"; label: string }[] = [
   { value: "all", label: "All" },
-  { value: "awaiting_review", label: "Needs review" },
+  { value: "awaiting_review", label: "Waiting for review" },
   { value: "running", label: "Running" },
   { value: "published", label: "Published" },
   { value: "rejected", label: "Rejected" },
@@ -42,12 +43,12 @@ const FILTERS: { value: Status | "all"; label: string }[] = [
 ];
 
 const EMPTY: Record<string, string> = {
-  all: "No runs yet. Start one from logs, or point Alertmanager or Grafana at ARIA.",
+  all: "No incidents yet. Pick a sample to triage, or paste your own logs.",
   awaiting_review: "Nothing is waiting for review.",
   running: "Nothing is running right now.",
   published: "No published reports yet.",
   rejected: "No rejected reports.",
-  failed: "No failed runs.",
+  failed: "No failed triages.",
 };
 
 function usePages(status: Status | "all") {
@@ -116,7 +117,7 @@ export function Queue() {
     <div className="grid gap-6">
       <PageHeader
         title="Incidents"
-        description="Every triage run, newest first. Open one to see its evidence, review its report or rewind it."
+        description="Every incident ARIA has triaged, newest first. Open one to see its evidence, review its report or go back to an earlier step."
         actions={
           <Button asChild variant="primary">
             <Link href="/console/runs/new">
@@ -146,6 +147,8 @@ export function Queue() {
         </div>
       </PageHeader>
 
+      {status === "all" ? <Waiting onShow={() => setStatus("awaiting_review")} /> : null}
+
       {runs.isPending ? (
         <LoadingRows rows={6} label="Loading incidents" />
       ) : runs.isError ? (
@@ -172,7 +175,7 @@ export function Queue() {
               </Button>
             ) : (
               <Button size="sm" onClick={() => setStatus("all")}>
-                Show all runs
+                Show all incidents
               </Button>
             )
           }
@@ -261,5 +264,23 @@ export function Queue() {
         </>
       )}
     </div>
+  );
+}
+
+/** The incidents waiting for a person, as one line above the list, with a way to show only them. */
+function Waiting({ onShow }: { onShow: () => void }) {
+  const { data } = useRuns("awaiting_review", 50);
+  const n = data?.runs.length ?? 0;
+  if (n === 0) return null;
+  return (
+    <p className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-panel-keylime px-4 py-3 text-sm text-heading dark:bg-highlight">
+      <span>
+        {n >= 50 ? "50 or more incidents are" : n === 1 ? "1 incident is" : `${n} incidents are`}{" "}
+        waiting for your review.
+      </span>
+      <button type="button" onClick={onShow} className="font-medium underline underline-offset-4">
+        Show {n === 1 ? "it" : "them"}
+      </button>
+    </p>
   );
 }
