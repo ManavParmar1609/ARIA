@@ -239,8 +239,10 @@ async def test_a_moderate_window_without_errors_is_not_said_to_have_them(
     assert level.startswith("SEV3: Moderate: a contained problem with limited user impact.")
     assert "contained errors" not in level
     noisy = replace(moderate, batch=ctx.batch)
-    assert compose_draft(noisy).summary[0].text.startswith(
-        "SEV3: Moderate: contained errors with limited user impact."
+    assert (
+        compose_draft(noisy)
+        .summary[0]
+        .text.startswith("SEV3: Moderate: contained errors with limited user impact.")
     )
 
 

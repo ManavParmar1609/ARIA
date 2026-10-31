@@ -258,10 +258,7 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
         # A floor lifted the severity above the model's own view: say which, and what the model
         # thought, so a reviewer sees why the two disagree.
         rule = floor_ev.title.split(": ", 1)[-1].rstrip(".")
-        severity_text = (
-            f"{sev.severity}: {meaning} Held there by a safety floor: "
-            f"{rule}"
-        )
+        severity_text = f"{sev.severity}: {meaning} Held there by a safety floor: {rule}"
         if model_ev is not None:
             severity_text += (
                 f" (on its own, the model gave {model_top} {sev.probabilities[model_top]:.0%})"
