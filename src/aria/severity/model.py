@@ -101,6 +101,10 @@ class LinearModel:
     alpha: float = 0.1
     version: str = "unversioned"
     metadata: dict[str, Any] = field(default_factory=dict)
+    # The smallest and largest value of each feature in the training data. Past them the linear
+    # model extrapolates; models saved before these were recorded have none.
+    low: FloatArray | None = None
+    high: FloatArray | None = None
 
     @property
     def trained_version(self) -> str:
@@ -117,13 +121,24 @@ class LinearModel:
     def standardise(self, x: FloatArray) -> FloatArray:
         return (x - self.mean) / self.scale
 
-    def outside_training(self, x_row: FloatArray, limit: float) -> list[str]:
-        """Features of one row more than ``limit`` standard deviations from the training mean.
+    def outside_training(
+        self, x_row: FloatArray, limit: float, tolerance: float | None = None
+    ) -> list[str]:
+        """Features of one row the model has not seen values like in training.
 
-        There the linear model extrapolates, and its probabilities mean nothing.
+        A feature is outside when it lies more than ``limit`` standard deviations from the
+        training mean, or, with ``tolerance`` and recorded ranges, beyond the training range by
+        more than that share of the range. There the linear model extrapolates, and its
+        probabilities mean nothing. A feature the model gave no weight cannot mislead it, so only
+        weighted features count for the range.
         """
-        z = np.abs(self.standardise(x_row))
-        return [self.feature_names[i] for i in np.flatnonzero(z > limit)]
+        outside = np.abs(self.standardise(x_row)) > limit
+        if tolerance is not None and self.low is not None and self.high is not None:
+            used = np.abs(self.coef).max(axis=0) > 1e-9
+            margin = tolerance * np.maximum(self.high - self.low, 1e-9)
+            beyond = (x_row > self.high + margin) | (x_row < self.low - margin)
+            outside |= used & beyond
+        return [self.feature_names[i] for i in np.flatnonzero(outside)]
 
     def logits(self, x: FloatArray) -> FloatArray:
         return np.asarray(self.standardise(x) @ self.coef.T + self.intercept, dtype=np.float64)
@@ -154,7 +169,13 @@ class LinearModel:
     # --- persistence ---------------------------------------------------------------------------
 
     def to_dict(self) -> dict[str, Any]:
+        ranges = (
+            {"low": self.low.tolist(), "high": self.high.tolist()}
+            if self.low is not None and self.high is not None
+            else {}
+        )
         return {
+            **ranges,
             "format": "aria.linear_model.v1",
             "name": self.name,
             "version": self.version,
@@ -192,11 +213,17 @@ class LinearModel:
             alpha=float(raw["alpha"]),
             version=str(raw["version"]),
             metadata=dict(raw.get("metadata") or {}),
+            low=None if raw.get("low") is None else np.array(raw["low"], dtype=np.float64),
+            high=None if raw.get("high") is None else np.array(raw["high"], dtype=np.float64),
         )
         k, f = len(model.classes), len(model.feature_names)
         if model.coef.shape != (k, f) or model.intercept.shape != (k,) or model.mean.shape != (f,):
             msg = "model arrays do not match its classes and features"
             raise ValueError(msg)
+        for bound in (model.low, model.high):
+            if bound is not None and bound.shape != (f,):
+                msg = "model ranges do not match its features"
+                raise ValueError(msg)
         return model
 
     @classmethod
@@ -246,6 +273,8 @@ def fit_linear_model(
         coef=coef,
         intercept=intercept,
         metadata={"c": c, "class_weight": class_weight, "trained_classes": present},
+        low=x.min(axis=0),
+        high=x.max(axis=0),
     )
 
 

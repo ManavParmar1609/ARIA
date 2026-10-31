@@ -30,6 +30,12 @@ RULES_ONLY_MIN_P = 0.2
 # before the model is not used. No training or held-out window reaches it; a handful of lines or
 # an alert with no logs is far past it.
 MODEL_RANGE_Z = 6.0
+# How far past the range of its training data (as a share of that range) a feature may go before
+# the model is not used. A window far longer than any it learned from, or with far more new
+# patterns, sits within six deviations yet beyond anything the model saw: there it extrapolates
+# (it rated healthy OpenStack runs SEV1), so the rules decide and a person reviews. Chosen on the
+# validation seeds only.
+MODEL_RANGE_TOLERANCE = 0.25
 
 
 @dataclass
@@ -158,7 +164,7 @@ class SeverityEngine:
         extra: dict[str, Any] = {}
         if self.model is not None:
             x = self.model.matrix([log_feature_row(values, evaluation)])
-            outside = self.model.outside_training(x[0], MODEL_RANGE_Z)
+            outside = self.model.outside_training(x[0], MODEL_RANGE_Z, MODEL_RANGE_TOLERANCE)
         if self.model is None or outside:
             probabilities = evaluation.probabilities
             raw_set = [s for s in SEVERITY_ORDER if probabilities[s] >= RULES_ONLY_MIN_P]
