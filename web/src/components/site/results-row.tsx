@@ -1,6 +1,7 @@
 import { ArrowRightIcon } from "lucide-react";
 import Link from "next/link";
 
+import { RollingNumber } from "@/components/aria/rolling-number";
 import type { Evaluation, RealLogs } from "@/lib/site-data";
 
 // The home page's results (item 28): one row of findings, each computed from the published
@@ -56,9 +57,12 @@ export function ResultsRow({ data, real }: { data: Evaluation; real: RealLogs })
   return (
     <ul className="grid gap-3 md:grid-cols-3">
       {resultTiles(data, real).map((tile) => (
-        <li key={tile.href} className="flex flex-col gap-3 rounded-card bg-raised p-6">
-          <p className="stat text-[2rem] leading-none whitespace-nowrap">{tile.figure}</p>
-          <p className="text-sm leading-relaxed text-foreground">{tile.label}</p>
+        <li key={tile.href} className="flex flex-col gap-4 rounded-card bg-raised p-6 sm:p-7">
+          {/* The figure rolls into view once (rolling-number.tsx); its plain text is always there. */}
+          <p className="stat text-[2.5rem] leading-none whitespace-nowrap sm:text-[2.75rem]">
+            <RollingNumber value={tile.figure} />
+          </p>
+          <p className="text-base leading-relaxed text-foreground">{tile.label}</p>
           <Link
             href={tile.href as never}
             prefetch={false}

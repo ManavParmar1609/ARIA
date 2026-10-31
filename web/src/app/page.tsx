@@ -217,9 +217,9 @@ export default function Landing() {
           more={{ href: "/console/evals", label: "See every test" }}
         >
           <p className="max-w-[62ch] text-xl leading-relaxed font-medium text-heading">
-            {resultsInShort(evals, real, datasets)}
+            {resultsInShort(evals, real)}
           </p>
-          <ResultsRow data={evals} real={real} more={datasets} />
+          <ResultsRow data={evals} real={real} />
         </Section>
 
         <div className="h-6" />
