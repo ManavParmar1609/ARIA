@@ -23,6 +23,16 @@ export interface ReceiptFacts {
   deliveries: Delivery[];
   /** Whether a message's channel is connected on this server. */
   connected: (kind: string) => boolean;
+  /** A shared demo, where a visitor's published incidents stay theirs and join no library. */
+  shared?: boolean;
+}
+
+/** What publishing did, beyond the messages (J-m5). */
+export function publishedMeaning(f: Pick<ReceiptFacts, "status" | "shared">): string | null {
+  if (f.status !== "published") return null;
+  return f.shared
+    ? "The report is final. On this shared demo it stays with your incidents."
+    : "The report is final, and ARIA will compare new incidents with this one.";
 }
 
 const AUTO = "aria:auto";
@@ -63,11 +73,11 @@ export function receiptText(f: ReceiptFacts): { decision: string; messages: stri
     const unconnected = kept.filter((k) => !f.connected(k.kind)).length;
     const why =
       unconnected === kept.length
-        ? " (no channel connected)"
+        ? " (no channel is connected)"
         : unconnected === 0
           ? " (not chosen)"
           : "";
-    parts.push(`${count(kept.length, "preview", "previews")} kept${why}`);
+    parts.push(`${count(kept.length, "draft message", "draft messages")} kept here, unsent${why}`);
   }
   const text = parts.join(", ");
   return { decision, messages: `${text.charAt(0).toUpperCase()}${text.slice(1)}.` };
@@ -110,6 +120,9 @@ export function Receipt({
       <p className="text-sm" title={absoluteTime(facts.at)}>
         {text.decision} {text.messages}
       </p>
+      {publishedMeaning(facts) ? (
+        <p className="text-sm text-muted-foreground">{publishedMeaning(facts)}</p>
+      ) : null}
       {comment ? (
         <p className="text-sm text-muted-foreground">
           Comment: <q>{comment}</q>

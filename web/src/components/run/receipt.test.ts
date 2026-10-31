@@ -34,7 +34,7 @@ describe("receiptText", () => {
   it("says who approved, and that the messages stayed previews with no channel", () => {
     const text = receiptText(facts());
     expect(text.decision).toMatch(/^Drafted by ARIA, approved by you at \d\d:\d\d\.$/);
-    expect(text.messages).toBe("3 previews kept (no channel connected).");
+    expect(text.messages).toBe("3 draft messages kept here, unsent (no channel is connected).");
   });
 
   it("counts what was sent, what failed and what was not chosen", () => {
@@ -45,7 +45,7 @@ describe("receiptText", () => {
       }),
     );
     expect(text.messages).toBe(
-      "1 message sent, 1 message not delivered (see below), 1 preview kept (not chosen).",
+      "1 message sent, 1 message not delivered (see below), 1 draft message kept here, unsent (not chosen).",
     );
   });
 

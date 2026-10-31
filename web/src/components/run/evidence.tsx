@@ -16,8 +16,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/popover";
 import type { Evidence, LogEvent } from "@/lib/api/types";
+import { chance, evidenceDetail, evidenceTitle, featureName } from "@/lib/evidence-text";
 import { failureName } from "@/lib/failure-modes";
-import { plainTemplate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -45,15 +45,15 @@ export const sourceLabel = (source: string) => SOURCE_LABEL[source] ?? source;
 export const KIND_LABEL: Record<string, string> = {
   log: "Log line",
   template: "Log template",
-  feature: "Computed feature",
+  feature: "Measurement",
   rule: "Severity rule",
-  model: "Model output",
+  model: "Estimate",
   alert: "Alert",
   incident: "Past incident",
   tickets: "Ticket history",
   runbook: "Runbook",
-  tool: "Tool call",
-  hypothesis: "Hypothesis",
+  tool: "Investigation check",
+  hypothesis: "Tested cause",
   feedback: "Reviewer feedback",
   review: "Review",
 };
@@ -155,7 +155,7 @@ function EvidencePreview({ evidence, lines }: { evidence: Evidence; lines: LogEv
       <p className="text-sm leading-snug font-medium wrap-anywhere">{evidenceTitle(evidence)}</p>
       {evidence.detail ? (
         <p className="line-clamp-4 text-xs leading-5 wrap-anywhere whitespace-pre-wrap text-muted-foreground">
-          {evidence.detail}
+          {evidenceDetail(evidence)}
         </p>
       ) : null}
       <LogLines lines={lines} limit={4} />
@@ -175,20 +175,36 @@ function revealPanel(panelId: string, pinning = false) {
   const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches
     ? "auto"
     : "smooth";
-  const column = panel.closest("aside");
-  if (!column || !window.matchMedia("(min-width: 1280px)").matches) {
-    panel.scrollIntoView({ block: "nearest", behavior });
+  // Beside the report from 1280 px (the page's xl column); below the report otherwise. Asked of
+  // the screen, not of the markup: the panel's column is no longer an <aside> (RQ-M2).
+  if (!window.matchMedia("(min-width: 1280px)").matches) {
+    // Its top, where its title and "Back to the claim" are: "nearest" would show only the bottom
+    // of a panel taller than the screen (J-M3).
+    panel.scrollIntoView({ block: pinning ? "start" : "nearest", behavior });
     // Far from the claim, the reader continues from the panel: its "Back to the claim" is next.
     if (pinning && panel.getAttribute("tabindex") === "-1") panel.focus({ preventScroll: true });
     return;
   }
-  const top = panel.offsetTop;
+  // Beside the report, focus stays on the citation and only the side column scrolls.
+  const column = scrollingParent(panel);
+  if (!column) return;
+  const top =
+    panel.getBoundingClientRect().top - column.getBoundingClientRect().top + column.scrollTop;
   const bottom = top + panel.offsetHeight;
   const { scrollTop, clientHeight } = column;
   if (top < scrollTop) column.scrollTo({ top, behavior });
   else if (bottom > scrollTop + clientHeight) {
     column.scrollTo({ top: Math.min(top, bottom - clientHeight), behavior });
   }
+}
+
+/** The nearest ancestor that scrolls on its own, if any. */
+function scrollingParent(element: HTMLElement): HTMLElement | null {
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    const { overflowY } = window.getComputedStyle(node);
+    if (overflowY === "auto" || overflowY === "scroll") return node;
+  }
+  return null;
 }
 
 // The citation "Back to the claim" hands focus back to; its preview card stays shut for that focus.
@@ -307,18 +323,6 @@ export function EvidenceChip({ id, label }: { id: string; label?: string }) {
   );
 }
 
-/**
- * An evidence title as a person reads it. A pattern is recorded as "16x Failed password for
- * <*> port <*>"; it reads "16 lines like “Failed password for … port …”".
- */
-export function evidenceTitle(evidence: Pick<Evidence, "kind" | "title">): string {
-  const pattern = evidence.kind === "template" ? /^(\d+)x (.+)$/s.exec(evidence.title) : null;
-  if (!pattern?.[1] || !pattern[2]) return evidence.title;
-  const n = Number(pattern[1]);
-  const text = plainTemplate(pattern[2]);
-  return n === 1 ? `1 line: “${text}”` : `${n.toLocaleString("en")} lines like “${text}”`;
-}
-
 /** How many citations a claim shows before "+N": two read as sources, more as noise. */
 const SHOWN_CITATIONS = 2;
 
@@ -401,12 +405,94 @@ const INCIDENT_FIELDS: Record<string, string> = {
   occurrences: "times seen",
 };
 
+// The severity model's and the rules' numbers, named for what each one measures.
+const MODEL_FIELDS: Record<string, string> = {
+  probabilities: "how likely",
+  sla_breach_risk: "risk of missing the deadline",
+  top_contributions: "weighed most",
+  outside_training: "unlike what it learned from",
+  rule_id: "rule",
+  effect: "what it does",
+};
+
+// Record ids, raw search scores and the model's settings: the title and detail already say what
+// they mean (J-M4, RQ-m5).
+const HIDDEN_FIELDS = new Set([
+  "template_id",
+  "incident_id",
+  "score",
+  "lexical",
+  "dense",
+  "rerank",
+  "alpha",
+  "conformal",
+  "conformal_q",
+  "set_empty",
+  "temperature",
+  "weight",
+  "rules_version",
+]);
+
+/** A field's value as a person reads it: chances as percentages, the model's measurements by
+ * name, the rest as recorded. `toward` is the level the measurements are weighed for. */
+function fieldValue(key: string, value: unknown, toward: string | null): string {
+  if (key === "failure_mode" && typeof value === "string") return failureName(value);
+  if ((key === "coverage_target" || key === "sla_breach_risk") && typeof value === "number") {
+    return chance(value);
+  }
+  if (key === "probabilities" && value && typeof value === "object" && !Array.isArray(value)) {
+    return Object.entries(value)
+      .map(([level, p]) => `${level} ${typeof p === "number" ? chance(p) : show(p)}`)
+      .join(", ");
+  }
+  if (key === "effect" && (value === "score" || value === "floor")) {
+    return value === "floor" ? "sets a safety floor" : "adds to a level's score";
+  }
+  if (key === "outside_training" && Array.isArray(value)) {
+    return value.map((name) => featureName(String(name))).join(", ");
+  }
+  if (key === "top_contributions" && Array.isArray(value)) {
+    return value
+      .filter((part): part is [string, number] => Array.isArray(part) && part.length === 2)
+      .map(([name, weight]) => {
+        const side = weight >= 0 ? "for" : "against";
+        return `${featureName(name)} (${side}${toward ? ` ${toward}` : ""})`;
+      })
+      .join(", ");
+  }
+  return show(value);
+}
+
+/** The most likely level in a model's probabilities, which its contributions are weighed for. */
+function likeliest(data: Record<string, unknown>): string | null {
+  const probabilities = data.probabilities;
+  if (!probabilities || typeof probabilities !== "object" || Array.isArray(probabilities)) {
+    return null;
+  }
+  let best: [string, number] | null = null;
+  for (const [level, p] of Object.entries(probabilities)) {
+    if (typeof p === "number" && (!best || p > best[1])) best = [level, p];
+  }
+  return best?.[0] ?? null;
+}
+
 function DataTable({ data, kind }: { data: Record<string, unknown>; kind: string }) {
   const entries = Object.entries(data).filter(
-    ([, v]) => v !== null && v !== "" && !(Array.isArray(v) && v.length === 0),
+    ([k, v]) =>
+      !HIDDEN_FIELDS.has(k) &&
+      !(k === "nodes" && v === 0) &&
+      v !== null &&
+      v !== "" &&
+      !(Array.isArray(v) && v.length === 0),
   );
   if (entries.length === 0) return null;
-  const names = kind === "incident" ? { ...FIELD_NAMES, ...INCIDENT_FIELDS } : FIELD_NAMES;
+  const names =
+    kind === "incident"
+      ? { ...FIELD_NAMES, ...INCIDENT_FIELDS }
+      : kind === "model" || kind === "rule"
+        ? { ...FIELD_NAMES, ...MODEL_FIELDS }
+        : FIELD_NAMES;
+  const toward = kind === "model" ? likeliest(data) : null;
   return (
     <dl className="grid grid-cols-[minmax(0,9rem)_1fr] gap-x-3 gap-y-1 text-xs">
       {entries.slice(0, 14).map(([key, value]) => (
@@ -414,9 +500,7 @@ function DataTable({ data, kind }: { data: Record<string, unknown>; kind: string
           <dt className="truncate text-muted-foreground">
             {names[key] ?? key.replace(/^n_/, "").replaceAll("_", " ")}
           </dt>
-          <dd className="min-w-0 font-mono break-words">
-            {key === "failure_mode" && typeof value === "string" ? failureName(value) : show(value)}
-          </dd>
+          <dd className="min-w-0 font-mono break-words">{fieldValue(key, value, toward)}</dd>
         </div>
       ))}
     </dl>
@@ -533,7 +617,7 @@ export function EvidencePanel({ className }: { className?: string }) {
       // Focus lands here after a pin in one column, where the panel sits far below the claim.
       tabIndex={-1}
       className={cn(
-        "grid min-w-0 content-start gap-3 rounded-lg bg-raised p-4 outline-none sm:p-5",
+        "grid min-w-0 content-start gap-3 rounded-lg bg-raised p-4 outline-none focus-visible:ring-2 focus-visible:ring-ring sm:p-5",
         !(evidence && pinned) && "max-xl:hidden",
         className,
       )}
@@ -593,7 +677,7 @@ export function EvidencePanel({ className }: { className?: string }) {
               aria-label="Evidence detail"
               className="max-h-48 overflow-auto rounded-sm bg-sunken p-2 text-xs leading-5 whitespace-pre-wrap"
             >
-              {evidence.detail}
+              {evidenceDetail(evidence)}
             </pre>
           ) : null}
           {/* Keyed by evidence, so each citation pointed at sends its own pass of light. */}

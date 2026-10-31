@@ -69,7 +69,8 @@ test.describe("landing page", () => {
   test("links the hero to real incidents and each result to its test", async ({ page }) => {
     await page.goto("/");
     await page.getByRole("link", { name: "Try it on real logs" }).click();
-    await expect(page).toHaveURL(/\/console\/runs\/new\?source=bigdata$/);
+    // New triage as a first visit sees it: the real incident leads "Start with one of these".
+    await expect(page).toHaveURL(/\/console\/runs\/new$/);
     await expect(page.getByRole("button", { name: /^Replay it: / }).first()).toBeVisible();
     await page.goto("/#results");
     const results = page.locator("section#results");

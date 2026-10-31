@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useDensity } from "@/lib/density";
+import { evidenceTitle } from "@/lib/evidence-text";
 import { capitalise, minutesWords, percent, plainTemplate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -18,7 +19,6 @@ import { DensityToggle } from "./density-toggle";
 import {
   Citations,
   EvidenceChip,
-  evidenceTitle,
   KIND_LABEL,
   LongLine,
   sourceLabel,
@@ -221,9 +221,11 @@ export function Templates({ batch }: { batch: ParsedBatch }) {
               {t.novel ? (
                 <span className="rounded-xs border border-primary/70 px-1 text-primary">new</span>
               ) : null}
-              {t.error_like ? (
+              {/* Only where no level already says so: an ERROR line needs no second tag (J-m12). */}
+              {t.error_like &&
+              !Object.keys(t.levels).some((l) => /ERR|FATAL|CRIT|SEVERE/.test(l)) ? (
                 <span className="rounded-xs border border-sev1-fg/60 px-1 text-sev1-fg">
-                  error-like
+                  reads like an error
                 </span>
               ) : null}
               <Citations ids={[t.evidence_id]} />

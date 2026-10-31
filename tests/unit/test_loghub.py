@@ -221,6 +221,16 @@ def test_generic_parser_reads_syslog_times_and_keeps_a_lone_bracket_in_the_messa
     assert tagged.message == "[Controller id=1] Processing automatic rebalance"
 
 
+def test_generic_parser_names_a_service_with_its_process_id() -> None:
+    """ "orders-svc[884]:" is the service orders-svc: read as the whole message, a paste of many
+    services was blamed on the one service that wrote a plain "name:" prefix."""
+    rec = parse_generic_line("svc", "2026-10-31 09:59:15 ERROR orders-svc[884]: query timed out")
+    assert (rec.level, rec.component, rec.message) == ("ERROR", "orders-svc", "query timed out")
+    # A host before the process is not a component.
+    host = parse_generic_line("svc", "Oct 31 10:00:01 host sshd[123]: Failed password for root")
+    assert host.component is None
+
+
 def test_generic_parser_derives_level_from_message() -> None:
     assert parse_generic_line("svc", "kernel panic - not syncing").level == "FATAL"
     assert parse_generic_line("svc", "connection refused by peer").level == "ERROR"

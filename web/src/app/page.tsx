@@ -215,7 +215,7 @@ export default function Landing() {
           id="how"
           tag="How it works"
           title="Four steps, then a person decides"
-          intro="Each step saves its place, so a run can stop for a person, carry on after a restart, or be rewound and tried another way. The figures come from the example above. Words with a dotted underline open a short definition."
+          intro="Each step saves its place, so a triage can stop for a person, carry on after a restart, or be rewound and tried another way. The figures come from the example above. Words with a dotted underline open a short definition."
         >
           <Suspense>
             <RunGraph steps={steps(facts, evals.severity.targetCoverage)} />

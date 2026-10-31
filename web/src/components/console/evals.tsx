@@ -1,6 +1,9 @@
+import Link from "next/link";
+
 import { RollingNumber } from "@/components/aria/rolling-number";
 import { PageHeader } from "@/components/console/states";
 import { BaselineChart, RiskCoverageChart } from "@/components/site/charts";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -71,8 +74,13 @@ function Section({
       {headline ? <p className="max-w-prose leading-relaxed">{headline}</p> : null}
       <details className="group">
         <summary className="flex min-h-6 w-fit cursor-pointer items-center text-sm font-medium text-muted-foreground hover:text-heading">
-          <span className="group-open:hidden">Show details</span>
-          <span className="hidden group-open:inline">Hide details</span>
+          {/* Named for its test, so a list of the page's controls tells them apart (RQ-p2). */}
+          <span className="group-open:hidden">
+            Show details<span className="sr-only">: {title}</span>
+          </span>
+          <span className="hidden group-open:inline">
+            Hide details<span className="sr-only">: {title}</span>
+          </span>
         </summary>
         <div className="grid gap-5 pt-5">
           {intro ? <p className="max-w-prose text-sm text-muted-foreground">{intro}</p> : null}
@@ -1237,6 +1245,25 @@ export function Evals({
             {live.valid === 1 ? ", and every one validated." : "."}
           </p>
         </Section>
+      </section>
+
+      {/* The page's way on: put the numbers to a test of one's own, or learn to read a rating. */}
+      <section aria-labelledby="ev-next" className="grid max-w-3xl gap-3 border-t border-rule pt-6">
+        <h2 id="ev-next" className="text-xl tracking-heading">
+          What next?
+        </h2>
+        <ul className="flex flex-wrap gap-2">
+          <li>
+            <Button asChild variant="primary">
+              <Link href="/console/runs/new">Try it on real logs</Link>
+            </Button>
+          </li>
+          <li>
+            <Button asChild>
+              <Link href="/console/guide#read-a-run">Learn to read a rating</Link>
+            </Button>
+          </li>
+        </ul>
       </section>
     </div>
   );

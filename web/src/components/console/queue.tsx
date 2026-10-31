@@ -93,11 +93,12 @@ function usePages(status: Status | "all") {
   return { ...query, more };
 }
 
-/** Who settled the level. "Needs your call" holds only while the run waits for a person. */
+/** Who settled the level. "Needs your call" holds only while the run waits for this person: an
+ * example every visitor reads waits for nobody's call (RQ-p7). */
 function decider(run: RunSummary): string {
   if (run.decided_by !== "fallback") return decidedByLabel(run.decided_by);
   if (run.status === "published") return "Confirmed by a reviewer";
-  if (run.status === "rejected") return "ARIA was unsure";
+  if (run.status === "rejected" || run.example) return "ARIA was unsure";
   return decidedByLabel(run.decided_by);
 }
 

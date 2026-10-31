@@ -134,7 +134,7 @@ export function Memory() {
                 id={`${id}-q`}
                 type="search"
                 className="pl-9"
-                placeholder="disk, quorum, brute force..."
+                placeholder="For example: disk, quorum, brute force"
                 value={query}
                 onChange={(e) => {
                   setQuery(e.target.value);
@@ -180,22 +180,27 @@ export function Memory() {
         />
       ) : !searching && system === "all" && shown.length === 0 ? (
         <EmptyState icon={LibraryIcon} title="The incident library is empty">
-          Seed it with <code>aria seed</code>, or publish a report: every approved run is
+          Seed it with <code>aria seed</code>, or publish a report: every approved incident is
           remembered.
         </EmptyState>
       ) : (
         <>
+          {/* While a new search loads, the last results stay on screen; the count waits for the
+              new ones, so it never announces the old list under the new words (RQ-p10). */}
           <p className="text-sm text-muted-foreground" aria-live="polite">
-            {searching
-              ? shown.length === 0
-                ? `No incident matches "${deferred}"`
-                : shown.length === 1
-                  ? `The closest incident to "${deferred}", by keyword and by meaning`
-                  : `The ${shown.length} closest incidents to "${deferred}", by keyword and by meaning, closest first`
-              : shown.length === 1
-                ? "The most recent incident"
-                : `The ${shown.length} most recent incidents`}
-            {kinds}.
+            {incidents.isPlaceholderData
+              ? "Searching…"
+              : `${
+                  searching
+                    ? shown.length === 0
+                      ? `No incident matches "${deferred}"`
+                      : shown.length === 1
+                        ? `The closest incident to "${deferred}", by keyword and by meaning`
+                        : `The ${shown.length} closest incidents to "${deferred}", by keyword and by meaning, closest first`
+                    : shown.length === 1
+                      ? "The most recent incident"
+                      : `The ${shown.length} most recent incidents`
+                }${kinds}.`}
           </p>
           {shown.length === 0 ? (
             <EmptyState

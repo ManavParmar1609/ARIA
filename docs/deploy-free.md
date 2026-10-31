@@ -79,6 +79,9 @@ visitor ──▶ Vercel: landing page, console, /api/* proxy ──▶ Render: 
 
 5. Choose **Deploy**. When it finishes, open the address Vercel gives you, such as
    `https://aria.vercel.app`.
+6. Back in Render, open the `aria-api` service's **Environment** settings and set
+   `ARIA_CONSOLE_URL` to that address. Messages ARIA drafts then link to the incident's page in
+   the console instead of to the API.
 
 Link previews on LinkedIn, X and Slack use the production address automatically. If you add a
 custom domain later, set `ARIA_WEB_URL` to it and redeploy.

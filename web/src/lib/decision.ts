@@ -32,9 +32,9 @@ export function decisionPhrase(d: Decision, status?: string): string {
     case "rules":
       // A safety rule settled it or the rules and a confident model named the same level; a
       // floor the model disagreed with is worded by the panel, which knows the rule.
-      return "Set by the rules, and the model agrees.";
+      return "Set by the rules, and the severity model agrees.";
     case "model":
-      return "Confident: decided by the model.";
+      return "Confident: decided by the severity model.";
   }
   if (d.set_empty) {
     return `No level was likely enough, so ARIA ${plans} for ${d.severity}.${ask("decide")}`;
@@ -54,7 +54,7 @@ export function decisionPhrase(d: Decision, status?: string): string {
 
 const SHORT: Record<string, string> = {
   rules: "Set by a rule",
-  model: "Decided by the model",
+  model: "Decided by the severity model",
   llm: "Chosen by a language model",
   fallback: "Needs your call",
   human: "Set by a reviewer",

@@ -101,13 +101,15 @@ export function reachedCount(steps: Step[]): number {
 }
 
 /** The steps as a playback shows them: the first ``shown`` as they are, the next one at work, and
- * any later step that has already finished still to come. */
+ * every later step still to come, whatever it has done already, so steps light up in order. */
 export function pacedSteps(steps: Step[], shown: number): Step[] {
   const reached = reachedCount(steps);
   return steps.map((step, i) => {
     if (i < shown) return step;
-    if (i === shown && shown < reached) return { ...step, state: "running", took: null };
-    return SETTLED.has(step.state) ? { ...step, state: "pending", took: null } : step;
+    if (i === shown) {
+      return shown < reached ? { ...step, state: "running", took: null, note: undefined } : step;
+    }
+    return { ...step, state: "pending", took: null, note: undefined };
   });
 }
 
@@ -116,15 +118,16 @@ const reducedMotion = () =>
 
 /**
  * The run's steps, played back at a pace a person can follow when this tab started the run or
- * watched it start (M1). ``playing`` stays true until the whole trace has shown: until then the
- * page presents the run as still at work, so its results arrive with the last step. A run opened
- * later, or under reduced motion, shows as it is.
+ * watched it start (M1). While the playback is behind the run, ``playing`` is true and ``passed``
+ * names the steps it has shown, so the page can present each step's results as the trace reaches
+ * it. Once results have shown they stay: a slow run the playback keeps up with shows its results
+ * as they come. A run opened later, or under reduced motion, shows as it is.
  */
 export function usePacedSteps(
   runId: string,
   events: RunEvent[],
   status: string | undefined,
-): { steps: Step[]; playing: boolean } {
+): { steps: Step[]; playing: boolean; passed: ReadonlySet<string> } {
   const actual = useMemo(() => progressSteps(events, status ?? "queued"), [events, status]);
   // Decided once, when the status is first known.
   const [watched, setWatched] = useState<boolean | null>(null);
@@ -153,9 +156,20 @@ export function usePacedSteps(
     }, HOLD_MS);
     return () => clearTimeout(fold);
   }, [pacing, shown, reached, over, held, runId]);
+  // Behind the run, or holding the finished trace: the page waits for the playback.
+  const waiting = pacing && !held && (shown < reached || over);
+  // Results that have shown once never go back to waiting (J-M6).
+  const [caughtUp, setCaughtUp] = useState(false);
+  if (!caughtUp && pacing && !waiting && reached > 0) setCaughtUp(true);
+  const playing = waiting && !caughtUp;
+  const passed = useMemo(
+    () => new Set(actual.slice(0, playing ? shown : actual.length).map((step) => step.key)),
+    [actual, playing, shown],
+  );
   return {
     steps: pacing && !held ? pacedSteps(actual, shown) : actual,
-    playing: pacing && over && !held,
+    playing,
+    passed,
   };
 }
 

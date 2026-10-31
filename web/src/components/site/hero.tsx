@@ -87,7 +87,7 @@ function ReportCard({ data }: { data: Replay }) {
         </p>
       </div>
       <figcaption className="px-1 text-xs leading-relaxed text-heading/80 dark:text-muted-foreground">
-        From a recorded run
+        From a recorded triage
         {data.model ? ` with ${data.model.service}` : ""}: {data.nLines} real log lines from a
         Hadoop file system (HDFS) in the public Loghub collection, arranged into an incident.
       </figcaption>
@@ -157,11 +157,12 @@ export function Hero({ data }: { data: Replay }) {
             </h1>
             <p className="mt-8 max-w-[46ch] text-[0.9375rem] leading-relaxed text-heading xl:mt-auto xl:pt-14">
               For the person on call: ARIA reads an alert&apos;s logs, rates how serious it is,
-              finds what happened before, and drafts the report and the messages.
+              finds what happened before, and drafts the report and the messages. Nothing is sent
+              until you approve it.
             </p>
           </div>
           <Link
-            href="/console/runs/new?source=bigdata"
+            href="/console/runs/new"
             prefetch={false}
             className="group/button flex h-16 items-center justify-between rounded-card bg-primary px-7 text-[0.9375rem] font-medium text-primary-foreground transition-colors duration-(--duration-quick) hover:bg-primary-hover sm:h-[4.75rem]"
           >

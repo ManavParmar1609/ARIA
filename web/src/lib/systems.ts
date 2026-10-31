@@ -1,6 +1,7 @@
 // Display names for the log systems ARIA knows (mirrors SYSTEM_NAMES in the report composer).
 export const SYSTEM_NAMES: Record<string, string> = {
-  generic: "Generic",
+  // Logs whose format was not named ("Not sure" on New triage).
+  generic: "Unknown system",
   android: "Android",
   apache: "Apache",
   bgl: "BlueGene/L",

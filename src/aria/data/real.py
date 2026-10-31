@@ -119,9 +119,10 @@ REAL_INCIDENTS: tuple[RealIncident, ...] = (
         title="Silent block failures on a Hadoop cluster",
         system="hdfs",
         summary=(
-            "Ten minutes of the log a Hadoop cluster of more than 200 servers wrote in 2008, in "
-            "the order it wrote them, with every line about one storage block in eight. Some "
-            "blocks never finish being copied, yet no line is marked as an error."
+            "Ten minutes of the log a Hadoop cluster of more than 200 servers wrote in 2008. The "
+            "cluster stores files as blocks copied across servers; to keep the log short, this "
+            "keeps every line about one block in eight. Some blocks never finish copying, yet no "
+            "line is marked as an error."
         ),
         source="Loghub HDFS_v1, the loglizer HDFS_100k sample; every line of one block in eight",
         citation=HDFS_CITATION,

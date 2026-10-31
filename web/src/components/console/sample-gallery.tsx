@@ -86,17 +86,20 @@ function SizePicker({
   );
 }
 
-function RealLines({ lines }: { lines: string[] }) {
+function RealLines({ lines, title }: { lines: string[]; title: string }) {
   if (!lines.length) return null;
   return (
-    <details className="group text-sm">
+    // min-w-0: a long line scrolls inside its box instead of widening the card (RQ-M1).
+    <details className="group min-w-0 text-sm">
       <summary className="w-fit cursor-pointer py-0.5 text-muted-foreground hover:text-heading">
         Show {lines.length} real {lines.length === 1 ? "line" : "lines"}
+        {/* Each card's control names its sample, so a list of controls tells them apart. */}
+        <span className="sr-only"> from {title}</span>
       </summary>
       <pre
         tabIndex={0}
         role="region"
-        aria-label="Real lines from this sample"
+        aria-label={`Real lines from ${title}`}
         className="mt-2 overflow-x-auto rounded-md bg-sunken p-3 font-mono text-xs leading-5"
       >
         {lines.join("\n")}
@@ -141,7 +144,7 @@ function SampleCard({ sample, compact = false }: { sample: Scenario; compact?: b
   };
 
   return (
-    <li className="flex flex-col gap-3 rounded-lg bg-raised p-5">
+    <li className="flex min-w-0 flex-col gap-3 rounded-lg bg-raised p-5">
       <div className="grid gap-1">
         <h3 className="font-sans text-base leading-snug font-semibold text-heading">
           {sample.title}
@@ -158,7 +161,7 @@ function SampleCard({ sample, compact = false }: { sample: Scenario; compact?: b
           Watch its recorded run on the home page
         </Link>
       ) : null}
-      {compact ? null : <RealLines lines={sample.preview ?? []} />}
+      {compact ? null : <RealLines lines={sample.preview ?? []} title={sample.title} />}
       {!compact && sample.servers && servers != null ? (
         <SizePicker choice={sample.servers} value={servers} onChange={setServers} />
       ) : null}
@@ -222,7 +225,7 @@ function RealIncidentCard({ incident }: { incident: RealIncident }) {
     );
   };
   return (
-    <li className="flex flex-col gap-3 rounded-lg bg-raised p-5 ring-1 ring-primary/40 ring-inset">
+    <li className="flex min-w-0 flex-col gap-3 rounded-lg bg-raised p-5 ring-1 ring-primary/40 ring-inset">
       <div className="grid gap-1">
         <p className="text-xs font-medium text-primary">Real incident</p>
         <h3 className="font-sans text-base leading-snug font-semibold text-heading">
@@ -318,7 +321,7 @@ export function SampleGallery() {
   // below it down the page.
   if (scenarios.isPending || real.isPending) {
     return (
-      <div className="grid gap-4" aria-busy="true" aria-label="Loading the samples">
+      <div className="grid gap-4" role="status" aria-busy="true" aria-label="Loading the samples">
         <Skeleton className="h-6 w-56" />
         <div className="grid gap-4 md:grid-cols-3">
           <Skeleton className="h-48" />
@@ -378,7 +381,7 @@ export function SampleGallery() {
           <h2 id="start-title" className="text-xl tracking-heading">
             Start with one of these
           </h2>
-          <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <ul className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2 xl:grid-cols-4">
             {reals.slice(0, 1).map((incident) => (
               <RealIncidentCard key={incident.id} incident={incident} />
             ))}
@@ -403,7 +406,10 @@ export function SampleGallery() {
           </p>
         </div>
         <SourceFilter current={source} counts={counts} />
-        <ul ref={list} className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <ul
+          ref={list}
+          className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2 xl:grid-cols-3"
+        >
           {listedReals.map((incident) => (
             <RealIncidentCard key={incident.id} incident={incident} />
           ))}

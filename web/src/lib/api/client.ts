@@ -61,7 +61,7 @@ function describe(status: number, body: unknown): string {
   if (status === 401) return "Sign in with an API key to use the console.";
   if (status === 502 || status === 503 || status === 504) return UNREACHABLE;
   if (status >= 500) {
-    return "The ARIA API hit an unexpected error. Try again; if it keeps failing, its log says why.";
+    return "Something went wrong on ARIA's side. Try again in a moment.";
   }
   return `The request failed (HTTP ${status}).`;
 }

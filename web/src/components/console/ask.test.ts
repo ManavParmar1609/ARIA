@@ -131,3 +131,21 @@ describe("loadTurns", () => {
     expect(loadTurns(store('{"id": "a"}'))).toEqual([]);
   });
 });
+
+describe("an Ask source's name", () => {
+  const base = { id: "E7", source: "investigator", ts: null, detail: "", data: {} };
+
+  it("reads a tested cause by what the evidence did to it", () => {
+    const supported = { ...base, kind: "hypothesis", title: "H2 supported: disk <*> is full" };
+    expect(sourceName(supported as unknown as Evidence)).toBe(
+      "Backed by the evidence: disk … is full",
+    );
+    const refuted = { ...base, kind: "hypothesis", title: "H1 refuted: the network dropped" };
+    expect(sourceName(refuted as unknown as Evidence)).toBe("Ruled out: the network dropped");
+  });
+
+  it("names an investigation check by what it looked at", () => {
+    const tool = { ...base, kind: "tool", title: "component_timeline: 12 events over 3 minutes" };
+    expect(sourceName(tool as unknown as Evidence)).toBe("Over time: 12 events over 3 minutes");
+  });
+});

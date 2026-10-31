@@ -395,11 +395,13 @@ def parse_raw_line(system: str, line: str, line_no: int = 0) -> LogRecord:
 
 # A line in no format ARIA knows: a timestamp it can read, if one leads the line; then a level,
 # perhaps after a process or thread id ("148 INFO" in Hadoop's style, "[main] WARN"); then a
-# component ending in a colon, perhaps after a thread ("[main] org.app.Server:"); then the message.
+# component ending in a colon, perhaps after a thread ("[main] org.app.Server:") or with syslog's
+# process id ("orders-svc[884]:"); then the message.
 _LEVELS = "TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|ERR|SEVERE|CRITICAL|FATAL"
 _GENERIC = re.compile(
     rf"^(?:(?:(?:\d+|\[[^\]]{{1,40}}\])\s+)?\[?(?P<level>{_LEVELS})\]?:?\s+)?"
-    r"(?:(?:\[[^\]]{1,40}\]\s+)?\[?(?P<component>[\w.$/-]{2,80})\]?:\s+)?(?P<message>.*)$",
+    r"(?:(?:\[[^\]]{1,40}\]\s+)?\[?(?P<component>[\w.$/-]{2,80})(?:\[\d{1,10}\])?\]?:\s+)?"
+    r"(?P<message>.*)$",
     re.IGNORECASE,
 )
 

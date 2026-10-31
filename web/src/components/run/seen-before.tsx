@@ -7,6 +7,7 @@ import { CodeText } from "@/components/ui/code-text";
 import type { RetrievalResult, SimilarIncident } from "@/lib/api/types";
 import { isSeverity } from "@/lib/api/types";
 import { plainResolution } from "@/lib/format";
+import { systemName } from "@/lib/systems";
 
 import { Citations } from "./evidence";
 
@@ -39,7 +40,27 @@ export function pastKinds(incidents: SimilarIncident[]): PastKind[] {
   return [...kinds.values()];
 }
 
-function Incident({ kind, sameFix }: { kind: PastKind; sameFix: boolean }) {
+// Below this search grade the report says there is no close match (composer.py), so the panel
+// says so too.
+const CLOSE_MATCH = 0.35;
+
+/** What to say before the matches when they are weak: from other systems, or not close. */
+export function matchCaveat(
+  incidents: Pick<SimilarIncident, "system">[],
+  system: string,
+  grade: number | undefined,
+): string | null {
+  if (incidents.length === 0) return null;
+  if (incidents.every((incident) => incident.system !== system)) {
+    return "Nothing like this has been seen on this system. These are the nearest incidents from other systems: read them as clues, not as fixes to follow.";
+  }
+  if (grade !== undefined && grade < CLOSE_MATCH) {
+    return "None of these is a close match: check one before following its fix.";
+  }
+  return null;
+}
+
+function Incident({ kind, sameFix, system }: { kind: PastKind; sameFix: boolean; system: string }) {
   const { lead, all } = kind;
   const ids = all.flatMap((incident) => (incident.evidence_id ? [incident.evidence_id] : []));
   const sources = [...new Set(all.map((incident) => SOURCE[incident.source]).filter(Boolean))];
@@ -66,6 +87,7 @@ function Incident({ kind, sameFix }: { kind: PastKind; sameFix: boolean }) {
           ? `, resolved in about ${Math.round(lead.mttr_minutes)} min`
           : ""}
         {sources.length ? `, ${sources.join(" and ")}` : ""}
+        {lead.system !== system ? `, on ${systemName(lead.system)}` : ""}
       </p>
     </li>
   );
@@ -74,18 +96,23 @@ function Incident({ kind, sameFix }: { kind: PastKind; sameFix: boolean }) {
 export function SeenBefore({
   incidents,
   retrieval,
+  system,
 }: {
   /** The ones the report cites, else the ones retrieval found. */
   incidents: SimilarIncident[];
   retrieval: RetrievalResult | undefined;
+  /** The incident's own system, to tell its matches from other systems' (J-M2). */
+  system: string;
 }) {
   const runbooks = retrieval?.runbooks ?? [];
   const kinds = pastKinds(incidents);
+  const caveat = matchCaveat(incidents, system, retrieval?.grade);
   return (
     <section aria-labelledby="seen-title" className="grid gap-4 rounded-lg bg-raised p-5">
       <h2 id="seen-title" className="text-base font-medium">
         Seen before
       </h2>
+      {caveat ? <p className="text-sm text-muted-foreground">{caveat}</p> : null}
       {incidents.length ? (
         <ul className="grid gap-4">
           {kinds.map((kind, i) => (
@@ -93,6 +120,7 @@ export function SeenBefore({
               key={kind.lead.incident_id}
               kind={kind}
               sameFix={i > 0 && kinds[i - 1]?.lead.resolution === kind.lead.resolution}
+              system={system}
             />
           ))}
         </ul>

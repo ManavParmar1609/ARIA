@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { SimilarIncident } from "@/lib/api/types";
 
-import { pastKinds } from "./seen-before";
+import { matchCaveat, pastKinds } from "./seen-before";
 
 const incident = (id: string, changes: Partial<SimilarIncident> = {}): SimilarIncident => ({
   incident_id: id,
@@ -34,5 +34,22 @@ describe("past incidents of one kind", () => {
   it("stay apart when they were fixed differently", () => {
     const kinds = pastKinds([incident("a"), incident("b", { resolution: "Replace the disk" })]);
     expect(kinds).toHaveLength(2);
+  });
+});
+
+describe("the caveat before past incidents", () => {
+  it("says when every match comes from another system", () => {
+    expect(matchCaveat([{ system: "bgl" }, { system: "hpc" }], "generic", 0.9)).toMatch(
+      /^Nothing like this has been seen on this system\./,
+    );
+  });
+
+  it("says when the matches are not close", () => {
+    expect(matchCaveat([{ system: "hdfs" }], "hdfs", 0.1)).toMatch(/not a close match|None of/);
+  });
+
+  it("says nothing over close matches on the same system", () => {
+    expect(matchCaveat([{ system: "hdfs" }], "hdfs", 0.8)).toBeNull();
+    expect(matchCaveat([], "hdfs", 0)).toBeNull();
   });
 });

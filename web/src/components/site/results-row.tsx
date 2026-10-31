@@ -40,7 +40,7 @@ export function resultTiles(data: Evaluation, real: RealLogs, more: RealData): R
     },
     {
       figure: `${per100(s.autoDecided)} in 100`,
-      label: `test incidents, built from real log lines, rated without help, and ${per100(s.accuracyWhenAuto)} in 100 of those were right. ARIA asked a person about the rest, the harder ones.`,
+      label: `test incidents, built from real log lines, were rated without asking a person. Of those, ${per100(s.accuracyWhenAuto)} in 100 were right. ARIA asked a person about the rest, the harder ones.`,
       href: "/console/evals#ev-calibration",
       link: "When it asks a person",
     },
@@ -53,7 +53,7 @@ export function resultTiles(data: Evaluation, real: RealLogs, more: RealData): R
     {
       figure: `${count(t.aria.quietPaged)} of ${count(t.quiet)}`,
       label:
-        "quiet stretches of another supercomputer's log (Thunderbird) raised false alarms: its routine noise looks like trouble to ARIA.",
+        "quiet stretches of a supercomputer's log (Thunderbird) raised false alarms: its routine noise looks like trouble to ARIA.",
       href: "/console/evals#ev-thunderbird",
       link: "Where it falls short",
     },

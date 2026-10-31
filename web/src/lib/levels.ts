@@ -52,7 +52,14 @@ export function shortListText(
     if (set[0] !== a.severity) {
       return `${set[0]} is likely, but a safety rule keeps it at ${a.severity}.`;
     }
-    if (!unsure) return `Only ${a.severity} is likely.`;
+    // Who stands behind the one likely level: the severity model, or the rules (RQ-m14).
+    if (!unsure) {
+      return a.decided_by === "model"
+        ? `Only ${a.severity} is likely, and the severity model is confident of it.`
+        : a.decided_by === "rules"
+          ? `Only ${a.severity} is likely, and the rules agree.`
+          : `Only ${a.severity} is likely.`;
+    }
     // Why it asks, said here rather than only under "How ARIA decided": the rules rated the logs
     // alone (unlike what the model learned from, or no model), or the model's figure fell short.
     if (a.model_version?.startsWith("rules-only")) {
@@ -60,11 +67,18 @@ export function shortListText(
         ? `Probably ${a.severity}. Only ARIA's rules rated these logs.${ask("confirm")}`
         : `Probably ${a.severity}. Only ARIA's rules rated these logs, so please confirm.`;
     }
-    // Rounded down, so a figure just short of the bar never reads as reaching it.
-    const likely = a.confidence ? `, ${Math.floor(a.confidence * 100 + 1e-9)}% likely` : "";
+    // Rounded the way the report rounds it, so the page shows one figure (J-m1). Under half is
+    // not "probably": it is the likeliest level, and no more (RQ-m7).
+    const p = a.confidence ? Math.round(a.confidence * 100) : null;
+    const lead =
+      p === null
+        ? `Probably ${a.severity}`
+        : p < 50
+          ? `${a.severity} is the likeliest level, at ${p}%`
+          : `Probably ${a.severity}, ${p}% likely`;
     return ended
-      ? `Probably ${a.severity}${likely}. ARIA wasn't sure enough to decide alone.${ask("confirm")}`
-      : `Probably ${a.severity}${likely}. ARIA isn't sure enough to decide alone, so please confirm.`;
+      ? `${lead}. ARIA wasn't sure enough to decide alone.${ask("confirm")}`
+      : `${lead}. ARIA isn't sure enough to decide alone, so please confirm.`;
   }
   const chose =
     a.decided_by === "llm"

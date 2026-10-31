@@ -29,7 +29,7 @@ test.describe("console", () => {
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await expect(
       page.getByText(
-        /^(Only SEV\d is likely\.|Probably SEV\d(, \d+% likely)?\. (ARIA isn't sure enough to decide alone|Only ARIA's rules rated these logs), so please confirm\.|Could be SEV\d.*ARIA plans for SEV\d\.( Please confirm\.)?)$/,
+        /^(Only SEV\d is likely(, and the severity model is confident of it|, and the rules agree)?\.|(Probably SEV\d(, \d+% likely)?|SEV\d is the likeliest level, at \d+%)\. (ARIA isn't sure enough to decide alone|Only ARIA's rules rated these logs), so please confirm\.|Could be SEV\d.*ARIA plans for SEV\d\.( Please confirm\.)?)$/,
       ),
     ).toBeVisible();
     // Four panels, one question each.
@@ -83,7 +83,7 @@ test.describe("console", () => {
     await expect(page.getByText(/Run finished: published/)).toBeVisible();
 
     // time travel: view the run as it was before the review, then come back
-    await page.getByRole("tab", { name: "History and forks" }).click();
+    await page.getByRole("tab", { name: "History" }).click();
     await page
       .locator("li", { hasText: "Paused at “Your review”" })
       .getByRole("button", { name: "View" })
@@ -431,7 +431,7 @@ test.describe("console at 320 px", () => {
       .click();
     await expect(page.getByRole("heading", { name: "How serious", exact: true })).toBeVisible();
     await expectNoSidewaysScroll(page, "run view");
-    for (const tab of ["What ARIA did", "Evidence", "Logs", "History and forks"]) {
+    for (const tab of ["What ARIA did", "Evidence", "Logs", "History"]) {
       await page.getByRole("tab", { name: new RegExp(tab) }).click();
       await expectNoSidewaysScroll(page, `run view, ${tab}`);
     }

@@ -26,7 +26,8 @@ import {
 import { ApiError } from "@/lib/api/client";
 import { useAsk, useRun, useRuns } from "@/lib/api/hooks";
 import type { AskResponse, Evidence } from "@/lib/api/types";
-import { stripSeverity } from "@/lib/format";
+import { evidenceTitle } from "@/lib/evidence-text";
+import { capitalise, plainTemplate, stripSeverity } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 // Ask ARIA has one job: questions about ARIA's records, answered with their sources (items 21 to
@@ -134,8 +135,33 @@ export function sourceName(evidence: Evidence): string {
   if (rule?.[1]) return rule[1];
   const runbook = evidence.kind === "runbook" ? RUNBOOK_TITLE.exec(evidence.title) : null;
   if (runbook?.[1]) return runbook[1];
-  return evidence.title;
+  const tested = evidence.kind === "hypothesis" ? HYPOTHESIS_TITLE.exec(evidence.title) : null;
+  if (tested?.[1] && tested[2]) {
+    return `${TESTED[tested[1]] ?? "Still being tested"}: ${plainTemplate(tested[2])}`;
+  }
+  const check = evidence.kind === "tool" ? TOOL_TITLE.exec(evidence.title) : null;
+  if (check?.[1] && check[2]) {
+    return `${TOOL_NAMES[check[1]] ?? capitalise(check[1].replaceAll("_", " "))}: ${check[2]}`;
+  }
+  return evidenceTitle(evidence);
 }
+
+// "H2 supported: <statement>" and "component_timeline: <summary>", as the investigator records
+// them, read without the investigation's own labels.
+const HYPOTHESIS_TITLE = /^H\d+ (\w+): (.+)$/s;
+const TESTED: Record<string, string> = {
+  supported: "Backed by the evidence",
+  refuted: "Ruled out",
+};
+const TOOL_TITLE = /^([a-z_]+): (.+)$/s;
+const TOOL_NAMES: Record<string, string> = {
+  search_incidents: "Past incidents searched",
+  get_template_examples: "Examples of the pattern",
+  node_breakdown: "By server",
+  component_timeline: "Over time",
+  list_runbooks: "Runbooks that match",
+  get_runbook: "The runbook ARIA read",
+};
 
 /** Names for a list of sources: two past incidents with one title are told apart by the day each
  * was last seen. */
@@ -325,6 +351,7 @@ function Questions() {
   useEffect(() => saveTurns(turns), [turns]);
   const counter = useRef(0);
   const input = useRef<HTMLInputElement>(null);
+  const answers = useRef<HTMLOListElement>(null);
   const suggestions = about === ABOUT_ALL ? LIBRARY_QUESTIONS : INCIDENT_QUESTIONS;
 
   const send = (text: string) => {
@@ -342,8 +369,17 @@ function Questions() {
     ask.mutate(
       { question: q, run_id: turn.runId },
       {
-        onSuccess: (answer) =>
-          setTurns((list) => list.map((t) => (t.id === turn.id ? { ...t, answer } : t))),
+        onSuccess: (answer) => {
+          setTurns((list) => list.map((t) => (t.id === turn.id ? { ...t, answer } : t)));
+          // On a phone the answer lands below the form: bring it into view (J-p9).
+          requestAnimationFrame(() => {
+            const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+            answers.current?.firstElementChild?.scrollIntoView({
+              block: "nearest",
+              behavior: reduce ? "auto" : "smooth",
+            });
+          });
+        },
         onError: (error) =>
           setTurns((list) =>
             list.map((t) =>
@@ -451,7 +487,7 @@ function Questions() {
         {answerNews(turns[0])}
       </p>
       {turns.length ? (
-        <ol aria-label="Answers" className="grid max-w-3xl gap-8">
+        <ol ref={answers} aria-label="Answers" className="grid max-w-3xl gap-8">
           {turns.map((turn) => (
             <li key={turn.id} className="grid gap-3 border-t border-rule pt-6">
               <h2 className="text-xl tracking-heading wrap-anywhere">{turn.question}</h2>

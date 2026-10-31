@@ -83,6 +83,19 @@ describe("pacedSteps", () => {
     // Once the playback has caught up, the steps are as they are.
     expect(pacedSteps(finished, 4)).toEqual(finished);
   });
+
+  it("never shows a later step at work before the playback reaches it", () => {
+    // A live run whose report is being written while the playback still shows the first step.
+    const live: Step[] = [
+      { key: "read", label: "Read the logs", state: "done", took: 40 },
+      { key: "rate", label: "Rate severity", state: "done", took: 12 },
+      { key: "write", label: "Write the report", state: "running", took: null },
+      { key: "assess", label: "Decide", state: "done", took: 3, note: "looked further" },
+    ];
+    const shown = pacedSteps(live, 0);
+    expect(shown.map((s) => s.state)).toEqual(["running", "pending", "pending", "pending"]);
+    expect(shown[3]?.note).toBeUndefined();
+  });
 });
 
 describe("Steps", () => {

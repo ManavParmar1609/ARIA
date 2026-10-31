@@ -18,7 +18,7 @@ from aria.config import (
 )
 from aria.contracts.base import Claim, EvidenceKind, Severity
 from aria.contracts.report import ActionItem, IncidentReport
-from aria.contracts.retrieval import Hypothesis, Investigation, SimilarIncident
+from aria.contracts.retrieval import Hypothesis, Investigation, RetrievalResult, SimilarIncident
 from aria.data.scenarios import LinePools, ScenarioBuilder
 from aria.db.engine import get_engine, init_db
 from aria.evidence import EvidenceStore
@@ -236,13 +236,13 @@ async def test_a_moderate_window_without_errors_is_not_said_to_have_them(
         severity=ctx.severity.model_copy(update={"severity": Severity.SEV3}),
     )
     level = compose_draft(moderate).summary[0].text
-    assert level.startswith("SEV3: Moderate: a contained problem with limited user impact.")
+    assert level.startswith("SEV3 (moderate): a contained problem with limited user impact.")
     assert "contained errors" not in level
     noisy = replace(moderate, batch=ctx.batch)
     assert (
         compose_draft(noisy)
         .summary[0]
-        .text.startswith("SEV3: Moderate: contained errors with limited user impact.")
+        .text.startswith("SEV3 (moderate): contained errors with limited user impact.")
     )
 
 
@@ -558,6 +558,40 @@ def test_cut_text_never_ends_on_part_of_a_number() -> None:
         assert len(cut) <= limit
         assert cut.endswith("…")
         assert {n.value for n in numbers_in(cut)} <= whole, cut
+
+
+async def test_a_rare_decisive_line_reaches_the_summary() -> None:
+    """A full disk logged once decided the incident, yet the summary quoted only the most frequent
+    error: the most serious line is said too."""
+    lines = [
+        f"2026-10-31 09:59:{10 + i:02d} ERROR orders-svc[884]: database query timed out after 5000ms"
+        for i in range(4)
+    ] + [
+        "2026-10-31 09:59:44 ERROR postgres[1201]: could not write to file: No space left on device",
+        "2026-10-31 09:59:50 INFO api-gateway[2231]: GET /v1/orders 200 41ms",
+    ]
+    store = EvidenceStore()
+    batch = parse_lines(lines, system="generic", guard=GuardrailConfig(), evidence=store).batch
+    severity = (
+        await SeverityEngine.load(SeverityConfig()).assess(
+            batch.features, system="generic", evidence=store, use_llm=False
+        )
+    ).assessment
+    ctx = ReportContext(
+        run_id="run-disk",
+        system="generic",
+        batch=batch,
+        severity=severity,
+        evidence=store.all(),
+        retrieval=RetrievalResult(),
+        investigation=Investigation(),
+        runbooks=RUNBOOKS,
+    )
+    summary = [c.text for c in compose_draft(ctx).summary]
+    assert len(summary) <= 5
+    serious = [t for t in summary if t.startswith("The most serious line")]
+    assert serious
+    assert "No space left on device" in serious[0]
 
 
 def test_a_sentence_starting_with_a_name_keeps_the_name_as_written() -> None:
@@ -902,7 +936,7 @@ def test_offline_answers_explain_a_rating_and_the_first_step_without_tool_record
     output = _fallback(rank("Why was this rated SEV3, and what should I do first?", items))
     assert [claim.evidence_ids for claim in output.answer] == [[rule], [model], [runbook]]
     assert [claim.text for claim in output.answer] == [
-        "A severity rule points to SEV3: retries, timeouts or degradation messages.",
+        "One severity rule, on its own, would say SEV3: retries, timeouts or degradation messages.",
         (
             "The severity model finds SEV3 most likely (45%); its short list of likely levels "
             "is SEV2 or SEV3."

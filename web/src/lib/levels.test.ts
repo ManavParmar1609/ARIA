@@ -20,7 +20,12 @@ describe("shortListText", () => {
       shortListText(
         assessment({ prediction_set: ["SEV2"], decided_by: "model", needs_review: false }),
       ),
-    ).toBe("Only SEV2 is likely.");
+    ).toBe("Only SEV2 is likely, and the severity model is confident of it.");
+    expect(
+      shortListText(
+        assessment({ prediction_set: ["SEV2"], decided_by: "rules", needs_review: false }),
+      ),
+    ).toBe("Only SEV2 is likely, and the rules agree.");
   });
 
   it("asks for a check when ARIA is unsure, even with one likely level", () => {
@@ -38,6 +43,14 @@ describe("shortListText", () => {
         assessment({ prediction_set: ["SEV2"], confidence: 0.95, model_version: "rules-only" }),
       ),
     ).toBe("Probably SEV2. Only ARIA's rules rated these logs, so please confirm.");
+  });
+
+  it("calls a level under half likely the likeliest, not probable", () => {
+    expect(
+      shortListText(assessment({ prediction_set: ["SEV1"], severity: "SEV1", confidence: 0.46 })),
+    ).toBe(
+      "SEV1 is the likeliest level, at 46%. ARIA isn't sure enough to decide alone, so please confirm.",
+    );
   });
 
   it("says what came of the check once a person decided", () => {

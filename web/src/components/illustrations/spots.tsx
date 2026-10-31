@@ -19,20 +19,6 @@ function Frame({ className, children }: { className?: string; children: React.Re
   );
 }
 
-/** Hello: loose lines running together into one, the way a run turns logs into an incident. */
-export function WelcomeSpot({ className }: { className?: string }) {
-  return (
-    <Frame className={className}>
-      <rect x="20" y="30" width="220" height="140" rx="14" fill={PANEL} stroke="none" />
-      {[62, 78, 94, 110, 126, 142].map((y, i) => (
-        <path key={y} d={`M${38 + ((i * 23) % 40)} ${y}H120C150 ${y} 160 102 190 102`} />
-      ))}
-      <path d="M190 102H224" />
-      <circle cx="190" cy="102" r="4" fill={INK} />
-    </Frame>
-  );
-}
-
 /** All clear: rings settling outward from a quiet point. */
 export function AllClearSpot({ className }: { className?: string }) {
   return (

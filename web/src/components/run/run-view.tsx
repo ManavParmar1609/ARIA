@@ -37,6 +37,7 @@ import {
   isSeverity,
   type ReviewPrompt,
   type RunDetail,
+  type RunStateValues,
   type SeverityAssessment,
 } from "@/lib/api/types";
 import { absoluteTime, relativeTime, stripSeverity, writtenOffline } from "@/lib/format";
@@ -62,6 +63,21 @@ import { AgentTeam } from "./team";
 import { WhatHappened } from "./what-happened";
 
 const ACTIVE = new Set(["queued", "running", "awaiting_review"]);
+
+/** The parts of a run's state that the steps a playback has shown would have produced. */
+function reached(values: RunStateValues, passed: ReadonlySet<string>): RunStateValues {
+  const wrote = passed.has("write");
+  return {
+    ...values,
+    batch: passed.has("read") ? values.batch : undefined,
+    severity: passed.has("rate") ? values.severity : undefined,
+    retrieval: passed.has("recall") ? values.retrieval : undefined,
+    investigation: passed.has("investigate") ? values.investigation : undefined,
+    report: wrote ? values.report : undefined,
+    actions: wrote ? values.actions : undefined,
+    evidence: wrote ? values.evidence : undefined,
+  };
+}
 
 const TABS_KEY = "aria:run-tabs";
 const TABS = new Set(["work", "evidence", "logs", "history"]);
@@ -338,9 +354,10 @@ export function RunView({
   const progress = usePacedSteps(runId, timeline.events, status);
   // Fetched alongside the run, not after it; a queued run has no state yet.
   const state = useRunState(runId, checkpoint, status !== "queued");
-  // While a run that finished in a blink plays its steps back, the page shows it still at work,
-  // so the results arrive with the last step instead of before the first (M1).
-  const values = progress.playing ? undefined : state.data?.values;
+  // While a run that finished in a blink plays its steps back, each part of the page arrives as
+  // the trace reaches its step, so nothing shows before its step or goes away again (M1, J-M6).
+  const full = state.data?.values;
+  const values = progress.playing && full ? reached(full, progress.passed) : full;
   const evidence = useMemo(() => values?.evidence ?? values?.report?.evidence ?? [], [values]);
   const events = useMemo(() => values?.batch?.events ?? [], [values]);
   const cited = useMemo(() => new Set((values?.report?.evidence ?? []).map((e) => e.id)), [values]);
@@ -417,6 +434,7 @@ export function RunView({
           actions: values?.actions ?? [],
           deliveries: detail.deliveries ?? [],
           connected: (kind) => settings?.channels?.[kind] ?? false,
+          shared,
         }
       : null;
 
@@ -586,6 +604,7 @@ export function RunView({
             <SeenBefore
               incidents={report?.similar_incidents ?? values?.retrieval?.incidents ?? []}
               retrieval={values?.retrieval}
+              system={detail.system}
             />
           </div>
           <div className="min-w-0 xl:col-start-1 xl:row-start-3">
@@ -629,7 +648,7 @@ export function RunView({
             <TabsTrigger value="work">What ARIA did</TabsTrigger>
             <TabsTrigger value="evidence">Evidence ({evidence.length})</TabsTrigger>
             <TabsTrigger value="logs">Logs</TabsTrigger>
-            <TabsTrigger value="history">History and forks</TabsTrigger>
+            <TabsTrigger value="history">History</TabsTrigger>
           </TabsList>
           <TabsContent value="work" className="grid gap-6">
             {values ? (

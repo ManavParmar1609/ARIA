@@ -93,6 +93,9 @@ _GENERIC = frozenset(" ".join([*_KIND_WORDS.values(), *_TOOL_WORDS.values()]).sp
     "outages", "same", "kind", "sort", "type", "again", "occurred", "occur", "been", "being",
     "will", "would", "could", "can", "our", "your", "you", "some", "here", "now", "today",
     "yesterday", "ago", "recent", "recently", "happening", "going", "on", "matter", "wrong",
+    # How a question is put, not what it is about: "Which errors appeared most often?"
+    "appear", "appeared", "appears", "often", "most", "frequent", "frequently", "common",
+    "commonly", "show", "showed", "shown", "shows", "logged",
 }  # fmt: skip
 
 # A question about the state of things now, which no record of the past can answer.
@@ -426,7 +429,8 @@ def _plain(item: Evidence) -> str:
         why = _sentence(found["why"])
         if found["effect"] == "floor":
             return f"A severity rule keeps this at {found['level']} or more serious: {why}."
-        return f"A severity rule points to {found['level']}: {why}."
+        # One rule's score among several, not the rating: on its own it can disagree with it.
+        return f"One severity rule, on its own, would say {found['level']}: {why}."
     if item.kind is EvidenceKind.MODEL and (found := _SCORES.match(item.title)):
         return _scores(found["by"], found["shown"], data) or item.title
     if item.kind is EvidenceKind.RUNBOOK and (found := _RUNBOOK.match(item.title)):

@@ -20,7 +20,7 @@ describe("API errors", () => {
     answer(new Response("Internal Server Error", { status: 500 }));
     await expect(apiFetch("/api/v1/runs")).rejects.toMatchObject({
       status: 500,
-      detail: expect.stringMatching(/unexpected error.*Try again/),
+      detail: expect.stringMatching(/went wrong.*Try again/),
     });
   });
 

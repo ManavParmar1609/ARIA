@@ -281,7 +281,7 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
         <div className="grid max-w-sm gap-2">
           <Label htmlFor={`${id}-system`}>What wrote these logs?</Label>
           <Select value={system} onValueChange={setSystem}>
-            <SelectTrigger id={`${id}-system`}>
+            <SelectTrigger id={`${id}-system`} aria-describedby={`${id}-system-hint`}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -292,6 +292,11 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
               ))}
             </SelectContent>
           </Select>
+          {/* The named formats are the public datasets ARIA was tested on (J-m7). */}
+          <p id={`${id}-system-hint`} className="text-sm text-muted-foreground">
+            The named systems are the public logs ARIA was tested on. For anything else, such as a
+            database, a web server or Kubernetes, choose Not sure: ARIA reads common formats.
+          </p>
         </div>
 
         <details className="group rounded-lg bg-raised px-5 py-3">
@@ -310,12 +315,14 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
               />
             </div>
             <div className="grid">
+              {/* With no model to answer, the switch shows off rather than on but unused (J-m8). */}
               <Toggle
                 id={`${id}-llm`}
                 label="Use a language model if one is set up"
                 hint={llmHint}
-                checked={useLlm}
+                checked={useLlm && answers !== "offline"}
                 onChange={setUseLlm}
+                disabled={answers === "offline"}
               />
               <Toggle
                 id={`${id}-investigate`}

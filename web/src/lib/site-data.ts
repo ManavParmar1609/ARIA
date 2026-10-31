@@ -5,6 +5,7 @@ import evals from "@/data/eval-results.json";
 import live from "@/data/eval-live.json";
 
 import type { Severity } from "./api/types";
+import { evidenceTitle } from "./evidence-text";
 
 // Everything the landing page quotes comes from three committed files: the offline evaluation
 // (docs/eval-results.json), the live-provider run (docs/eval-live.json) and one recorded run
@@ -129,7 +130,7 @@ export function replay(): Replay {
     replayEvidence[id] = {
       id,
       kind: e.kind,
-      title: e.title,
+      title: evidenceTitle(e),
       detail: e.detail.length > 280 ? `${e.detail.slice(0, 277)}...` : e.detail,
       lines: linesFor(id),
     };

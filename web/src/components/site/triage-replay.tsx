@@ -210,7 +210,7 @@ export function TriageReplay({ data }: { data: Replay }) {
               <span className="font-mono text-foreground">{evidence.id}</span>{" "}
               <span>({KIND_LABEL[evidence.kind] ?? evidence.kind})</span>{" "}
               <span className="text-foreground">{evidence.title}</span>
-              {evidence.lines.length > 1 ? (
+              {evidence.lines.length > 1 && evidence.kind !== "template" ? (
                 <span> {evidence.lines.length} lines in this window carry it.</span>
               ) : null}
             </>

@@ -7,10 +7,10 @@ const base = { severity: "SEV3", prediction_set: ["SEV3"] };
 describe("decisionPhrase", () => {
   it("names who settled it when a rule, the model or a reviewer did", () => {
     expect(decisionPhrase({ ...base, decided_by: "rules" })).toBe(
-      "Set by the rules, and the model agrees.",
+      "Set by the rules, and the severity model agrees.",
     );
     expect(decisionPhrase({ ...base, decided_by: "model" })).toBe(
-      "Confident: decided by the model.",
+      "Confident: decided by the severity model.",
     );
     expect(decisionPhrase({ ...base, decided_by: "human" })).toBe(
       "A reviewer chose SEV3 from the short list.",

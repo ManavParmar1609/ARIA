@@ -276,7 +276,8 @@ function Palette({
         id: `runbook:${book.slug}`,
         group: "Runbooks",
         label: book.title,
-        hint: book.when_to_use,
+        // The runbook marks log text with backticks; a hint is plain text, so it quotes instead.
+        hint: book.when_to_use.replace(/`([^`]+)`/g, "“$1”"),
         keywords: `runbook playbook steps fix ${book.slug} ${book.systems.map(systemName).join(" ")}`,
         icon: BookOpenIcon,
         run: () => go(`/console/runbooks/${encodeURIComponent(book.slug)}`),
@@ -413,7 +414,8 @@ function Palette({
     }
   };
 
-  let index = -1;
+  // Each result's place in ``shown``, which the list draws in the same order, group by group.
+  const position = new Map(shown.map((item, i) => [item.id, i]));
   return (
     <>
       <div className="flex items-center gap-3 border-b border-rule px-5">
@@ -439,80 +441,82 @@ function Palette({
           Esc
         </kbd>
       </div>
+      {/* Outside the list: a listbox may hold only options and their groups (RQ-m2). */}
+      {shown.length === 0 ? (
+        <p className="px-5 py-8 text-center text-muted-foreground" role="status">
+          Nothing matches “{query}”. Try a page name, an incident, or a word such as “prediction
+          set”.
+        </p>
+      ) : null}
       <div
         ref={list}
         id={listId}
         role="listbox"
         aria-label="Results"
-        className="max-h-[min(60vh,32rem)] overflow-y-auto p-2"
-      >
-        {shown.length === 0 ? (
-          <p className="px-3 py-8 text-center text-muted-foreground" role="status">
-            Nothing matches “{query}”. Try a page name, an incident, or a word such as “prediction
-            set”.
-          </p>
-        ) : (
-          GROUPS.map((group) => {
-            const inGroup = shown.filter((item) => item.group === group);
-            if (inGroup.length === 0) return null;
-            const headingId = `${listId}-${group}`;
-            return (
-              <div key={group} role="group" aria-labelledby={headingId} className="pb-1">
-                <div
-                  id={headingId}
-                  role="presentation"
-                  className="px-3 pt-3 pb-1.5 text-sm font-medium text-muted-foreground"
-                >
-                  {group}
-                </div>
-                {inGroup.map((item) => {
-                  index += 1;
-                  const i = index;
-                  const Icon = item.icon;
-                  const selected = i === activeIndex;
-                  return (
-                    // Keyboard selection goes through the input (aria-activedescendant), as the
-                    // ARIA combobox pattern asks; options take clicks but never focus.
-                    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus
-                    <div
-                      key={item.id}
-                      id={optionId(i)}
-                      role="option"
-                      aria-selected={selected}
-                      onMouseMove={() => setActive(i)}
-                      onClick={() => item.run()}
-                      className={cn(
-                        "flex cursor-pointer items-center gap-3 rounded-md px-3 py-2.5",
-                        selected
-                          ? "bg-panel-keylime text-heading dark:bg-highlight"
-                          : "text-foreground",
-                      )}
-                    >
-                      <Icon aria-hidden className="size-4 shrink-0" strokeWidth={1.75} />
-                      <span className="grid min-w-0 flex-1">
-                        <span className="truncate">{item.label}</span>
-                        {item.hint ? (
-                          <span
-                            className={cn(
-                              "truncate text-sm",
-                              selected ? "text-heading" : "text-muted-foreground",
-                            )}
-                          >
-                            {item.hint}
-                          </span>
-                        ) : null}
-                      </span>
-                      {item.badge}
-                      {selected ? (
-                        <CornerDownLeftIcon aria-hidden className="size-4 shrink-0" />
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })
+        className={cn(
+          "max-h-[min(60vh,32rem)] overflow-y-auto p-2",
+          shown.length === 0 && "hidden",
         )}
+      >
+        {GROUPS.map((group) => {
+          const inGroup = shown.filter((item) => item.group === group);
+          if (inGroup.length === 0) return null;
+          const headingId = `${listId}-${group}`;
+          return (
+            <div key={group} role="group" aria-labelledby={headingId} className="pb-1">
+              <div
+                id={headingId}
+                role="presentation"
+                className="px-3 pt-3 pb-1.5 text-sm font-medium text-muted-foreground"
+              >
+                {group}
+              </div>
+              {inGroup.map((item) => {
+                const i = position.get(item.id) ?? 0;
+                const Icon = item.icon;
+                const selected = i === activeIndex;
+                return (
+                  // Keyboard selection goes through the input (aria-activedescendant), as the
+                  // ARIA combobox pattern asks; options take clicks but never focus.
+                  // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus
+                  <div
+                    key={item.id}
+                    id={optionId(i)}
+                    role="option"
+                    aria-selected={selected}
+                    onMouseMove={() => setActive(i)}
+                    onClick={() => item.run()}
+                    className={cn(
+                      "flex cursor-pointer items-center gap-3 rounded-md px-3 py-2.5",
+                      selected
+                        ? "bg-panel-keylime text-heading dark:bg-highlight"
+                        : "text-foreground",
+                    )}
+                  >
+                    <Icon aria-hidden className="size-4 shrink-0" strokeWidth={1.75} />
+                    <span className="grid min-w-0 flex-1">
+                      <span className="truncate">{item.label}</span>
+                      {item.hint ? (
+                        <span
+                          className={cn(
+                            "truncate text-sm",
+                            selected ? "text-heading" : "text-muted-foreground",
+                          )}
+                        >
+                          {item.hint}
+                        </span>
+                      ) : null}
+                    </span>
+                    {item.badge}
+                    {selected ? (
+                      <CornerDownLeftIcon aria-hidden className="size-4 shrink-0" />
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-rule px-5 py-3 text-sm text-muted-foreground">
         {/* Keys mean nothing on a touch screen, where a tap opens a result. */}
