@@ -295,7 +295,7 @@ export function TriageReplay({ data }: { data: Replay }) {
               <span className="font-mono text-foreground">{evidence.id}</span>{" "}
               <span className="text-foreground">{evidence.title}</span>
               {firstLit ? (
-                <span className="mt-1 block font-mono text-xs break-all">
+                <span className="mt-1 block font-mono text-xs wrap-anywhere">
                   Line {firstLit.lineNo}: {firstLit.text}
                 </span>
               ) : null}

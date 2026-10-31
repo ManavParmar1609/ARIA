@@ -18,21 +18,36 @@ import { decidedByLabel } from "@/lib/decision";
 import { SEVERITIES } from "@/lib/api/types";
 import {
   bglResult,
+  bglVerdict,
   buildsResult,
+  buildsVerdict,
   decidingResult,
+  decidingVerdict,
   endToEndResult,
+  endToEndVerdict,
   gitlabResult,
+  gitlabVerdict,
   hadoopResult,
+  hadoopVerdict,
   hdfsResult,
+  hdfsVerdict,
   injectionResult,
+  injectionVerdict,
   liveResult,
+  liveVerdict,
   openstackResult,
+  openstackVerdict,
   postmortemsResult,
+  postmortemsVerdict,
   readingResult,
+  readingVerdict,
   severityResult,
+  severityVerdict,
   TestQuestions,
   thunderbirdResult,
+  thunderbirdVerdict,
   ticketsResult,
+  ticketsVerdict,
 } from "@/components/console/test-questions";
 import { EVAL_DOC_URL, type Evaluation, type RealData, type RealLogs } from "@/lib/site-data";
 import { count } from "@/lib/format";
@@ -47,6 +62,7 @@ function Section({
   id,
   title,
   what,
+  verdict,
   headline,
   intro,
   source,
@@ -56,6 +72,8 @@ function Section({
   title: string;
   /** One sentence on what was tested. */
   what: React.ReactNode;
+  /** What the result means for the person on call, in one plain sentence: it opens the result. */
+  verdict?: string;
   /** The result, beside the strongest simple method. */
   headline?: React.ReactNode;
   /** How it was tested, in full: shown with the details. */
@@ -76,10 +94,15 @@ function Section({
         </h3>
         <p className="text-base text-muted-foreground">{what}</p>
       </div>
-      {headline ? (
+      {verdict || headline ? (
         <div className="grid max-w-3xl gap-1 rounded-md bg-panel-keylime px-4 py-3">
           <p className="text-sm font-semibold text-heading">Result</p>
-          <p className="text-base leading-relaxed text-foreground">{headline}</p>
+          {verdict ? (
+            <p className="text-lg leading-relaxed font-medium text-foreground">{verdict}</p>
+          ) : null}
+          {headline ? (
+            <p className="text-base leading-relaxed text-foreground">{headline}</p>
+          ) : null}
         </div>
       ) : null}
       <details className="group">
@@ -108,13 +131,21 @@ function Section({
   );
 }
 
+/**
+ * A row of figures, each over its label. A figure never wraps ("3 of 5,186" stays on one line), so
+ * the row wraps instead: two to a line on a phone, three on wider screens, and a long figure takes
+ * the width it needs, alone on its line if it must. Capped at three across, so labels stay short.
+ */
 function Facts({ items }: { items: [string, string][] }) {
   return (
-    <dl className="grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-3 xl:grid-cols-6">
+    <dl className="flex max-w-3xl flex-wrap gap-6">
       {items.map(([label, value]) => (
-        <div key={label} className="grid content-start gap-2 border-t border-rule pt-3">
+        <div
+          key={label}
+          className="grid flex-[1_1_6.5rem] content-start gap-2 border-t border-rule pt-3 sm:basis-[11.5rem]"
+        >
           <dt className="order-2 text-sm text-muted-foreground">{label}</dt>
-          <dd className="stat order-1 text-[1.75rem]">
+          <dd className="stat order-1 text-[1.75rem] whitespace-nowrap">
             <RollingNumber value={value} />
           </dd>
         </div>
@@ -225,6 +256,7 @@ function RealSection({ real }: { real: RealLogs }) {
       id="ev-real"
       title="A Hadoop file system's blocks, judged by experts"
       what="Can ARIA find the storage blocks that failed, from the log lines alone?"
+      verdict={hdfsVerdict(real)}
       headline={hdfsResult(real)}
       source={real.citation}
       intro={
@@ -488,6 +520,7 @@ function MoreRealSections({ more, data }: { more: RealData; data: Evaluation }) 
         id="ev-bgl"
         title="A supercomputer's own alarm tags"
         what="Does ARIA rate each stretch of BlueGene/L's whole log as seriously as its administrators' alert tags do?"
+        verdict={bglVerdict(more.bgl)}
         headline={bglResult(more.bgl)}
         source={bgl.citation}
         intro={
@@ -545,6 +578,7 @@ function MoreRealSections({ more, data }: { more: RealData; data: Evaluation }) 
         id="ev-thunderbird"
         title="A second supercomputer's alarm tags"
         what={`The same test on ${Math.round(tb.days / 7)} weeks of the Thunderbird cluster's log, which nothing was tuned on.`}
+        verdict={thunderbirdVerdict(more)}
         headline={thunderbirdResult(more)}
         intro={
           <>
@@ -593,6 +627,7 @@ function MoreRealSections({ more, data }: { more: RealData; data: Evaluation }) 
         id="ev-hadoop"
         title="Hadoop jobs with injected failures"
         what="Can ARIA tell the jobs that failed from the healthy ones, and say how they failed?"
+        verdict={hadoopVerdict(more)}
         headline={hadoopResult(more)}
         source={hadoop.citation}
         intro={
@@ -639,6 +674,7 @@ function MoreRealSections({ more, data }: { more: RealData; data: Evaluation }) 
         id="ev-openstack"
         title="OpenStack runs with injected bugs"
         what="Can ARIA tell the runs a bug broke, including the ones that failed silently?"
+        verdict={openstackVerdict(more)}
         headline={openstackResult(more)}
         source={openstack.citation}
         intro={
@@ -709,6 +745,7 @@ function MoreRealSections({ more, data }: { more: RealData; data: Evaluation }) 
         id="ev-builds"
         title="Failed CI builds"
         what="Do the lines ARIA keeps as evidence include the reason a build failed?"
+        verdict={buildsVerdict(more)}
         headline={buildsResult(more)}
         intro={
           <>
@@ -737,6 +774,7 @@ function MoreRealSections({ more, data }: { more: RealData; data: Evaluation }) 
         id="ev-tickets"
         title="A service desk's tickets"
         what="Can ARIA set a ticket's priority when it opens, and spot the ones that will miss their deadline?"
+        verdict={ticketsVerdict(more)}
         headline={ticketsResult(more)}
         source={tickets.citation}
         intro={
@@ -792,6 +830,7 @@ function MoreRealSections({ more, data }: { more: RealData; data: Evaluation }) 
         id="ev-gitlab"
         title="GitLab.com's incidents"
         what="When an incident comes in, does ARIA find past ones on the same service, or with the same cause?"
+        verdict={gitlabVerdict(more)}
         headline={gitlabResult(more)}
         source={gitlab.citation}
         intro={
@@ -841,6 +880,7 @@ function MoreRealSections({ more, data }: { more: RealData; data: Evaluation }) 
         id="ev-postmortems"
         title="Three clouds' post-mortems"
         what="Does ARIA find past post-mortems with the same root cause, or the same fix?"
+        verdict={postmortemsVerdict(more)}
         headline={postmortemsResult(more)}
         source={postmortems.citation}
         intro={
@@ -888,6 +928,7 @@ function MoreRealSections({ more, data }: { more: RealData; data: Evaluation }) 
         id="ev-injection"
         title="Public prompt-injection attacks"
         what="Does ARIA set aside log lines written to talk it out of an incident, when someone else wrote them?"
+        verdict={injectionVerdict(more)}
         headline={injectionResult(data, more)}
         intro={
           <>
@@ -1000,6 +1041,7 @@ export function Evals({
                 id="ev-severity"
                 title="Severity on built samples"
                 what="Real log lines composed into incidents, each given a level by a written policy."
+                verdict={severityVerdict(data)}
                 headline={severityResult(data)}
                 intro={`${s.n} labelled windows. ARIA's policy against simpler methods on the same windows.`}
               >
@@ -1048,6 +1090,7 @@ export function Evals({
                 id="ev-calibration"
                 title="Knowing when not to decide"
                 what="Does ARIA's confidence mean what it says, and does it pass the hard ones to a person?"
+                verdict={decidingVerdict(data)}
                 headline={decidingResult(data)}
                 intro="A confident wrong answer is worse than a flagged one. These measure whether ARIA's confidence means what it says."
               >
@@ -1138,6 +1181,7 @@ export function Evals({
                 id="ev-pipeline"
                 title="End to end on built samples"
                 what="Each run goes through every step, offline, up to the review."
+                verdict={endToEndVerdict(data)}
                 headline={endToEndResult(data)}
                 intro={`${p.n} runs through the whole graph, offline, to the review pause.`}
               >
@@ -1172,6 +1216,7 @@ export function Evals({
                 id="ev-robustness"
                 title="Reading logs, and hostile input"
                 what="Does ARIA group log lines the way people did, and stay standing on broken or hostile lines?"
+                verdict={readingVerdict(data)}
                 headline={readingResult(data)}
                 intro={`Template grouping against Loghub's and GAIA's hand labels, and ${r.edgeN.toLocaleString("en")} hostile or broken inputs.`}
               >
@@ -1223,6 +1268,7 @@ export function Evals({
                 id="ev-live"
                 title="With a language model"
                 what={`The built-sample runs again, with ${live.answeredBy} writing the reports.`}
+                verdict={liveVerdict(data)}
                 headline={liveResult(data)}
                 intro={`${live.n} runs through ${live.answeredBy}, ${live.createdAt.slice(0, 10)}.`}
               >

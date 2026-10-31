@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
 
 import { ErrorState, LoadingRows } from "@/components/console/states";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,10 @@ export function ModelKeyPanel({ kinds }: { kinds: string[] }) {
   const forget = useForgetModelKey();
   const [provider, setProvider] = useState(kinds[0] ?? "");
   const [key, setKey] = useState("");
+  // Set when "Check and save key" is pressed with nothing to check. The button stays enabled, so
+  // a keyboard can reach it and hear why it can't go ahead yet.
+  const [empty, setEmpty] = useState(false);
+  const keyField = useRef<HTMLInputElement>(null);
 
   if (saved.isPending) return <LoadingRows rows={2} label="Loading your model key" />;
   if (saved.isError) {
@@ -50,10 +54,17 @@ export function ModelKeyPanel({ kinds }: { kinds: string[] }) {
   }
 
   const chosen = MODEL_KEYS[provider];
-  const refused =
-    save.error?.message ?? (save.data && !save.data.accepted ? save.data.detail : null);
+  const refused = empty
+    ? "Paste your API key first."
+    : (save.error?.message ?? (save.data && !save.data.accepted ? save.data.detail : null));
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    if (save.isPending) return;
+    if (key.trim() === "") {
+      setEmpty(true);
+      keyField.current?.focus();
+      return;
+    }
     save.mutate(
       { provider, key },
       {
@@ -101,6 +112,7 @@ export function ModelKeyPanel({ kinds }: { kinds: string[] }) {
       <div className="grid gap-1.5">
         <Label htmlFor={`${id}-key`}>API key</Label>
         <Input
+          ref={keyField}
           id={`${id}-key`}
           type="password"
           autoComplete="off"
@@ -109,6 +121,7 @@ export function ModelKeyPanel({ kinds }: { kinds: string[] }) {
           value={key}
           onChange={(event) => {
             setKey(event.target.value);
+            setEmpty(false);
             if (save.data || save.error) save.reset();
           }}
           aria-invalid={refused ? true : undefined}
@@ -140,7 +153,12 @@ export function ModelKeyPanel({ kinds }: { kinds: string[] }) {
         ) : null}
       </div>
       <div>
-        <Button type="submit" disabled={save.isPending || !provider || key.trim() === ""}>
+        {/* Never disabled, so it stays in the Tab order: while a check runs it only waits. */}
+        <Button
+          type="submit"
+          aria-disabled={save.isPending || undefined}
+          className="aria-disabled:opacity-50"
+        >
           {save.isPending ? "Checking the key…" : "Check and save key"}
         </Button>
       </div>

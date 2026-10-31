@@ -1,6 +1,7 @@
 import { Suspense, type ReactNode } from "react";
 
 import { Term } from "@/components/aria/term";
+import { resultsInShort } from "@/components/console/test-questions";
 import { Explainer } from "@/components/site/explainer";
 import { Faq } from "@/components/site/faq";
 import { ResultsRow } from "@/components/site/results-row";
@@ -170,9 +171,13 @@ export function StepsPart() {
   );
 }
 
-/** Part 4: four findings from the tests, one where ARIA falls short. */
+/** Part 4: four findings from the tests, one where ARIA falls short, led by what they mean for
+ * the person on call, so a figure such as "the best standard detector did the same" reads as the
+ * match it is. */
 export function ResultsPart() {
   const datasets = realData();
+  const data = evaluation();
+  const real = realLogs();
   // The HDFS log plus every other real dataset on Test results.
   const nDatasets = Object.keys(datasets).length + 1;
   return (
@@ -180,9 +185,12 @@ export function ResultsPart() {
       id="results"
       tinted
       title="What the tests show"
-      intro={`ARIA is tested on ${nDatasets} public, labelled datasets, each against a simpler method. Four of the findings, including one where it falls short:`}
+      intro={`ARIA is tested on ${nDatasets} public, labelled datasets, each against a simpler method. The four findings below include one where it falls short.`}
     >
-      <ResultsRow data={evaluation()} real={realLogs()} more={datasets} />
+      <p className="max-w-[62ch] text-lg leading-relaxed font-medium text-heading">
+        {resultsInShort(data, real, datasets)}
+      </p>
+      <ResultsRow data={data} real={real} more={datasets} />
     </Part>
   );
 }

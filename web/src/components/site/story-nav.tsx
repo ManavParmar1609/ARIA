@@ -3,16 +3,44 @@
 import { ArrowLeftIcon, ArrowRightIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
 
 import { STORY_PARTS } from "@/components/site/story-parts";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { cn } from "@/lib/utils";
 
-/** The parts of How ARIA works, numbered in reading order; the one open is filled. */
+/** The heading of the part on show: the first one after the parts' navigation that is laid out
+ * (a part kept hidden for Back has no boxes). */
+export function partHeading(nav: Element): HTMLElement | null {
+  for (const heading of nav.ownerDocument.querySelectorAll<HTMLElement>("h2")) {
+    if (!(nav.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
+    if (heading.getClientRects().length > 0) return heading;
+  }
+  return null;
+}
+
+/**
+ * The parts of How ARIA works, numbered in reading order; the one open is filled.
+ *
+ * Moving to another part (a numbered pill, Next or Previous at the foot, or Back) puts focus on
+ * the new part's heading, as a new page would. Otherwise focus stays on the link that was used,
+ * out of view at the foot of the page, and the next Tab leaves the part. Arriving on a part, by a
+ * link from elsewhere or a reload, leaves focus where the browser puts it.
+ */
 export function StoryNav() {
   const pathname = usePathname();
+  const nav = useRef<HTMLElement>(null);
+  const shown = useRef(pathname);
+  useEffect(() => {
+    if (shown.current === pathname) return;
+    shown.current = pathname;
+    const heading = nav.current ? partHeading(nav.current) : null;
+    if (!heading) return;
+    if (!heading.hasAttribute("tabindex")) heading.tabIndex = -1;
+    heading.focus();
+  }, [pathname]);
   return (
-    <nav aria-label="Parts of How ARIA works">
+    <nav ref={nav} aria-label="Parts of How ARIA works">
       <ol className="flex flex-wrap gap-2">
         {STORY_PARTS.map((part, i) => {
           const current = pathname === part.href;
@@ -48,7 +76,7 @@ export function StoryNav() {
 }
 
 /** Back and next at the foot of each part, so the parts read in order; the last one leads to a
- * triage of your own. */
+ * triage of your own. Following one moves focus to the new part's heading (StoryNav). */
 export function StoryPager() {
   const pathname = usePathname();
   const i = STORY_PARTS.findIndex((part) => part.href === pathname);

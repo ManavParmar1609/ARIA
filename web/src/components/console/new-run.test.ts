@@ -1,6 +1,24 @@
-import { describe, expect, it } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { createElement } from "react";
+import { describe, expect, it, vi } from "vitest";
 
-import { loadDraft, logsHint, modelHint, megabytes } from "./new-run";
+import { loadDraft, logsHint, modelHint, megabytes, NewRun } from "./new-run";
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/console/runs/new",
+  useSearchParams: () => new URLSearchParams("tab=own"),
+  useRouter: () => ({ push: vi.fn() }),
+}));
+vi.mock("@/lib/api/hooks", () => ({
+  useCreateRun: () => ({ mutate: vi.fn(), isPending: false, error: null }),
+  useModelKey: () => ({ data: undefined }),
+  useSettingsView: () => ({ data: undefined }),
+  // The Samples tab's, which stays closed here.
+  useScenarios: () => ({ isPending: true }),
+  useRealIncidents: () => ({ isPending: true }),
+  useStartSample: () => ({}),
+  useReplay: () => ({}),
+}));
 
 describe("logsHint", () => {
   it("says how pasted lines are protected", () => {
@@ -95,5 +113,52 @@ describe("the pasted draft", () => {
     expect(blank.system).toBe("generic");
     expect(loadDraft(storage("not json"))).toEqual(blank);
     expect(loadDraft(storage(JSON.stringify({ text: 42, useLlm: "no" })))).toEqual(blank);
+  });
+});
+
+describe("Your own logs", () => {
+  const familiar = () => screen.getByRole("button", { name: /^Linux server/ });
+  const box = () => screen.getByLabelText("Log lines");
+
+  it("fills the box from a familiar log and, from the keyboard, takes focus there", () => {
+    render(createElement(NewRun));
+    // A key's click: no pointer pressed first.
+    fireEvent.click(familiar());
+    expect((box() as HTMLTextAreaElement).value).not.toBe("");
+    expect(document.activeElement).toBe(box());
+    // The count beside the box says how many lines came in.
+    expect(screen.getByText(/^[\d,]+ lines$/).getAttribute("aria-live")).toBe("polite");
+  });
+
+  it("keeps focus on a tapped log, so no on-screen keyboard covers Start a triage", () => {
+    render(createElement(NewRun));
+    act(() => familiar().focus());
+    fireEvent.pointerDown(familiar(), { pointerType: "touch" });
+    fireEvent.click(familiar());
+    expect((box() as HTMLTextAreaElement).value).not.toBe("");
+    expect(document.activeElement).toBe(familiar());
+  });
+
+  it("keeps focus where it is on a screen that can't hover, such as a phone's", () => {
+    vi.spyOn(window, "matchMedia").mockImplementation(
+      (query) => ({ matches: query === "(hover: none)", media: query }) as MediaQueryList,
+    );
+    render(createElement(NewRun));
+    act(() => familiar().focus());
+    fireEvent.click(familiar());
+    expect(document.activeElement).toBe(familiar());
+  });
+
+  it("asks for lines with a placeholder that can't pass for a log", () => {
+    render(createElement(NewRun));
+    expect(box().getAttribute("placeholder")).toBe("Paste log lines here, one per line.");
+    expect(box().className).toContain("placeholder:font-sans");
+  });
+
+  it("points a newcomer to the guide", () => {
+    render(createElement(NewRun));
+    expect(screen.getByRole("link", { name: "Start with the guide" }).getAttribute("href")).toBe(
+      "/console/guide",
+    );
   });
 });

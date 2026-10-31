@@ -142,7 +142,17 @@ export function NewRun({ publicDemo = false }: { publicDemo?: boolean }) {
       <PageHeader
         title="New triage"
         description="Choose where the logs come from and an issue to triage, or paste your own logs. ARIA reads them, rates how serious the incident is and drafts a report with its sources. Nothing is sent until you approve it."
-      />
+      >
+        <p className="flex flex-wrap items-center gap-x-1 text-sm text-muted-foreground">
+          New here?
+          <Link
+            href="/console/guide"
+            className="inline-flex min-h-6 items-center underline underline-offset-4 hover:text-heading"
+          >
+            Start with the guide
+          </Link>
+        </p>
+      </PageHeader>
       <Tabs value={tab} onValueChange={setTab} className="grid gap-8">
         <TabsList aria-label="What to triage">
           <TabsTrigger value="samples">Samples</TabsTrigger>
@@ -230,8 +240,17 @@ const FAMILIAR: { id: string; name: string; what: string }[] = [
 type FamiliarLog = { title: string; system: string; lines: string[] };
 
 /** One click puts a familiar log in the box: for someone with no logs of their own at hand. */
-function FamiliarLogs({ chosen, onPick }: { chosen: string; onPick: (log: FamiliarLog) => void }) {
+function FamiliarLogs({
+  chosen,
+  onPick,
+}: {
+  chosen: string;
+  /** `touch`: picked on a touch screen, so focus should stay where it is. */
+  onPick: (log: FamiliarLog, touch: boolean) => void;
+}) {
   const id = useId();
+  // What pressed a log last: a finger or a pen, a mouse, or nothing (a key).
+  const pointer = useRef("");
   const byId = new Map(samples.map((sample) => [sample.id, sample]));
   return (
     <section
@@ -257,13 +276,24 @@ function FamiliarLogs({ chosen, onPick }: { chosen: string; onPick: (log: Famili
               <button
                 type="button"
                 aria-pressed={chosen === text}
-                onClick={() =>
-                  onPick({
-                    title: `${log.name}: ${log.what}`,
-                    system: sample.system,
-                    lines: sample.lines,
-                  })
-                }
+                onPointerDown={(event) => {
+                  pointer.current = event.pointerType;
+                }}
+                onKeyDown={() => {
+                  pointer.current = "";
+                }}
+                onClick={() => {
+                  const touch = pointer.current === "touch" || pointer.current === "pen";
+                  pointer.current = "";
+                  onPick(
+                    {
+                      title: `${log.name}: ${log.what}`,
+                      system: sample.system,
+                      lines: sample.lines,
+                    },
+                    touch,
+                  );
+                }}
                 className="inline-flex min-h-10 items-center gap-2 rounded-full border border-rule bg-background px-4 py-1.5 text-left text-sm transition-colors duration-(--duration-quick) hover:border-control aria-pressed:border-primary aria-pressed:bg-highlight"
               >
                 <span className="font-semibold text-heading">{log.name}</span>
@@ -379,14 +409,18 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
     );
   };
 
-  const pick = (log: FamiliarLog) => {
+  const pick = (log: FamiliarLog, touch: boolean) => {
     setText(log.lines.join("\n"));
     setSystem(log.system in SYSTEM_NAMES ? log.system : "generic");
     setTitle(log.title);
     setTouched(false);
-    // To the lines, so the reader sees what was filled in and the button to start sits below.
-    logsBox.current?.focus({ preventScroll: true });
-    logsBox.current?.scrollIntoView({ block: "nearest" });
+    const box = logsBox.current;
+    // The lines come into view either way, and the count beside them says how many arrived.
+    // With a keyboard or a mouse, focus goes to them, so the reader sees what was filled in and
+    // the button to start sits below. On a touch screen it stays on the button: focusing the box
+    // would raise the on-screen keyboard over "Start a triage".
+    if (!touch && !window.matchMedia("(hover: none)").matches) box?.focus({ preventScroll: true });
+    box?.scrollIntoView({ block: "nearest" });
   };
 
   return (
@@ -413,10 +447,9 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
             spellCheck={false}
             wrap="off"
             rows={8}
-            className="font-mono text-xs leading-5"
-            placeholder={
-              "Paste log lines here, one per line, such as:\n2026-10-31 10:00:01 ERROR api.gateway: upstream timed out"
-            }
+            // The placeholder is an instruction in the sans, so the empty box never looks filled.
+            className="font-mono text-xs leading-5 placeholder:font-sans placeholder:text-sm"
+            placeholder="Paste log lines here, one per line."
             aria-invalid={touched && problem ? true : undefined}
             aria-describedby={`${id}-logs-hint`}
           />

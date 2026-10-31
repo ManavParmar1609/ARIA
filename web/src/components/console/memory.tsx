@@ -208,30 +208,43 @@ export function Memory() {
       ) : (
         <>
           {/* While a new search loads, the last results stay on screen; the count waits for the
-              new ones, so it never announces the old list under the new words (RQ-p10). */}
-          <p className="text-sm text-muted-foreground" aria-live="polite">
-            {incidents.isPlaceholderData
-              ? "Searching…"
-              : `${
+              new ones, so it never announces the old list under the new words (RQ-p10). A search
+              that finds nothing says so once, in the card, which the same live region reads. */}
+          <div aria-live="polite" className="grid">
+            {!incidents.isPlaceholderData && shown.length === 0 ? (
+              <EmptyState
+                title={
                   searching
-                    ? shown.length === 0
-                      ? `No incident matches "${deferred}"`
-                      : shown.length === 1
-                        ? `The closest incident to "${deferred}", by keyword and by meaning`
-                        : `The ${shown.length} closest incidents to "${deferred}", by keyword and by meaning, closest first`
-                    : shown.length === 1
-                      ? "The most recent incident"
-                      : `The ${shown.length} most recent incidents`
-                }${kinds}.`}
-          </p>
-          {shown.length === 0 ? (
-            <EmptyState
-              title="Nothing matches that filter"
-              art={<SearchSpot className="h-auto w-full" />}
-            >
-              Try fewer words, or another system.
-            </EmptyState>
-          ) : (
+                    ? `No past incident matches "${deferred}"`
+                    : `No past incident from ${systemName(system)}`
+                }
+                art={<SearchSpot className="h-auto w-full" />}
+                // A long search without spaces still wraps on a phone.
+                className="[&_p]:wrap-anywhere"
+              >
+                {searching
+                  ? system === "all"
+                    ? "Try fewer or different words."
+                    : "Try fewer words, or choose All systems."
+                  : "Choose All systems to see every past incident."}
+              </EmptyState>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {incidents.isPlaceholderData
+                  ? "Searching…"
+                  : `${
+                      searching
+                        ? shown.length === 1
+                          ? `The closest incident to "${deferred}", by keyword and by meaning`
+                          : `The ${shown.length} closest incidents to "${deferred}", by keyword and by meaning, closest first`
+                        : shown.length === 1
+                          ? "The most recent incident"
+                          : `The ${shown.length} most recent incidents`
+                    }${kinds}.`}
+              </p>
+            )}
+          </div>
+          {shown.length === 0 ? null : (
             <ul className="grid gap-2">
               {shown.slice(0, limit).map((incident) => (
                 <li key={incident.incident_id}>
