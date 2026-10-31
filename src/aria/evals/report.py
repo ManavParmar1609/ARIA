@@ -445,6 +445,24 @@ def _bgl(section: Mapping[str, Any], system: str = "bgl") -> list[str]:
             "scenarios are composed from. The scenarios re-time and recombine those lines; no "
             "window here was seen in training."
         ),
+        *(
+            [
+                (
+                    "- **What paged on quiet windows**: the rules that fired most often on the "
+                    "SEV4 windows ARIA rated SEV1-2 were "
+                    + _and(
+                        [
+                            f"`{rule}` ({n:,} windows)"
+                            for rule, n in section.get("rules_on_paged_quiet_windows", [])
+                        ]
+                    )
+                    + ". These rules count words and error lines in the window itself; none knows "
+                    "what is routine for a system ARIA has not seen before."
+                )
+            ]
+            if section.get("rules_on_paged_quiet_windows")
+            else []
+        ),
         (
             f"- **Lines left out or cut**: {section['lines_without_time']:,} lines carry no "
             f"timestamp and cannot be placed in a window. {section['windows_over_line_cap']:,} "
@@ -1546,18 +1564,24 @@ def _bgl_summary(section: Mapping[str, Any], machine: str = "a supercomputer") -
     # Next to the strongest baselines, not the weakest: ARIA's own rules and the highest level.
     against = [
         f"{label}: {methods[key]['severe_missed']:,} and {methods[key]['quiet_paged']:,}"
+        if severe
+        else f"{label}: {methods[key]['quiet_paged']:,}"
         for key, label in (
             ("rules_only", "ARIA's rules alone"),
             ("highest_level", "the highest log level"),
         )
         if key in methods
     ]
+    caught = (
+        f"ARIA rated {aria['severe_missed']:,} of the {severe:,} SEV1-2 windows as SEV3-4 and paged"
+        if severe
+        else "no window was labelled SEV1-2, and ARIA paged"
+    )
     return [
         (
             f"**Real severity**: on all {section['windows']:,} {section['window_min']}-minute "
             f"windows of {machine}'s {section['days']:g}-day log, labelled by its "
-            f"administrators' alert tags, ARIA rated {aria['severe_missed']:,} of the "
-            f"{severe:,} SEV1-2 windows as SEV3-4 and paged on {aria['quiet_paged']:,} of "
+            f"administrators' alert tags, {caught} on {aria['quiet_paged']:,} of "
             f"{section['labels'].get('SEV4', 0):,} quiet windows"
             + (f" ({'; '.join(against)})" if against else "")
             + f"; accuracy {_pct(aria['accuracy'])} ({_ci(aria['accuracy_ci95'])}), "

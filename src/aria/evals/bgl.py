@@ -216,6 +216,7 @@ class _Judged:
     needs_review: bool
     lines: int
     pool_lines: int
+    fired: tuple[str, ...]  # the rules that fired, to explain the misses
 
 
 def _judge(engine: SeverityEngine, window: Window, feats: WindowFeatures) -> _Judged:
@@ -233,6 +234,7 @@ def _judge(engine: SeverityEngine, window: Window, feats: WindowFeatures) -> _Ju
         needs_review=decision.needs_review,
         lines=len(window.lines),
         pool_lines=window.pool_lines,
+        fired=tuple(hit.rule_id for hit in pre.rule_hits),
     )
 
 
@@ -288,6 +290,9 @@ def evaluate(
     }
     cap = GuardrailConfig().max_lines
     auto = [j for j in judged if not j.needs_review]
+    # What made ARIA page on windows the tags call quiet: the rules that fired there most often.
+    paged_quiet = [j for j in judged if j.label == str(Severity.SEV4) and j.aria in SEVERE]
+    quiet_rules = Counter(rule for j in paged_quiet for rule in set(j.fired)).most_common(5)
     placed = tally.lines - tally.without_time
     days = (
         (tally.last - tally.first).total_seconds() / 86_400 if tally.first and tally.last else 0.0
@@ -322,6 +327,7 @@ def evaluate(
             else None,
         },
         "confusion": {"classes": m.CLASSES, "matrix": m.confusion(truth, methods["aria_policy"])},
+        "rules_on_paged_quiet_windows": [[rule, n] for rule, n in quiet_rules],
         "overlap_with_training_sample": {
             "lines": sum(j.pool_lines for j in judged),
             "share": round(sum(j.pool_lines for j in judged) / max(1, placed), 4),
