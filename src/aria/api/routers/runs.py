@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from fastapi.responses import PlainTextResponse
 from sse_starlette.sse import EventSourceResponse
 
-from aria.api.keys import VisitorKeyDep, check_provider
+from aria.api.keys import VisitorKeyDep, check_provider, may_use_model, offline
 from aria.api.schemas import (
     Checkpoint,
     Delivery,
@@ -68,6 +68,8 @@ async def create_run(
 ) -> RunAccepted:
     """Start triage. The run continues in the background; follow it on ``links.stream``."""
     check_provider(state, request.options.provider, visitor)
+    if not may_use_model(state, visitor, viewer.tag, request.options.use_llm):
+        request = request.model_copy(update={"options": offline(request.options)})
     if request.window_id and not request.logs:
         engine = state.services.engine
         if not await asyncio.to_thread(window_exists, engine, request.window_id):
@@ -297,11 +299,14 @@ async def fork(
     """Branch a new run from a checkpoint, optionally with different run options. The new run is
     the caller's own, so forking an example is how a visitor gets a copy to change."""
     await _run_or_404(state, run_id, viewer)
+    options = body.run_options()
+    if not may_use_model(state, visitor, viewer.tag, bool((options or {}).get("use_llm", True))):
+        options = {**(options or {}), "use_llm": False}
     try:
         outcome = await state.runner.fork(
             run_id,
             body.checkpoint_id,
-            options=body.run_options(),
+            options=options,
             title=body.title,
             execute=False,
             visitor=viewer.tag,

@@ -38,6 +38,15 @@ llm:
       openai: [openai]
       nvidia: [nim, nim-fallback]
 
+  # This server's own keys, for visitors who bring none: how many model-written runs and answers
+  # each visitor (per_visitor) and everyone together (per_day) may have per UTC day; 0 means no
+  # limit. Past either, the work runs offline, which still works end to end. A visitor's own key
+  # never counts. Counts live in memory: a restart starts the day afresh. The public demo image
+  # sets both (docs/deploy-free.md).
+  shared:
+    per_visitor: ${ARIA_SHARED_PER_VISITOR:-0}
+    per_day: ${ARIA_SHARED_PER_DAY:-0}
+
   providers:
     nim-local:
       kind: nvidia_nim

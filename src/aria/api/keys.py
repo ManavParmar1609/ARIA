@@ -13,6 +13,7 @@ from typing import Annotated
 from fastapi import Depends, Header, HTTPException, status
 
 from aria.api.state import AppState, app_state
+from aria.contracts.inputs import RunOptions
 from aria.llm.visitor import VisitorKey, parse_key
 
 
@@ -88,3 +89,21 @@ def check_provider(state: AppState, wanted: str | None, visitor: VisitorKey | No
             f"provider {wanted!r} is not set up on this server: `aria providers check` says why"
         )
     raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail)
+
+
+def may_use_model(
+    state: AppState, visitor: VisitorKey | None, visitor_tag: str | None, wanted: bool
+) -> bool:
+    """Whether this run or answer may use a model: always with the visitor's own key; with this
+    server's keys while the visitor's daily allowance lasts (``llm.shared``); past it, the work
+    runs offline. Work that wants no model, or a server with none, uses none of the allowance."""
+    if not wanted or visitor is not None:
+        return wanted
+    if not state.allowance.limited or not state.services.router.has_real_llm("reporter"):
+        return True
+    return state.allowance.take(visitor_tag or "all")
+
+
+def offline(options: RunOptions) -> RunOptions:
+    """The same options, with the model off."""
+    return options.model_copy(update={"use_llm": False})

@@ -7,7 +7,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from aria.api.keys import VisitorKeyDep
+from aria.api.keys import VisitorKeyDep, may_use_model, offline
 from aria.api.schemas import (
     ExpertCheckOut,
     FlaggedUnit,
@@ -69,10 +69,13 @@ async def replay_real_incident(
     if incident is None or not await asyncio.to_thread(lambda: incident.available):
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"no real incident {incident_id}")
     lines = await asyncio.to_thread(incident.lines)
+    options = (body or ReplayRequest()).options
+    if not may_use_model(state, visitor, viewer.tag, options.use_llm):
+        options = offline(options)
     request = TriageRequest(
         system=incident.system,
         logs=lines,
-        options=(body or ReplayRequest()).options,
+        options=options,
         replay_of=incident.id,
     )
     run_id = await asyncio.to_thread(

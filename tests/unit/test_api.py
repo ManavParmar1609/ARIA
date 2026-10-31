@@ -899,6 +899,33 @@ async def test_ask_cites_run_evidence(api: Api, monkeypatch: pytest.MonkeyPatch)
     assert missing.status_code == 404
 
 
+async def test_past_the_daily_allowance_the_sites_model_steps_aside(
+    api: Api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The server's own key does a visitor's work while their share lasts; then work runs
+    offline, and the settings say how much is left."""
+    from aria.config import SharedAllowanceConfig
+    from aria.llm.allowance import SharedAllowance
+
+    api.state.allowance = SharedAllowance(SharedAllowanceConfig(per_visitor=1, per_day=5))
+    monkeypatch.setattr(api.state.services.router, "has_real_llm", lambda role: True)
+    settings = (await api.client.get("/api/v1/settings")).json()
+    assert settings["shared_model"] == {"left": 1, "per_visitor": 1, "per_day": 5}
+    body = {"system": "bgl", "logs": logs(api), "options": {"investigate": False}}
+    ids = [(await api.client.post("/api/v1/runs", json=body)).json()["run_id"] for _ in range(2)]
+    used = [
+        repo.get_run(api.state.services.engine, run_id)["request"]["options"]["use_llm"]
+        for run_id in ids
+    ]
+    assert used == [True, False]
+    left = (await api.client.get("/api/v1/settings")).json()["shared_model"]["left"]
+    assert left == 0
+    asked = await api.client.post("/api/v1/ask", json={"question": "brute force ssh logins"})
+    assert asked.json()["answered_by"] == "retrieval"  # the answer is offline too
+    for run_id in ids:
+        await wait_for(api, run_id, "awaiting_review")
+
+
 async def test_asking_about_a_queued_run_says_it_is_not_ready(api: Api) -> None:
     request = TriageRequest(system="bgl", logs=["x"]).model_dump(mode="json")
     repo.create_run(api.state.services.engine, "run-waiting", request=request, system="bgl")

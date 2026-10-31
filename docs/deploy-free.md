@@ -152,12 +152,23 @@ Add your key as an environment variable on Render (for example `GEMINI_API_KEY`)
 until its next deploy. Check it in the console under **Settings**, **Model providers**: the
 provider's row should say **Ready**.
 
-Every visitor without a key of their own then uses yours. Before you do this, weigh three things:
+Every visitor without a key of their own then uses yours, within a daily allowance the demo image
+sets: 5 model-written runs and answers per visitor, and 100 for everyone together, per UTC day.
+Past either, that visitor's work runs offline, which still works end to end, and the console says
+so: **Settings** and **New triage** show "The site's key (shared, limited)" with what is left
+today, then "Offline". A visitor's own key always comes first and never counts against yours.
+Change the allowance with `ARIA_SHARED_PER_VISITOR` and `ARIA_SHARED_PER_DAY` (0 means no limit).
+
+Before you add your key, weigh three things:
 
 - **Cost.** A free-tier key (Google AI Studio without billing, for example) costs nothing: when its
-  daily quota runs out, runs fall back to the offline path until it resets. A key with billing has
-  no total cap: ARIA limits each run's tokens, calls and time, not how many runs visitors start.
-- **Quota.** One busy visitor can use up a free tier's daily requests for everyone.
+  daily quota runs out, runs fall back to the offline path until it resets. With billing, the cost
+  is at most the daily allowance times one run's budget, since ARIA caps each run's tokens, calls
+  and time. The counts live in the service's memory, so a restart (the free plan sleeps after 15
+  minutes without visitors) starts the day's count afresh.
+- **Quota.** Visitors share your key's provider quota; the per-visitor allowance keeps one busy
+  visitor from using it all. A visitor is a browser session, so clearing cookies starts a new
+  share: the daily total is the real cap.
 - **Privacy.** Visitors' pasted logs, after redaction, go to your provider account. On Gemini's
   free tier, Google may use prompts to improve its products.
 

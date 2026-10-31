@@ -36,6 +36,15 @@ describe("modelHint", () => {
     expect(modelHint(["gemini"], "openai")).toContain("add your own key in Settings");
   });
 
+  it("says when the site's key answers, and how many runs are left today", () => {
+    expect(modelHint(["gemini"], null, { left: 2, per_visitor: 5 })).toContain(
+      "On: the site's key answers (shared, limited: 2 left today).",
+    );
+    expect(modelHint(["gemini"], null, { left: 0, per_visitor: 5 })).toMatch(
+      /^Offline for today: your share of the site's key is used/,
+    );
+  });
+
   it("keeps the offline promise where no keys are taken", () => {
     expect(modelHint([], null)).toContain("nothing leaves the server");
   });

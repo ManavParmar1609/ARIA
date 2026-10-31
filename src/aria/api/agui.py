@@ -48,7 +48,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 
-from aria.api.keys import VisitorKeyDep
+from aria.api.keys import VisitorKeyDep, may_use_model, offline
 from aria.api.schemas import ReviewRequest, links_for
 from aria.api.security import Principal
 from aria.api.state import AppState, app_state, current_principal
@@ -285,6 +285,8 @@ async def _stream(
                     "send log lines as a user message, or forwardedProps.request", "no_input"
                 )
                 return
+            if not may_use_model(state, visitor, viewer.tag, request.options.use_llm):
+                request = request.model_copy(update={"options": offline(request.options)})
             await asyncio.to_thread(
                 runner.submit,
                 request,

@@ -28,9 +28,9 @@ export const GLOSSARY = {
       "A probability that means what it says: of all the windows ARIA rates 70% likely to be SEV2, about 70% really are SEV2.",
   },
   "prediction-set": {
-    term: "Prediction set",
+    term: "Short list (prediction set)",
     definition:
-      "The severities ARIA cannot rule out. Conformal prediction builds it to hold the true severity 90% of the time on windows like its calibration set; other logs can fall short. One severity and a confident model: ARIA decides alone. Otherwise a model picks within the set, or a person decides.",
+      "The levels ARIA cannot rule out. Conformal prediction builds the list to hold the right level 90 times in 100 on incidents like the ones it was calibrated on; other logs can fall short. One level and a confident model: ARIA decides alone. Otherwise a model picks from the list, or a person decides.",
   },
   "safety-floor": {
     term: "Safety floor",

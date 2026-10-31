@@ -11,6 +11,7 @@ from aria.api.metrics import Metrics
 from aria.api.security import KeyAuth, Principal, RateLimiter, principal_of
 from aria.api.worker import Worker
 from aria.graph.runner import TriageRunner
+from aria.llm.allowance import SharedAllowance
 from aria.services import Services
 
 
@@ -22,6 +23,7 @@ class AppState:
     auth: KeyAuth
     limiter: RateLimiter
     metrics: Metrics
+    allowance: SharedAllowance
     started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @property

@@ -42,14 +42,13 @@ import { runTitle } from "@/components/console/run-row";
 import { STATUS_LABEL } from "@/components/console/status";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { useCreateRun, useRuns, useSession, useSignOut } from "@/lib/api/hooks";
+import { useRuns, useScenarios, useSession, useSignOut, useStartSample } from "@/lib/api/hooks";
 import { isSeverity } from "@/lib/api/types";
 import { GLOSSARY } from "@/lib/glossary";
 import { GO_KEYS, isTypingTarget, setShortcutsEnabled, useShortcutsEnabled } from "@/lib/shortcuts";
 import { systemName } from "@/lib/systems";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
-import type sampleData from "@/data/samples.json";
 
 interface Commands {
   openPalette: () => void;
@@ -172,28 +171,17 @@ function score(item: Item, words: string[]): number {
   return words.every((w) => label.includes(w)) ? 2 : 1;
 }
 
-type Samples = typeof sampleData;
-
 function Palette({ onClose, onHelp }: { onClose: () => void; onHelp: () => void }) {
   const router = useRouter();
   const runs = useRuns("all", 30);
-  const create = useCreateRun();
+  // The samples the server offers, under the names New triage gives them.
+  const scenarios = useScenarios();
+  const start = useStartSample();
   const session = useSession();
   const signOut = useSignOut();
   const { setTheme } = useTheme();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
-  // The samples carry whole log files, so they load when the palette opens, not with each page.
-  const [samples, setSamples] = useState<Samples>([]);
-  useEffect(() => {
-    let live = true;
-    void import("@/data/samples.json").then((loaded) => {
-      if (live) setSamples(loaded.default);
-    });
-    return () => {
-      live = false;
-    };
-  }, []);
   const listId = useId();
   const list = useRef<HTMLDivElement>(null);
 
@@ -229,22 +217,24 @@ function Palette({ onClose, onHelp }: { onClose: () => void; onHelp: () => void 
         run: () => go(`/console/runs/${encodeURIComponent(run.id)}`),
       });
     }
-    for (const sample of samples) {
+    for (const sample of scenarios.data ?? []) {
       all.push({
         id: `sample:${sample.id}`,
         group: "Samples",
-        label: `Triage a sample: ${sample.label}`,
-        hint: `${systemName(sample.system)}, ${sample.lines.length} lines, synthetic`,
-        keywords: "sample demo try example",
+        label: `Triage a sample: ${sample.title}`,
+        hint: `${sample.technology}${sample.benign ? ", harmless" : ""}`,
+        keywords: `sample demo try example ${systemName(sample.system)} ${sample.summary}`,
         icon: PlayIcon,
         run: () => {
           onClose();
-          create.mutate(
+          start.mutate(
             {
-              system: sample.system,
-              logs: sample.lines,
-              synthetic: true,
-              options: { use_llm: true, investigate: true, require_approval: true },
+              id: sample.id,
+              body: {
+                servers: null,
+                rate: null,
+                options: { use_llm: true, investigate: true, require_approval: true },
+              },
             },
             {
               onSuccess: (accepted) => {
@@ -329,7 +319,18 @@ function Palette({ onClose, onHelp }: { onClose: () => void; onHelp: () => void 
       });
     }
     return all;
-  }, [runs.data, samples, session.data, go, create, router, onClose, onHelp, setTheme, signOut]);
+  }, [
+    runs.data,
+    scenarios.data,
+    session.data,
+    go,
+    start,
+    router,
+    onClose,
+    onHelp,
+    setTheme,
+    signOut,
+  ]);
 
   const shown = useMemo(() => {
     const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);

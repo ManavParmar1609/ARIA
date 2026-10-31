@@ -150,6 +150,18 @@ class VisitorKeysConfig(_Strict):
         return list(self.providers) if self.enabled else []
 
 
+class SharedAllowanceConfig(_Strict):
+    """How much model work this server's own keys do, per UTC day, for visitors who bring none.
+
+    ``per_visitor`` counts each visitor's model-written runs and answers, ``per_day`` everyone's
+    together; 0 means no limit. Past either, the work runs offline. A visitor's own key never
+    counts.
+    """
+
+    per_visitor: int = Field(default=0, ge=0)
+    per_day: int = Field(default=0, ge=0)
+
+
 class LLMConfig(_Strict):
     providers: dict[str, ProviderConfig]
     routing: dict[str, list[str]] = Field(default_factory=dict)
@@ -157,6 +169,7 @@ class LLMConfig(_Strict):
     rerank: list[str] = Field(default_factory=list)
     safety: list[str] = Field(default_factory=list)
     visitor_keys: VisitorKeysConfig = Field(default_factory=VisitorKeysConfig)
+    shared: SharedAllowanceConfig = Field(default_factory=SharedAllowanceConfig)
 
     @model_validator(mode="after")
     def _chains_reference_known_providers(self) -> LLMConfig:

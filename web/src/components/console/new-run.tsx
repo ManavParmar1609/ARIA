@@ -24,6 +24,7 @@ import { useCreateRun, useModelKey, useSettingsView } from "@/lib/api/hooks";
 import { modelKeyLabel } from "@/lib/api/model-key";
 import { MAX_BODY_BYTES } from "@/lib/limits";
 import { SYSTEM_NAMES } from "@/lib/systems";
+import { accessSentence, modelAccess, type SharedModel } from "@/lib/model-access";
 
 const MAX_LINES = 20_000;
 
@@ -72,11 +73,22 @@ export function logsHint(problem: string | null, publicDemo: boolean, keys = fal
 }
 
 /** What the model switch does here: whose model answers when it is on, and what off means. */
-export function modelHint(kinds: string[], savedProvider: string | null): string {
+export function modelHint(
+  kinds: string[],
+  savedProvider: string | null,
+  shared?: SharedModel | null,
+): string {
   const off = "Off: rules, the calibrated model and the grounded template only.";
-  if (savedProvider && kinds.includes(savedProvider)) {
-    return `On: your own ${modelKeyLabel(savedProvider)} key answers first. ${off}`;
+  const access = modelAccess(savedProvider, kinds, shared);
+  if (access.kind === "own") {
+    return `On: your own ${modelKeyLabel(savedProvider ?? "")} key answers first. ${off}`;
   }
+  if (access.kind === "shared") {
+    return access.left == null
+      ? `On: the site's key answers. ${off}`
+      : `On: the site's key answers (shared, limited: ${access.left} left today). ${off}`;
+  }
+  if (access.usedUp) return accessSentence(access, kinds.length > 0);
   if (kinds.length > 0) return `${off} To use a model, add your own key in Settings.`;
   return `${off} Faster, and nothing leaves the server.`;
 }
@@ -131,7 +143,11 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
   const settings = useSettingsView().data;
   const approvalRequired = settings?.require_approval ?? true;
   const savedKey = useModelKey().data;
-  const llmHint = modelHint(settings?.visitor_keys ?? [], savedKey?.provider ?? null);
+  const llmHint = modelHint(
+    settings?.visitor_keys ?? [],
+    savedKey?.provider ?? null,
+    settings?.shared_model,
+  );
 
   const lines = useMemo(() => text.split(/\r?\n/).filter((l) => l.trim()), [text]);
   // The lines' size as sent (UTF-8 JSON, with room for the other fields), so a paste the

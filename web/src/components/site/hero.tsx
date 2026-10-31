@@ -86,7 +86,7 @@ function Trio({ data }: { data: Replay }) {
             })}
           </ul>
           <p className="text-xs text-muted-foreground">
-            Prediction set: {data.predictionSet.join(" or ")}
+            Short list: {data.predictionSet.join(" or ")}
           </p>
         </Card>
         <Card name="Report" delay={120}>

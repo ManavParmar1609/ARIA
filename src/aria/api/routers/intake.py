@@ -9,7 +9,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, status
 
 from aria.api import alerts as intake
 from aria.api.ask import answer, memory_evidence
-from aria.api.keys import VisitorKeyDep
+from aria.api.keys import VisitorKeyDep, may_use_model
 from aria.api.schemas import AlertAccepted, AskRequest, AskResponse
 from aria.api.state import AppState, app_state
 from aria.api.visitors import SEES_ALL, Viewer, ViewerDep
@@ -146,6 +146,7 @@ async def ask(
     else:
         evidence = await memory_evidence(services, body.question)
     use_llm = not (run and run.get("request", {}).get("options", {}).get("use_llm") is False)
+    use_llm = may_use_model(state, visitor, viewer.tag, use_llm)
     own = services.router.with_key(visitor) if visitor is not None else None
     try:
         output, cited, model = await answer(

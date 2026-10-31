@@ -88,7 +88,7 @@ function cards(data: RealData): Card[] {
       stat: pct(injection.rate),
       statLabel: "Caught by the detector",
       compare: `It flagged ${pct(injection.benign.rate)} of benign look-alikes and ${injection.realFlagged === 0 ? "none" : n(injection.realFlagged)} of ${n(injection.realLines)} real log lines.`,
-      caveat: "Fencing, the prediction set and approval do not rely on it.",
+      caveat: "Fencing, the short list and approval do not rely on it.",
       anchor: "prompt-injection-public-benchmarks",
     },
   ];

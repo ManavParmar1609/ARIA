@@ -520,3 +520,61 @@ async def test_a_separate_worker_process_means_no_visitor_keys(
             "/api/v1/runs", json={"system": "bgl", "logs": _logs()}, headers=_headers()
         )
         assert refused.status_code == 422
+
+
+def test_the_shared_allowance_counts_each_visitor_and_the_whole_site_per_day() -> None:
+    from aria.config import SharedAllowanceConfig
+    from aria.llm.allowance import SharedAllowance
+
+    day = ["2026-10-31"]
+    allowance = SharedAllowance(
+        SharedAllowanceConfig(per_visitor=2, per_day=3), today=lambda: day[0]
+    )
+    assert allowance.check("a").left == 2
+    assert allowance.take("a")
+    assert allowance.take("a")
+    assert not allowance.take("a")  # this visitor's two are used
+    assert allowance.check("a").left == 0
+    assert allowance.take("b")  # the site's third
+    assert not allowance.take("c")  # the site's three are used, though c has used none
+    assert allowance.check("c").left == 0
+    day[0] = "2026-11-01"  # a new UTC day starts afresh
+    assert allowance.check("a").left == 2
+    assert allowance.take("c")
+    unlimited = SharedAllowance(SharedAllowanceConfig())
+    assert not unlimited.limited
+    assert unlimited.check("a").left is None
+    assert all(unlimited.take("a") for _ in range(50))
+
+
+def test_only_the_sites_own_key_counts_against_the_allowance() -> None:
+    from types import SimpleNamespace
+    from typing import cast
+
+    from aria.api.keys import may_use_model
+    from aria.api.state import AppState
+    from aria.config import SharedAllowanceConfig
+    from aria.llm.allowance import SharedAllowance
+    from aria.llm.visitor import VisitorKey
+
+    def state(real_llm: bool) -> AppState:
+        router = SimpleNamespace(has_real_llm=lambda role: real_llm)
+        return cast(
+            "AppState",
+            SimpleNamespace(
+                allowance=SharedAllowance(SharedAllowanceConfig(per_visitor=1)),
+                services=SimpleNamespace(router=router),
+            ),
+        )
+
+    shared = state(real_llm=True)
+    own = VisitorKey("gemini", SecretStr("x" * 24))
+    assert may_use_model(shared, own, "v-1", wanted=True)  # a visitor's own key never counts
+    assert not may_use_model(shared, None, "v-1", wanted=False)  # no model wanted: none used
+    assert may_use_model(shared, None, "v-1", wanted=True)  # the one the visitor has today
+    assert not may_use_model(shared, None, "v-1", wanted=True)  # past it: offline
+    assert may_use_model(shared, None, "v-2", wanted=True)  # another visitor has their own
+    offline_server = state(real_llm=False)
+    for _ in range(3):  # a server without a model of its own counts nothing
+        assert may_use_model(offline_server, None, "v-1", wanted=True)
+    assert offline_server.allowance.check("v-1").left == 1

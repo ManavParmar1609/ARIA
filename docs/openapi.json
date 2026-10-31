@@ -108,8 +108,28 @@
           "system"
         ],
         "summary": "Settings View",
-        "description": "Budgets, guardrails, severity, retrieval and routing settings in force. No secrets.",
+        "description": "Budgets, guardrails, severity, retrieval and routing settings in force, and the caller's\nshare today of the server's own model. No secrets.",
         "operationId": "settings_view_api_v1_settings_get",
+        "parameters": [
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -117,6 +137,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SettingsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -4975,6 +5005,16 @@
             "type": "boolean",
             "title": "Visitor Scope",
             "default": false
+          },
+          "shared_model": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SharedModelOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -5005,6 +5045,46 @@
         ],
         "title": "Severity",
         "description": "Incident severity. SEV1 is the most severe."
+      },
+      "SharedModelOut": {
+        "properties": {
+          "left": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Left"
+          },
+          "per_visitor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Per Visitor"
+          },
+          "per_day": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Per Day"
+          }
+        },
+        "type": "object",
+        "title": "SharedModelOut",
+        "description": "This visitor's share today of the server's own model keys (``llm.shared``). None means\nno limit; ``left`` 0 means this visitor's work runs offline until tomorrow (UTC)."
       },
       "SimilarIncident": {
         "properties": {

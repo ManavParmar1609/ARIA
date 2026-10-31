@@ -41,6 +41,7 @@ from aria.graph.runner import (
     RunStateError,
     TriageRunner,
 )
+from aria.llm.allowance import SharedAllowance
 from aria.mcp.server import build_server
 from aria.observability.logging import configure_logging, get_logger
 from aria.observability.tracing import configure_tracing
@@ -141,7 +142,9 @@ def create_app(
         metrics = Metrics(svc.engine)
         run.observers.append(metrics.observe)
         worker = Worker(run, concurrency=settings.worker_concurrency)
-        state = AppState(svc, run, worker, auth, limiter, metrics)
+        state = AppState(
+            svc, run, worker, auth, limiter, metrics, SharedAllowance(svc.config.llm.shared)
+        )
         holder["state"] = state
         app.state.aria = state
         if auth.open:

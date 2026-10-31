@@ -248,7 +248,7 @@ test.describe("console", () => {
 
   test("triages in chat over AG-UI and answers the review interrupt", async ({ page }) => {
     await page.goto("/console/guide/connect");
-    await page.getByRole("button", { name: /Sample: ssh brute-force attempts/i }).click();
+    await page.getByRole("button", { name: /Sample: Someone keeps guessing passwords/ }).click();
     await page.getByRole("button", { name: "Triage in chat" }).click();
     await expect(page.getByText(/Review the incident report/)).toBeVisible();
     await expect(page.locator("li:has(svg.lucide-wrench)").first()).toBeVisible();
@@ -330,18 +330,21 @@ test.describe("console", () => {
     await expect(page.getByRole("term").filter({ hasText: "Prediction set" })).toBeVisible();
     await expectAccessible(page, "guide");
 
-    await page.getByRole("button", { name: "Triage it: SSH brute-force attempts" }).click();
+    await page
+      .getByRole("button", { name: "Triage a sample: Someone keeps guessing passwords" })
+      .click();
     await expect(page).toHaveURL(/\/console\/runs\/run-/);
     await expect(page.getByRole("heading", { name: "How serious", exact: true })).toBeVisible();
     await page.getByRole("link", { name: "How to read this" }).click();
     await expect(page).toHaveURL(/\/console\/guide#read-a-run$/);
-    await expect(page.getByRole("heading", { name: "How to read a run" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Read a severity rating" })).toBeVisible();
   });
 
   test("replays a real incident and checks ARIA against the experts", async ({ page }) => {
-    await page.goto("/console/guide");
+    // Real incidents live on New triage, beside the samples from the same kind of system.
+    await page.goto("/console/runs/new?source=bigdata");
     const card = page.locator("li", { hasText: "Silent block failures on a Hadoop cluster" });
-    await expect(card.getByText("labelled failed by its experts")).toBeVisible();
+    await expect(card.getByText(/the label experts gave each/)).toBeVisible();
     await card.getByRole("button", { name: /^Replay it: Silent block failures/ }).click();
 
     await expect(page).toHaveURL(/\/console\/runs\/run-/);

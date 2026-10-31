@@ -34,14 +34,16 @@ RUN --mount=type=secret,id=ca,required=false \
 FROM ${PYTHON_IMAGE}
 # User 1000, which some hosts insist on.
 RUN useradd --create-home --uid 1000 aria
-# A public demo: no API key (anyone may try it), no model provider keys of its own (every step runs
-# on the offline provider unless a visitor brings a key) and no Slack, Teams or webhook targets.
+# A public demo: no API key (anyone may try it) and no Slack, Teams or webhook targets. Every step
+# runs on the offline provider unless a visitor brings a key or the service is given one (below).
 # Visitors may paste their own Claude, Gemini, OpenAI or NVIDIA key in the console's Settings: it
 # answers only their own runs and questions, sending them to that provider, and is held in memory
 # while they run, never stored. Each visitor sees only the incidents they started, plus the seeded
 # examples, which nobody can change or delete. The rate limit is shared, since every console
 # visitor arrives through one proxy, and a request may carry at most 8 MB, as through the console.
 # Runs go one at a time, so a few large ones arriving together stay inside a free plan's 512 MB.
+# With a model key set on the service (GEMINI_API_KEY, say), a visitor without a key of their own
+# gets 5 model-written runs and answers a day, and everyone together 100; past that, offline.
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:${PATH}" \
@@ -50,6 +52,8 @@ ENV PYTHONUNBUFFERED=1 \
     ARIA_WORKER_MODE=inprocess \
     ARIA_VISITOR_KEYS=true \
     ARIA_VISITOR_SCOPE=true \
+    ARIA_SHARED_PER_VISITOR=5 \
+    ARIA_SHARED_PER_DAY=100 \
     ARIA_WORKER_CONCURRENCY=1 \
     ARIA_RATE_LIMIT_PER_MINUTE=600 \
     ARIA_MAX_BODY_BYTES=8388608 \

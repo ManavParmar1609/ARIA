@@ -27,6 +27,7 @@ import {
 import { money, percent, relativeTime } from "@/lib/format";
 import { useTheme, type ThemeChoice } from "@/lib/theme";
 import { cn } from "@/lib/utils";
+import { accessSentence, modelAccess } from "@/lib/model-access";
 
 const THEMES: [ThemeChoice, string][] = [
   ["light", "Light"],
@@ -365,15 +366,23 @@ export function Settings() {
         </fieldset>
       </Section>
 
-      {kinds.length > 0 || savedKey.data?.provider ? (
-        <Section
-          id="set-model-key"
-          title="Your model key"
-          intro="Use your own Claude, Gemini, OpenAI or NVIDIA key for the runs you start and the questions you ask. Your browser keeps it and sends it only with those requests; the server uses it for that work alone and never stores it."
-        >
-          <ModelKeyPanel kinds={kinds} />
-        </Section>
-      ) : null}
+      <Section
+        id="set-model-key"
+        title="Language model"
+        intro={
+          kinds.length > 0
+            ? "Use your own Claude, Gemini, OpenAI or NVIDIA key for the runs you start and the questions you ask. Your browser keeps it and sends it only with those requests; the server uses it for that work alone and never stores it."
+            : "Which model writes your reports and answers here."
+        }
+      >
+        <p role="status" className="text-sm">
+          {accessSentence(
+            modelAccess(savedKey.data?.provider ?? null, kinds, view.data?.shared_model),
+            kinds.length > 0,
+          )}
+        </p>
+        {kinds.length > 0 || savedKey.data?.provider ? <ModelKeyPanel kinds={kinds} /> : null}
+      </Section>
 
       <Section
         id="set-providers"

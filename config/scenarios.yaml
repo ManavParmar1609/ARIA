@@ -229,7 +229,7 @@ failure_modes:
       title: "Harmless errors from a Mac app"
       technology: "macOS"
       source: "noise"
-      summary: "Error-level lines that need no action: a test of whether ARIA stays calm."
+      summary: "Lines logged as errors that need no action. The right answer is SEV4."
       headline: true
   android.permission_noise:
     system: android
@@ -241,7 +241,7 @@ failure_modes:
       title: "Harmless permission warnings on Android"
       technology: "Android"
       source: "noise"
-      summary: "Warnings that look alarming but need no action."
+      summary: "Warnings that look alarming but need no action. The right answer is SEV4."
   zookeeper.old_client_noise:
     system: zookeeper
     title: "ZooKeeper connections from old clients (benign)"
@@ -252,5 +252,5 @@ failure_modes:
       title: "Old clients connect to ZooKeeper"
       technology: "ZooKeeper"
       source: "noise"
-      summary: "Routine messages about outdated clients: nothing to fix tonight."
+      summary: "Routine notices about outdated clients, with nothing to fix. The right answer is SEV4."
       servers: false

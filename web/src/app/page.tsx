@@ -48,8 +48,8 @@ function steps(f: RunFacts): GraphStep[] {
         <>
           Rules and a <Term name="calibrated">calibrated</Term> model score the window. Conformal
           prediction turns the model&apos;s probabilities into a{" "}
-          <Term name="prediction-set">set</Term> built to hold the true severity 90% of the time on
-          windows like the ones it was calibrated on, and{" "}
+          <Term name="prediction-set">short list</Term> of levels built to hold the right one 90% of
+          the time on windows like the ones it was calibrated on, and{" "}
           <Term name="safety-floor">safety floors</Term> stop a dangerous pattern being rated too
           low. Meanwhile hybrid search finds similar past incidents.
         </>

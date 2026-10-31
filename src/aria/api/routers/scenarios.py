@@ -8,7 +8,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from aria.api.keys import VisitorKeyDep, check_provider
+from aria.api.keys import VisitorKeyDep, check_provider, may_use_model, offline
 from aria.api.schemas import (
     RunAccepted,
     SampleRunRequest,
@@ -142,6 +142,9 @@ async def run_scenario(
     """Build a sample on this server and triage it as a run; follow it on ``links.stream``."""
     body = body or SampleRunRequest()
     check_provider(state, body.options.provider, visitor)
+    options = body.options
+    if not may_use_model(state, visitor, viewer.tag, options.use_llm):
+        options = offline(options)
     builder = _builder()
     mode = builder.pools.modes.get(scenario_id)
     if mode is None or mode.card is None or scenario_id not in builder.pools.available_modes():
@@ -154,7 +157,7 @@ async def run_scenario(
         system=scenario.system,
         logs=scenario.lines,
         synthetic=True,
-        options=body.options,
+        options=options,
         sample=SampleRef(
             id=scenario_id,
             servers=(servers or sizes.servers.default) if sizes.servers else None,

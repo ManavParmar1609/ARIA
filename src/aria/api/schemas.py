@@ -316,6 +316,15 @@ class Me(BaseModel):
     auth_required: bool
 
 
+class SharedModelOut(BaseModel):
+    """This visitor's share today of the server's own model keys (``llm.shared``). None means
+    no limit; ``left`` 0 means this visitor's work runs offline until tomorrow (UTC)."""
+
+    left: int | None = None
+    per_visitor: int | None = None
+    per_day: int | None = None
+
+
 class SettingsOut(BaseModel):
     """The configuration a reviewer may see: limits, guardrails and routing, never secrets."""
 
@@ -337,6 +346,9 @@ class SettingsOut(BaseModel):
     visitor_keys: list[str] = Field(default_factory=list)
     # Whether each visitor sees only their own runs and the examples (ARIA_VISITOR_SCOPE).
     visitor_scope: bool = False
+    # The server's own model for visitors without a key, and this visitor's share of it today;
+    # None when the server has no model of its own (its work runs offline).
+    shared_model: SharedModelOut | None = None
 
 
 class ModelKeyCheck(BaseModel):

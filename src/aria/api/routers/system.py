@@ -13,9 +13,10 @@ from sqlalchemy import text
 from aria import __version__
 from aria.api.keys import VisitorKeyDep, accepted_kinds
 from aria.api.metrics import CONTENT_TYPE
-from aria.api.schemas import Health, Me, ModelKeyCheck, ProviderOut, SettingsOut
+from aria.api.schemas import Health, Me, ModelKeyCheck, ProviderOut, SettingsOut, SharedModelOut
 from aria.api.security import Principal
 from aria.api.state import AppState, app_state, current_principal
+from aria.api.visitors import ViewerDep
 from aria.db.engine import session_scope
 from aria.llm.base import Message, ProviderError
 from aria.notify import channel_env
@@ -99,9 +100,16 @@ async def me(state: State, caller: Caller) -> Me:
 
 
 @router.get("/api/v1/settings", response_model=SettingsOut)
-async def settings_view(state: State) -> SettingsOut:
-    """Budgets, guardrails, severity, retrieval and routing settings in force. No secrets."""
+async def settings_view(state: State, viewer: ViewerDep) -> SettingsOut:
+    """Budgets, guardrails, severity, retrieval and routing settings in force, and the caller's
+    share today of the server's own model. No secrets."""
     settings, config = state.services.settings, state.services.config
+    shared = None
+    if state.services.router.has_real_llm("reporter"):
+        share = state.allowance.check(viewer.tag or "all")
+        shared = SharedModelOut(
+            left=share.left, per_visitor=share.per_visitor, per_day=share.per_day
+        )
     return SettingsOut(
         environment=str(settings.env),
         require_approval=settings.require_approval,
@@ -121,6 +129,7 @@ async def settings_view(state: State) -> SettingsOut:
         },
         visitor_keys=accepted_kinds(state),
         visitor_scope=settings.visitor_scope,
+        shared_model=shared,
     )
 
 

@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import samples from "@/data/samples.json";
+import { useScenarios } from "@/lib/api/hooks";
 import { isSeverity } from "@/lib/api/types";
 import { SYSTEM_NAMES } from "@/lib/systems";
 import { cn } from "@/lib/utils";
@@ -71,6 +72,11 @@ const STEP: Record<string, string> = {
  */
 export function AguiChat() {
   const id = useId();
+  // The chat pastes a sample's whole log, which only the bundled file carries; its name is the
+  // one New triage gives the same sample.
+  const titles = useScenarios().data;
+  const titleOf = (sampleId: string, fallback: string) =>
+    titles?.find((card) => card.id === sampleId)?.title ?? fallback;
   const [items, setItems] = useState<Item[]>([]);
   // While a review waits for an answer, its approve button is the one primary action.
   const awaiting = items.some((i) => i.kind === "review" && !i.answered);
@@ -404,7 +410,7 @@ export function AguiChat() {
                   setText(s.lines.join("\n"));
                 }}
               >
-                Sample: {s.label}
+                Sample: {titleOf(s.id, s.label)}
               </Button>
             ))}
           </div>

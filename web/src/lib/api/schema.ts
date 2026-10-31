@@ -696,7 +696,8 @@ export type paths = {
         };
         /**
          * Settings View
-         * @description Budgets, guardrails, severity, retrieval and routing settings in force. No secrets.
+         * @description Budgets, guardrails, severity, retrieval and routing settings in force, and the caller's
+         *     share today of the server's own model. No secrets.
          */
         get: operations["settings_view_api_v1_settings_get"];
         put?: never;
@@ -1806,6 +1807,7 @@ export type components = {
             severity: {
                 [key: string]: unknown;
             };
+            shared_model?: components["schemas"]["SharedModelOut"] | null;
             /** Visitor Keys */
             visitor_keys?: string[];
             /**
@@ -1822,6 +1824,19 @@ export type components = {
          * @enum {string}
          */
         Severity: "SEV1" | "SEV2" | "SEV3" | "SEV4";
+        /**
+         * SharedModelOut
+         * @description This visitor's share today of the server's own model keys (``llm.shared``). None means
+         *     no limit; ``left`` 0 means this visitor's work runs offline until tomorrow (UTC).
+         */
+        SharedModelOut: {
+            /** Left */
+            left?: number | null;
+            /** Per Day */
+            per_day?: number | null;
+            /** Per Visitor */
+            per_visitor?: number | null;
+        };
         /** SimilarIncident */
         SimilarIncident: {
             /** Components */
@@ -3278,7 +3293,10 @@ export interface operations {
     settings_view_api_v1_settings_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3291,6 +3309,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SettingsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

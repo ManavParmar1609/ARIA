@@ -81,9 +81,9 @@ export function Results({
           </p>
           <p className="text-muted-foreground">
             The model alone scores about the same, so most of the policy&apos;s value is not
-            accuracy: it is knowing when not to decide. Its 90% prediction sets held the true
-            severity {pct(s.coverage)} of the time, with an expected calibration error of{" "}
-            {s.ece.toFixed(3)}.
+            accuracy: it is knowing when not to decide. Its short lists of likely levels, built to
+            hold the right one 90% of the time, held the true severity {pct(s.coverage)} of the
+            time, with an expected calibration error of {s.ece.toFixed(3)}.
           </p>
         </div>
         <BaselineChart methods={s.methods} className={CARD} />
@@ -140,7 +140,7 @@ export function Results({
             The project wrote both the attacks and the detector, and tuned one on the other, so
             treat that recall as an upper bound. On {publicAttacks.attacks.toLocaleString("en")}{" "}
             attacks from public benchmarks it was never tuned on, it caught{" "}
-            {pct(publicAttacks.rate)}. Fencing, the prediction set and approval do not rely on it.
+            {pct(publicAttacks.rate)}. Fencing, the short list and approval do not rely on it.
           </p>
         </div>
         <div className="grid content-start gap-4">
