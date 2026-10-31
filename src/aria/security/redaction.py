@@ -79,8 +79,16 @@ _CARD = re.compile(r"(?<![\w.:-])(?:\d{4}(?:[ -]\d{4}){2}[ -]\d{1,7}|\d{13,19})(
 _EMAIL = re.compile(
     r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,24}\b"
 )
+# An address may be followed by a host name label or the end of a sentence ("5.36.59.76.dsl.net",
+# "from 10.0.0.1."), but not by more digits: "1.2.3.4.5" is a version, not an address.
 _IPV4 = re.compile(
-    r"(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?![\d.])"
+    r"(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?!\d|\.\d)"
+)
+# An address spelled with dashes inside a reverse-DNS host name: "202-132-40-29.adsl.example.net"
+# or "ip-10-0-0-1.ec2.internal". The host name after it keeps dates and counters out.
+_IPV4_DASHED = re.compile(
+    r"(?<!\d)(?<!\d-)(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)-){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)"
+    r"(?=\.[A-Za-z])"
 )
 _IPV6 = re.compile(
     r"(?<![\w:])(?:"
@@ -293,6 +301,8 @@ class Redactor:
 
             if text.count(".") >= 3:
                 text = _IPV4.sub(ip, text)
+            if text.count("-") >= 3 and "." in text:
+                text = _IPV4_DASHED.sub(ip, text)
             if "::" in text or text.count(":") >= 7:
                 text = _IPV6.sub(ip6, text)
         return text
