@@ -252,10 +252,8 @@ test.describe("console", () => {
     await expect(row).toBeVisible();
     await expectAccessible(page, "incidents");
     await row.getByRole("link").click();
-    await page
-      .getByRole("link", { name: /zookeeper-quorum-loss/ })
-      .first()
-      .click();
+    // The report names the runbook by its title and links to it.
+    await page.locator('a[href="/console/runbooks/zookeeper-quorum-loss"]').first().click();
     await expect(page.getByRole("heading", { name: "Mitigate" })).toBeVisible();
     await expectAccessible(page, "runbook");
   });
@@ -330,11 +328,12 @@ test.describe("console", () => {
           "Does it find the right past incident?",
           "Where does it fall short, and why?",
         ]) {
-          await expect(page.getByRole("heading", { level: 2, name: question })).toBeVisible();
+          // Each question is a card under the section that groups them.
+          await expect(page.getByRole("heading", { level: 3, name: question })).toBeVisible();
         }
         const card = page.getByRole("region", { name: "GitLab.com's incidents" });
         await expect(card.getByRole("table").first()).toBeHidden();
-        await card.getByText("Show details").click();
+        await card.getByText("Show how it was measured").click();
         await expect(card.getByRole("table").first()).toBeVisible();
       }
     }
