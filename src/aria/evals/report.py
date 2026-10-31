@@ -119,6 +119,149 @@ def _severity(section: Mapping[str, Any], heading: str = "## Severity") -> list[
     return [*lines, ""]
 
 
+def _bound(severe: Mapping[str, Any]) -> str:
+    """'3 of 43 (at most 15.6%)': misses of severe windows, with the exact one-sided bound."""
+    if not severe.get("severe"):
+        return "no severe windows"
+    return f"{severe['misses']} of {severe['severe']} (at most {_pct(severe['upper95'])})"
+
+
+def _rate_ci(rate: Mapping[str, Any]) -> str:
+    return f"{_pct(rate.get('rate'))} ({_ci(rate.get('ci95'))})"
+
+
+def _generalisation(section: Mapping[str, Any]) -> list[str]:
+    """Ring B: every window scored by a model fitted without its system, or its failure mode."""
+    system = section["leave_one_system_out"]
+    mode = section["leave_one_failure_mode_out"]
+    lines = [
+        "## Systems and failures ARIA has never seen",
+        "",
+        (
+            "The severity test above uses fresh windows of the systems, failure modes and line "
+            "pools the model was trained on: it catches regressions, but says little about a new "
+            "system. Here each system, and then each failure mode, is held out in turn. The "
+            "model, its regularisation (chosen by cross-validation that holds out whole systems), "
+            "its temperature and its conformal threshold are fitted again without it, and the "
+            "policy rates its test windows. Every window is rated once, by a model that never saw "
+            "its system or failure mode, so these numbers estimate how ARIA does on something "
+            "new. The rules and their floors are not refitted: they are written by hand and "
+            "apply everywhere."
+        ),
+        "",
+        (
+            "The headline is how often a truly serious window (SEV1 or SEV2) was rated SEV3 or "
+            "SEV4, with an exact upper bound: with few severe windows, the honest claim is "
+            '"at most", not the point estimate.'
+        ),
+        "",
+        (
+            "| Held out | Windows | Serious windows rated SEV3-4 | Accuracy (95% CI) | "
+            "Rated too high | Asked a person | Label inside the set |"
+        ),
+        "|---|---:|---|---|---|---|---|",
+    ]
+    for label, ring in (("One system at a time", system), ("One failure mode at a time", mode)):
+        if not ring.get("n"):
+            continue
+        lines.append(
+            f"| {label} ({ring['groups']}) | {ring['n']:,} | {_bound(ring['severe'])} | "
+            f"{_rate_ci(ring['accuracy'])} | {_pct(ring['over_triage']['rate'])} | "
+            f"{_pct(ring['deferred']['rate'])} | {_pct(ring['coverage']['all']['rate'])} |"
+        )
+    names = {
+        "aria_policy": "ARIA (rules, model and policy)",
+        "rules_only": "Rules only",
+        "model_only": "Model only",
+        "novelty_only": "How much is new (unseen patterns only)",
+    }
+    lines += [
+        "",
+        "Against simpler methods on the same held-out systems:",
+        "",
+        (
+            "| Method | Accuracy | Serious windows rated SEV3-4 | Differs from ARIA (exact "
+            "McNemar, Holm-adjusted) |"
+        ),
+        "|---|---|---|---|",
+    ]
+    for key, label in names.items():
+        method = system["methods"].get(key)
+        if method is None:
+            continue
+        test = system["against"].get(key)
+        p = "—" if test is None else f"p = {test['p_correct_holm']:.3f}"
+        lines.append(f"| {label} | {_pct(method['accuracy'])} | {_bound(method['severe'])} | {p} |")
+    spread = system["spread"]
+    lines += [
+        "",
+        (
+            f"By system, the median accuracy was {_pct(spread['median_accuracy'])} and the worst "
+            f"{_pct(spread['worst_accuracy'])} ({spread['worst_group']}). Systems where a serious "
+            "window was rated SEV3 or SEV4: "
+            + (", ".join(spread["groups_with_a_severe_miss"]) or "none")
+            + ". Calibration on held-out systems: negative log-likelihood "
+            f"{system['nll']:.3f}, smoothed calibration error {_pct(system['smooth_ece'])}, "
+            f"ordinal error per class {system['macro_mae']:.3f} levels."
+        ),
+        "",
+        "| System held out | Windows | Accuracy | Serious windows rated SEV3-4 | Asked a person |",
+        "|---|---:|---|---|---|",
+    ]
+    for name, group in system["by_group"].items():
+        lines.append(
+            f"| {name} | {group['n']} | {_pct(group['accuracy'])} | {_bound(group['severe'])} | "
+            f"{_pct(group['deferred'])} |"
+        )
+    return [*lines, ""]
+
+
+def _bgl_unseen(unseen: Mapping[str, Any]) -> list[str]:
+    """Ring C for BGL: the whole log rated by a model fitted without any BGL window."""
+    aria = unseen["methods"]["aria_policy"]
+    return [
+        (
+            "The training windows include BGL lines labelled by the same rubric, so the results "
+            "above come from a system the model has seen. Rated by a model fitted without any BGL "
+            f"window, accuracy was {_pct(aria['accuracy'])} (95% CI {_ci(aria['accuracy_ci95'])}) "
+            f"and serious windows rated SEV3-4 were {_bound(unseen['severe'])}; its set held "
+            f"the label for {_pct(unseen['conformal']['coverage'])} of windows, against a "
+            f"{_pct(unseen['conformal']['target_coverage'])} target."
+        ),
+        "",
+    ]
+
+
+def _registry(registry: Mapping[str, Any]) -> list[str]:
+    """Which suites anything was tuned on: a suite looked at while changing ARIA is no longer a
+    clean test, and the record says so."""
+    suites = registry.get("suites") or {}
+    if not suites:
+        return []
+    lines = [
+        "## What was tuned on what",
+        "",
+        (
+            "Rules, the lexicon, thresholds, prompts and model settings count as tuning. They are "
+            "tuned only on familiar-system windows and held-out-system folds. A real-data suite "
+            "looked at while changing ARIA is recorded here, with the date, so its numbers are "
+            "read as checked, not untouched."
+        ),
+        "",
+        "| Suite | Ring | Status | Note |",
+        "|---|---|---|---|",
+    ]
+    status = {"untouched": "Untouched", "seen": "Looked at", "tuned": "Tuned on"}
+    for name, entry in suites.items():
+        since = f" since {entry['since']}" if entry.get("since") else ""
+        lines.append(
+            f"| {name} | {entry.get('ring', '')} | "
+            f"{status.get(entry.get('status', ''), entry.get('status', ''))}{since} | "
+            f"{entry.get('note', '')} |"
+        )
+    return [*lines, ""]
+
+
 def _pipeline(section: Mapping[str, Any], title: str) -> list[str]:
     g, r, inv, lat, b = (
         section["groundedness"],
@@ -458,6 +601,7 @@ def _bgl(section: Mapping[str, Any]) -> list[str]:
             for c, row in zip(classes, section["confusion"]["matrix"], strict=True)
         ),
         "",
+        *(_bgl_unseen(section["unseen_system_model"]) if "unseen_system_model" in section else []),
     ]
 
 
@@ -1389,6 +1533,8 @@ def render(results: Mapping[str, Any], live: Mapping[str, Any] | None = None) ->
             lines += _postmortems(results["real"]["postmortems"])
     if "severity" in results:
         lines += _severity(results["severity"])
+    if "generalisation" in results:
+        lines += _generalisation(results["generalisation"])
     if "pipeline" in results:
         lines += _pipeline(results["pipeline"], "## End to end (offline: no LLM steps)")
     if live and "pipeline" in live:
@@ -1410,6 +1556,8 @@ def render(results: Mapping[str, Any], live: Mapping[str, Any] | None = None) ->
         lines += _injection(results["injection_benchmarks"])
     if "robustness" in results:
         lines += _robustness(results["robustness"])
+    if "registry" in results:
+        lines += _registry(results["registry"])
     lines += [
         "## Limitations",
         "",

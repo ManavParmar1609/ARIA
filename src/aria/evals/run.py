@@ -1,7 +1,8 @@
-"""Evaluation suites: ``aria eval run --suite smoke|severity|pipeline|robustness|real|all``.
+"""Evaluation suites: ``aria eval run --suite smoke|severity|generalisation|pipeline|...|all``.
 
 ``smoke`` is small and deterministic: CI runs it as a regression gate (``--gate``). ``real``
-replays real, expert-labelled logs (``evals/real.py``). ``all`` runs every suite at full size and
+replays real, expert-labelled logs (``evals/real.py``). ``generalisation`` scores systems and
+failure modes the model never saw (``evals/rings.py``). ``all`` runs every suite at full size and
 regenerates ``docs/evaluation.md``. Results are written as JSON to ``reports/eval/<suite>.json``.
 """
 
@@ -37,14 +38,29 @@ from aria.evals import parsing as ps
 from aria.evals import pipeline as pl
 from aria.evals import postmortems as pmx
 from aria.evals import real as rl
+from aria.evals import rings
 from aria.evals import severity as sv
 from aria.evals import tickets as tk
 from aria.retrieval.seed import MEMORY_SEEDS
 from aria.severity.engine import SeverityEngine
+from aria.severity.rules import load_rules
 from aria.severity.training import SplitSeeds, known_templates
 
-SUITES = ("smoke", "severity", "pipeline", "robustness", "parsing", "edge", "real", "all")
+SUITES = (
+    "smoke",
+    "severity",
+    "generalisation",
+    "pipeline",
+    "robustness",
+    "parsing",
+    "edge",
+    "real",
+    "all",
+)
+# The training split's size, so held-out models are fitted the way the shipped one is.
+TRAINING_SIZE = {"per_mode": 6, "quiet_per_system": 3}
 THRESHOLDS = Path("config/eval_thresholds.yaml")
+REGISTRY = Path("config/eval_registry.yaml")
 FIXTURES_DIR = Path("tests/fixtures/loghub")  # tiny samples for tests, not for measurement
 
 
@@ -63,6 +79,13 @@ SIZES = {
     "smoke": Size((41,), 1, 1, False, 12, 4, 1),
     "full": Size(SplitSeeds().test, 6, 3, True, 60, 16, 2),
 }
+
+
+def _registry() -> dict[str, Any] | None:
+    if not REGISTRY.exists():
+        return None
+    loaded = yaml.safe_load(REGISTRY.read_text(encoding="utf-8"))
+    return loaded if isinstance(loaded, dict) else None
 
 
 def is_fixtures(loghub_dir: Path) -> bool:
@@ -127,6 +150,37 @@ async def run(
             "fixtures": is_fixtures(loghub_dir),
         },
     }
+    if suite == "all":
+        # What each suite was used for, so the report can say which numbers are clean tests.
+        registry = await asyncio.to_thread(_registry)
+        if registry:
+            results["registry"] = registry
+    rules = load_rules(Path(config.severity.rules_file))
+    fitted: dict[str, rings.TrainingWindows] = {}
+
+    def training() -> rings.TrainingWindows:
+        """The training splits' windows, parsed once for every held-out model."""
+        if "windows" not in fitted:
+            fitted["windows"] = rings.training_windows(
+                builder,
+                rules,
+                per_mode=TRAINING_SIZE["per_mode"],
+                quiet_per_system=TRAINING_SIZE["quiet_per_system"],
+                workers=workers,
+            )
+        return fitted["windows"]
+
+    def unseen_engine(system: str) -> SeverityEngine:
+        """An engine whose model was fitted without any window of ``system``."""
+
+        def other(w: Any) -> bool:
+            return bool(w.system != system)
+
+        model = rings.model_without(
+            training(), other, alpha=config.severity.alpha, rules_version=rules.version
+        )
+        return SeverityEngine(rules, model, alpha=config.severity.alpha)
+
     if suite in ("smoke", "parsing", "all"):
         results["parsing"] = ps.summarize(loghub_dir)
     if suite in ("parsing", "all"):  # 140,000 and 1.9 million lines: too many for the smoke gate
@@ -155,6 +209,7 @@ async def run(
             if bgl_pool.exists()
             else set(),
             workers=workers,
+            unseen=None if is_fixtures(loghub_dir) else unseen_engine("bgl"),
         )
         results["real"]["uci_tickets"] = tk.summarize(Path(config.severity.ticket_model_file))
         results["real"]["hadoop"] = await _hadoop(builder, loghub_dir, size, workers)
@@ -168,6 +223,7 @@ async def run(
         per_mode=size.severity_per_mode,
         quiet_per_system=size.severity_quiet,
     )
+    features: list[Any] | None = None
     if suite in ("smoke", "severity", "all"):
         engine = SeverityEngine.load(config.severity)
         features = sv.featurize(builder, test, workers=workers)
@@ -181,6 +237,20 @@ async def run(
             cases, alpha=engine.alpha, majority=sv.majority_label(), tfidf=tfidf
         )
         results["severity"]["model_version"] = engine.model.version if engine.model else None
+    if suite in ("generalisation", "all"):
+        if features is None:
+            features = sv.featurize(builder, test, workers=workers)
+        results["generalisation"] = rings.evaluate(
+            builder,
+            rules,
+            test,
+            features,
+            alpha=config.severity.alpha,
+            windows=training(),
+            workers=workers,
+            per_mode=TRAINING_SIZE["per_mode"],
+            quiet_per_system=TRAINING_SIZE["quiet_per_system"],
+        )
     if suite in ("smoke", "pipeline", "robustness", "all"):
         benign_modes = {k for k, mode in builder.pools.modes.items() if mode.benign}
         with tempfile.TemporaryDirectory(prefix="aria-eval-") as tmp:

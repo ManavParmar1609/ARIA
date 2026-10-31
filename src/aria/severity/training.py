@@ -4,7 +4,8 @@ Labelled windows come from the semi-synthetic scenario suite (real Loghub lines,
 composition; BGL scenarios labelled by the alert-tag rubric, others by the documented scenario
 policy). Each split uses different scenario seeds, so no window appears in two splits:
 
-* train: fit the logistic regression (C chosen by cross-validation on train only);
+* train: fit the logistic regression (C chosen by cross-validation on train only, with whole
+  systems held out in each fold, so the choice favours what works on a system it has not seen);
 * temperature: fit the calibration temperature;
 * conformal: fit the conformal threshold;
 * test: reserved for ``make eval``.
@@ -165,22 +166,53 @@ def _xy(
     return x, [str(w.severity) for w in windows]
 
 
-def _choose_c(x: np.ndarray, y: list[str], grid: Sequence[float], seed: int) -> float:
+def _choose_c(
+    x: np.ndarray,
+    y: list[str],
+    grid: Sequence[float],
+    seed: int,
+    groups: Sequence[str] | None = None,
+) -> float:
+    """The regularisation with the best held-out log-loss.
+
+    With ``groups`` (the system of each window), each fold holds out whole systems, so C is chosen
+    for how the model does on a system it has not seen, not on fresh windows of familiar ones.
+    A fold whose held-out systems lack a class the loss needs is skipped.
+    """
     from sklearn.linear_model import LogisticRegression  # noqa: PLC0415 - training only
-    from sklearn.model_selection import StratifiedKFold, cross_val_score  # noqa: PLC0415
+    from sklearn.metrics import log_loss  # noqa: PLC0415
+    from sklearn.model_selection import GroupKFold, StratifiedKFold  # noqa: PLC0415
     from sklearn.pipeline import make_pipeline  # noqa: PLC0415
     from sklearn.preprocessing import StandardScaler  # noqa: PLC0415
 
-    counts = Counter(y)
-    folds = max(2, min(4, *counts.values()))
+    labels = sorted(set(y))
+    y_arr = np.array(y)
+    if groups is not None and len(set(groups)) >= 3:
+        splits = list(GroupKFold(n_splits=min(4, len(set(groups)))).split(x, y, list(groups)))
+    else:
+        counts = Counter(y)
+        folds = max(2, min(4, *counts.values()))
+        splits = list(StratifiedKFold(n_splits=folds, shuffle=True, random_state=seed).split(x, y))
     best, best_score = grid[0], -np.inf
     for c in grid:
-        pipe = make_pipeline(
-            StandardScaler(),
-            LogisticRegression(C=c, class_weight="balanced", max_iter=5_000, random_state=seed),
-        )
-        cv = StratifiedKFold(n_splits=folds, shuffle=True, random_state=seed)
-        score = float(np.mean(cross_val_score(pipe, x, y, cv=cv, scoring="neg_log_loss")))
+        losses = []
+        for train_idx, test_idx in splits:
+            if len(set(y_arr[train_idx])) < 2:
+                continue
+            pipe = make_pipeline(
+                StandardScaler(),
+                LogisticRegression(C=c, class_weight="balanced", max_iter=5_000, random_state=seed),
+            )
+            pipe.fit(x[train_idx], y_arr[train_idx])
+            probs = pipe.predict_proba(x[test_idx])
+            # Classes the fold's training part never saw get no probability mass.
+            full = np.zeros((len(test_idx), len(labels)))
+            for j, cls in enumerate(pipe.classes_):
+                full[:, labels.index(str(cls))] = probs[:, j]
+            full = np.clip(full, 1e-12, 1.0)
+            full /= full.sum(axis=1, keepdims=True)
+            losses.append(log_loss(y_arr[test_idx], full, labels=labels))
+        score = -float(np.mean(losses)) if losses else -np.inf
         if score > best_score:
             best, best_score = c, score
     return best
@@ -195,12 +227,14 @@ def fit_log_model(
     rules_version: str,
     seed: int = 0,
     c_grid: Sequence[float] = (0.03, 0.1, 0.3, 1.0, 3.0),
+    grouped: bool = True,
 ) -> tuple[LinearModel, dict[str, Any]]:
     names = log_feature_names()
     x_train, y_train = _xy(names, train)
     x_temp, y_temp = _xy(names, temperature)
     x_conf, y_conf = _xy(names, conformal)
-    c = _choose_c(x_train, y_train, c_grid, seed) if len(set(y_train)) > 1 else 1.0
+    groups = [w.system for w in train] if grouped else None
+    c = _choose_c(x_train, y_train, c_grid, seed, groups) if len(set(y_train)) > 1 else 1.0
     model = fit_linear_model(
         "severity_log", x_train, y_train, classes=CLASSES, feature_names=names, c=c, seed=seed
     )
@@ -227,6 +261,9 @@ def fit_log_model(
         "model_version": model.version,
         "rules_version": rules_version,
         "c": c,
+        "c_chosen_by": "cross-validation holding out whole systems"
+        if groups is not None and len(set(groups)) >= 3
+        else "stratified cross-validation",
         "alpha": alpha,
         "temperature": round(model.temperature, 4),
         "conformal_q": model.conformal_q,
