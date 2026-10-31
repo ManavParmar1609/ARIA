@@ -149,3 +149,17 @@ describe("an Ask source's name", () => {
     expect(sourceName(tool as unknown as Evidence)).toBe("Over time: 12 events over 3 minutes");
   });
 });
+
+describe("Ask ARIA's word answers", () => {
+  it("keeps a word's meaning in the conversation and says where it came from", () => {
+    const turn: Turn = {
+      id: "t1",
+      question: "What does SEV1 mean?",
+      runId: null,
+      definition: { term: "SEV1", text: "SEV1 means critical." },
+    };
+    const storage = { getItem: () => JSON.stringify([turn]) };
+    expect(loadTurns(storage)).toEqual([turn]);
+    expect(answerNews(turn)).toBe("ARIA answered from its word list: what SEV1 means.");
+  });
+});

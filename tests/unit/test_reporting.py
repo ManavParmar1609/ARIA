@@ -872,8 +872,11 @@ def test_one_shared_word_does_not_make_an_unrelated_record_an_answer() -> None:
     assert [item.kind for item in kernel] == [EvidenceKind.INCIDENT]
     # What the answer cannot say, said: subjects no source mentions, and anything about now.
     assert notes("Did a kernel panic kill jobs during the deploy?", kernel, run_scoped=False) == [
-        "Nothing below mentions “deploy”."
+        "None of the records below mention “deploy”."
     ]
+    # Words that frame a question are not its subject: no caveat about "involved" or "mean".
+    assert notes("Which kernel panics involved killed jobs?", kernel, run_scoped=False) == []
+    assert rank("Why do my servers keep getting crashed jobs?", items) == kernel
     now = notes("Is this still happening?", [], run_scoped=True)
     assert now == [
         (

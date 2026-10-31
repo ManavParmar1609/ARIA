@@ -995,6 +995,23 @@ async def test_ask_cites_each_kind_of_past_incident_once(api: Api) -> None:
     assert sum("openssh" in e["title"] for e in past) == 1
 
 
+async def test_ask_understands_everyday_words(api: Api) -> None:
+    """A question in a newcomer's words reaches the records that use the trade's words."""
+    asked = await api.client.post(
+        "/api/v1/ask",
+        json={"question": "why does my server keep getting password guesses and should I care??"},
+    )
+    body = asked.json()
+    assert body["answer"], body
+    titles = " ".join(e["title"] for e in body["evidence"]).lower()
+    assert "brute" in titles or "openssh" in titles
+    suggested = await api.client.post(
+        "/api/v1/ask",
+        json={"question": "Which past incidents involved SSH brute-force attempts on many hosts?"},
+    )
+    assert not any("involved" in note for note in suggested.json().get("notes", []))
+
+
 async def test_ask_names_runbooks_and_says_it_cannot_see_systems_now(api: Api) -> None:
     library = await api.client.post(
         "/api/v1/ask", json={"question": "Which runbook covers kernel panics?"}

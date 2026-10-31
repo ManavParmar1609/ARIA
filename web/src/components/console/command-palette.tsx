@@ -71,7 +71,9 @@ export function useCommands(): Commands {
 }
 
 type Group = "Pages" | "Incidents" | "Samples" | "Runbooks" | "Words" | "Actions";
-const GROUPS: Group[] = ["Pages", "Incidents", "Samples", "Runbooks", "Words", "Actions"];
+// Things to look at come before things that start work: typing "password" and pressing Enter
+// opens the runbook, not a new triage of the password-guessing sample (P7).
+const GROUPS: Group[] = ["Pages", "Incidents", "Runbooks", "Words", "Samples", "Actions"];
 
 interface Item {
   id: string;
@@ -443,7 +445,7 @@ function Palette({
             setActive(0);
           }}
           onKeyDown={onKeyDown}
-          className="h-16 min-w-0 flex-1 bg-transparent text-lg text-foreground outline-none placeholder:text-muted-foreground"
+          className="my-2 h-12 min-w-0 flex-1 rounded-md bg-transparent px-2 text-lg text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
         />
         <kbd className="hidden rounded-xs border border-control/60 px-1.5 py-0.5 text-xs text-muted-foreground sm:inline">
           Esc
@@ -662,6 +664,9 @@ export function ConsoleCommands({ children }: { children: ReactNode }) {
         if (go) {
           event.preventDefault();
           router.push(go.href as never);
+          // The page's content takes focus, as after a search: focus left on the page would
+          // otherwise fall to the body when the old page goes (A5).
+          document.getElementById("console-main")?.focus({ preventScroll: true });
         }
       }
     };
@@ -709,6 +714,12 @@ export function ConsoleCommands({ children }: { children: ReactNode }) {
         <DialogContent
           instant
           onCloseAutoFocus={giveFocusBack}
+          // The sheet itself takes focus, so its title is read first and nothing below the fold
+          // (the shortcuts switch) is focused out of sight (A3).
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            (event.currentTarget as HTMLElement | null)?.focus();
+          }}
           closeLabel="Close the shortcuts"
           className="max-w-xl"
         >

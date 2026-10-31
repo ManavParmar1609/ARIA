@@ -27,6 +27,7 @@ import {
 import { ApiError } from "@/lib/api/client";
 import { useAsk, useRun, useRuns } from "@/lib/api/hooks";
 import type { AskResponse, Evidence } from "@/lib/api/types";
+import { definitionFor, type Definition } from "@/lib/definitions";
 import { evidenceDetail, evidenceTitle } from "@/lib/evidence-text";
 import { capitalise, plainTemplate, stripSeverity } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -53,6 +54,10 @@ export interface Turn {
   id: string;
   question: string;
   runId: string | null;
+  /** What the question was about, as the About box named it when it was asked. */
+  about?: string;
+  /** A word's meaning, answered from ARIA's word list rather than a search. */
+  definition?: Definition;
   answer?: AskResponse;
   error?: string;
 }
@@ -68,7 +73,9 @@ export function loadTurns(storage: Pick<Storage, "getItem"> | undefined): Turn[]
     return Array.isArray(turns)
       ? (turns as Turn[]).filter(
           (t) =>
-            typeof t?.id === "string" && typeof t.question === "string" && (t.answer || t.error),
+            typeof t?.id === "string" &&
+            typeof t.question === "string" &&
+            Boolean(t.answer || t.error || t.definition),
         )
       : [];
   } catch {
@@ -78,7 +85,7 @@ export function loadTurns(storage: Pick<Storage, "getItem"> | undefined): Turn[]
 
 function saveTurns(turns: Turn[]) {
   try {
-    const kept = turns.filter((t) => t.answer || t.error).slice(0, KEPT_TURNS);
+    const kept = turns.filter((t) => t.answer || t.error || t.definition).slice(0, KEPT_TURNS);
     window.sessionStorage.setItem(TURNS_KEY, JSON.stringify(kept));
   } catch {
     // Storage full or blocked: the conversation still works, it is just not kept.
@@ -92,6 +99,8 @@ function saveTurns(turns: Turn[]) {
  */
 export function answerNews(turn: Turn | undefined): string {
   if (!turn || turn.error) return "";
+  if (turn.definition)
+    return `ARIA answered from its word list: what ${turn.definition.term} means.`;
   const answer = turn.answer;
   if (!answer) return "Searching ARIA's records";
   const points = answer.answer.length;
@@ -266,6 +275,25 @@ function Sources({ id, numbers }: { id: string; numbers: ReadonlyMap<string, str
 
 function Answer({ turn }: { turn: Turn }) {
   const answer = turn.answer;
+  if (turn.definition) {
+    return (
+      <div className="grid gap-2">
+        <p className="leading-relaxed">
+          <strong className="font-semibold">{turn.definition.term}</strong>: {turn.definition.text}
+        </p>
+        <p className="text-xs text-faint">
+          From{" "}
+          <Link
+            href={"/console/guide#words" as never}
+            className="underline underline-offset-4 hover:text-heading"
+          >
+            Words used in ARIA
+          </Link>
+          . To ask about incidents, name a system, a part or a kind of failure.
+        </p>
+      </div>
+    );
+  }
   if (turn.error) {
     return (
       <p role="alert" className="text-sm text-danger">
@@ -348,6 +376,13 @@ function Questions() {
     linkedRun.error instanceof ApiError && [400, 404, 422].includes(linkedRun.error.status);
   const [question, setQuestion] = useState("");
   const [chosen, setAbout] = useState<string>(linked ?? ABOUT_ALL);
+  // Opening Ask ARIA again, from the sidebar or another incident's link, asks about what the new
+  // address names: the page stays mounted, so the choice follows the link (P2).
+  const [followed, setFollowed] = useState(linked);
+  if (followed !== linked) {
+    setFollowed(linked);
+    setAbout(linked ?? ABOUT_ALL);
+  }
   const about = missing && chosen === linked ? ABOUT_ALL : chosen;
   // This page renders in the browser only (it reads the address), so storage is there to read.
   const [turns, setTurns] = useState<Turn[]>(() =>
@@ -358,6 +393,12 @@ function Questions() {
   const input = useRef<HTMLInputElement>(null);
   const answers = useRef<HTMLOListElement>(null);
   const suggestions = about === ABOUT_ALL ? LIBRARY_QUESTIONS : INCIDENT_QUESTIONS;
+  /** The incident's title as the About box shows it. */
+  const aboutName = (runId: string): string => {
+    const run = runs.data?.runs.find((r) => r.id === runId);
+    const title = run?.title ?? (runId === linked ? linkedRun.data?.title : undefined);
+    return stripSeverity(title ?? "") || "this incident";
+  };
 
   // A question asked while ARIA answers another waits in the box, said so, rather than being
   // dropped (FL-06).
@@ -377,7 +418,18 @@ function Questions() {
       id: `${id}-${Date.now().toString(36)}-q${counter.current}`,
       question: q,
       runId: about === ABOUT_ALL ? null : about,
+      about: about === ABOUT_ALL ? undefined : aboutName(about),
     };
+    const meaning = definitionFor(q);
+    if (meaning) {
+      // A word's meaning comes from the word list, whatever the About box says.
+      setTurns((list) => [
+        { ...turn, runId: null, about: undefined, definition: meaning },
+        ...list,
+      ]);
+      setQuestion("");
+      return;
+    }
     setTurns((list) => [turn, ...list]);
     setQuestion("");
     ask.mutate(
@@ -519,7 +571,16 @@ function Questions() {
         <ol ref={answers} aria-label="Answers" className="grid max-w-3xl gap-8">
           {turns.map((turn) => (
             <li key={turn.id} className="grid gap-3 border-t border-rule pt-6">
-              <h2 className="text-xl tracking-heading wrap-anywhere">{turn.question}</h2>
+              <div className="grid gap-1">
+                <h2 className="text-xl tracking-heading wrap-anywhere">{turn.question}</h2>
+                {turn.definition ? null : (
+                  <p className="text-sm wrap-anywhere text-muted-foreground">
+                    {turn.runId
+                      ? `About: ${turn.about ?? "one incident"}`
+                      : "About: all past incidents and runbooks"}
+                  </p>
+                )}
+              </div>
               <Answer turn={turn} />
             </li>
           ))}
