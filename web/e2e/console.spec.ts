@@ -230,11 +230,27 @@ test.describe("console", () => {
     await expect(page).toHaveURL(/\/console\/runs\/new\?tab=own$/);
     await page.getByRole("button", { name: "Start a triage" }).click();
     await expect(page.getByText("Paste at least one log line")).toBeVisible();
-    // A familiar log fills the box in one click, for someone with no logs at hand.
-    const linux = page.getByRole("button", { name: /^Linux server/ });
+    // A familiar log fills the box in one click, for someone with no logs at hand. A handful show
+    // in their groups at first, and every log on request, each marked incident or routine.
+    const familiar = page.getByRole("region", { name: "No logs at hand? Try a familiar one" });
+    const all = familiar.getByRole("button", { name: /^Show all \d+ logs$/ });
+    const total = Number((await all.textContent())?.match(/\d+/)?.[0]);
+    expect(await familiar.getByRole("listitem").count()).toBeLessThan(total);
+    await all.click();
+    await expect(familiar.getByRole("listitem")).toHaveCount(total);
+    await expect(familiar.getByRole("heading", { name: "Supercomputers" })).toBeVisible();
+    await expect(familiar.getByRole("button", { name: /^Mac: .+, routine$/ })).toBeVisible();
+    await expectAccessible(page, "new triage, every familiar log");
+    const crash = familiar.getByRole("button", { name: /^BlueGene\/L: Compute nodes crash/ });
+    await crash.click();
+    await expect(crash).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByLabel("Log lines")).toHaveValue(/RAS KERNEL/);
+    await familiar.getByRole("button", { name: "Show fewer logs" }).click();
+    await expect(crash).toBeHidden();
+    const linux = familiar.getByRole("button", { name: /^Linux server/ });
     await linux.click();
     await expect(linux).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByLabel("Log lines")).not.toHaveValue("");
+    await expect(page.getByLabel("Log lines")).not.toHaveValue(/RAS KERNEL/);
     await page
       .getByLabel("Log lines")
       .fill(

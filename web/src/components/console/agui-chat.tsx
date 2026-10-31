@@ -4,6 +4,7 @@ import { HttpAgent, type AgentSubscriber } from "@ag-ui/client";
 import {
   BotIcon,
   CircleCheckIcon,
+  LoaderCircleIcon,
   ShieldAlertIcon,
   UserRoundCheckIcon,
   WrenchIcon,
@@ -23,11 +24,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import samples from "@/data/samples.json";
 import { useScenarios } from "@/lib/api/hooks";
 import { isSeverity } from "@/lib/api/types";
+import { SAMPLE_LOGS, sampleLines, type SampleLog } from "@/lib/samples";
 import { SYSTEM_NAMES } from "@/lib/systems";
 import { cn } from "@/lib/utils";
+
+// The chat offers three of the console's samples: failing storage, an attack and a lost quorum.
+const CHAT_SAMPLES = [
+  "hdfs.block_serve_exceptions",
+  "openssh.bruteforce",
+  "zookeeper.quorum_connection_loss",
+].flatMap((id) => SAMPLE_LOGS.filter((sample) => sample.id === id));
 
 /** One thing that happened in the chat, rendered in order. */
 type Item =
@@ -72,8 +80,8 @@ const STEP: Record<string, string> = {
  */
 export function AguiChat() {
   const id = useId();
-  // The chat pastes a sample's whole log, which only the bundled file carries; its name is the
-  // one New triage gives the same sample.
+  // The chat pastes a sample's whole log, which only the console's own copy carries (loaded when
+  // it is picked); its name is the one New triage gives the same sample.
   const titles = useScenarios().data;
   const titleOf = (sampleId: string, fallback: string) =>
     titles?.find((card) => card.id === sampleId)?.title ?? fallback;
@@ -84,8 +92,29 @@ export function AguiChat() {
   const [text, setText] = useState("");
   // A loaded sample is semi-synthetic, so its run never counts as a real incident in memory.
   const [sample, setSample] = useState<string | null>(null);
+  // The sample whose lines are on their way, and one whose lines could not be fetched.
+  const [loading, setLoading] = useState<string | null>(null);
+  const [unloaded, setUnloaded] = useState<string | null>(null);
+  const latestLoad = useRef(0);
   const [running, setRunning] = useState(false);
   const agentRef = useRef<HttpAgent | null>(null);
+
+  const loadSample = async (picked: SampleLog) => {
+    const turn = ++latestLoad.current;
+    setLoading(picked.id);
+    setUnloaded(null);
+    try {
+      const lines = await sampleLines(picked.id);
+      if (turn !== latestLoad.current) return;
+      setSample(picked.id);
+      setSystem(picked.system);
+      setText(lines.join("\n"));
+    } catch {
+      if (turn === latestLoad.current) setUnloaded(titleOf(picked.id, picked.label));
+    } finally {
+      if (turn === latestLoad.current) setLoading(null);
+    }
+  };
 
   const push = (item: Item) => setItems((list) => [...list, item]);
   const update = (match: (item: Item) => boolean, change: (item: Item) => Item) =>
@@ -398,23 +427,27 @@ export function AguiChat() {
             </Select>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {samples.slice(0, 3).map((s) => (
+            {CHAT_SAMPLES.map((s) => (
               <Button
                 key={s.id}
                 size="sm"
                 variant="ghost"
                 className="h-auto min-h-8 shrink py-1.5 text-left whitespace-normal"
-                onClick={() => {
-                  setSample(s.id);
-                  setSystem(s.system);
-                  setText(s.lines.join("\n"));
-                }}
+                onClick={() => void loadSample(s)}
               >
+                {loading === s.id ? (
+                  <LoaderCircleIcon aria-hidden className="animate-spin" />
+                ) : null}
                 Sample: {titleOf(s.id, s.label)}
               </Button>
             ))}
           </div>
         </div>
+        {unloaded ? (
+          <p role="alert" className="text-sm text-danger">
+            The sample &ldquo;{unloaded}&rdquo; couldn&rsquo;t load. Choose it to try again.
+          </p>
+        ) : null}
         <Label htmlFor={`${id}-logs`} className="sr-only">
           Log lines
         </Label>
