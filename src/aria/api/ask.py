@@ -92,9 +92,16 @@ def _fallback(ranked: Sequence[Evidence]) -> AnswerOutput:
     return AnswerOutput(answer=claims, insufficient_evidence=False, follow_ups=[])
 
 
+_HYPOTHESIS = re.compile(r"^H\d+ (?P<status>\w+): (?P<statement>.+)$", re.DOTALL)
+_LINE = re.compile(r"^line (?P<n>\d+): (?P<line>.+)$", re.DOTALL)
+_TEMPLATE = re.compile(r"^(?P<count>\d+)x (?P<pattern>.+)$", re.DOTALL)
+
+
 def _plain(item: Evidence) -> str:
-    """An answer line without a model: what the evidence says, in words a responder can act on."""
+    """An answer line without a model: what the evidence says, in words a responder can act on,
+    with internal IDs left to the citation chips."""
     data = item.data or {}
+    sample = " (built from a sample)" if data.get("synthetic") else ""
     if item.kind is EvidenceKind.INCIDENT and data.get("title") and data.get("resolution"):
         if data.get("source") == "run":  # ARIA's own report: what was approved, not what fixed it
             return (
@@ -102,8 +109,22 @@ def _plain(item: Evidence) -> str:
                 f"approved these next steps: {data['resolution']}"
             )
         return (
-            f"A similar past incident, {data['title']}, was resolved this way: {data['resolution']}"
+            f"A similar past incident, {data['title']}{sample}, was resolved this way: "
+            f"{data['resolution']}"
         )
+    if item.kind is EvidenceKind.INCIDENT and ": " in item.title:
+        return f"A similar past incident{sample}: {item.title.split(': ', 1)[1]}"
+    if item.kind is EvidenceKind.HYPOTHESIS and (found := _HYPOTHESIS.match(item.title)):
+        verdict = {"supported": "supports", "refuted": "rules out"}.get(found["status"])
+        statement = found["statement"].rstrip(".")
+        if verdict is None:
+            return f"The investigation is still testing this cause: {statement}."
+        return f"The investigation {verdict} this cause: {statement}."
+    if item.kind is EvidenceKind.LOG and (found := _LINE.match(item.title)):
+        return f'Line {found["n"]} of the log reads: "{found["line"]}"'
+    if item.kind is EvidenceKind.TEMPLATE and (found := _TEMPLATE.match(item.title)):
+        pattern = found["pattern"].replace("<*>", "…")
+        return f'{found["count"]} log lines follow one pattern: "{pattern}"'
     return item.title
 
 

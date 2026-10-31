@@ -11,6 +11,13 @@ import { cn } from "@/lib/utils";
 import { Citations, EvidenceChip, KIND_LABEL, useEvidence } from "./evidence";
 
 /** All evidence the run collected, filterable by kind. */
+// Where a past incident in memory came from, as the incident library names it.
+const SOURCE: Record<string, string> = {
+  curated: "built from a sample",
+  run: "from an approved incident",
+  memory: "from memory",
+};
+
 export function EvidenceTable({ evidence, cited }: { evidence: Evidence[]; cited: Set<string> }) {
   const [kind, setKind] = useState<string>("all");
   const { active, pin } = useEvidence();
@@ -227,7 +234,7 @@ export function Similar({ retrieval }: { retrieval: RetrievalResult }) {
                 {incident.components?.length ? (
                   <span>components {incident.components.slice(0, 3).join(", ")}</span>
                 ) : null}
-                <span>{incident.source === "memory" ? "synthetic memory" : incident.source}</span>
+                <span>{SOURCE[incident.source] ?? incident.source}</span>
               </p>
             </li>
           ))}

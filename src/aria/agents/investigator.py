@@ -42,7 +42,7 @@ from aria.llm.schemas import (
 from aria.mcp.client import ToolBelt, ToolNotAllowedError
 from aria.parsing.flows import load_flow_settings
 from aria.parsing.signals import signal_components, signal_templates
-from aria.text import clip
+from aria.text import clip, headline
 
 INVESTIGATOR_TOOLS = (
     "search_logs",
@@ -184,7 +184,7 @@ def candidate_hypotheses(inputs: InvestigationInputs, *, limit: int = 3) -> list
         label = incident.failure_mode.replace("_", " ")
         out.append(
             NewHypothesis(
-                statement=f"{label.capitalize()}, as in past incident {incident.incident_id}",
+                statement=f'{label.capitalize()}, as in the past incident "{clip(headline(incident.title), 80)}"',
                 failure_mode=incident.failure_mode,
                 component=_component_for(incident, batch, component),
             )

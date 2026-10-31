@@ -54,18 +54,24 @@ export function Memory() {
   );
   const shown = incidents.data ?? [];
   const synthetic = shown.filter((i) => i.synthetic).length;
-  // Tag the rarer kind, so a seeded memory does not repeat "synthetic" on nearly every row.
+  // Tag the rarer kind, so a seeded library does not repeat "from a sample" on nearly every row.
   const tagRuns = synthetic > shown.length / 2;
   const tag = (incident: IncidentOut) =>
-    tagRuns ? (incident.synthetic ? null : "from a run") : incident.synthetic ? "synthetic" : null;
+    tagRuns
+      ? incident.synthetic
+        ? null
+        : "from an approved incident"
+      : incident.synthetic
+        ? "from a sample"
+        : null;
   const kinds =
     synthetic === 0
       ? ""
       : synthetic === shown.length
-        ? "; all are synthetic seed incidents"
+        ? "; all were built from ARIA's samples, not taken from real history"
         : tagRuns
-          ? `; ${shown.length - synthetic} came from published runs, tagged so, and the rest are synthetic seed incidents`
-          : `; ${synthetic} are synthetic seed incidents, tagged so`;
+          ? `; ${shown.length - synthetic} came from approved incidents, tagged so, and the rest were built from samples`
+          : `; ${synthetic} were built from samples, tagged so`;
 
   return (
     <div className="grid gap-6">

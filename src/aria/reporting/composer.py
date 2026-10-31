@@ -23,11 +23,15 @@ from aria.parsing.signals import signal_components, signal_templates
 from aria.retrieval.runbooks import Runbook
 from aria.text import clip, headline
 
+# How the severity was settled, in the words the console uses for the same five cases.
 DECIDED_BY_TEXT = {
-    "rules": "Decided by rules",
-    "model": "Decided by the calibrated model",
-    "llm": "Chosen by the LLM from the model's prediction set",
-    "fallback": "The most severe class in the prediction set, pending review",
+    "rules": "A rule set it",
+    "model": "The model is confident in it",
+    "llm": "A language model chose it from the levels the model allowed",
+    "fallback": (
+        "ARIA is not sure enough to decide alone, so it plans for the most serious level it "
+        "could be, and a person confirms"
+    ),
     "human": "Set by a reviewer",
 }
 SYSTEM_NAMES = {
@@ -138,6 +142,23 @@ def _own_evidence(ctx: ReportContext, template: TemplateStat) -> Evidence | None
     return item if item is not None and item.kind is EvidenceKind.TEMPLATE else None
 
 
+def _example(ctx: ReportContext, template: TemplateStat) -> Evidence | None:
+    """A real line of the template, as the log-line evidence the parser kept for it, if any."""
+    return next(
+        (
+            e
+            for e in ctx.all_of(EvidenceKind.LOG, source="parser")
+            if e.data.get("template_id") == template.template_id
+        ),
+        None,
+    )
+
+
+def _quoted(item: Evidence) -> str:
+    """The log line a log-line evidence item holds (its title reads "line N: <line>")."""
+    return item.title.split(": ", 1)[-1]
+
+
 def compose_title(ctx: ReportContext) -> str:
     if ctx.title_hint:
         return clip(f"{ctx.severity.severity} · {ctx.title_hint}", 140)
@@ -198,7 +219,9 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
     p = sev.probabilities.get(sev.severity, 0.0)
     how = DECIDED_BY_TEXT[sev.decided_by]
     if sev.set_empty and sev.decided_by == "fallback":
-        how = "Too uncertain to decide alone: the most likely class, pending review"
+        how = (
+            "No level was likely enough, so ARIA plans for the most likely one and a person decides"
+        )
     # The model is skipped for a window far from its training data (the rules set the choices).
     unlike = model_ev is not None and bool(model_ev.data.get("outside_training"))
     if unlike:
@@ -208,7 +231,8 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
         )
     severity_text = f"{sev.severity}: {SEVERITY_DESCRIPTIONS[sev.severity]} {how}"
     if sev.decided_by in ("model", "llm", "fallback") and model_ev is not None:
-        severity_text += f" ({'rule-score' if unlike else 'model'} probability {p:.2f})"
+        scorer = "the rules' score" if unlike else "the model"
+        severity_text += f" ({scorer} gives it {p:.0%})"
     if unlike and floor_ev is not None and sev.floor is not None:
         rule = floor_ev.title.split(": ", 1)[-1].rstrip(".")
         severity_text += f". A safety floor keeps it at {sev.floor} or worse: {rule}"
@@ -223,8 +247,7 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
         )
         if model_ev is not None:
             severity_text += (
-                f" (on its own, the model gave {model_top} a probability of "
-                f"{sev.probabilities[model_top]:.2f})"
+                f" (on its own, the model gave {model_top} {sev.probabilities[model_top]:.0%})"
             )
     ticket_ev = ctx.find(EvidenceKind.MODEL, source="severity.ticket_model")
     if ticket_ev is not None and any(ticket_ev.id in c.evidence_ids for c in sev.rationale):
@@ -241,11 +264,16 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
         )
     if window is not None and features.n_events:
         warnings = features.level_counts.get("WARN", 0)
-        scale = (
-            f"{features.error_events} error events ({features.error_ratio:.1%} of {features.n_events})"
-            + (f" and {warnings} warnings" if warnings else "")
-            + f" in {features.duration_s / 60:.1f} minutes of logs"
-        )
+        minutes = f"{features.n_events} lines over {features.duration_s / 60:.1f} minutes"
+        if features.error_events:
+            scale = (
+                f"{features.error_events} errors ({features.error_ratio:.1%} of "
+                f"{minutes} of logs)" + (f" and {warnings} warnings" if warnings else "")
+            )
+        elif warnings:
+            scale = f"No errors, but {warnings} warnings, in {minutes} of logs"
+        else:
+            scale = f"No errors in {minutes} of logs"
         if spread is not None:
             scale += f", on {features.error_nodes} of {features.distinct_nodes} nodes"
         elif warn_spread is not None:
@@ -276,12 +304,23 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
         template, template_ev = top
         kind = "error" if template.error_like else "new warning" if template.novel else "warning"
         on_nodes = f" on {template.nodes} nodes" if template.nodes else ""
-        summary.append(
-            _claim(
-                f'Most frequent {kind}: "{clip(template.template, 160)}" ({template.count} lines{on_nodes}).',
-                template_ev,
+        real = _example(ctx, template)
+        if real is not None:  # one real line reads better than the pattern it was mined into
+            summary.append(
+                _claim(
+                    f"Most frequent {kind}, {template.count} lines{on_nodes}, like this one: "
+                    f'"{clip(_quoted(real), 160)}".',
+                    template_ev,
+                    real,
+                )
             )
-        )
+        else:
+            summary.append(
+                _claim(
+                    f'Most frequent {kind}: "{clip(template.template, 160)}" ({template.count} lines{on_nodes}).',
+                    template_ev,
+                )
+            )
     incidents = [i for i in ctx.retrieval.incidents if i.evidence_id in by_id]
     # Retrieval may fall back to analogues on other systems; only this system's incidents can
     # suggest a cause.
@@ -290,9 +329,11 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
         best = incidents[0]
         seen = f"seen {best.occurrences} times" if best.occurrences > 1 else "seen once"
         where = "" if best in local else f" (an analogue on {best.system}, another system)"
+        made = ", built from a sample" if best.source == "curated" else ""
         summary.append(
             _claim(
-                f"Closest past incident{where}: {headline(best.title)} ({best.severity}, {seen}).",
+                f"Closest past incident{where}{made}: {headline(best.title)}, {best.severity}, "
+                f"{seen}.",
                 by_id[best.evidence_id or ""],
             )
         )
@@ -336,7 +377,7 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
         text = f"Suspected cause: {lead.statement.rstrip('.')}"
         if hyp_ev is not None and "confidence" in hyp_ev.data:
             # Quote the confidence only from the evidence that records it.
-            text += f" (investigation confidence {float(hyp_ev.data['confidence']):.0%})"
+            text += f" (the investigation is {float(hyp_ev.data['confidence']):.0%} sure)"
         cause.append(_claim(f"{text}.", hyp_ev, *supporting[:4]))
     elif local and signal:
         best = local[0]
@@ -426,35 +467,44 @@ def _fallback_claim(ctx: ReportContext) -> ClaimOut:
 
 
 def compose_timeline(ctx: ReportContext, *, limit: int = 12) -> list[TimelineEntry]:
-    events: list[tuple[datetime, str, str]] = [
-        (t.first_ts, f'First "{clip(t.template, 100)}" ({t.count} lines)', t.evidence_id)
-        for t in signal_templates(ctx.batch)
-        if t.first_ts and _own_evidence(ctx, t) is not None
-    ]
+    events: list[tuple[datetime, str, list[str]]] = []
+    told: set[str] = set()  # log lines already quoted where their pattern begins
+    for t in signal_templates(ctx.batch):
+        if not t.first_ts or _own_evidence(ctx, t) is None:
+            continue
+        example = _example(ctx, t)
+        if example is None:
+            events.append(
+                (t.first_ts, f'First "{clip(t.template, 100)}" ({t.count} lines)', [t.evidence_id])
+            )
+            continue
+        told.add(example.id)
+        text = f'First of {t.count} lines like "{clip(_quoted(example), 100)}"'
+        events.append((t.first_ts, text, [t.evidence_id, example.id]))
     events.extend(
         (
             item.ts,
             (
                 f"{'Warning' if item.data.get('level') == 'WARN' else 'Error'} logged: "
-                f"{clip(item.title.split(': ', 1)[-1], 120)}"
+                f"{clip(_quoted(item), 120)}"
             ),
-            item.id,
+            [item.id],
         )
         for item in ctx.all_of(EvidenceKind.LOG, source="parser")
-        if item.ts is not None
+        if item.ts is not None and item.id not in told
     )
     events.extend(
-        (item.ts, f"Alert fired: {clip(item.title, 120)}", item.id)
+        (item.ts, f"Alert fired: {clip(item.title, 120)}", [item.id])
         for item in ctx.all_of(EvidenceKind.ALERT)
         if item.ts is not None
     )
     seen: set[tuple[datetime, str]] = set()
     entries = []
-    for ts, text, eid in sorted(events, key=lambda e: e[0]):
+    for ts, text, ids in sorted(events, key=lambda e: e[0]):
         if (ts, text) in seen:
             continue
         seen.add((ts, text))
-        entries.append(TimelineEntry(ts=ts, text=text, evidence_ids=[eid]))
+        entries.append(TimelineEntry(ts=ts, text=text, evidence_ids=ids))
     return entries[:limit]
 
 

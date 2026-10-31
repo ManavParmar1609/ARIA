@@ -179,7 +179,7 @@ export function ReportView({
       {report.similar_incidents?.length ? (
         <Section title="Similar past incidents">
           <ul className="grid gap-2">
-            {report.similar_incidents.map((incident) => (
+            {report.similar_incidents.map((incident, i, all) => (
               <li key={incident.incident_id} className="grid gap-1 rounded-lg bg-raised p-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <SeverityBadge
@@ -189,13 +189,18 @@ export function ReportView({
                   <span className="font-medium">{incident.title}</span>
                   {incident.evidence_id ? <Citations ids={[incident.evidence_id]} /> : null}
                 </div>
-                <p className="text-sm text-muted-foreground">{incident.resolution}</p>
+                <p className="text-sm text-muted-foreground">
+                  {/* The same fix, card after card, says nothing new: write it once. */}
+                  {i > 0 && all[i - 1]?.resolution === incident.resolution
+                    ? "Fixed the same way as the one above."
+                    : incident.resolution}
+                </p>
                 <p className="text-xs text-faint">
                   seen {incident.occurrences} {incident.occurrences === 1 ? "time" : "times"}
                   {incident.mttr_minutes != null
                     ? `, resolved in about ${Math.round(incident.mttr_minutes)} min`
                     : ""}
-                  {incident.source === "memory" ? ", synthetic memory" : ""}
+                  {incident.source === "curated" ? ", built from a sample" : ""}
                 </p>
               </li>
             ))}

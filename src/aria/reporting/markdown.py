@@ -72,13 +72,17 @@ def render_markdown(report: IncidentReport, *, decided_by: str | None = None) ->
             "| Incident | Severity | Seen | Resolution | Evidence |",
             "|---|---|---|---|---|",
         ]
+        previous = None
         for inc in report.similar_incidents:
-            label = f"{inc.title}{' (synthetic history)' if inc.source == 'curated' else ''}"
+            label = f"{inc.title}{' (from a sample)' if inc.source == 'curated' else ''}"
             seen = f"{inc.occurrences}x" + (
                 f", last {inc.last_seen:%Y-%m-%d}" if inc.last_seen else ""
             )
+            # The same fix, row after row, says nothing new: write it once.
+            fix = "Same as above" if inc.resolution == previous else inc.resolution[:200]
+            previous = inc.resolution
             lines.append(
-                f"| {_cell(label)} | {inc.severity} | {seen} | {_cell(inc.resolution[:200])} | {_cite([inc.evidence_id] if inc.evidence_id else [])} |"
+                f"| {_cell(label)} | {inc.severity} | {seen} | {_cell(fix)} | {_cite([inc.evidence_id] if inc.evidence_id else [])} |"
             )
         lines.append("")
     if report.ticket_history is not None:
@@ -119,7 +123,8 @@ def render_markdown(report: IncidentReport, *, decided_by: str | None = None) ->
     )
     if any(inc.source == "curated" for inc in report.similar_incidents):
         lines.append(
-            "_Similar incidents marked synthetic come from ARIA's seeded, semi-synthetic history._"
+            '_Incidents marked "from a sample" were built from ARIA\'s samples, not taken from real '
+            "history._"
         )
     return "\n".join(lines) + "\n"
 

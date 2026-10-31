@@ -17,8 +17,8 @@ from aria.config import (
     SeverityConfig,
 )
 from aria.contracts.base import Claim, EvidenceKind, Severity
-from aria.contracts.report import ActionItem
-from aria.contracts.retrieval import Hypothesis, Investigation
+from aria.contracts.report import ActionItem, IncidentReport
+from aria.contracts.retrieval import Hypothesis, Investigation, SimilarIncident
 from aria.data.scenarios import LinePools, ScenarioBuilder
 from aria.db.engine import get_engine, init_db
 from aria.evidence import EvidenceStore
@@ -181,7 +181,7 @@ async def test_the_draft_is_grounded_by_construction(builder: ScenarioBuilder) -
     assert report.title.startswith(str(ctx.severity.severity))
     assert report.suspected_cause
     assert "Kernel panics" in report.suspected_cause[0].text
-    assert "confidence 80%" in report.suspected_cause[0].text  # quoted from the hypothesis evidence
+    assert "80% sure" in report.suspected_cause[0].text  # quoted from the hypothesis evidence
     assert any(a.runbook_slug == "bgl-kernel-panic" for a in report.actions)
     ids = {e.id for e in report.evidence}
     assert all(set(c.evidence_ids) <= ids for _, c in report.claims())
@@ -214,7 +214,7 @@ async def test_the_severity_check_says_why_a_person_must_confirm(builder: Scenar
         "Confirm the severity: the model could not rule out SEV2 or SEV3."
     )
     summary = compose_draft(one).summary[0].text
-    assert "The most severe class in the prediction set, pending review" in summary
+    assert "ARIA is not sure enough to decide alone" in summary
     assert "Severity " not in summary
     unsure = replace(one, severity=one.severity.model_copy(update={"set_empty": True}))
     assert (
@@ -222,7 +222,7 @@ async def test_the_severity_check_says_why_a_person_must_confirm(builder: Scenar
         .actions[0]
         .text.startswith("Confirm the severity: no severity was likely enough to decide alone (")
     )
-    assert "Too uncertain to decide alone" in compose_draft(unsure).summary[0].text
+    assert "No level was likely enough" in compose_draft(unsure).summary[0].text
 
 
 async def test_validator_catches_every_kind_of_defect(builder: ScenarioBuilder) -> None:
@@ -374,7 +374,7 @@ async def test_markdown_and_postmortem_render_with_citations(builder: ScenarioBu
     ):
         assert heading in md
     assert "[E" in md
-    assert "synthetic" in md  # seeded history is labelled as such
+    assert "(from a sample)" in md  # seeded history is labelled as such
     assert "_Validation: passed" in md
     post = render_postmortem(report)
     assert "## What went well" in post
@@ -546,3 +546,104 @@ def test_failure_modes_read_as_words_and_keep_their_capitals() -> None:
     assert _sentence(_mode_words("resourcemanager_unreachable")) == "ResourceManager unreachable"
     assert _sentence(_mode_words("bruteforce")) == "Brute-force attempts"
     assert _sentence(_mode_words("quorum_connection_loss")) == "Quorum connection loss"
+
+
+async def test_a_report_quotes_real_lines_and_names_past_incidents(
+    builder: ScenarioBuilder,
+) -> None:
+    """Plain text: one real line instead of the mined pattern, past incidents by title, and no
+    internal IDs in a sentence (the evidence chips carry them)."""
+    ctx = await _context(builder)
+    report = (
+        await ReportWriter(None, RUNBOOKS).write(ctx, report_id="rep-plain", use_llm=False)
+    ).report
+    assert report.validation.ok, report.validation.issues
+    frequent = next(c for c in report.summary if c.text.startswith("Most frequent"))
+    assert "<*>" not in frequent.text
+    assert "like this one" in frequent.text
+    assert len(frequent.evidence_ids) == 2  # the pattern's count and the line it quotes
+    sentences = [c.text for _, c in report.claims()] + [t.text for t in report.timeline]
+    assert not [s for s in sentences if "syn-" in s or "inc-" in s]
+    first = next(t for t in report.timeline if t.text.startswith("First of"))
+    assert "<*>" not in first.text
+    cause = report.suspected_cause[0].text if report.suspected_cause else ""
+    if "past incident" in cause:
+        assert '"' in cause  # named by its title
+
+
+def test_the_markdown_writes_a_repeated_fix_once() -> None:
+    rows = [
+        SimilarIncident(
+            incident_id=f"syn-{n}",
+            title=f"DataNodes failing to serve blocks ({n} nodes)",
+            system="hdfs",
+            failure_mode="block_serve_exceptions",
+            severity=Severity.SEV3,
+            score=0.5,
+            lexical_score=0.5,
+            dense_score=0.5,
+            occurrences=4,
+            resolution="Decommission the failing DataNode.",
+            source="curated",
+        )
+        for n in (3, 8)
+    ]
+    md = render_markdown(
+        IncidentReport.model_validate(
+            {
+                "report_id": "rep-md",
+                "run_id": "run-md",
+                "title": "SEV3 · Block serve exceptions in HDFS",
+                "severity": "SEV3",
+                "summary": [{"text": "A sentence.", "evidence_ids": ["E1"]}],
+                "similar_incidents": [r.model_dump() for r in rows],
+            }
+        ),
+        decided_by="rules",
+    )
+    assert md.count("Decommission the failing DataNode.") == 1
+    assert "| Same as above |" in md
+    assert md.count("(from a sample)") == 2
+
+
+def test_offline_answers_read_as_sentences_without_ids() -> None:
+    from aria.api.ask import _plain
+
+    store = EvidenceStore()
+    template = store.add(
+        EvidenceKind.TEMPLATE,
+        "46x <*>:50010:Got exception while serving <*> to /<*>:",
+        source="parser",
+        data={"template_id": "Tb70ad336a0", "count": 46},
+    )
+    line = store.add(
+        EvidenceKind.LOG,
+        "line 31: ip-af187e5b:50010:Got exception while serving blk_1 to /ip-f29a3842:",
+        source="parser",
+        data={"line": 31, "template_id": "Tb70ad336a0"},
+    )
+    hypothesis = store.add(
+        EvidenceKind.HYPOTHESIS,
+        'H1 supported: Block serve exceptions, as in the past incident "DataNodes failing"',
+        source="investigator",
+        data={"id": "H1", "status": "supported", "confidence": 0.95},
+    )
+    incident = store.add(
+        EvidenceKind.INCIDENT,
+        "Similar incident syn-hdfs-1: DataNodes failing to serve blocks (SEV3; 4x on hdfs)",
+        source="mcp.search_incidents",
+        data={"incident_id": "syn-hdfs-1", "synthetic": True, "occurrences": 4},
+    )
+    by_id = {item.id: item for item in store.all()}
+    texts = [_plain(by_id[e]) for e in (template, line, hypothesis, incident)]
+    assert (
+        texts[0]
+        == '46 log lines follow one pattern: "…:50010:Got exception while serving … to /…:"'
+    )
+    assert texts[1].startswith('Line 31 of the log reads: "ip-af187e5b:50010')
+    assert texts[2].startswith("The investigation supports this cause: Block serve exceptions")
+    assert texts[3] == (
+        "A similar past incident (built from a sample): DataNodes failing to serve blocks "
+        "(SEV3; 4x on hdfs)"
+    )
+    assert not any("syn-" in t or t.startswith("H1") for t in texts)
