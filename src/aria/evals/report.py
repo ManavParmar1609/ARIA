@@ -1843,6 +1843,23 @@ def _injection_summary(bench: Mapping[str, Any]) -> list[str]:
     return [text + ". Fencing, the prediction set and approval do not rely on it.", ""]
 
 
+def _generalisation_summary(section: Mapping[str, Any]) -> list[str]:
+    ring = section.get("leave_one_system_out") or {}
+    if not ring.get("n"):
+        return []
+    return [
+        "",
+        (
+            f"**On systems the model never saw** (each held out in turn, {ring['n']:,} windows "
+            f"from {ring['groups']} systems): accuracy {_pct(ring['accuracy']['rate'])} "
+            f"({_ci(ring['accuracy']['ci95'])}); serious windows rated SEV3-4: "
+            f"{_bound(ring['severe'])}; a person asked about "
+            f"{_pct(ring['deferred']['rate'])}. "
+            "[Details](docs/evaluation.md#systems-and-failures-aria-has-never-seen)."
+        ),
+    ]
+
+
 def _results(results: Mapping[str, Any], live: Mapping[str, Any] | None) -> list[str]:
     """The README's summary: headline numbers, each linked to its section of the full report."""
     lines = [_provenance(results, real="real" in results), ""]
@@ -1874,6 +1891,12 @@ def _results(results: Mapping[str, Any], live: Mapping[str, Any] | None) -> list
                 )
         cal, conf, auto = sev["calibration"], sev["conformal"], sev["automation"]
         lines += [
+            "",
+            (
+                "These windows come from the same systems and failure modes as the training "
+                "windows; the next line is the honest estimate for a new system."
+            ),
+            *_generalisation_summary(results.get("generalisation") or {}),
             "",
             (
                 f"- Calibration: ECE {cal['ece']:.3f}. Conformal prediction sets hold the true "

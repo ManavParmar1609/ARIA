@@ -683,3 +683,89 @@ export function realData() {
 }
 
 export type RealData = ReturnType<typeof realData>;
+
+// --- systems the model never saw (ring B) ------------------------------------------------------
+
+export interface SevereMisses {
+  misses: number;
+  severe: number;
+  rate: number | null;
+  /** At most this, with 95% confidence (an exact one-sided bound). */
+  upper95: number;
+}
+
+interface RawRate {
+  hits: number;
+  n: number;
+  rate: number | null;
+  ci95: [number, number];
+}
+
+interface RawGroup {
+  n: number;
+  accuracy: number;
+  severe: SevereMisses;
+  deferred: number;
+}
+
+interface RawRing {
+  n: number;
+  groups?: number;
+  severe?: SevereMisses;
+  accuracy?: RawRate;
+  deferred?: RawRate;
+  over_triage?: RawRate;
+  coverage?: { target: number; all: RawRate };
+  methods?: Record<string, { accuracy: number; severe: SevereMisses }>;
+  spread?: { median_accuracy: number; worst_group: string; worst_accuracy: number };
+  by_group?: Record<string, RawGroup>;
+}
+
+export interface HeldOutRing {
+  n: number;
+  groups: number;
+  severe: SevereMisses;
+  accuracy: number;
+  accuracyCi: [number, number];
+  deferred: number;
+  overTriage: number;
+  coverage: number;
+  target: number;
+  median: number;
+  worst: { name: string; accuracy: number };
+  methods: Record<string, { accuracy: number; severe: SevereMisses }>;
+  byGroup: { name: string; n: number; accuracy: number; severe: SevereMisses; deferred: number }[];
+}
+
+function heldOutRing(raw: RawRing | undefined): HeldOutRing | null {
+  if (!raw?.n || !raw.severe || !raw.accuracy || !raw.spread || !raw.coverage) return null;
+  return {
+    n: raw.n,
+    groups: raw.groups ?? 0,
+    severe: raw.severe,
+    accuracy: raw.accuracy.rate ?? 0,
+    accuracyCi: raw.accuracy.ci95,
+    deferred: raw.deferred?.rate ?? 0,
+    overTriage: raw.over_triage?.rate ?? 0,
+    coverage: raw.coverage.all.rate ?? 0,
+    target: raw.coverage.target,
+    median: raw.spread.median_accuracy,
+    worst: { name: raw.spread.worst_group, accuracy: raw.spread.worst_accuracy },
+    methods: raw.methods ?? {},
+    byGroup: Object.entries(raw.by_group ?? {})
+      .map(([name, g]) => ({ name, ...g }))
+      .sort((a, b) => a.accuracy - b.accuracy),
+  };
+}
+
+/**
+ * How ARIA does on systems, and on failure modes, its model never saw: each held out in turn and
+ * the model fitted again without it. Absent until `make eval` has measured it.
+ */
+export function generalisation(): { system: HeldOutRing; mode: HeldOutRing | null } | null {
+  const raw = (evals as unknown as Record<string, unknown>).generalisation as
+    { leave_one_system_out?: RawRing; leave_one_failure_mode_out?: RawRing } | undefined;
+  const system = heldOutRing(raw?.leave_one_system_out);
+  if (!system) return null;
+  return { system, mode: heldOutRing(raw?.leave_one_failure_mode_out) };
+}

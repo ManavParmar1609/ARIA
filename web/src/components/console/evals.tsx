@@ -47,7 +47,14 @@ import {
   ticketsResult,
   ticketsVerdict,
 } from "@/components/console/test-questions";
-import { EVAL_DOC_URL, type Evaluation, type RealData, type RealLogs } from "@/lib/site-data";
+import {
+  EVAL_DOC_URL,
+  type Evaluation,
+  type RealData,
+  type RealLogs,
+  type SevereMisses,
+  type generalisation,
+} from "@/lib/site-data";
 import { count } from "@/lib/format";
 import { NODE_LABEL } from "@/lib/steps";
 import { systemName } from "@/lib/systems";
@@ -906,14 +913,108 @@ function MoreRealSections({ more, data }: { more: RealData; data: Evaluation }) 
   );
 }
 
+/** "3 of 43 (at most 16%)": the honest form of a severe-miss count. */
+function missed(severe: SevereMisses): string {
+  if (!severe.severe) return "no serious windows";
+  return `${severe.misses} of ${severe.severe} (at most ${pct(severe.upper95, 0)})`;
+}
+
+/** Ring B: systems the model never saw, each held out in turn and the model fitted again. */
+function UnseenSection({ unseen }: { unseen: NonNullable<ReturnType<typeof generalisation>> }) {
+  const s = unseen.system;
+  const rules = s.methods.rules_only;
+  const verdict =
+    `On a system its model never saw, ARIA rated ${pct(s.accuracy, 0)} of windows right and ` +
+    `missed ${s.severe.misses} of ${s.severe.severe} serious ones: at most ` +
+    `${pct(s.severe.upper95, 0)}, with 95% confidence.`;
+  return (
+    <Section
+      id="ev-unseen-systems"
+      title="On systems it has never seen"
+      what="Each system held out in turn: the model is fitted again without it, then rates that system's windows. The honest estimate for a new system."
+      verdict={verdict}
+      headline={
+        rules
+          ? `Rules alone, on the same windows: ${pct(rules.accuracy, 0)} right, ${missed(rules.severe)} serious windows missed.`
+          : undefined
+      }
+      intro={
+        <>
+          The severity test on built samples uses fresh windows of the systems the model was trained
+          on. Here every window is rated once, by a model fitted (with its calibration and its short
+          lists) on the other systems only. With few serious windows, the honest claim is &ldquo;at
+          most&rdquo;, so serious misses come with an exact upper bound.
+        </>
+      }
+    >
+      <Facts
+        items={[
+          ["Right level (accuracy)", pct(s.accuracy)],
+          ["95% interval", `${pct(s.accuracyCi[0])} to ${pct(s.accuracyCi[1])}`],
+          ["Serious rated minor", missed(s.severe)],
+          ["Asked a person", pct(s.deferred)],
+          ["Rated too high", pct(s.overTriage)],
+          ["Short list held the label", `${pct(s.coverage)} (target ${pct(s.target, 0)})`],
+        ]}
+      />
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[32rem] text-left text-sm">
+          <caption className="sr-only">Each system held out in turn</caption>
+          <thead className="text-muted-foreground">
+            <tr className="border-b border-rule">
+              <th scope="col" className="py-2 pr-4 font-medium">
+                System held out
+              </th>
+              <th scope="col" className="py-2 pr-4 text-right font-medium">
+                Windows
+              </th>
+              <th scope="col" className="py-2 pr-4 text-right font-medium">
+                Right
+              </th>
+              <th scope="col" className="py-2 pr-4 font-medium">
+                Serious rated minor
+              </th>
+              <th scope="col" className="py-2 text-right font-medium">
+                Asked a person
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {s.byGroup.map((g) => (
+              <tr key={g.name} className="border-b border-rule last:border-0">
+                <th scope="row" className="py-2 pr-4 font-medium text-foreground">
+                  {systemName(g.name)}
+                </th>
+                <td className="tabular py-2 pr-4 text-right">{g.n}</td>
+                <td className="tabular py-2 pr-4 text-right">{pct(g.accuracy, 0)}</td>
+                <td className="tabular py-2 pr-4">{missed(g.severe)}</td>
+                <td className="tabular py-2 text-right">{pct(g.deferred, 0)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {unseen.mode ? (
+        <p className="max-w-prose text-sm text-muted-foreground">
+          Holding out one kind of failure at a time instead ({unseen.mode.groups} kinds), ARIA rated{" "}
+          {pct(unseen.mode.accuracy, 0)} of windows right and missed {missed(unseen.mode.severe)}{" "}
+          serious ones.
+        </p>
+      ) : null}
+    </Section>
+  );
+}
+
 export function Evals({
   data,
   real,
   more,
+  unseen,
 }: {
   data: Evaluation;
   real?: RealLogs;
   more?: RealData;
+  unseen?: ReturnType<typeof generalisation>;
 }) {
   const s = data.severity;
   const p = data.pipeline;
@@ -922,7 +1023,7 @@ export function Evals({
   const stages = Object.entries(p.stageP50)
     .map(([step, ms]) => [NODE_LABEL[step] ?? step, ms] as [string, number])
     .sort((a, b) => b[1] - a[1]);
-  const toc = contents(Boolean(real), Boolean(more));
+  const toc = contents(Boolean(real), Boolean(more), Boolean(unseen));
   return (
     <div className="grid gap-8">
       <PageHeader
@@ -954,6 +1055,17 @@ export function Evals({
                 description="The short answer to each, with the evidence under it."
               />
               <TestQuestions data={data} real={real} more={more} />
+            </section>
+          ) : null}
+
+          {unseen ? (
+            <section aria-labelledby="ev-unseen" className="grid gap-6">
+              <SectionHeader
+                id="ev-unseen"
+                title="New systems"
+                description="How ARIA does on systems and failures its model never saw."
+              />
+              <UnseenSection unseen={unseen} />
             </section>
           ) : null}
 
@@ -1290,7 +1402,7 @@ export function Evals({
 }
 
 /** The page's sections and the tests in each, for its "On this page" list. */
-function contents(real: boolean, more: boolean): TocItem[] {
+function contents(real: boolean, more: boolean, unseen: boolean): TocItem[] {
   const realTests = [
     ...(real ? [{ id: "ev-real", label: "Hadoop file system blocks" }] : []),
     ...(more
@@ -1318,6 +1430,15 @@ function contents(real: boolean, more: boolean): TocItem[] {
               { id: "q-memory", label: "Does it find the right past incident?" },
               { id: "q-limits", label: "Where does it fall short?" },
             ],
+          },
+        ]
+      : []),
+    ...(unseen
+      ? [
+          {
+            id: "ev-unseen",
+            label: "New systems",
+            children: [{ id: "ev-unseen-systems", label: "On systems it has never seen" }],
           },
         ]
       : []),
