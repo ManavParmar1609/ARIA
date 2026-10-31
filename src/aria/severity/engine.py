@@ -177,6 +177,14 @@ class SeverityEngine:
             version, conformal = self.model.version, self.model.conformal_q is not None
             q = self.model.conformal_q
             set_empty = q is not None and not any(float(p) >= 1.0 - q for p in probs)
+            if set_empty:
+                # No level is likely enough on its own: the model's most likely level and the
+                # rules' level both stay possible, and the conservative policy plans for the more
+                # serious of the two. (The most likely alone once rated an outage the rules
+                # called SEV2 as SEV4.)
+                raw_set = sorted(
+                    {Severity(str(top)), evaluation.rule_severity}, key=lambda s: s.rank
+                )
             extra = {
                 "conformal_q": self.model.conformal_q,
                 "temperature": round(self.model.temperature, 4),
@@ -191,7 +199,8 @@ class SeverityEngine:
             detail=(
                 (
                     f"No severity is likely enough for the {1 - self.alpha:.0%} prediction set on "
-                    f"its own; it falls back to the most likely class, {raw_set[0]}."
+                    f"its own; the model's most likely class and the rules' stay possible: "
+                    f"{{{', '.join(raw_set)}}}."
                     if set_empty
                     else f"{1 - self.alpha:.0%} prediction set: {{{', '.join(raw_set)}}}"
                 )

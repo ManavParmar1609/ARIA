@@ -2,7 +2,9 @@
 
 Counts are log-scaled so a window with 10,000 errors does not dominate one with 100; ratios and
 criticality stay on their natural 0-1 scale. Rule probabilities are included, so the model
-learns how far to trust each rule family instead of re-deriving them.
+learns how far to trust each rule family instead of re-deriving them. Keyword counts come from
+lines logged at WARN or above (or with no level): the rules see every line, but at INFO the same
+words are usually routine.
 """
 
 from __future__ import annotations
@@ -31,14 +33,19 @@ _LOG_COUNTS = (
     "alerts.critical",
     "alerts.warning",
 )
-_RAW = ("error_ratio", "node_spread", "max_component_criticality")
+_RAW = (
+    "error_ratio",
+    "node_spread",
+    "max_component_criticality",
+    "warn_component_criticality",
+)
 
 
 def log_feature_names() -> list[str]:
     names = [f"log1p.{name}" for name in _LOG_COUNTS]
     names += list(_RAW)
     names += ["burst_score", "persistence_min_log1p", "frac.WARN", "frac.ERROR", "frac.FATAL"]
-    names += [f"log1p.keyword_hits.{c}" for c in load_lexicon()]
+    names += [f"log1p.issue_keyword_hits.{c}" for c in load_lexicon()]
     names += [f"rule_p.{s}" for s in SEVERITY_ORDER]
     names += ["floor_rank"]
     return names
@@ -56,8 +63,8 @@ def log_feature_row(values: FeatureSpace, rules: RuleEvaluation) -> dict[str, fl
     for level in ("WARN", "ERROR", "FATAL"):
         row[f"frac.{level}"] = values.get(f"level_counts.{level}", 0.0) / n
     for category in load_lexicon():
-        row[f"log1p.keyword_hits.{category}"] = math.log1p(
-            values.get(f"keyword_hits.{category}", 0.0)
+        row[f"log1p.issue_keyword_hits.{category}"] = math.log1p(
+            values.get(f"issue_keyword_hits.{category}", 0.0)
         )
     for severity in SEVERITY_ORDER:
         row[f"rule_p.{severity}"] = rules.probabilities[severity]

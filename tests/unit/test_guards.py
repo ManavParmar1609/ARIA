@@ -198,6 +198,18 @@ def test_ips_and_emails_are_pseudonymised_consistently() -> None:
     assert redactor.summary().pseudonyms == 3
 
 
+def test_addresses_inside_host_names_and_at_a_sentence_end_are_pseudonymised() -> None:
+    redactor = Redactor()
+    for text, address in (
+        ("rhost=5.36.59.76.dynamic-dsl-ip.omantel.net.om user=root", "5.36.59.76"),
+        ("connection closed by 192.0.2.44.", "192.0.2.44"),
+    ):
+        assert address not in redactor.redact(text), text
+    # Versions, dates and counters stay as they are.
+    kept = "release 1.2.3.4.5 built 2026-10-31-12.tar on 10.0.0.1.2"
+    assert redactor.redact(kept) == kept
+
+
 def test_pseudonyms_agree_across_redactors_sharing_a_salt_only() -> None:
     salt = b"0" * 16
     assert Redactor(salt=salt).redact("10.1.1.1") == Redactor(salt=salt).redact("10.1.1.1")

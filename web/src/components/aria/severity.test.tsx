@@ -29,7 +29,7 @@ describe("severity components", () => {
       />,
     );
     expect(screen.getByRole("figure").getAttribute("aria-label")).toContain(
-      "No level is likely enough to make the short list, so the likeliest stands in.",
+      "No level is likely enough to make the short list on its own, so the model's best guess and the rules' level stand in.",
     );
     expect(screen.getByText(/Dashed bracket/)).toBeTruthy();
   });

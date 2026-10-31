@@ -3,7 +3,7 @@
 import { LevelChip, SeverityScale } from "@/components/aria/severity";
 import { decisionPhrase } from "@/lib/decision";
 import { SEVERITIES, type SeverityAssessment } from "@/lib/api/types";
-import { percent } from "@/lib/format";
+import { chance, percent } from "@/lib/format";
 import { LEVEL_RESPONSE, orList } from "@/lib/levels";
 import { cn } from "@/lib/utils";
 
@@ -100,16 +100,16 @@ export function SeverityPanel({
               {lifted
                 ? rulesOnly
                   ? `On their own, the rule scores put ${percent(assessment.probabilities[modelTop] ?? 0)} on ${modelTop}; the safety rule is there for cases the scores miss.`
-                  : `On its own, the model put ${percent(assessment.probabilities[modelTop] ?? 0)} on ${modelTop}; the safety rule is there for cases the model has not learned.`
+                  : `On its own, the model put ${chance(assessment.probabilities[modelTop] ?? 0)} on ${modelTop}; the safety rule is there for cases the model has not learned.`
                 : assessment.decided_by === "human"
                   ? ""
                   : rulesOnly
                     ? "The bars are rule scores, not a calibrated confidence."
                     : assessment.set_empty
-                      ? `No level is likely enough for the ${coverage}% short list on its own; ${assessment.severity} is the most likely, at ${percent(assessment.confidence)}.`
+                      ? `No level is likely enough for the ${coverage}% short list on its own, so the model's best guess and the rules' level stay on it, and ARIA plans for the more serious: ${assessment.severity}, which the model gives ${chance(assessment.confidence)}.`
                       : assessment.decided_by === "fallback" && set.length === 1
-                        ? `The model gives ${assessment.severity} ${percent(assessment.confidence)}, short of the confidence ARIA needs to decide alone.`
-                        : `The model gives ${assessment.severity} ${percent(assessment.confidence)}.`}
+                        ? `The model gives ${assessment.severity} ${chance(assessment.confidence)}, short of the confidence ARIA needs to decide alone.`
+                        : `The model gives ${assessment.severity} ${chance(assessment.confidence)}.`}
               {assessment.auditable
                 ? ` No language model was involved, so the decision can be checked from ${rulesOnly ? "the rules" : "the rules and the model"} alone.`
                 : ""}

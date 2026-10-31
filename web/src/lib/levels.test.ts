@@ -66,8 +66,11 @@ describe("shortListText", () => {
   });
 
   it("says when no level was likely enough, or a rule or a reviewer set it", () => {
-    expect(shortListText(assessment({ set_empty: true, prediction_set: [] }))).toBe(
-      "No level was likely enough on its own. ARIA plans for SEV2, the most likely. Please decide.",
+    expect(shortListText(assessment({ set_empty: true, prediction_set: ["SEV2", "SEV4"] }))).toBe(
+      "No level was likely enough on its own, so SEV2 or SEV4 stay possible. ARIA plans for SEV2, the more serious. Please decide.",
+    );
+    expect(shortListText(assessment({ set_empty: true, prediction_set: ["SEV2"] }))).toBe(
+      "No level was likely enough on its own. ARIA plans for SEV2, where the model and the rules meet. Please decide.",
     );
     expect(
       shortListText(

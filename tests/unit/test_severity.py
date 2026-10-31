@@ -492,15 +492,24 @@ async def test_uncertain_without_llm_falls_back_conservatively(rules: RuleSet) -
 
 
 async def test_a_flat_model_says_no_class_clears_the_threshold(rules: RuleSet) -> None:
-    flat = {"SEV1": 0.25, "SEV2": 0.25, "SEV3": 0.3, "SEV4": 0.2}
+    """No level clears the bar: the model's most likely level and the rules' both stay possible,
+    and ARIA plans for the more serious, never for the most likely alone."""
+    flat = {"SEV1": 0.2, "SEV2": 0.25, "SEV3": 0.25, "SEV4": 0.3}
     evidence = EvidenceStore()
     engine = SeverityEngine(rules, constant_model(flat, 0.5), alpha=0.1)  # threshold p >= 0.5
     result = await engine.assess(WINDOW, system="bgl", evidence=evidence, router=None)
+    pre = result.preliminary
     assert result.assessment.set_empty
-    assert result.assessment.prediction_set == [Severity.SEV3]
+    assert pre.rule_severity.rank < Severity.SEV4.rank  # the rules see more than noise
+    assert pre.raw_set == sorted({Severity.SEV4, pre.rule_severity}, key=lambda s: s.rank)
+    assert (result.assessment.severity, result.assessment.decided_by) == (
+        pre.rule_severity,
+        "fallback",
+    )
+    assert result.assessment.needs_review
     model = next(e for e in evidence.all() if e.kind == EvidenceKind.MODEL)
     assert model.data["set_empty"] is True
-    assert "falls back to the most likely class, SEV3" in model.detail
+    assert "the model's most likely class and the rules' stay possible" in model.detail
 
 
 async def test_llm_adjudicates_within_the_set(rules: RuleSet) -> None:

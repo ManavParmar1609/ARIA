@@ -48,6 +48,9 @@ def feature_space(features: WindowFeatures, alerts: Sequence[AlertSignal] = ()) 
         values[f"level_counts.{level}"] = float(features.level_counts.get(level, 0))
     for category in load_lexicon():
         values[f"keyword_hits.{category}"] = float(features.keyword_hits.get(category, 0))
+        values[f"issue_keyword_hits.{category}"] = float(
+            features.issue_keyword_hits.get(category, 0)
+        )
     values["n_critical_components"] = float(len(features.critical_components))
     firing = [a for a in alerts if a.status == "firing"]
     labels = [(a.labels.get("severity") or a.labels.get("priority") or "").lower() for a in firing]
@@ -67,7 +70,13 @@ def _zero_features() -> dict[str, Any]:
         name: 0 if info.annotation in (int, "int") else 0.0
         for name, info in WindowFeatures.model_fields.items()
         if name in _NUMERIC_FIELDS
-    } | {"level_counts": {}, "keyword_hits": {}, "components": [], "critical_components": []}
+    } | {
+        "level_counts": {},
+        "keyword_hits": {},
+        "issue_keyword_hits": {},
+        "components": [],
+        "critical_components": [],
+    }
 
 
 # --- condition trees ---------------------------------------------------------------------------

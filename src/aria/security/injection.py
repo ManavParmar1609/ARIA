@@ -17,7 +17,7 @@ import base64
 import binascii
 import re
 import unicodedata
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from urllib.parse import unquote_plus
 
@@ -182,7 +182,14 @@ def variants(text: str) -> Iterator[str]:
             yield from (normalize_for_detection(d) for d in _decoded_base64(reading))
 
 
-def scan_line(text: str, line_idx: int) -> InjectionFinding | None:
+def scan_line(
+    text: str, line_idx: int, *, redact: Callable[[str], str] | None = None
+) -> InjectionFinding | None:
+    """A finding for a line that reads like instructions to a model, or None.
+
+    ``redact``, when given, cleans the excerpt the finding keeps. Detection still reads the line
+    as written, but the excerpt is shown to reviewers, cited in answers and quoted to a model, and
+    a line written by an attacker is the likeliest to carry a key or an address."""
     hits: dict[str, tuple[_Pattern, str, re.Match[str]]] = {}
     for variant in variants(text):
         lowered = variant.lower()
@@ -199,8 +206,12 @@ def scan_line(text: str, line_idx: int) -> InjectionFinding | None:
     score = round(1.0 - score, 3)
     if score < 0.5:
         return None
-    _, variant, match = max(hits.values(), key=lambda hit: hit[0].weight)
+    pattern, variant, match = max(hits.values(), key=lambda hit: hit[0].weight)
     start = max(0, match.start() - 20)
+    if redact is not None:
+        variant = redact(variant)
+        again = pattern.regex.search(variant)
+        start = max(0, again.start() - 20) if again else 0
     return InjectionFinding(
         line_idx=line_idx,
         pattern="+".join(hits),

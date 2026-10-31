@@ -65,6 +65,10 @@ describe("an evidence title", () => {
 
   it("names the severity model's measurements in words", () => {
     expect(featureName("log1p.keyword_hits.crash")).toBe("words about crashes");
+    expect(featureName("log1p.issue_keyword_hits.data_risk")).toBe(
+      "words about data loss in warnings and errors",
+    );
+    expect(featureName("warn_component_criticality")).toBe("most critical service with warnings");
     expect(featureName("log1p.peak_errors_per_min")).toBe("errors a minute at the peak");
     expect(featureName("frac.WARN")).toBe("share of WARN lines");
     expect(featureName("rule_p.SEV2")).toBe("rules' score for SEV2");
@@ -77,6 +81,9 @@ describe("an evidence title", () => {
     expect(
       evidenceTitle({ kind: "feature", title: "2000 events, 1 errors (0.1%) over 12.0 min" }),
     ).toBe("2,000 lines, 1 error (0.1%), over 12.0 minutes");
+    expect(
+      evidenceTitle({ kind: "feature", title: "40 events, 0 errors (0.0%) over 0.0 min" }),
+    ).toBe("40 lines, no errors, within a minute");
   });
 
   it("says what a tool did and what came back, without record ids or a cut-off payload", () => {

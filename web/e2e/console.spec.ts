@@ -31,7 +31,7 @@ test.describe("console", () => {
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await expect(
       page.getByText(
-        /^(Only SEV\d is likely(, and the severity model is confident of it|, and the rules agree)?\.|(Probably SEV\d(, \d+% likely)?|SEV\d is the likeliest level, at \d+%)\. (ARIA isn't sure enough to decide alone|Only ARIA's rules rated these logs), so please confirm\.|Could be SEV\d.*ARIA plans for SEV\d\.( Please confirm\.)?)$/,
+        /^(Only SEV\d is likely(, and the severity model is confident of it|, and the rules agree)?\.|(Probably SEV\d(, \d+% likely)?|SEV\d is the likeliest level, at \d+%)\. (ARIA isn't sure enough to decide alone|Only ARIA's rules rated these logs), so please confirm\.|Could be SEV\d.*ARIA plans for SEV\d( until someone decides)?\.( Please confirm\.)?|No level was likely enough on its own.*ARIA plans for SEV\d, .*\.( Please decide\.)?)$/,
       ),
     ).toBeVisible();
     // Four panels, one question each.

@@ -200,8 +200,27 @@ def _most_serious(
 
 
 def _quoted(item: Evidence) -> str:
-    """The log line a log-line evidence item holds (its title reads "line N: <line>")."""
-    return item.title.split(": ", 1)[-1]
+    """The log line a log-line evidence item holds (its title reads "line N: <line>"), with an
+    ellipsis where the title cut it short, so a cut quote does not read as the whole line."""
+    text = item.title.split(": ", 1)[-1]
+    full = item.detail or ""
+    if len(full) > len(text) and full.startswith(text.rstrip("…")):
+        return text if text.endswith("…") else f"{text.rstrip()}…"
+    return text
+
+
+# A title's words for the kind of trouble a window's error lines report most.
+_TROUBLE = {
+    "crash": "Crashes",
+    "data_risk": "Data-integrity errors",
+    "unavailable": "Services unreachable",
+    "resource": "Resources running out",
+    "security": "Sign-in and access failures",
+    "hardware": "Hardware errors",
+    "storage": "Storage errors",
+    "network": "Network errors",
+    "degradation": "Slow or retrying requests",
+}
 
 
 def compose_title(ctx: ReportContext) -> str:
@@ -229,7 +248,10 @@ def compose_title(ctx: ReportContext) -> str:
     elif top is not None and top.score > 0:
         what = f"Suspected {_mode_words(top.failure_mode)}"
     elif features.error_events:
-        what = "Error spike"
+        # Named by the kind of trouble the error lines report most, so a list of incidents is not
+        # a column of "Error spike".
+        hits = {k: v for k, v in (features.issue_keyword_hits or {}).items() if k in _TROUBLE}
+        what = _TROUBLE[max(hits, key=lambda k: hits[k])] if hits else "Error spike"
     elif signal_templates(ctx.batch):
         what = "New warnings"
     else:
@@ -274,7 +296,8 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
     how = DECIDED_BY_TEXT[sev.decided_by]
     if sev.set_empty and sev.decided_by == "fallback":
         how = (
-            "No level was likely enough, so ARIA plans for the most likely one and a person decides"
+            "No level was likely enough, so ARIA plans for the more serious of the model's most "
+            "likely level and the rules' and a person decides"
         )
     # The model is skipped for a window far from its training data (the rules set the choices).
     unlike = model_ev is not None and bool(model_ev.data.get("outside_training"))
@@ -288,10 +311,11 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
     level = f"{sev.severity} ({word.lower()}): {what}" if what else f"{sev.severity}: {meaning}"
     severity_text = f"{level} {how}"
     if sev.decided_by in ("model", "llm", "fallback") and model_ev is not None:
-        scorer = "the rules' score" if unlike else "the severity model"
-        severity_text += (
-            f" ({p:.0%})" if sev.decided_by == "model" else f" ({scorer} gives it {p:.0%})"
+        # Without the model the figure is a share of the rules' summed weight, not a chance.
+        share = (
+            f"{p:.0%} of the rules' weight" if unlike else f"the severity model gives it {p:.0%}"
         )
+        severity_text += f" ({p:.0%})" if sev.decided_by == "model" else f" ({share})"
     if unlike and floor_ev is not None and sev.floor is not None:
         rule = floor_ev.title.split(": ", 1)[-1].rstrip(".")
         severity_text += f". A safety floor keeps it at {sev.floor} or worse: {rule}"
@@ -327,11 +351,14 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
             if features.duration_s >= 60
             else "within a minute"
         )
-        minutes = f"{_count(features.n_events, 'line')} {span} of logs"
+        minutes = f"{_count(features.n_events, 'line')} {span}"
         if features.error_events:
+            # "46 errors in 113 lines (40.7%), within a minute", not "46 errors (40.7% of 113
+            # lines within a minute of logs)".
             scale = (
-                f"{_count(features.error_events, 'error')} ({features.error_ratio:.1%} of "
-                f"{minutes})" + (f" and {_count(warnings, 'warning')}" if warnings else "")
+                f"{_count(features.error_events, 'error')} in "
+                f"{_count(features.n_events, 'line')} ({features.error_ratio:.1%}), {span}"
+                + (f", and {_count(warnings, 'warning')}" if warnings else "")
             )
         elif warnings:
             scale = f"No errors, but {_count(warnings, 'warning')}, in {minutes}"

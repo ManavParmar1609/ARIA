@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  chance,
   count,
   duration,
   median,
@@ -71,5 +72,14 @@ describe("count", () => {
     expect(count(6)).toBe("six");
     expect(count(10)).toBe("10");
     expect(count(5247088)).toBe("5,247,088");
+  });
+});
+
+describe("chance", () => {
+  it("never claims a calibrated model is certain", () => {
+    expect(chance(0.996)).toBe(">99%");
+    expect(chance(0.003)).toBe("<1%");
+    expect(chance(0.54)).toBe("54%");
+    expect(chance(0)).toBe("0%");
   });
 });

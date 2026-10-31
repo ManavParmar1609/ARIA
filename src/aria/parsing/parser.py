@@ -102,6 +102,14 @@ def parse_shard(
     dropped: int = 0,
 ) -> ShardResult:
     redactor = Redactor(pseudonymize_ips=guard.pseudonymize_ips, salt=salt)
+
+    def excerpt_redactor(text: str) -> str:
+        # A quarantined line's excerpt is redacted like the line, by a redactor of its own so the
+        # run's redaction counts stay one per line.
+        if not guard.redact_pii:
+            return text
+        return Redactor(pseudonymize_ips=guard.pseudonymize_ips, salt=salt).redact(text)
+
     drain = drain_for(system)
     parsed: list[ParsedLine] = []
     injections: list[InjectionFinding] = []
@@ -112,7 +120,10 @@ def parse_shard(
         flags: list[str] = [] if line_text == raw else ["sanitized"]
         if len(line_text) > guard.max_line_chars:
             line_text, truncated = line_text[: guard.max_line_chars], truncated + 1
-        if guard.detect_injection and (finding := scan_line(line_text, idx)) is not None:
+        if (
+            guard.detect_injection
+            and (finding := scan_line(line_text, idx, redact=excerpt_redactor)) is not None
+        ):
             injections.append(finding)
             flags.append(QUARANTINE_FLAG)
         text = redactor.redact(line_text) if guard.redact_pii else line_text

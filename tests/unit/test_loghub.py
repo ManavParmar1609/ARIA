@@ -231,6 +231,41 @@ def test_generic_parser_names_a_service_with_its_process_id() -> None:
     assert host.component is None
 
 
+def test_generic_parser_reads_pipe_fields_with_one_letter_levels_and_epoch_times() -> None:
+    """A format ARIA has no pattern for still has its levels and times read: a paste of these
+    once read as "no errors, within a minute"."""
+    ok = parse_generic_line("svc", "1793416932840|ledger-sync|I|batch#4100|committed 128 rows")
+    bad = parse_generic_line("svc", "1793417069000|ledger-sync|E|batch#4101|checksum mismatch")
+    worst = parse_generic_line("svc", "1793417069000|ledger-sync|F|batch#4101|giving up")
+    assert (ok.level, bad.level, worst.level) == ("INFO", "ERROR", "FATAL")
+    assert (bad.component, bad.message) == ("ledger-sync", "batch#4101 | checksum mismatch")
+    assert ok.ts is not None
+    assert bad.ts is not None
+    assert (bad.ts - ok.ts).total_seconds() == pytest.approx(136.16)
+    # Pipes in a line with no level field are only part of what it says.
+    plain = parse_generic_line("svc", "a | b | c with no level")
+    assert (plain.level, plain.message) == ("INFO", "a | b | c with no level")
+
+
+def test_generic_parser_reads_a_level_a_few_fields_in_and_access_log_statuses() -> None:
+    pod = parse_generic_line(
+        "svc", "2026-10-31T03:02:14.404Z checkout-6b7 checkout ERROR c.s.Checkout - OOMKilled"
+    )
+    assert pod.level == "ERROR"
+    assert pod.message == "checkout-6b7 checkout ERROR c.s.Checkout - OOMKilled"  # kept whole
+    served = parse_generic_line(
+        "svc", '198.51.100.9 - - [31/Oct/2026:02:00:00 +0000] "GET /errors HTTP/1.1" 200 31 "-"'
+    )
+    failed = parse_generic_line(
+        "svc", '198.51.100.9 - - [31/Oct/2026:02:05:00 +0000] "POST /api/pay HTTP/1.1" 502 9 "-"'
+    )
+    assert (served.level, failed.level) == ("INFO", "ERROR")  # the status, not the path's words
+    assert served.ts == datetime(2026, 10, 31, 2, 0, tzinfo=UTC)
+    assert failed.ts == datetime(2026, 10, 31, 2, 5, tzinfo=UTC)
+    # A message that happens to start with a capital letter keeps it.
+    assert parse_generic_line("svc", "I am a plain message").message == "I am a plain message"
+
+
 def test_generic_parser_derives_level_from_message() -> None:
     assert parse_generic_line("svc", "kernel panic - not syncing").level == "FATAL"
     assert parse_generic_line("svc", "connection refused by peer").level == "ERROR"
