@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState, type CSSProperties } from "react";
 
 import { SeverityScale, TagStrip } from "@/components/aria/severity";
+import { decisionPhrase } from "@/lib/decision";
 import { useWideMotion } from "@/lib/motion";
 import type { Replay } from "@/lib/site-data";
 import { cx } from "@/lib/cx";
@@ -17,13 +18,6 @@ const KIND_LABEL: Record<string, string> = {
   runbook: "runbook",
   tool: "tool call",
   hypothesis: "hypothesis",
-};
-
-const DECIDED: Record<string, string> = {
-  rules: "Rules decided it.",
-  model: "The calibrated model decided it.",
-  fallback: "Too uncertain to decide alone, so a person confirms.",
-  llm: "The LLM chose within the model's prediction set.",
 };
 
 /**
@@ -246,7 +240,14 @@ export function TriageReplay({ data }: { data: Replay }) {
               <span className="font-medium">
                 {data.severity}, {p}% likely.
               </span>{" "}
-              <span className="text-muted-foreground">{DECIDED[data.decidedBy] ?? ""}</span>
+              <span className="text-muted-foreground">
+                {decisionPhrase({
+                  severity: data.severity,
+                  decided_by: data.decidedBy,
+                  prediction_set: data.predictionSet,
+                  set_empty: data.setEmpty,
+                })}
+              </span>
             </p>
           </div>
           <h4 className="eyebrow mt-5 border-t border-rule pt-5 text-muted-foreground">

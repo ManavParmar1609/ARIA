@@ -9,6 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { decidedByLabel } from "@/lib/decision";
 import { SEVERITIES } from "@/lib/api/types";
 import { EVAL_DOC_URL, type Evaluation, type RealData, type RealLogs } from "@/lib/site-data";
 import { count } from "@/lib/format";
@@ -913,7 +914,7 @@ export function Evals({
             <Bars
               label="Who decided"
               rows={Object.entries(s.decidedBy).map(
-                ([k, v]) => [k === "fallback" ? "flagged for review" : k, v] as [string, number],
+                ([k, v]) => [decidedByLabel(k), v] as [string, number],
               )}
               max={s.n}
               format={(v) => `${v}`}

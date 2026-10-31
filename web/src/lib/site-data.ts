@@ -40,6 +40,8 @@ export interface Replay {
   severity: Severity;
   probabilities: Record<Severity, number>;
   predictionSet: Severity[];
+  /** True when no level cleared the bar: the set then holds the likeliest level as a stand-in. */
+  setEmpty: boolean;
   decidedBy: string;
   needsReview: boolean;
   confidence: number;
@@ -134,6 +136,7 @@ export function replay(): Replay {
     severity: sev.severity as Severity,
     probabilities: sev.probabilities as Record<Severity, number>,
     predictionSet: sev.prediction_set as Severity[],
+    setEmpty: sev.set_empty ?? false,
     decidedBy: sev.decided_by,
     needsReview: sev.needs_review,
     confidence: sev.confidence,

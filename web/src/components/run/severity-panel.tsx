@@ -7,30 +7,12 @@ import { useState } from "react";
 
 import { SeverityBadge, SeverityScale } from "@/components/aria/severity";
 import { Button } from "@/components/ui/button";
+import { decisionPhrase } from "@/lib/decision";
 import { SEVERITIES, SEVERITY_MEANING, type SeverityAssessment } from "@/lib/api/types";
 import { percent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import { Citations } from "./evidence";
-
-const HOW: Record<string, string> = {
-  rules: "Rules decided it: a safety floor fixed it, or the rules agreed with a confident model.",
-  model: "The calibrated model decided it: its prediction set held a single class.",
-  llm: "The LLM chose it from inside the model's prediction set.",
-  fallback:
-    "ARIA was not sure enough to decide alone, so it took the most severe class in the prediction set and asked for review.",
-  human: "A reviewer set it.",
-};
-
-// The same paths when the model stepped aside: the set is what the rules leave open, not a
-// calibrated prediction set, so these never mention the model or a confidence.
-const HOW_RULES_ONLY: Record<string, string> = {
-  ...HOW,
-  rules: "Rules decided it: a safety floor fixed it, or the rule scores left one level open.",
-  llm: "The LLM chose it from the levels the rules leave open.",
-  fallback:
-    "ARIA was not sure enough to decide alone, so it took the most severe level the rules leave open and asked for review.",
-};
 
 /** Severity and why: the instrument, the decision path and the rule trace. */
 export function SeverityPanel({ assessment }: { assessment: SeverityAssessment }) {
@@ -53,10 +35,8 @@ export function SeverityPanel({ assessment }: { assessment: SeverityAssessment }
       ? floorHit
       : null;
   const how = lifted
-    ? `A safety floor decided it: “${lifted.title}” holds it at ${assessment.floor} or above.`
-    : assessment.decided_by === "fallback" && assessment.set_empty && !rulesOnly
-      ? "ARIA was not sure enough to decide alone, so it took the most likely class and asked for review."
-      : ((rulesOnly ? HOW_RULES_ONLY : HOW)[assessment.decided_by] ?? assessment.decided_by);
+    ? `Set by a safety rule: “${lifted.title}” keeps it at ${assessment.floor} or worse.`
+    : decisionPhrase(assessment);
   const maxScore = Math.max(1, ...SEVERITIES.map((s) => assessment.rule_scores[s] ?? 0));
   return (
     // overflow-clip: the stamp starts large, and a transform still counts as overflow; clipped to

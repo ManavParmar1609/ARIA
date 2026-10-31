@@ -10,7 +10,8 @@ import { SeverityBadge } from "@/components/aria/severity";
 import { runTitle } from "@/components/console/run-row";
 import { EmptyState, ErrorState, LoadingRows, PageHeader } from "@/components/console/states";
 import { AllClearSpot, SearchSpot } from "@/components/illustrations/spots";
-import { decidedByLabel, RunStatus } from "@/components/console/status";
+import { RunStatus } from "@/components/console/status";
+import { decidedByLabel } from "@/lib/decision";
 import { Button } from "@/components/ui/button";
 import {
   Table,

@@ -50,15 +50,3 @@ export function RunStatus({ status, className }: { status: string; className?: s
     </span>
   );
 }
-
-const DECIDED: Record<string, string> = {
-  rules: "Rules",
-  model: "Model",
-  llm: "LLM, within the model's set",
-  fallback: "Unsure, flagged for review",
-  human: "Reviewer",
-};
-
-export function decidedByLabel(decidedBy: string | null | undefined): string {
-  return decidedBy ? (DECIDED[decidedBy] ?? decidedBy) : "";
-}
