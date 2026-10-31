@@ -25,8 +25,11 @@ visitor ──▶ Vercel: landing page, console, /api/* proxy ──▶ Render: 
 - The API runs the [demo image](../deploy/demo/Dockerfile). It needs no API key and starts from a
   demo seeded at build time: past incidents in memory, one approved run and two waiting for
   review, and each sample's sizes already rated, so the first visitor after a wake-up does not
-  wait for them. Every step runs on ARIA's offline provider, unless a visitor brings their own model key
-  or you set one (see [Language models on the demo](#language-models-on-the-demo)).
+  wait for them. Every step runs on ARIA's offline provider, unless a visitor brings their own
+  model key or you set one (see [Language models on the demo](#language-models-on-the-demo)).
+- The build downloads the public Loghub log samples (a few MB) that the samples are made from
+  and the severity model learned from. If the download fails, the build carries on with the small
+  copies in the repository, where some harmless samples are rated as incidents.
 
 ## Before you start
 
@@ -218,6 +221,7 @@ Before you add your key, weigh three things:
 | The console often says ARIA is busy | Raise `ARIA_RATE_LIMIT_SITE_PER_MINUTE` on Render, or `ARIA_RATE_LIMIT_PER_MINUTE` if one visitor sees it alone. |
 | Render restarts the API saying it ran out of memory | Lower `ARIA_MAX_BODY_BYTES`, or move to a plan with more memory. |
 | Link previews show no image | Set `ARIA_WEB_URL` to your site's address and redeploy. |
+| The deploy log says the Loghub samples could not be downloaded | The demo still works, on the small copies of the logs in the repository, where some harmless samples are rated as incidents. Redeploy to try the download again. |
 
 ## Other places to run the API
 

@@ -29,6 +29,18 @@ COPY src ./src
 RUN --mount=type=secret,id=ca,required=false \
     if [ -s /run/secrets/ca ]; then export SSL_CERT_FILE=/run/secrets/ca UV_SYSTEM_CERTS=1; fi; \
     uv sync --locked --no-dev --no-editable --no-cache
+# The Loghub samples the severity model learned from: a few MB from the commit data/manifest.yaml
+# pins, fetched with git. Samples built from them rate as the model expects. If git or the samples
+# cannot be fetched, the demo still builds, on the small test fixtures, where several harmless
+# samples look like incidents.
+COPY data/manifest.yaml ./data/manifest.yaml
+RUN --mount=type=secret,id=ca,required=false \
+    mkdir -p data/raw; \
+    if [ -s /run/secrets/ca ]; then export GIT_SSL_CAINFO=/run/secrets/ca; fi; \
+    { apt-get update && apt-get install -y --no-install-recommends git \
+        && rm -rf /var/lib/apt/lists/* \
+        && /app/.venv/bin/aria data download --source loghub-2k; } \
+    || echo "The Loghub samples could not be fetched: the demo uses the test fixtures."
 
 # --- demo: the API and its seeded demo, run as an unprivileged user ----------------------------
 FROM ${PYTHON_IMAGE}
@@ -74,11 +86,12 @@ COPY models/severity_log.json models/severity_log.report.json \
 COPY docs/eval-results.json ./docs/eval-results.json
 COPY tests/fixtures/loghub ./tests/fixtures/loghub
 COPY tests/fixtures/real ./tests/fixtures/real
+RUN install -d -o aria -g aria /home/aria/demo /home/aria/demo/data /home/aria/demo/models
+COPY --from=build --chown=aria:aria /app/data/raw /home/aria/demo/data/raw
 USER aria
-# Incident memory from the bundled Loghub samples (as `docker compose up` seeds it), one approved
-# run and two waiting for review.
-RUN mkdir -p /home/aria/demo/data /home/aria/demo/models \
-    && aria db upgrade \
+# Incident memory from the Loghub samples (or the bundled fixtures, when they could not be
+# downloaded), one approved run and two waiting for review.
+RUN aria db upgrade \
     && aria seed --workers 2 \
     && aria triage --scenario zookeeper.quorum_connection_loss --approve \
     && aria triage --scenario bgl.kernel_panic \
