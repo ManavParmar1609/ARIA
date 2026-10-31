@@ -25,13 +25,34 @@ function outcome(d: Delivery, ended: boolean): string {
     case "failed":
       return `Not delivered through ${channel}${d.problem ? `: ${d.problem}` : "."}`;
     case "skipped":
-      return `Not sent${d.problem ? `: ${d.problem}` : "."}`;
+      // Working as designed, not an error: no channel was connected, so ARIA kept the draft.
+      return `Kept as a preview: ${channel} is not connected on this server.`;
     default:
       // Still approved after the run ended: whatever was sending it stopped before it heard back.
       return ended
         ? "Delivery not confirmed: ARIA stopped before it heard back, so this may already have gone out."
         : "Sending now.";
   }
+}
+
+/** The server setting that connects a channel, read from the server's own note ("X is not set"). */
+export function settingFor(d: Delivery): string | null {
+  return /^([A-Z][A-Z0-9_]*) is not set$/.exec(d.problem ?? "")?.[1] ?? null;
+}
+
+/** One note for the messages ARIA kept as previews, instead of an error under each of them. */
+export function previewNote(deliveries: Delivery[]): string | null {
+  const kept = deliveries.filter((d) => d.status === "skipped");
+  if (!kept.length) return null;
+  if (kept.length === deliveries.length) {
+    return "No channel is connected on this server, so ARIA kept every message as a preview. Nothing left this site.";
+  }
+  const names = [...new Set(kept.map((d) => CHANNEL[d.kind] ?? d.kind))];
+  const list =
+    names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : (names[0] ?? "");
+  return `${list} ${names.length > 1 ? "are" : "is"} not connected on this server, so ARIA kept ${
+    kept.length > 1 ? "those messages as previews" : "that message as a preview"
+  }.`;
 }
 
 /** Whether a message can be sent again: it failed, or the run ended before its delivery was
@@ -65,11 +86,16 @@ export function Deliveries({
           description: error instanceof ApiError ? error.message : String(error),
         }),
     });
+  const note = previewNote(deliveries);
+  const settings = [
+    ...new Set(deliveries.map(settingFor).filter((name): name is string => name !== null)),
+  ];
   return (
     <section aria-labelledby="deliveries-title" className="grid gap-3 rounded-lg bg-raised p-5">
       <h2 id="deliveries-title" className="font-sans text-base font-semibold">
         Messages
       </h2>
+      {note ? <p className="max-w-prose text-sm text-muted-foreground">{note}</p> : null}
       <ul className="grid gap-2">
         {deliveries.map((d) => (
           <li
@@ -77,7 +103,14 @@ export function Deliveries({
             className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-sunken px-4 py-3"
           >
             <div className="grid min-w-0 gap-0.5">
-              <p className="truncate font-medium">{d.title}</p>
+              <p className="flex min-w-0 items-center gap-2 font-medium">
+                {d.status === "skipped" ? (
+                  <span className="shrink-0 rounded-sm border border-rule px-1.5 text-xs font-normal text-muted-foreground">
+                    Preview
+                  </span>
+                ) : null}
+                <span className="truncate">{d.title}</span>
+              </p>
               <p className="text-sm text-muted-foreground">{outcome(d, ended)}</p>
             </div>
             {canSendAgain(d, ended) ? (
@@ -93,6 +126,22 @@ export function Deliveries({
           </li>
         ))}
       </ul>
+      {settings.length ? (
+        <details className="text-sm text-muted-foreground">
+          <summary className="w-fit cursor-pointer text-foreground">Connect a channel</summary>
+          <p className="mt-2 max-w-prose">
+            If you run ARIA yourself, set{" "}
+            {settings.map((name, i) => (
+              <span key={name}>
+                {i ? (i === settings.length - 1 ? " and " : ", ") : null}
+                <code className="font-mono text-xs">{name}</code>
+              </span>
+            ))}{" "}
+            on the server to the channel&apos;s webhook address. Messages approved after that are
+            sent.
+          </p>
+        </details>
+      ) : null}
     </section>
   );
 }

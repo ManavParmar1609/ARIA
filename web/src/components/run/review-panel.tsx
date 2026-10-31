@@ -74,7 +74,7 @@ function ActionChoice({
           <span className="truncate text-muted-foreground">{action.title}</span>
           {ready === false ? (
             <span className="text-xs text-muted-foreground">
-              This channel has no webhook set, so the message would be skipped.
+              Not connected on this server, so this stays a preview.
             </span>
           ) : null}
         </label>

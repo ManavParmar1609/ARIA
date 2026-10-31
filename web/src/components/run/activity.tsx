@@ -144,7 +144,7 @@ interface Row {
 const MESSAGE_OUTCOME: Record<string, string> = {
   sent: "Sent",
   failed: "Not delivered",
-  skipped: "Not sent, channel not set up",
+  skipped: "Kept as a preview (no channel connected)",
   approved: "Sending",
 };
 
