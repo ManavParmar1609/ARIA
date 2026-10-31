@@ -11,6 +11,7 @@ import {
   EvidenceProvider,
   KIND_LABEL,
   LogLines,
+  RawResult,
   useEvidence,
 } from "@/components/run/evidence";
 import { Button } from "@/components/ui/button";
@@ -26,7 +27,7 @@ import {
 import { ApiError } from "@/lib/api/client";
 import { useAsk, useRun, useRuns } from "@/lib/api/hooks";
 import type { AskResponse, Evidence } from "@/lib/api/types";
-import { evidenceTitle } from "@/lib/evidence-text";
+import { evidenceDetail, evidenceTitle } from "@/lib/evidence-text";
 import { capitalise, plainTemplate, stripSeverity } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -235,11 +236,12 @@ function Sources({ id, numbers }: { id: string; numbers: ReadonlyMap<string, str
                   />
                 </summary>
                 <div className="grid gap-2 pb-3 pl-7 text-xs leading-5">
-                  {evidence.detail ? (
+                  {evidenceDetail(evidence) ? (
                     <p className="wrap-anywhere whitespace-pre-wrap text-muted-foreground">
-                      {evidence.detail}
+                      {evidenceDetail(evidence)}
                     </p>
                   ) : null}
+                  <RawResult evidence={evidence} />
                   {lines.length ? <LogLines lines={lines} limit={4} /> : null}
                   {runbook ? (
                     <Link
