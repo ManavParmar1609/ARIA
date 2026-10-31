@@ -244,6 +244,39 @@ def test_model_round_trips_and_explains(tmp_path: Path) -> None:
     ]
 
 
+def test_a_model_knows_the_range_it_was_trained_on(tmp_path: Path) -> None:
+    rng = np.random.default_rng(5)
+    x = rng.uniform(0.0, 1.0, size=(200, 3))
+    x[:, 2] = 0.0  # a feature the model never sees vary, so gives no weight
+    y = np.where(x[:, 0] > 0.5, "SEV2", "SEV4")
+    model = fit_linear_model(
+        "m", x, list(y), classes=["SEV1", "SEV2", "SEV3", "SEV4"], feature_names=["a", "b", "c"]
+    )
+    assert model.low is not None and model.high is not None
+    assert np.allclose(model.low, x.min(axis=0)) and np.allclose(model.high, x.max(axis=0))
+    loaded = LinearModel.from_dict(model.to_dict())
+    assert loaded.low is not None and np.allclose(loaded.low, model.low)
+
+    inside = np.array([0.5, 0.5, 0.0])
+    assert loaded.outside_training(inside, 6.0, 0.25) == []
+    # Within six deviations of the mean, but well past anything seen in training.
+    far = np.array([2.0, 0.5, 0.0])
+    assert loaded.outside_training(far, 6.0, None) == []
+    assert loaded.outside_training(far, 6.0, 0.25) == ["a"]
+    # Just past the edge, inside the tolerance.
+    assert loaded.outside_training(np.array([1.1, 0.5, 0.0]), 6.0, 0.25) == []
+    # The feature the model ignores cannot mislead it, so its range does not count (within six
+    # deviations; past them every feature counts).
+    assert loaded.outside_training(np.array([0.5, 0.5, 5.0]), 6.0, 0.25) == []
+
+    older = model.to_dict()
+    del older["low"], older["high"]
+    assert LinearModel.from_dict(older).outside_training(far, 6.0, 0.25) == []
+    broken = {**model.to_dict(), "low": [0.0]}
+    with pytest.raises(ValueError, match="ranges"):
+        LinearModel.from_dict(broken)
+
+
 def test_binary_models_use_sigmoid_form() -> None:
     rng = np.random.default_rng(3)
     x = rng.normal(size=(400, 2))
