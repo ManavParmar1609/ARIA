@@ -75,9 +75,33 @@ export function sourceName(evidence: Evidence): string {
   return evidence.title;
 }
 
+/** Names for a list of sources: two past incidents with one title are told apart by the day each
+ * was last seen. */
+export function sourceNames(list: Evidence[]): Map<string, string> {
+  const names = new Map(list.map((e) => [e.id, sourceName(e)] as const));
+  const counts = new Map<string, number>();
+  for (const name of names.values()) counts.set(name, (counts.get(name) ?? 0) + 1);
+  for (const e of list) {
+    const name = names.get(e.id) ?? "";
+    if ((counts.get(name) ?? 0) > 1 && e.ts) {
+      const day = new Date(e.ts).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        timeZone: "UTC",
+      });
+      names.set(e.id, `${name}, last seen ${day}`);
+    }
+  }
+  return names;
+}
+
 /** The answer's sources, numbered as cited. A citation clicked above opens its source here. */
 function Sources({ id, numbers }: { id: string; numbers: ReadonlyMap<string, string> }) {
   const { byId, active, pinned, linesFor } = useEvidence();
+  const names = sourceNames(
+    [...numbers.keys()].map((eid) => byId.get(eid)).filter((e): e is Evidence => e != null),
+  );
   const rows = useRef(new Map<string, HTMLDetailsElement>());
   useEffect(() => {
     const row = pinned ? rows.current.get(pinned) : undefined;
@@ -115,7 +139,7 @@ function Sources({ id, numbers }: { id: string; numbers: ReadonlyMap<string, str
                     <span className="text-muted-foreground">
                       {KIND_LABEL[evidence.kind] ?? evidence.kind}:
                     </span>{" "}
-                    {sourceName(evidence)}
+                    {names.get(eid) ?? sourceName(evidence)}
                   </span>
                   <ChevronRightIcon
                     aria-hidden

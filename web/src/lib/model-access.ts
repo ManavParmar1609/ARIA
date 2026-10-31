@@ -46,15 +46,15 @@ export function accessSentence(
     : "";
   switch (access.kind) {
     case "own":
-      return `${access.label} answers your runs and questions.`;
+      return `${access.label} triages your incidents and answers your questions.`;
     case "shared":
       return access.left == null
-        ? "The site's key answers your runs and questions."
-        : `The site's key (shared, limited) answers your runs and questions: ${access.left} left today.`;
+        ? "The site's key triages your incidents and answers your questions."
+        : `The site's key (shared, limited) triages your incidents and answers your questions: ${access.left} left today.`;
     case "offline":
       return access.usedUp
-        ? `Offline for today: your share of the site's key is used, so runs use ${OFFLINE}.${bring}`
-        : `Offline: runs use ${OFFLINE}, and nothing leaves the server.${bring}`;
+        ? `Offline for today: your share of the site's key is used, so triages use ${OFFLINE}.${bring}`
+        : `Offline: triages use ${OFFLINE}, and nothing leaves the server.${bring}`;
   }
 }
 

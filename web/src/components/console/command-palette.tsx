@@ -237,24 +237,29 @@ function Palette({
         icon: PlayIcon,
         run: () => {
           onLeave();
-          start.mutate(
-            {
+          // The palette closes at once, so the answer is awaited here rather than in mutate's
+          // own callbacks, which are dropped once the palette is gone. A note bridges the
+          // second before the incident page opens; the page then says the run has started.
+          const note = toast.loading(`Starting "${sample.title}"`);
+          start
+            .mutateAsync({
               id: sample.id,
               body: {
                 servers: null,
                 rate: null,
                 options: { use_llm: true, investigate: true, require_approval: true },
               },
-            },
-            {
-              onSuccess: (accepted) => {
-                // The incident page shows the run starting; no toast needs to say so (item 34).
-                router.push(`/console/runs/${encodeURIComponent(accepted.run_id)}` as never);
-              },
-              onError: (error) =>
-                toast.error("The sample could not be started", { description: error.message }),
-            },
-          );
+            })
+            .then((accepted) => {
+              toast.dismiss(note);
+              router.push(`/console/runs/${encodeURIComponent(accepted.run_id)}` as never);
+            })
+            .catch((error: Error) =>
+              toast.error("The sample could not be started", {
+                id: note,
+                description: error.message,
+              }),
+            );
         },
       });
     }

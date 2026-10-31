@@ -53,6 +53,9 @@ export async function GET(request: NextRequest) {
     };
   } else if (status === 401) {
     session = { authRequired: true, signedIn: false, name: null, reachable: true };
+  } else if (status === 429) {
+    // The API is up but turning requests away for a moment; the console waits and asks again.
+    session = { authRequired: false, signedIn: false, name: null, reachable: true, busy: true };
   } else {
     session = { authRequired: false, signedIn: false, name: null, reachable: false };
   }

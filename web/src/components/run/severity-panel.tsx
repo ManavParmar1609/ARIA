@@ -70,19 +70,23 @@ export function SeverityPanel({
           <span className="font-normal text-muted-foreground">no level was likely enough</span>
         )}
       </p>
+      {/* What the short list means, in view: how often such lists held the right level, which is
+          not how sure ARIA is of its first choice (item 16). */}
+      <p className="-mt-2 text-sm text-muted-foreground">
+        {rulesOnly
+          ? "The calibrated model was not used for this window, so the short list comes from the rules alone."
+          : `${
+              shortListHeld != null
+                ? `Short lists like this held the right level in ${Math.round(shortListHeld * 100)} of 100 past test incidents.`
+                : `Short lists like this are built to hold the right level ${coverage} times in 100.`
+            } That is how often the list was right, not ARIA's confidence in its first choice.`}
+      </p>
 
       <details className="group grid gap-3 text-sm">
         <summary className="w-fit cursor-pointer font-medium text-muted-foreground hover:text-heading">
           How ARIA decided
         </summary>
         <div className="grid gap-4 pt-3">
-          <p className="text-muted-foreground">
-            {rulesOnly
-              ? "The calibrated model was not used for this window, so the short list comes from the rules alone."
-              : shortListHeld != null
-                ? `Short lists like this held the right level in ${Math.round(shortListHeld * 100)} of 100 past test incidents.`
-                : `Short lists like this are built to hold the right level ${coverage} times in 100.`}
-          </p>
           <p className="leading-relaxed">
             {how}{" "}
             <span className="text-muted-foreground">

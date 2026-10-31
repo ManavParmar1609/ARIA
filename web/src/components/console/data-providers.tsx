@@ -22,8 +22,16 @@ function makeQueryClient(): QueryClient {
       queries: {
         staleTime: 5_000,
         refetchOnWindowFocus: true,
+        // A busy server (429) is asked again, a little later each time; other refusals are not.
         retry: (failures, error) =>
-          !(error instanceof ApiError && error.status >= 400 && error.status < 500) && failures < 2,
+          error instanceof ApiError && error.status === 429
+            ? failures < 4
+            : !(error instanceof ApiError && error.status >= 400 && error.status < 500) &&
+              failures < 2,
+        retryDelay: (failures, error) =>
+          error instanceof ApiError && error.status === 429
+            ? Math.min(2_000 * 2 ** failures, 15_000)
+            : Math.min(1_000 * 2 ** failures, 30_000),
       },
     },
   });

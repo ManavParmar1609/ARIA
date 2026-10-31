@@ -110,7 +110,9 @@ export function ExpertCheck({ runId }: { runId: string }) {
                       <td className="px-4 py-2.5 font-mono text-xs">{unit.key}</td>
                       <td className="px-4 py-2.5">
                         {unit.reason ?? (
-                          <span className="text-faint">Listed in the run&rsquo;s evidence</span>
+                          <span className="text-faint">
+                            Listed in the incident&rsquo;s evidence
+                          </span>
                         )}{" "}
                         {unit.evidence_id ? <Citations ids={[unit.evidence_id]} /> : null}
                       </td>

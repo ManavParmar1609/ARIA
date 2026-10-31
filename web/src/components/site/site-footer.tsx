@@ -48,8 +48,8 @@ export function SiteFooter({ recordedAt }: { recordedAt: string }) {
           <Wordmark />
           <p className="text-muted-foreground">
             Open source under the MIT licence. Measured on real, public logs, tickets and incidents
-            (Loghub, a ServiceNow desk, GitLab.com) and on semi-synthetic windows built from real
-            lines; every synthetic incident is marked as synthetic.
+            (Loghub, a ServiceNow desk, GitLab.com) and on samples built from real lines; every
+            sample is marked as one.
           </p>
         </div>
         <nav aria-label="Project links" className="grid gap-8 sm:grid-cols-3">

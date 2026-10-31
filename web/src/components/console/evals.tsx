@@ -70,7 +70,7 @@ function Section({
       </div>
       {headline ? <p className="max-w-prose leading-relaxed">{headline}</p> : null}
       <details className="group">
-        <summary className="w-fit cursor-pointer text-sm font-medium text-muted-foreground hover:text-heading">
+        <summary className="flex min-h-6 w-fit cursor-pointer items-center text-sm font-medium text-muted-foreground hover:text-heading">
           Show details
         </summary>
         <div className="grid gap-5 pt-5">
@@ -265,7 +265,7 @@ function RealSection({ real }: { real: RealLogs }) {
         {real.head
           ? ` The sample is the log's first ${real.head.lines.toLocaleString("en")} lines plus later lines of the same blocks; on those lines alone ARIA flags ${real.head.flagged} blocks, ${pct(real.head.precision)} of them real failures (${pct(real.head.recallAll)} of all failures).`
           : ""}{" "}
-        The deployed log scan opens a run on a burst of errors, and this log has none.
+        The deployed log scan opens an incident on a burst of errors, and this log has none.
       </p>
       <p className="max-w-prose text-sm text-muted-foreground">
         A block is judged only in a window that holds its whole life, so the window length moves the
@@ -509,7 +509,7 @@ function MoreRealSections({ more, data }: { more: RealData; data: Evaluation }) 
           ]}
         />
         <p className="max-w-prose text-sm text-muted-foreground">
-          The model learned from semi-synthetic windows, and on this log
+          The model learned from samples built from real lines, and on this log
           {bgl.rules.macroF1 > bgl.aria.macroF1
             ? " ARIA's rules alone did better than its rules and model together"
             : " the rules and model together did at least as well as the rules alone"}
@@ -677,8 +677,8 @@ function MoreRealSections({ more, data }: { more: RealData; data: Evaluation }) 
           ARIA was unsure of {n(openstack.unsure)} of the {n(openstack.experiments)} runs and sent
           them to a reviewer at the most serious level on their short list. An AUROC of 0.5 is
           chance. ARIA&apos;s only OpenStack failure mode, from a 2,000-line sample of another
-          deployment, is a missing image-cache file, and its model learned from semi-synthetic
-          windows rather than from runs like these.
+          deployment, is a missing image-cache file, and its model learned from samples built from
+          real lines rather than from runs like these.
         </p>
       </Section>
 
@@ -960,7 +960,10 @@ export function Evals({
           <h2 id="ev-built" className="text-xl tracking-heading">
             Each test on built samples
           </h2>
-          <p className="text-muted-foreground">{data.dataDescription}</p>
+          <p className="max-w-prose text-muted-foreground">
+            Each sample is real Loghub log lines arranged into an incident, so these results are not
+            accuracy on production incidents.
+          </p>
         </div>
         <Section
           id="ev-severity"

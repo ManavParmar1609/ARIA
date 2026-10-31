@@ -4,7 +4,7 @@ import { LibraryIcon, SearchIcon } from "lucide-react";
 import Link from "next/link";
 import { useDeferredValue, useId, useMemo, useState } from "react";
 
-import { SeverityBadge } from "@/components/aria/severity";
+import { SeverityDot } from "@/components/aria/severity";
 import { EmptyState, ErrorState, LoadingRows, PageHeader } from "@/components/console/states";
 import { SearchSpot } from "@/components/illustrations/spots";
 import { Button } from "@/components/ui/button";
@@ -175,9 +175,8 @@ export function Memory() {
                 <li key={incident.incident_id}>
                   <details className="group rounded-lg bg-raised">
                     <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 [&::-webkit-details-marker]:hidden">
-                      <SeverityBadge
+                      <SeverityDot
                         severity={isSeverity(incident.severity) ? incident.severity : null}
-                        size="sm"
                       />
                       {/* At least 12rem before the date and tag wrap below, so a phone never
                           squeezes the title to a word per line. */}

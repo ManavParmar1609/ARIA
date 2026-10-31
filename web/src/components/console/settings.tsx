@@ -104,7 +104,7 @@ function Configuration({ view }: { view: SettingsView }) {
       <Section
         id="set-budgets"
         title="Budgets per run"
-        intro="When a run reaches a limit, the LLM steps stop and ARIA finishes on the deterministic path."
+        intro="When a triage reaches a limit, the model steps stop and ARIA finishes without a model."
       >
         <Pairs
           items={[
@@ -323,7 +323,7 @@ export function Settings() {
         title="Language model"
         intro={
           kinds.length > 0
-            ? "Use your own Claude, Gemini, OpenAI or NVIDIA key for the runs you start and the questions you ask. Your browser keeps it and sends it only with those requests; the server uses it for that work alone and never stores it."
+            ? "Use your own Claude, Gemini, OpenAI or NVIDIA key for the incidents you triage and the questions you ask. Your browser keeps it and sends it only with those requests; the server uses it for that work alone and never stores it."
             : "Which model writes your reports and answers here."
         }
       >
@@ -333,7 +333,7 @@ export function Settings() {
           <LoadingRows rows={2} label="Loading the model settings" />
         ) : (
           <>
-            <p role="status" className="text-sm">
+            <p role="status" className="max-w-prose text-sm">
               {accessSentence(
                 modelAccess(savedKey.data?.provider ?? null, kinds, view.data.shared_model),
                 kinds.length > 0,
@@ -347,7 +347,7 @@ export function Settings() {
 
       <Section id="set-session" title="Your session">
         <div className="flex flex-wrap items-center justify-between gap-4 text-sm">
-          <p>
+          <p className="max-w-prose">
             {session.data?.signedIn
               ? `Signed in with the key named "${session.data.name}". Reviews you make are recorded under that name.`
               : session.data?.authRequired === false

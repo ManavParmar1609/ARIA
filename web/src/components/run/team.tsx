@@ -222,7 +222,7 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
       const replans = values.plan?.replans ?? 0;
       if (replans) {
         investigator.push(
-          `The evidence looked thin, so the planner sent the run back for ${replans === 1 ? "another round" : `${replans} more rounds`}.`,
+          `The evidence looked thin, so the planner sent the investigation back for ${replans === 1 ? "another round" : `${replans} more rounds`}.`,
         );
       }
     }

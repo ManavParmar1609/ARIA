@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Evidence } from "@/lib/api/types";
 
-import { sourceName, sourceNumbers } from "./ask";
+import { sourceName, sourceNames, sourceNumbers } from "./ask";
 
 describe("Ask ARIA's sources", () => {
   it("numbers sources in the order the answer first cites them", () => {
@@ -31,5 +31,26 @@ describe("Ask ARIA's sources", () => {
     expect(sourceName({ ...incident, data: { title: "Disk full" } } as Evidence)).toBe("Disk full");
     const line = { ...incident, kind: "log", title: "line 4: oops", data: {} } as Evidence;
     expect(sourceName(line)).toBe("line 4: oops");
+  });
+
+  it("tells apart two past incidents with one title by the day each was last seen", () => {
+    const twin = (id: string, ts: string) =>
+      ({
+        id,
+        kind: "incident",
+        title: `Past incident ${id}: Quorum loss`,
+        source: "memory.search",
+        data: { title: "Quorum loss" },
+        ts,
+      }) as unknown as Evidence;
+    const other = { ...twin("E3", "2026-03-01T00:00:00Z"), data: { title: "Disk full" } };
+    const names = sourceNames([
+      twin("E1", "2026-03-02T10:00:00Z"),
+      twin("E2", "2026-04-12T16:12:00Z"),
+      other as Evidence,
+    ]);
+    expect(names.get("E1")).toBe("Quorum loss, last seen 2 Mar 2026");
+    expect(names.get("E2")).toBe("Quorum loss, last seen 12 Apr 2026");
+    expect(names.get("E3")).toBe("Disk full");
   });
 });

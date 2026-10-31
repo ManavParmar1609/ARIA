@@ -279,7 +279,6 @@ export function evaluation() {
   return {
     createdAt: evals.created_at,
     gitSha: evals.git_sha,
-    dataDescription: evals.data.description,
     severity: {
       n: sev.n,
       labels: sev.label_distribution,

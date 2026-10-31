@@ -111,7 +111,7 @@ describe("forward", () => {
       expect(setCookie).toContain(`aria_visitor=${id}`);
       expect(setCookie).toContain("HttpOnly");
       expect(setCookie).toContain("SameSite=Strict");
-      expect(setCookie).toContain("Path=/api");
+      expect(setCookie).toContain("Path=/;");
       expect(setCookie).not.toContain("Secure"); // plain http on localhost
     }
     const secure = await forward(

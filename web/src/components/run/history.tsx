@@ -29,7 +29,7 @@ import { stepLabel } from "./progress";
 
 /** A checkpoint, named by the steps the progress strip shows: "Before “Rate severity”". */
 export function checkpointName(cp: Pick<Checkpoint, "next" | "interrupted">): string {
-  if (cp.next.length === 0) return "The end of the run";
+  if (cp.next.length === 0) return "The end of the triage";
   if (cp.next.includes("__start__")) return "The input, before anything ran";
   // Parallel parts repeat one step: "“Read the logs” (3 parts at once)", not the step three times.
   const counts = new Map<string, number>();
@@ -107,8 +107,9 @@ export function History({
   return (
     <div className="grid gap-4">
       <p className="max-w-prose text-sm text-muted-foreground">
-        ARIA keeps a checkpoint after every step. View the run as it was at any of them, or fork a
-        new run from one, for example to try it again with an LLM or without investigation.
+        ARIA keeps a checkpoint after every step. View the incident as it was at any of them, or
+        copy it from one into a new incident (a fork), for example to try it again with a model or
+        without investigation.
       </p>
       <ol className="grid gap-1.5">
         {items.map((cp) => {

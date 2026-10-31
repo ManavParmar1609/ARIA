@@ -81,6 +81,19 @@ describe("session", () => {
     expect(resent.get("x-visitor-id")).toBe(id);
   });
 
+  it("reports a busy API as reachable, so the console waits instead of calling it down", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ detail: "rate limit exceeded" }, { status: 429 })),
+    );
+    const session = (await (await GET(req("GET"))).json()) as {
+      reachable: boolean;
+      busy?: boolean;
+    };
+    expect(session.reachable).toBe(true);
+    expect(session.busy).toBe(true);
+  });
+
   it("reports an unreachable API instead of asking to sign in", async () => {
     vi.stubGlobal(
       "fetch",

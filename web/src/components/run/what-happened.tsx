@@ -58,7 +58,7 @@ function Pattern({ template, lines }: { template: TemplateStat; lines: LogEvent[
       </p>
       {lines.length > 1 ? (
         <details className="text-xs">
-          <summary className="w-fit cursor-pointer text-muted-foreground hover:text-heading">
+          <summary className="flex min-h-6 w-fit cursor-pointer items-center text-muted-foreground hover:text-heading">
             {lines.length < template.count
               ? `Show ${lines.length} of the ${template.count.toLocaleString("en")} lines`
               : `Show the ${lines.length.toLocaleString("en")} lines`}

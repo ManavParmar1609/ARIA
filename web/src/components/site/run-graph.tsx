@@ -152,7 +152,7 @@ export function RunGraph({ steps }: { steps: GraphStep[] }) {
                     scrolling && i > active ? "text-faint" : "text-foreground",
                   )}
                 >
-                  In the run
+                  In the example
                 </span>
                 <span>{step.fact}</span>
               </p>

@@ -3,6 +3,9 @@ import "server-only";
 import { type NextRequest } from "next/server";
 
 import { MAX_BODY_BYTES } from "@/lib/limits";
+import { VISITOR_COOKIE, VISITOR_SHAPE, visitorCookieValue } from "@/lib/visitor-cookie";
+
+export { VISITOR_COOKIE };
 
 /** Where the ARIA API listens, as seen from this server (never from the browser). */
 export function apiBase(): string {
@@ -33,9 +36,6 @@ export interface ModelKey {
  * apart (ARIA_VISITOR_SCOPE) files each visitor's incidents under it, so no one else sees them.
  * It is a random id, not a secret about the visitor, and lasts a month.
  */
-export const VISITOR_COOKIE = "aria_visitor";
-const VISITOR_MAX_AGE_S = 30 * 24 * 60 * 60;
-const VISITOR_SHAPE = /^[A-Za-z0-9_-]{16,64}$/;
 
 export interface Visitor {
   id: string;
@@ -51,14 +51,7 @@ export function visitorFrom(request: NextRequest): Visitor {
 }
 
 export function visitorCookie(request: NextRequest, id: string): string {
-  return [
-    `${VISITOR_COOKIE}=${id}`,
-    "Path=/api",
-    `Max-Age=${VISITOR_MAX_AGE_S}`,
-    "HttpOnly",
-    "SameSite=Strict",
-    ...(cookieOptions(request).secure ? ["Secure"] : []),
-  ].join("; ");
+  return visitorCookieValue(id, cookieOptions(request).secure);
 }
 
 /** Requests that can call a model; only these carry a visitor's own key. */

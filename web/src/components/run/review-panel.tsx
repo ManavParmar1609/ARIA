@@ -83,6 +83,12 @@ function ActionChoice({
         ) : (
           <p className="grid min-w-0 flex-1 gap-0.5 text-sm">{name}</p>
         )}
+        {/* No channel to send it to: it stays a preview, and says so. */}
+        {onChange ? null : (
+          <span className="mt-0.5 shrink-0 rounded-full border border-rule px-2 text-xs leading-5 text-muted-foreground">
+            Preview
+          </span>
+        )}
         <Button
           size="icon-sm"
           variant="ghost"
@@ -97,14 +103,25 @@ function ActionChoice({
         </Button>
       </div>
       {open ? (
-        <pre
+        // As it would arrive in a chat: who it is from and to, then the text.
+        <div
           tabIndex={0}
           role="region"
           aria-label="Message"
-          className="max-h-56 overflow-auto rounded-sm bg-sunken p-2.5 font-sans text-xs leading-5 whitespace-pre-wrap"
+          className="max-h-64 overflow-auto rounded-md bg-raised p-3 ring-1 ring-rule"
         >
-          {action.body}
-        </pre>
+          <p className="flex items-center gap-2 text-xs">
+            <span
+              aria-hidden
+              className="grid size-5 place-items-center rounded-sm bg-primary text-xs font-medium text-primary-foreground"
+            >
+              A
+            </span>
+            <span className="font-medium">ARIA</span>
+            <span className="text-muted-foreground">to {action.audience}</span>
+          </p>
+          <p className="mt-2 text-sm leading-6 whitespace-pre-wrap">{action.body}</p>
+        </div>
       ) : null}
     </li>
   );

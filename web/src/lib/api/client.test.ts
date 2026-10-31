@@ -29,6 +29,18 @@ describe("API errors", () => {
     });
   });
 
+  it("says how large a paste may be, in megabytes, when a server refuses it", async () => {
+    answer(Response.json({ detail: "request body larger than 4194304 bytes" }, { status: 413 }));
+    await expect(apiFetch("/api/v1/runs", { method: "POST", body: "{}" })).rejects.toMatchObject({
+      status: 413,
+      detail: expect.stringMatching(/larger than this server accepts per triage \(4 MB\)/),
+    });
+    answer(Response.json({ detail: "The request is larger than 8 MB." }, { status: 413 }));
+    await expect(apiFetch("/api/v1/runs", { method: "POST", body: "{}" })).rejects.toMatchObject({
+      detail: expect.stringContaining("(8 MB)"),
+    });
+  });
+
   it("keeps an explanation the API wrote", async () => {
     answer(Response.json({ detail: "Run run-1 not found" }, { status: 404 }));
     await expect(apiFetch("/api/v1/runs/run-1")).rejects.toMatchObject({

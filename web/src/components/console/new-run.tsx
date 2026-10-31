@@ -217,7 +217,11 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
           />
           <p
             id={`${id}-logs-hint`}
-            className={touched && problem ? "text-sm text-danger" : "text-sm text-muted-foreground"}
+            className={
+              touched && problem
+                ? "max-w-prose text-sm text-danger"
+                : "max-w-prose text-sm text-muted-foreground"
+            }
           >
             {logsHint(
               touched ? problem : null,

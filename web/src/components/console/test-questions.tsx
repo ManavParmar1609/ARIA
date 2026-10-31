@@ -427,7 +427,7 @@ export function TestQuestions({
         answer={alarmsAnswer(more.bgl)}
       >
         <AlarmTable bgl={more.bgl} />
-        <ul className="grid max-w-3xl list-disc gap-2 pl-5 text-sm leading-relaxed">
+        <ul className="grid max-w-prose list-disc gap-2 pl-5 text-sm leading-relaxed">
           {elsewhereLines(real, more).map((line) => (
             <li key={line}>{line}</li>
           ))}
@@ -445,7 +445,7 @@ export function TestQuestions({
         question="Where does it fall short, and why?"
         answer="Where a system's normal noise looks like trouble, and on logs unlike the ones it was built for."
       >
-        <ul className="grid max-w-3xl list-disc gap-2 pl-5 text-sm leading-relaxed">
+        <ul className="grid max-w-prose list-disc gap-2 pl-5 text-sm leading-relaxed">
           {shortfallLines(data, more).map((line) => (
             <li key={line}>{line}</li>
           ))}

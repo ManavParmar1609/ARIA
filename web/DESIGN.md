@@ -96,6 +96,14 @@ The floor is 12 px; the reference's 10 and 11 px labels are raised to it.
 - Medium buttons have 10 px corners, and small controls and nav items 7 px.
 - Tags have 4 px corners, and badges and status pills are full pills.
 
+## Space and measure
+
+- Spacing keeps to a scale of 8, 16, 24 and 32 px: 8 px inside a group, 16 px between groups,
+  24 px between panels and 32 px between a page's sections. Landing sections take more room.
+- Running text stops at about 65 characters a line (`max-w-prose`), at every size.
+- A view shows at most four badges. Long lists say a level with a dot and its name instead.
+- Anything clickable is at least 24 px tall, links set in small text included.
+
 ## Components
 
 - **Navigation.** The name on the left, the sections in charcoal, and "Open the console" as the

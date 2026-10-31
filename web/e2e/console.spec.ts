@@ -36,6 +36,8 @@ test.describe("console", () => {
     for (const name of ["What happened", "How serious", "Seen before", "The report"]) {
       await expect(page.getByRole("heading", { level: 2, name, exact: true })).toBeVisible();
     }
+    // ARIA's part is over, so the progress folds into one line that opens onto the eight steps.
+    await page.getByText(/^ARIA finished in /).click();
     await expect(
       page.getByRole("list", { name: "Run progress" }).getByRole("listitem"),
     ).toHaveCount(8);

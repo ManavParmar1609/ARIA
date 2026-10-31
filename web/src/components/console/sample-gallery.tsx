@@ -247,7 +247,7 @@ function RealIncidentCard({ incident }: { incident: RealIncident }) {
   );
 }
 
-function SourceFilter({ current }: { current: Source }) {
+function SourceFilter({ current, counts }: { current: Source; counts: Record<Source, number> }) {
   const params = useSearchParams();
   const pathname = usePathname();
   const href = (key: Source) => {
@@ -278,6 +278,7 @@ function SourceFilter({ current }: { current: Source }) {
               )}
             >
               {chip.name}
+              <span className="tabular text-xs opacity-75">{counts[chip.key]}</span>
             </Link>
           </li>
         ))}
@@ -337,6 +338,15 @@ export function SampleGallery() {
     );
   }
 
+  // How many cards each source holds; the real incidents come from big-data clusters.
+  const counts = Object.fromEntries([
+    ["all", samples.length + reals.length],
+    ...SOURCES.map((s) => [
+      s.key,
+      samples.filter((sample) => sample.source === s.key).length +
+        (s.key === "bigdata" ? reals.length : 0),
+    ]),
+  ]) as Record<Source, number>;
   const headline = samples.filter((s) => s.headline);
   // Under "All", the featured cards above are not repeated below. A chosen source shows only its
   // own full cards, with their sizes, and hides the featured row, so no card appears twice.
@@ -383,7 +393,7 @@ export function SampleGallery() {
               : ""}
           </p>
         </div>
-        <SourceFilter current={source} />
+        <SourceFilter current={source} counts={counts} />
         <ul ref={list} className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {listedReals.map((incident) => (
             <RealIncidentCard key={incident.id} incident={incident} />

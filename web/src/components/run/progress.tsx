@@ -18,8 +18,9 @@ import { stepStates } from "./activity";
 
 // Where a run is, in eight steps with plain names (item 17). A line traces through the finished
 // steps once, when the strip comes into view: a quick pass from the first step to the last, by
-// transform alone, and simply there under reduced motion (A). Once the run has finished, the
-// strip folds into one line saying how long ARIA took.
+// transform alone, and simply there under reduced motion (A). While a run works, each step that
+// finishes draws its own part of the line as it does. Once ARIA's part is over (the run waits for
+// a person, or has ended), the strip folds into one line saying how long ARIA took.
 
 export type StepState = "pending" | "running" | "done" | "paused" | "failed" | "skipped";
 
@@ -49,6 +50,8 @@ export function stepLabel(node: string): string {
 }
 
 const ENDED = new Set(["published", "rejected", "failed"]);
+// ARIA's part is over: the run waits for a person's review, or has been decided.
+const FOLDED = new Set(["awaiting_review", "published", "rejected"]);
 
 /** Each step's state from the run's events: the worst of its graph nodes, and what it took. */
 export function progressSteps(events: RunEvent[], status: string): Step[] {
@@ -98,7 +101,8 @@ const STATE_WORDS: Record<StepState, string> = {
   skipped: "not needed",
 };
 
-/** Mark the list once it is on screen, so the trace plays then, once; then drop the stagger. */
+/** Mark the list once it is on screen, so the trace plays then, once; then drop the stagger, so a
+ * step that finishes later draws its part straight away. */
 function useTrace<T extends HTMLElement>() {
   const ref = useRef<T>(null);
   useEffect(() => {
@@ -142,9 +146,15 @@ export function Steps({ steps }: { steps: Step[] }) {
                 aria-hidden
                 className="absolute top-6 bottom-0 left-2.5 w-0.5 -translate-x-1/2 bg-rule md:top-2.5 md:right-0 md:bottom-auto md:left-6 md:h-0.5 md:w-auto md:translate-x-0 md:-translate-y-1/2"
               >
-                {step.state === "done" ? (
-                  <span className="block size-full origin-top scale-y-0 bg-foreground transition-[scale] delay-[calc(var(--i)*110ms)] duration-300 ease-(--ease-out) group-data-settled:delay-0 group-data-traced:scale-y-100 motion-reduce:transition-none md:origin-left md:scale-x-0 md:scale-y-100 md:group-data-traced:scale-x-100" />
-                ) : null}
+                {/* Always there, so a step finishing during a live run draws its part: the scale
+                    changes on an element that already exists, and the transition plays. */}
+                <span
+                  className={cn(
+                    "block size-full origin-top scale-y-0 bg-foreground transition-[scale] delay-[calc(var(--i)*110ms)] duration-300 ease-(--ease-out) group-data-settled:delay-0 motion-reduce:transition-none md:origin-left md:scale-x-0 md:scale-y-100",
+                    step.state === "done" &&
+                      "group-data-traced:scale-y-100 md:group-data-traced:scale-x-100",
+                  )}
+                />
               </span>
             )}
             <span
@@ -201,7 +211,7 @@ export function RunProgress({
   facts: string;
 }) {
   const steps = useMemo(() => progressSteps(events, status), [events, status]);
-  if (status === "published" || status === "rejected") {
+  if (FOLDED.has(status)) {
     return (
       <details className="group/progress rounded-lg bg-raised px-5 py-3">
         <summary className="flex cursor-pointer flex-wrap items-center gap-x-2 gap-y-1 text-sm">

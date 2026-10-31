@@ -274,7 +274,7 @@ export function Queue() {
 /** The incidents waiting for a person, as one line above the list, with a way to show only them. */
 /** Marks an incident every visitor of a shared demo sees, which only a copy of one's own changes. */
 function Waiting({ onShow }: { onShow: () => void }) {
-  const { data } = useRuns("awaiting_review", 50);
+  const { data } = useRuns("awaiting_review", 50, 30_000);
   // Examples wait for review too, but only on a copy of one's own: they are not "your" review.
   const n = data?.runs.filter((run) => !run.example).length ?? 0;
   if (n === 0) return null;

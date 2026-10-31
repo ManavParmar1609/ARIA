@@ -130,16 +130,19 @@ function StatusAnnouncer({ status }: { status: string }) {
   );
 }
 
-/** Model and tool use in words, for the progress line. */
-function workFacts(run: RunDetail, offline: boolean): string {
+/** Model and tool use in words, for the progress line. ``offline`` is null while unknown. */
+function workFacts(run: RunDetail, offline: boolean | null): string {
   const budget = (run.budget ?? {}) as Record<string, unknown>;
   const llmCalls = Number(budget.llm_calls ?? 0);
   const tools = Number(budget.tool_calls ?? 0);
   const model =
-    llmCalls && !offline
-      ? `${llmCalls} model calls, ${((run.tokens_in ?? 0) + (run.tokens_out ?? 0)).toLocaleString("en")} tokens`
-      : "offline: no language model";
-  return tools ? `${model}, ${tools} tool ${tools === 1 ? "call" : "calls"}` : model;
+    offline === null
+      ? ""
+      : llmCalls && !offline
+        ? `${llmCalls} model calls, ${((run.tokens_in ?? 0) + (run.tokens_out ?? 0)).toLocaleString("en")} tokens`
+        : "offline: no language model";
+  const toolText = tools ? `${tools} tool ${tools === 1 ? "call" : "calls"}` : "";
+  return [model, toolText].filter(Boolean).join(", ");
 }
 
 function DeleteRun({ runId }: { runId: string }) {
@@ -273,7 +276,8 @@ export function RunView({
   // page does not jump as each part arrives. A running run shows at once: it changes as it goes.
   const stateLoading = state.isPending && state.fetchStatus === "fetching" && status !== "running";
   if (run.isPending || (run.isSuccess && stateLoading)) return <RunSkeleton />;
-  if (run.isError) {
+  // A refresh that fails (a busy server, say) keeps what the page already shows.
+  if (run.isError && !run.data) {
     if (run.error instanceof ApiError && run.error.status === 404) {
       return (
         <EmptyState
@@ -295,7 +299,7 @@ export function RunView({
       <div className="grid gap-6">
         <Crumbs />
         <ErrorState
-          title="This run could not be loaded"
+          title="This incident could not be loaded"
           error={run.error}
           onRetry={() => void run.refetch()}
           action={
@@ -312,7 +316,8 @@ export function RunView({
   const prompt =
     detail.status === "awaiting_review" ? (detail.review as ReviewPrompt | null) : null;
   const report = values?.report;
-  const offline = report ? writtenOffline(report) : false;
+  // Until the report is in, whether a model wrote it is not known (null), so nothing is claimed.
+  const offline = report ? writtenOffline(report) : null;
   const severity = values?.severity;
   const liveText = timeline.liveText.report ?? "";
   const viewing = checkpoint ? state.data : null;
@@ -438,6 +443,14 @@ export function RunView({
           facts={workFacts(detail, offline)}
         />
 
+        {state.isError && !state.data ? (
+          <ErrorState
+            title="The incident's details could not be loaded"
+            error={state.error}
+            onRetry={() => void state.refetch()}
+          />
+        ) : null}
+
         {/* Four panels, one question each (item 13). On a wide screen the severity and the past
             incidents sit beside the other two, and stay in view while the report scrolls. */}
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] xl:grid-rows-[auto_auto_1fr] xl:gap-x-8">
@@ -484,8 +497,12 @@ export function RunView({
         </div>
 
         {detail.trigger === "replay" ? <ExpertCheck runId={detail.id} /> : null}
-        {sample && terminal && detail.status !== "failed" && !viewing ? (
-          // It reads ?compare= from the address.
+        {sample &&
+        (terminal || detail.status === "awaiting_review") &&
+        detail.status !== "failed" &&
+        !viewing ? (
+          // Once ARIA's part is over: the next steps, and beside a bigger run, both ratings. It
+          // reads ?compare= from the address.
           <Suspense fallback={null}>
             <SampleNext
               runId={detail.id}
@@ -516,15 +533,19 @@ export function RunView({
                 {mode === "live" ? (
                   <p className="text-xs text-muted-foreground" role="status">
                     {timeline.state === "live"
-                      ? "Live: following the run as it happens."
+                      ? "Live: following the triage as it happens."
                       : timeline.state === "reconnecting"
-                        ? "Reconnecting to the run's event stream."
+                        ? "Reconnecting to the live updates."
                         : timeline.state === "closed"
                           ? "The run finished."
-                          : "Connecting to the run's event stream."}
+                          : "Connecting to the live updates."}
                   </p>
                 ) : null}
-                <Activity events={timeline.events} offline={offline} titles={messageTitles} />
+                <Activity
+                  events={timeline.events}
+                  offline={offline ?? undefined}
+                  titles={messageTitles}
+                />
               </div>
             </details>
           </TabsContent>

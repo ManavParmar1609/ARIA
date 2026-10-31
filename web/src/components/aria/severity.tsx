@@ -68,6 +68,34 @@ export function SeverityBadge({
 }
 
 /**
+ * The level as a dot and its name, for long lists where a badge on every row would crowd the page.
+ * The text says the level, so it never depends on colour alone.
+ */
+export function SeverityDot({
+  severity,
+  className,
+}: {
+  severity: Severity | null | undefined;
+  className?: string;
+}) {
+  if (!severity) {
+    return <span className={cx("text-xs text-faint", className)}>Not rated</span>;
+  }
+  return (
+    <span
+      className={cx("tabular inline-flex items-center gap-1.5 text-xs font-medium", className)}
+      title={SEVERITY_MEANING[severity]}
+    >
+      <span
+        aria-hidden
+        className={cx("block size-2.5 rounded-full border border-sev-edge", SEVERITY_BG[severity])}
+      />
+      {severity}
+    </span>
+  );
+}
+
+/**
  * The level and its word in one chip, "SEV2 · high": the answer an incident page leads with.
  * The colour carries the level and the text says it, so it never depends on colour alone.
  */

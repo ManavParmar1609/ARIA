@@ -128,7 +128,7 @@ function PaletteIconButton() {
 }
 
 function ReviewCount() {
-  const { data } = useRuns("awaiting_review", 50);
+  const { data } = useRuns("awaiting_review", 50, 30_000);
   // A shared demo's examples wait too, but nobody reviews them: only one's own incidents count.
   const n = data?.runs.filter((run) => !run.example).length ?? 0;
   if (n === 0) return null;
@@ -272,7 +272,7 @@ function ModelLine({ onNavigate }: { onNavigate?: () => void }) {
     <Link
       href="/console/settings#set-model-key"
       onClick={onNavigate}
-      className="w-fit text-xs text-muted-foreground underline decoration-control underline-offset-2 hover:text-foreground hover:decoration-foreground"
+      className="inline-flex min-h-6 w-fit items-center text-xs text-muted-foreground underline decoration-control underline-offset-2 hover:text-foreground hover:decoration-foreground"
     >
       {accessShort(access, kinds.length > 0)}
     </Link>
@@ -337,43 +337,34 @@ function useAfter(ms: number): boolean {
   return passed;
 }
 
-function Gate({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
-  const session = useSession();
-  // A free host puts an idle API to sleep, and the first answer after that takes about a minute.
+/** What the console shows until ARIA's API answers. A free host puts an idle API to sleep, and
+ * the first answer after that takes about a minute, so a failed check reads as "waking up" for a
+ * minute and a half before it reads as down. The session check keeps asking meanwhile, so the page
+ * carries on by itself once the API answers. */
+function Connecting({
+  busy,
+  failed,
+  onRetry,
+}: {
+  busy: boolean;
+  failed: boolean;
+  onRetry: () => void;
+}) {
   const slow = useAfter(4000);
-  const open = WITHOUT_API.has(pathname);
-  const reachable = !session.isError && Boolean(session.data?.reachable);
-  const signedOut = Boolean(session.data?.authRequired && !session.data.signedIn);
-  useHashOnArrival(open || (reachable && !signedOut));
-  if (open) return <>{children}</>;
-  if (session.isPending) {
-    return (
-      <div role="status" className="grid gap-4">
-        {slow ? (
-          <p className="text-sm text-muted-foreground">
-            ARIA&apos;s server is waking up. After a quiet spell this takes up to a minute.
-          </p>
-        ) : (
-          <span className="sr-only">Connecting to ARIA</span>
-        )}
-        <Skeleton className="h-10 w-64" />
-        <Skeleton className="h-40 w-full" />
-      </div>
-    );
-  }
-  if (session.isError || !session.data?.reachable) {
+  const gaveUp = useAfter(90_000);
+  if (failed && gaveUp) {
     return (
       <div className="grid gap-4">
         <ErrorState
           title="ARIA's API is not answering"
           error={
             new Error(
-              "Incidents, reviews and the incident library need it. A server that was asleep wakes within a minute, so try again shortly. If you run ARIA yourself, start it with make dev or docker compose up, and check that this web server's ARIA_API_URL points at it.",
+              "Incidents, reviews and the incident library need it. This page keeps checking, and carries on by itself once it answers.",
             )
           }
-          onRetry={() => void session.refetch()}
+          onRetry={onRetry}
         />
+        <SelfHosting />
         <p className="text-sm text-muted-foreground">
           These work without it:{" "}
           <Link href="/console/evals" className="underline decoration-control underline-offset-4">
@@ -388,7 +379,63 @@ function Gate({ children }: { children: ReactNode }) {
       </div>
     );
   }
-  if (session.data.authRequired && !session.data.signedIn) return <SignIn />;
+  return (
+    <div className="grid gap-4">
+      <div role="status">
+        {busy ? (
+          <p className="max-w-prose text-sm text-muted-foreground">
+            ARIA is busy right now. This page carries on by itself in a few seconds.
+          </p>
+        ) : slow || failed ? (
+          <p className="max-w-prose text-sm text-muted-foreground">
+            ARIA&apos;s server is waking up. After a quiet spell this takes up to a minute, and this
+            page carries on by itself.
+          </p>
+        ) : (
+          <span className="sr-only">Connecting to ARIA</span>
+        )}
+      </div>
+      {failed && !busy ? <SelfHosting /> : null}
+      <Skeleton className="h-10 w-64" />
+      <Skeleton className="h-40 w-full" />
+    </div>
+  );
+}
+
+/** For whoever runs ARIA: folded away, so a visitor reads only what applies to them. */
+function SelfHosting() {
+  return (
+    <details className="text-sm text-muted-foreground">
+      <summary className="min-h-6 w-fit cursor-pointer underline decoration-control underline-offset-4">
+        Running ARIA yourself?
+      </summary>
+      <p className="mt-2 max-w-prose">
+        Start the API with <code>make dev</code> or <code>docker compose up</code>, and check that
+        this web server&apos;s <code>ARIA_API_URL</code> points at it.
+      </p>
+    </details>
+  );
+}
+
+function Gate({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const session = useSession();
+  const open = WITHOUT_API.has(pathname);
+  const reachable = !session.isError && Boolean(session.data?.reachable);
+  const busy = Boolean(session.data?.busy);
+  const signedOut = Boolean(session.data?.authRequired && !session.data.signedIn);
+  useHashOnArrival(open || (reachable && !busy && !signedOut));
+  if (open) return <>{children}</>;
+  if (session.isPending || !reachable || busy) {
+    return (
+      <Connecting
+        busy={busy}
+        failed={!session.isPending && !reachable}
+        onRetry={() => void session.refetch()}
+      />
+    );
+  }
+  if (signedOut) return <SignIn />;
   return <>{children}</>;
 }
 

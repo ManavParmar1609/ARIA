@@ -61,6 +61,15 @@ export function useSession() {
     queryKey: keys.session,
     queryFn: () => apiFetch<Session>("/api/session"),
     staleTime: 60_000,
+    // While the API is asleep, starting or busy, ask again every few seconds, so an open tab
+    // carries on by itself once it answers.
+    refetchInterval: (query) => {
+      const session = query.state.data;
+      const waiting =
+        query.state.status === "error" ||
+        (session !== undefined && (!session.reachable || session.busy === true));
+      return waiting ? 5_000 : false;
+    },
   });
 }
 
@@ -124,13 +133,15 @@ export function useHealth() {
   });
 }
 
-export function useRuns(status: RunStatus | "all" = "all", limit = 50) {
+/** Incidents, newest first, checked again every ``every`` ms (a count in the menu can wait longer
+ * than a list someone is reading). */
+export function useRuns(status: RunStatus | "all" = "all", limit = 50, every = 10_000) {
   const query = new URLSearchParams({ limit: String(limit) });
   if (status !== "all") query.set("status", status);
   return useQuery({
     queryKey: keys.runs(status, limit),
     queryFn: () => apiFetch<RunPage>(v1(`/runs?${query.toString()}`)),
-    refetchInterval: 10_000,
+    refetchInterval: every,
     placeholderData: keepPreviousData,
   });
 }

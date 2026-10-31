@@ -6,7 +6,9 @@ describe("who answers a visitor's runs", () => {
   it("is the visitor's own key first", () => {
     const access = modelAccess("claude", ["claude", "gemini"], { left: 3, per_visitor: 5 });
     expect(access).toEqual({ kind: "own", label: "Your Claude key" });
-    expect(accessSentence(access, true)).toBe("Your Claude key answers your runs and questions.");
+    expect(accessSentence(access, true)).toBe(
+      "Your Claude key triages your incidents and answers your questions.",
+    );
   });
 
   it("is the site's key while today's share lasts, and says how much is left", () => {
@@ -23,7 +25,7 @@ describe("who answers a visitor's runs", () => {
     const none = modelAccess("openai", ["gemini"], null);
     expect(none.kind).toBe("offline");
     expect(accessSentence(none, false)).toBe(
-      "Offline: runs use the rules, the calibrated model and the grounded template, and nothing leaves the server.",
+      "Offline: triages use the rules, the calibrated model and the grounded template, and nothing leaves the server.",
     );
   });
 
