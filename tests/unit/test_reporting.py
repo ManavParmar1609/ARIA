@@ -594,6 +594,32 @@ async def test_a_rare_decisive_line_reaches_the_summary() -> None:
     assert "No space left on device" in serious[0]
 
 
+async def test_a_one_line_paste_is_counted_in_words_that_fit_it() -> None:
+    """One pasted line read "1 errors (100.0% of 1 lines over 0.0 minutes of logs)"."""
+    lines = ["2026-10-31 09:59:44 ERROR postgres[1201]: could not write to file: disk full"]
+    store = EvidenceStore()
+    batch = parse_lines(lines, system="generic", guard=GuardrailConfig(), evidence=store).batch
+    severity = (
+        await SeverityEngine.load(SeverityConfig()).assess(
+            batch.features, system="generic", evidence=store, use_llm=False
+        )
+    ).assessment
+    ctx = ReportContext(
+        run_id="run-one",
+        system="generic",
+        batch=batch,
+        severity=severity,
+        evidence=store.all(),
+        retrieval=RetrievalResult(),
+        investigation=Investigation(),
+        runbooks=RUNBOOKS,
+    )
+    summary = " ".join(c.text for c in compose_draft(ctx).summary)
+    assert "1 error (100.0% of 1 line within a minute of logs)" in summary
+    assert "1 errors" not in summary
+    assert "0.0 minutes" not in summary
+
+
 def test_a_sentence_starting_with_a_name_keeps_the_name_as_written() -> None:
     """The cause claim starts with the investigation's statement; capitalising it turned the
     component "payments.Gateway" into "Payments.Gateway", a name the logs never use."""

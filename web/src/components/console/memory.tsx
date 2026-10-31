@@ -2,7 +2,8 @@
 
 import { LibraryIcon, SearchIcon } from "lucide-react";
 import Link from "next/link";
-import { useDeferredValue, useId, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useDeferredValue, useEffect, useId, useMemo, useState } from "react";
 
 import { SeverityDot } from "@/components/aria/severity";
 import { EmptyState, ErrorState, LoadingRows, PageHeader } from "@/components/console/states";
@@ -73,8 +74,26 @@ const SOURCE_WORDS: Record<string, string> = {
 /** What ARIA remembers: past incidents it searches when a new one comes in. */
 export function Memory() {
   const id = useId();
-  const [query, setQuery] = useState("");
-  const [system, setSystem] = useState("all");
+  const params = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  // The search lives in the address, so Back, a reload or a shared link finds it again (FL-04).
+  const [query, setQuery] = useState(() => params.get("q") ?? "");
+  const [system, setSystem] = useState(() => params.get("system") ?? "all");
+  useEffect(() => {
+    const later = window.setTimeout(() => {
+      const next = new URLSearchParams(params.toString());
+      if (query.trim()) next.set("q", query.trim());
+      else next.delete("q");
+      if (system !== "all") next.set("system", system);
+      else next.delete("system");
+      const qs = next.toString();
+      if (qs !== params.toString()) {
+        router.replace((qs ? `${pathname}?${qs}` : pathname) as never, { scroll: false });
+      }
+    }, 400);
+    return () => window.clearTimeout(later);
+  }, [query, system, params, pathname, router]);
   const [limit, setLimit] = useState(PAGE);
   const deferred = useDeferredValue(query.trim());
   const searching = deferred.length >= 2;
@@ -84,7 +103,8 @@ export function Memory() {
   );
   const all = useIncidents();
   // On a shared demo, what a visitor publishes stays theirs: it never joins this library.
-  const shared = useSettingsView().data?.visitor_scope ?? false;
+  // Unknown until the settings load: neither sentence is said before then (FL-17).
+  const shared = useSettingsView().data?.visitor_scope;
   const systems = useMemo(
     () => [...new Set((all.data ?? []).map((i) => i.system))].sort(),
     [all.data],
@@ -114,11 +134,13 @@ export function Memory() {
     <div className="grid gap-6">
       <PageHeader
         title="Incident library"
-        description={
-          shared
-            ? "Past incidents ARIA searches when a new one comes in, by keyword and by meaning. On this shared demo, the incidents you publish stay yours and don't join it."
-            : "Past incidents ARIA searches when a new one comes in, by keyword and by meaning. Each published report adds one."
-        }
+        description={`Past incidents ARIA searches when a new one comes in, by keyword and by meaning.${
+          shared === undefined
+            ? ""
+            : shared
+              ? " On this shared demo, the incidents you publish stay yours and don't join it."
+              : " Each published report adds one."
+        }`}
       >
         <div className="flex flex-wrap items-end gap-3">
           <div className="grid min-w-64 flex-1 gap-1.5 md:max-w-md">

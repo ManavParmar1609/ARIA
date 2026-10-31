@@ -358,9 +358,11 @@ export function Settings() {
             {session.data?.signedIn
               ? `Signed in with the key named "${session.data.name}". Reviews you make are recorded under that name.`
               : session.data?.authRequired === false
-                ? view.data?.visitor_scope
-                  ? "This shared demo needs no key. The incidents you start are yours alone, kept with this browser, and the examples every visitor sees stay as they are."
-                  : "This API is open: it needs no key. Set ARIA_API_KEYS to require one."
+                ? !view.data
+                  ? "This server needs no key."
+                  : view.data.visitor_scope
+                    ? "This shared demo needs no key. The incidents you start are yours alone, kept with this browser, and the examples every visitor sees stay as they are."
+                    : "This API is open: it needs no key. Set ARIA_API_KEYS to require one."
                 : "Not signed in."}
           </p>
           {session.data?.signedIn ? (

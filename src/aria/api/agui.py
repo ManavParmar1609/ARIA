@@ -52,7 +52,7 @@ from aria.api.keys import VisitorKeyDep, may_use_model, offline
 from aria.api.schemas import ReviewRequest, links_for
 from aria.api.security import Principal
 from aria.api.state import AppState, app_state, current_principal
-from aria.api.visitors import EXAMPLE_STAYS, Viewer, ViewerDep
+from aria.api.visitors import EXAMPLE_STAYS, Viewer, ViewerDep, make_room
 from aria.contracts.base import first_problem
 from aria.contracts.inputs import TriageRequest
 from aria.contracts.report import ReviewDecision
@@ -287,14 +287,20 @@ async def _stream(
                 return
             if not may_use_model(state, visitor, viewer.tag, request.options.use_llm):
                 request = request.model_copy(update={"options": offline(request.options)})
-            await asyncio.to_thread(
-                runner.submit,
-                request,
-                run_id=run_id,
-                trigger="agui",
-                claim=True,
-                visitor=viewer.tag,
-            )
+            # The same share of the queue as every other way of starting a triage.
+            try:
+                async with make_room(state, viewer):
+                    await asyncio.to_thread(
+                        runner.submit,
+                        request,
+                        run_id=run_id,
+                        trigger="agui",
+                        claim=True,
+                        visitor=viewer.tag,
+                    )
+            except HTTPException as exc:
+                yield error(str(exc.detail), "too_many_active")
+                return
             if visitor is not None:
                 runner.keys.hold(run_id, visitor)
             job = runner.execute(run_id)

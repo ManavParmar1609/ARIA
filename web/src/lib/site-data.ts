@@ -112,7 +112,7 @@ export function replay(): Replay {
   });
   const newWarning = report.summary.find((c) => c.text.startsWith("Most frequent"));
   // How much of the log was errors: worded "N error events" before, "No errors, but ..." now.
-  const scale = report.summary.find((c) => /error events|^No errors|\d+ errors \(/.test(c.text));
+  const scale = report.summary.find((c) => /error events|^No errors|\d+ errors? \(/.test(c.text));
   const cause = report.suspected_cause[0];
   const quarantine = report.actions.find((a) => a.text.includes("quarantined"));
   const claims = [newWarning, scale, cause]

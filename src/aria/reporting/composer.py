@@ -321,16 +321,22 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
         )
     if window is not None and features.n_events:
         warnings = features.level_counts.get("WARN", 0)
-        minutes = f"{features.n_events} lines over {features.duration_s / 60:.1f} minutes"
+        # Counted in the right number, and a window under a minute said so, not as "0.0 minutes".
+        span = (
+            f"over {features.duration_s / 60:.1f} minutes"
+            if features.duration_s >= 60
+            else "within a minute"
+        )
+        minutes = f"{_count(features.n_events, 'line')} {span} of logs"
         if features.error_events:
             scale = (
-                f"{features.error_events} errors ({features.error_ratio:.1%} of "
-                f"{minutes} of logs)" + (f" and {warnings} warnings" if warnings else "")
+                f"{_count(features.error_events, 'error')} ({features.error_ratio:.1%} of "
+                f"{minutes})" + (f" and {_count(warnings, 'warning')}" if warnings else "")
             )
         elif warnings:
-            scale = f"No errors, but {warnings} warnings, in {minutes} of logs"
+            scale = f"No errors, but {_count(warnings, 'warning')}, in {minutes}"
         else:
-            scale = f"No errors in {minutes} of logs"
+            scale = f"No errors in {minutes}"
         if spread is not None:
             scale += f", on {features.error_nodes} of {features.distinct_nodes} servers"
         elif warn_spread is not None:

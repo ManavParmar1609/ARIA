@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useId, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { SampleGallery } from "@/components/console/sample-gallery";
 import { PageHeader } from "@/components/console/states";
@@ -159,17 +159,79 @@ export function NewRun({ publicDemo = false }: { publicDemo?: boolean }) {
   );
 }
 
+// What a visitor pasted outlives a look at the Samples tab, Back, a trip to another page and a
+// reload (FL-03): kept for this browser tab only, and cleared once the triage starts.
+const DRAFT_KEY = "aria:own-logs";
+
+interface Draft {
+  title: string;
+  system: string;
+  text: string;
+  useLlm: boolean;
+  investigate: boolean;
+  approval: boolean;
+}
+
+const BLANK: Draft = {
+  title: "",
+  system: "generic",
+  text: "",
+  useLlm: true,
+  investigate: true,
+  approval: true,
+};
+
+export function loadDraft(storage: Pick<Storage, "getItem"> | undefined): Draft {
+  try {
+    const raw: unknown = JSON.parse(storage?.getItem(DRAFT_KEY) ?? "null");
+    if (!raw || typeof raw !== "object") return BLANK;
+    const d = raw as Partial<Record<keyof Draft, unknown>>;
+    return {
+      title: typeof d.title === "string" ? d.title : "",
+      system: typeof d.system === "string" ? d.system : "generic",
+      text: typeof d.text === "string" ? d.text : "",
+      useLlm: d.useLlm !== false,
+      investigate: d.investigate !== false,
+      approval: d.approval !== false,
+    };
+  } catch {
+    return BLANK;
+  }
+}
+
+function saveDraft(draft: Draft) {
+  try {
+    const blank = (Object.keys(BLANK) as (keyof Draft)[]).every((k) => draft[k] === BLANK[k]);
+    if (blank) window.sessionStorage.removeItem(DRAFT_KEY);
+    else window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+  } catch {
+    // Too big for storage, or storage is blocked: the form still works, it is just not kept.
+  }
+}
+
 function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
   const id = useId();
   const router = useRouter();
   const create = useCreateRun();
-  const [title, setTitle] = useState("");
-  const [system, setSystem] = useState("generic");
-  const [text, setText] = useState("");
-  const [useLlm, setUseLlm] = useState(true);
-  const [investigate, setInvestigate] = useState(true);
-  const [approval, setApproval] = useState(true);
+  // This page renders in the browser only (it reads the address), so storage is there to read.
+  const [draft] = useState(() =>
+    loadDraft(typeof window === "undefined" ? undefined : window.sessionStorage),
+  );
+  const [title, setTitle] = useState(draft.title);
+  const [system, setSystem] = useState(draft.system);
+  const [text, setText] = useState(draft.text);
+  const [useLlm, setUseLlm] = useState(draft.useLlm);
+  const [investigate, setInvestigate] = useState(draft.investigate);
+  const [approval, setApproval] = useState(draft.approval);
   const [touched, setTouched] = useState(false);
+  // Once the triage has started, the draft is spent: nothing saves it again on the way out.
+  const sent = useRef(false);
+  useEffect(() => {
+    const later = window.setTimeout(() => {
+      if (!sent.current) saveDraft({ title, system, text, useLlm, investigate, approval });
+    }, 300);
+    return () => window.clearTimeout(later);
+  }, [title, system, text, useLlm, investigate, approval]);
   // The server's rule wins: where it requires approval, every run waits for a person.
   const settings = useSettingsView().data;
   const approvalRequired = settings?.require_approval ?? true;
@@ -202,7 +264,8 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
       : lines.length > MAX_LINES
         ? `ARIA reads at most ${MAX_LINES.toLocaleString("en")} lines in one triage; this has ${lines.length.toLocaleString("en")}.`
         : bytes > most
-          ? `These lines come to ${megabytes(bytes, Math.ceil)}, more than the ${megabytes(most)} this server takes in one triage. Send fewer lines, or split them over several triages.`
+          ? // Just over reads as such: rounded up, it would claim "1.1 MB, more than the 1 MB".
+            `These lines come to ${bytes < most * 1.1 ? "just over" : `${megabytes(bytes, Math.ceil)}, more than`} the ${megabytes(most)} this server takes in one triage. Send fewer lines, or split them over several triages.`
           : null;
   const apiError = create.error instanceof ApiError ? create.error.detail : create.error?.message;
 
@@ -224,6 +287,8 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
       },
       {
         onSuccess: (accepted) => {
+          sent.current = true;
+          saveDraft(BLANK);
           // The incident page shows the run starting; no toast needs to say so (item 34).
           router.push(`/console/runs/${encodeURIComponent(accepted.run_id)}` as never);
         },

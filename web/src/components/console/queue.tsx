@@ -139,7 +139,8 @@ export function Queue() {
     if (value === "all") next.delete("status");
     else next.set("status", value);
     const qs = next.toString();
-    router.replace((qs ? `${pathname}?${qs}` : pathname) as never, { scroll: false });
+    // Like New triage's source filters, a filter is a step Back can undo (FL-05).
+    router.push((qs ? `${pathname}?${qs}` : pathname) as never, { scroll: false });
   };
 
   return (

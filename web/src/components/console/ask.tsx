@@ -339,8 +339,11 @@ function Questions() {
   // An incident page's "Ask about this incident" opens here with that incident chosen.
   const linked = useSearchParams().get("run");
   const linkedRun = useRun(linked ?? "", Boolean(linked));
-  // A link to an incident this visitor can't see (or that was deleted) falls back to all.
+  // A link to an incident this visitor can't see (or that was deleted) falls back to all; so
+  // does one the server could not look up just now, which says so and can try again (FL-10).
   const missing = Boolean(linked) && linkedRun.isError;
+  const gone =
+    linkedRun.error instanceof ApiError && [400, 404, 422].includes(linkedRun.error.status);
   const [question, setQuestion] = useState("");
   const [chosen, setAbout] = useState<string>(linked ?? ABOUT_ALL);
   const about = missing && chosen === linked ? ABOUT_ALL : chosen;
@@ -354,9 +357,18 @@ function Questions() {
   const answers = useRef<HTMLOListElement>(null);
   const suggestions = about === ABOUT_ALL ? LIBRARY_QUESTIONS : INCIDENT_QUESTIONS;
 
+  // A question asked while ARIA answers another waits in the box, said so, rather than being
+  // dropped (FL-06).
+  const [held, setHeld] = useState(false);
   const send = (text: string) => {
     const q = text.trim();
-    if (q.length < 3 || ask.isPending) return;
+    if (q.length < 3) return;
+    if (ask.isPending) {
+      setQuestion(q);
+      setHeld(true);
+      return;
+    }
+    setHeld(false);
     counter.current += 1;
     const turn: Turn = {
       // Unique beyond this visit too: kept turns come back with their ids.
@@ -444,8 +456,18 @@ function Questions() {
             </Select>
             {missing ? (
               <p className="text-xs text-muted-foreground">
-                The incident in the link isn&apos;t available here, so questions go to all past
-                incidents.
+                {gone
+                  ? "The incident in the link isn't available here, so questions go to all past incidents."
+                  : "ARIA couldn't look up the incident in the link just now, so questions go to all past incidents. "}
+                {gone ? null : (
+                  <button
+                    type="button"
+                    onClick={() => void linkedRun.refetch()}
+                    className="font-medium text-foreground underline underline-offset-2"
+                  >
+                    Try again
+                  </button>
+                )}
               </p>
             ) : null}
           </div>
@@ -458,6 +480,11 @@ function Questions() {
         >
           Ask ARIA
         </Button>
+        <p role="status" className="text-sm text-muted-foreground empty:hidden">
+          {held && ask.isPending
+            ? "ARIA is still answering the last question. Yours is in the box: ask it once that answer arrives."
+            : ""}
+        </p>
       </form>
 
       <section aria-labelledby={`${id}-try`} className="grid gap-2">
@@ -473,7 +500,7 @@ function Questions() {
                 // Questions are long: let them wrap on a phone rather than widen the page.
                 className="h-auto min-h-9 py-1.5 text-left whitespace-normal"
                 // Not disabled while ARIA answers: focus would fall off the button to the page.
-                // A second question waits, as send() ignores it until the first is answered.
+                // A second question waits in the box until the first is answered.
                 onClick={() => send(s)}
               >
                 {s}

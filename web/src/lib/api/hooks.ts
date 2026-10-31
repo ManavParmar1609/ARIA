@@ -4,7 +4,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 
 import { markStarted } from "@/lib/started";
 
-import { apiFetch, postJson } from "./client";
+import { ApiError, apiFetch, postJson } from "./client";
 import type { ModelKeyCheck, SavedModelKey } from "./model-key";
 import type { Session } from "./session";
 import type {
@@ -131,8 +131,9 @@ export function useHealth() {
   return useQuery({
     queryKey: keys.health,
     queryFn: () => apiFetch<Health>("/api/ready"),
-    // Every half minute; every five seconds while the server is not answering.
-    refetchInterval: (query) => (query.state.status === "error" ? 5_000 : 30_000),
+    // Every quarter minute, so an open page notices an outage soon (any failed call also checks
+    // at once); every five seconds while the server is not answering.
+    refetchInterval: (query) => (query.state.status === "error" ? 5_000 : 15_000),
   });
 }
 
@@ -305,6 +306,13 @@ export function useReview(id: string) {
         client.invalidateQueries({ queryKey: ["run", id] }),
         client.invalidateQueries({ queryKey: ["runs"] }),
       ]);
+    },
+    // Deleted or decided elsewhere (another tab, another reviewer): look again, so the page shows
+    // what is true now instead of offering a review that can no longer happen (FL-08).
+    onError: async (error) => {
+      if (error instanceof ApiError && (error.status === 404 || error.status === 409)) {
+        await client.invalidateQueries({ queryKey: ["run", id] });
+      }
     },
   });
 }

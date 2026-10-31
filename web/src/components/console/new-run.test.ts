@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { logsHint, modelHint, megabytes } from "./new-run";
+import { loadDraft, logsHint, modelHint, megabytes } from "./new-run";
 
 describe("logsHint", () => {
   it("says how pasted lines are protected", () => {
@@ -71,5 +71,29 @@ describe("paste sizes", () => {
   it("round a paste up and a limit to the nearest tenth, in megabytes", () => {
     expect(megabytes(4 * 1024 * 1024)).toBe("4 MB");
     expect(megabytes(4.04 * 1024 * 1024, Math.ceil)).toBe("4.1 MB");
+  });
+});
+
+describe("the pasted draft", () => {
+  const storage = (value: string | null) => ({ getItem: () => value });
+
+  it("comes back as it was left", () => {
+    const draft = {
+      title: "Checkout down",
+      system: "linux",
+      text: "ERROR one\nERROR two",
+      useLlm: false,
+      investigate: true,
+      approval: false,
+    };
+    expect(loadDraft(storage(JSON.stringify(draft)))).toEqual(draft);
+  });
+
+  it("starts blank when nothing, or something unreadable, was kept", () => {
+    const blank = loadDraft(undefined);
+    expect(blank.text).toBe("");
+    expect(blank.system).toBe("generic");
+    expect(loadDraft(storage("not json"))).toEqual(blank);
+    expect(loadDraft(storage(JSON.stringify({ text: 42, useLlm: "no" })))).toEqual(blank);
   });
 });

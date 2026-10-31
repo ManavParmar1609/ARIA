@@ -222,7 +222,13 @@ export function ReviewPanel({
     if (hasChanges(changedEdits(edit, original))) void decide("edit");
     else setUnchanged(true);
   };
-  const error = review.error instanceof ApiError ? review.error.detail : review.error?.message;
+  // The server's "run run-... not found" read as what it means for this person (FL-08).
+  const error =
+    review.error instanceof ApiError && review.error.status === 404
+      ? "This incident was deleted, so there is nothing left to review."
+      : review.error instanceof ApiError
+        ? review.error.detail
+        : review.error?.message;
   const proposed = actions.filter((a) => a.status === "proposed" || a.status === undefined);
   // A message can go out only through a connected channel; the others stay previews, with
   // nothing to tick. Until the settings load, every message reads as a preview.

@@ -259,6 +259,19 @@ function ApiStatus() {
   );
 }
 
+/** On a phone the server's status sits in the closed menu, so the page itself says when the server
+ * is not answering (FL-07). */
+function PhoneServerNotice() {
+  const { isError } = useHealth();
+  if (!isError) return null;
+  return (
+    <p className="mb-6 flex items-center gap-2 rounded-card border border-rule bg-raised px-4 py-3 text-sm text-muted-foreground lg:hidden">
+      <span aria-hidden className="block size-2 shrink-0 rounded-full bg-sev3" />
+      Waiting for ARIA&apos;s server. This page carries on when it answers.
+    </p>
+  );
+}
+
 /** Who answers this visitor's runs and questions, as a link to the key form on Settings. */
 function ModelLine({ onNavigate }: { onNavigate?: () => void }) {
   const view = useSettingsView();
@@ -529,6 +542,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
             tabIndex={-1}
             className="mx-auto w-full max-w-[90rem] flex-1 px-4 py-8 outline-none sm:px-6 lg:px-8 lg:py-12"
           >
+            <PhoneServerNotice />
             <Gate>{children}</Gate>
           </main>
         </div>

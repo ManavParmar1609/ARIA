@@ -340,8 +340,7 @@ export function RunView({
   const [decided, setDecided] = useState(false);
   // A link that names no incident (deleted, someone else's, or damaged in copying) opens the
   // same "not here" page, with a title that says so.
-  const missing =
-    run.error instanceof ApiError && (run.error.status === 404 || run.error.status === 422);
+  const missing = run.error instanceof ApiError && [400, 404, 422].includes(run.error.status);
   useDocumentTitle(run.data ? runTitle(run.data) : missing ? "Incident not found" : null);
   const [checkpoint, setCheckpoint] = useState<string | null>(null);
   const [tab, setTab] = useState(() => storedTab(runId));
@@ -373,8 +372,9 @@ export function RunView({
   // page does not jump as each part arrives. A running run shows at once: it changes as it goes.
   const stateLoading = state.isPending && state.fetchStatus === "fetching" && status !== "running";
   if (run.isPending || (run.isSuccess && stateLoading)) return <RunSkeleton />;
-  // A refresh that fails (a busy server, say) keeps what the page already shows.
-  if (run.isError && !run.data) {
+  // A refresh that fails (a busy server, say) keeps what the page already shows; one that finds
+  // the incident gone (deleted in another tab) says so instead (FL-08).
+  if (run.isError && (!run.data || missing)) {
     if (missing) {
       return (
         <EmptyState

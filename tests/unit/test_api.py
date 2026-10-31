@@ -270,6 +270,21 @@ async def test_a_visitor_waits_for_a_triage_before_queueing_more(
             third = await start(ana)
             assert third.status_code == 429
             assert third.json()["detail"].startswith("You already have 2 triages queued")
+            # Triage in chat is held to the same share of the queue.
+            chat = {
+                "threadId": "ana-chat-1",
+                "runId": "ui-1",
+                "messages": [{"id": "u1", "role": "user", "content": "\n".join(lines)}],
+                "forwardedProps": {"system": "bgl"},
+            }
+            answer = await c.post("/agui", json=chat, headers={"x-visitor-id": ana})
+            events = [
+                json.loads(line[5:])
+                for line in answer.text.replace("\r\n", "\n").splitlines()
+                if line.startswith("data:")
+            ]
+            assert (events[-1]["type"], events[-1]["code"]) == ("RUN_ERROR", "too_many_active")
+            assert events[-1]["message"].startswith("You already have 2 triages queued")
             assert (await start(bo)).status_code == 202  # Ana's queue does not stop Bo
             # Starts that arrive together, from several tabs, take turns: they cannot all pass
             # the count before any of them is recorded.

@@ -337,17 +337,26 @@ export function Citations({
   className?: string;
 }) {
   const [all, setAll] = useState(false);
+  const list = useRef<HTMLSpanElement>(null);
   if (ids.length === 0) return null;
   const hidden = all ? 0 : Math.max(0, ids.length - SHOWN_CITATIONS);
+  // The "+N" button goes once pressed: focus moves to the first source it showed, not the page
+  // (FL-11).
+  const showAll = () => {
+    setAll(true);
+    requestAnimationFrame(() =>
+      list.current?.querySelectorAll<HTMLElement>("button")[SHOWN_CITATIONS]?.focus(),
+    );
+  };
   return (
-    <span className={cn("inline-flex flex-wrap gap-1 align-baseline", className)}>
+    <span ref={list} className={cn("inline-flex flex-wrap gap-1 align-baseline", className)}>
       {ids.slice(0, ids.length - hidden).map((id) => (
         <EvidenceChip key={id} id={id} label={labels?.get(id)} />
       ))}
       {hidden ? (
         <button
           type="button"
-          onClick={() => setAll(true)}
+          onClick={showAll}
           aria-label={`Show ${hidden} more ${hidden === 1 ? "source" : "sources"}`}
           className="inline-flex h-6 items-center rounded-xs border border-dashed border-control px-1.5 align-baseline font-mono text-xs text-muted-foreground hover:border-foreground hover:text-foreground"
         >
