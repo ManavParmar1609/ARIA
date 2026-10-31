@@ -109,9 +109,15 @@ export function SeenBefore({
   const caveat = matchCaveat(incidents, system, retrieval?.grade);
   return (
     <section aria-labelledby="seen-title" className="grid gap-4 rounded-lg bg-raised p-5">
-      <h2 id="seen-title" className="text-base font-medium">
-        Seen before
-      </h2>
+      <div className="grid gap-1">
+        <h2 id="seen-title" className="text-xl">
+          Seen before
+        </h2>
+        <p className="max-w-prose text-sm text-muted-foreground">
+          Past incidents in ARIA&apos;s library that look like this one, and what fixed them. A
+          close match suggests the same fix may work here too.
+        </p>
+      </div>
       {caveat ? <p className="text-sm text-muted-foreground">{caveat}</p> : null}
       {incidents.length ? (
         <ul className="grid gap-4">

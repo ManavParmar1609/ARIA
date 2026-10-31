@@ -5,6 +5,14 @@ import {
   ChevronRightIcon,
   CircleAlertIcon,
   CircleCheckIcon,
+  FileTextIcon,
+  GaugeIcon,
+  HistoryIcon,
+  ScaleIcon,
+  ScrollTextIcon,
+  SearchCheckIcon,
+  SendIcon,
+  UserRoundCheckIcon,
   UserRoundIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -113,7 +121,7 @@ export function progressSteps(events: RunEvent[], status: string): Step[] {
 
 // A run that finished faster than a person can follow (an offline one takes under a second) is
 // played back at this pace, one step after another, then held whole before the strip folds.
-const STEP_MS = 380;
+export const STEP_MS = 850;
 const HOLD_MS = 1_000;
 const SETTLED = new Set<StepState>(["done", "paused", "failed", "skipped"]);
 
@@ -243,8 +251,21 @@ function useTrace<T extends HTMLElement>() {
   return ref;
 }
 
-export function Steps({ steps }: { steps: Step[] }) {
+// Each step's own mark on the large strip, until it is done.
+const STEP_ICON: Record<string, LucideIcon> = {
+  read: ScrollTextIcon,
+  rate: GaugeIcon,
+  recall: HistoryIcon,
+  investigate: SearchCheckIcon,
+  assess: ScaleIcon,
+  write: FileTextIcon,
+  review: UserRoundCheckIcon,
+  publish: SendIcon,
+};
+
+export function Steps({ steps, large = false }: { steps: Step[]; large?: boolean }) {
   const ref = useTrace<HTMLOListElement>();
+  if (large) return <LargeSteps steps={steps} />;
   return (
     <ol ref={ref} aria-label="Run progress" className="group grid gap-0 md:grid-cols-8 md:gap-x-0">
       {steps.map((step, i) => {
@@ -311,6 +332,135 @@ export function Steps({ steps }: { steps: Step[] }) {
   );
 }
 
+/** The strip while a triage works: a marker per step, the line between them filling as each
+ * finishes, and a soft ring around the step at work. */
+function LargeSteps({ steps }: { steps: Step[] }) {
+  return (
+    <ol aria-label="Run progress" className="grid gap-0 md:grid-cols-8">
+      {steps.map((step, i) => {
+        const Mark =
+          step.state === "done"
+            ? CheckIcon
+            : step.state === "failed"
+              ? CircleAlertIcon
+              : (STEP_ICON[step.key] ?? CheckIcon);
+        const last = i === steps.length - 1;
+        const working = step.state === "running";
+        return (
+          <li
+            key={step.key}
+            className="relative flex gap-3 pb-5 last:pb-0 md:grid md:content-start md:justify-items-start md:gap-2.5 md:pr-3 md:pb-0"
+          >
+            {last ? null : (
+              <span
+                aria-hidden
+                className="absolute top-9 bottom-0 left-[1.125rem] w-0.5 -translate-x-1/2 bg-rule md:top-[1.125rem] md:right-0 md:bottom-auto md:left-9 md:h-0.5 md:w-auto md:translate-x-0 md:-translate-y-1/2"
+              >
+                <span
+                  className={cn(
+                    "block size-full origin-top bg-foreground transition-[scale] duration-(--duration-moderate) ease-(--ease-out) motion-reduce:transition-none md:origin-left",
+                    step.state === "done" || step.state === "skipped"
+                      ? "scale-100"
+                      : "scale-y-0 md:scale-x-0 md:scale-y-100",
+                  )}
+                />
+              </span>
+            )}
+            <span className="relative z-10 grid size-9 shrink-0 place-items-center">
+              {working ? (
+                <span
+                  aria-hidden
+                  className="absolute inset-0 rounded-full bg-primary/30 motion-safe:animate-halo"
+                />
+              ) : null}
+              <span
+                className={cn(
+                  "relative grid size-9 place-items-center rounded-full border-2 transition-colors duration-(--duration-moderate)",
+                  step.state === "done" && "border-foreground bg-foreground text-background",
+                  working && "border-primary bg-highlight text-heading",
+                  step.state === "paused" && "border-primary bg-highlight text-heading",
+                  step.state === "failed" && "border-danger bg-danger text-background",
+                  step.state === "pending" && "border-rule bg-background text-faint",
+                  step.state === "skipped" &&
+                    "border-dashed border-control bg-background text-faint",
+                )}
+              >
+                <Mark aria-hidden className="size-4" strokeWidth={2.25} />
+              </span>
+            </span>
+            <span className="grid min-w-0 gap-0.5 pt-1.5 md:pt-0">
+              <span
+                className={cn(
+                  "text-sm leading-snug",
+                  working || step.state === "paused"
+                    ? "font-semibold text-heading"
+                    : step.state === "done"
+                      ? "text-foreground"
+                      : "text-faint",
+                )}
+              >
+                {step.label}
+              </span>
+              {step.note ? <span className="text-xs text-faint">{step.note}</span> : null}
+              <span className="sr-only">: {STATE_WORDS[step.state]}</span>
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+// What each step is doing, in a line someone new to incidents reads while it runs.
+const STEP_NOW: Record<string, { title: string; doing: string }> = {
+  read: {
+    title: "Reading the logs",
+    doing:
+      "Grouping similar lines into patterns, and hiding personal details such as IP addresses.",
+  },
+  rate: {
+    title: "Rating how serious it is",
+    doing:
+      "Weighing the patterns with rules and a trained model, and keeping a short list of likely levels.",
+  },
+  recall: {
+    title: "Finding similar incidents",
+    doing: "Searching past incidents for ones like this, and the steps that fixed them.",
+  },
+  investigate: {
+    title: "Investigating the likeliest causes",
+    doing: "Testing each possible cause against the logs, with tools that can only read.",
+  },
+  assess: {
+    title: "Checking the evidence",
+    doing: "Deciding whether the evidence is strong enough, and looking further if it isn't.",
+  },
+  write: {
+    title: "Writing the report",
+    doing: "Writing the report and the messages, with a source for every claim.",
+  },
+  review: {
+    title: "Waiting for your review",
+    doing:
+      "Read the report, then approve, edit or discard the messages. Nothing is sent before you decide.",
+  },
+  publish: {
+    title: "Publishing",
+    doing: "Sending what was approved, and remembering the incident for next time.",
+  },
+};
+
+/** The step a triage is on: the one at work or waiting, else the next to start. */
+function currentStep(steps: Step[]): number {
+  const at = steps.findIndex((s) => s.state === "running" || s.state === "paused");
+  return at >= 0
+    ? at
+    : Math.max(
+        0,
+        steps.findIndex((s) => s.state === "pending"),
+      );
+}
+
 /** The run's progress: the strip while it works, one folded line once it has finished. */
 export function RunProgress({
   steps,
@@ -349,15 +499,39 @@ export function RunProgress({
       </details>
     );
   }
+  const at = currentStep(steps);
+  const step = steps[at];
+  const words =
+    status === "queued"
+      ? { title: "Waiting to start", doing: "ARIA starts this triage as soon as it is free." }
+      : step
+        ? (STEP_NOW[step.key] ?? { title: step.label, doing: "" })
+        : { title: "Starting", doing: "" };
   return (
-    <section aria-label="Progress" className="grid gap-3 rounded-lg bg-raised p-5">
-      <Steps steps={steps} />
+    <section
+      aria-label="Progress"
+      className="grid gap-6 rounded-card border border-rule bg-raised p-5 sm:p-6"
+    >
+      {/* Keyed by step, so each new step's words fade in where the last one's stood. */}
+      <div
+        key={status === "queued" ? "queued" : step?.key}
+        className="grid animate-in gap-1.5 duration-(--duration-moderate) ease-(--ease-out) fade-in-0 motion-safe:slide-in-from-bottom-1"
+      >
+        <p className="tabular text-sm font-medium text-muted-foreground">
+          {status === "queued" || !step ? "Triage" : `Step ${at + 1} of ${steps.length}`}
+        </p>
+        <h2 className="text-2xl leading-tight">{words.title}</h2>
+        {words.doing ? (
+          <p className="max-w-prose text-base text-muted-foreground">{words.doing}</p>
+        ) : null}
+      </div>
+      <Steps steps={steps} large />
       {replaying ? (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           ARIA has already finished: its steps play back at a pace you can follow.
         </p>
       ) : facts && status !== "queued" && status !== "running" ? (
-        <p className="text-xs text-muted-foreground">{facts}</p>
+        <p className="text-sm text-muted-foreground">{facts}</p>
       ) : null}
     </section>
   );

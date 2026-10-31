@@ -12,12 +12,14 @@ test.describe("console", () => {
     await expectAccessible(page, "incidents, empty");
 
     await page.getByRole("link", { name: "New triage" }).first().click();
-    // Samples are grouped by where their logs come from; the choice stays in the address.
+    // Each log is a choice of its own, with its issues; the choice stays in the address.
     await page
-      .getByRole("navigation", { name: "Where the logs come from" })
-      .getByRole("link", { name: /^Big-data clusters/ })
+      .locator("section", {
+        has: page.getByRole("heading", { name: "Or choose where the logs come from" }),
+      })
+      .getByRole("link", { name: /^ZooKeeper/ })
       .click();
-    await expect(page).toHaveURL(/\/console\/runs\/new\?source=bigdata$/);
+    await expect(page).toHaveURL(/\/console\/runs\/new\?log=zookeeper$/);
     await expectAccessible(page, "new triage");
     await page
       .getByRole("button", { name: "Run it: Coordination servers lose touch with each other" })
@@ -33,7 +35,7 @@ test.describe("console", () => {
       ),
     ).toBeVisible();
     // Four panels, one question each.
-    for (const name of ["What happened", "How serious", "Seen before", "The report"]) {
+    for (const name of ["The report", "How serious", "What happened in the logs", "Seen before"]) {
       await expect(page.getByRole("heading", { level: 2, name, exact: true })).toBeVisible();
     }
     // ARIA's part is over, so the progress folds into one line that opens onto the eight steps.
@@ -76,9 +78,13 @@ test.describe("console", () => {
     );
     // Once finished, the progress folds into one line.
     await expect(page.getByText(/^ARIA finished in /)).toBeVisible();
+    // The engineers' material is folded under one heading until asked for.
+    await expect(page.getByRole("tab", { name: "What ARIA did" })).toBeHidden();
+    await page.getByText("Technical details", { exact: true }).click();
     await page.getByRole("tab", { name: "What ARIA did" }).click();
     await page.getByText(/^Every event \(\d+\)$/).click();
-    const events = page.locator("details", { has: page.getByText(/^Every event \(\d+\)$/) });
+    // The innermost list: the technical details around it hold "Every event" too.
+    const events = page.locator("details", { has: page.getByText(/^Every event \(\d+\)$/) }).last();
     await expect(events.getByText(/^Approved by /)).toBeVisible();
     await expect(page.getByText(/Run finished: published/)).toBeVisible();
 
@@ -165,14 +171,29 @@ test.describe("console", () => {
     await expectAccessible(page, "run view, two sizes compared");
   });
 
-  test("lists each sample once, shows the rest on request and keeps Back working", async ({
+  test("offers each log with its issues, shows the rest on request and keeps Back working", async ({
     page,
   }) => {
     await page.goto("/console/runs/new");
-    // The featured cards are not repeated in the list below them.
+    // The quick start leads; then each log is a choice, and a chosen log lists its issues.
     await expect(
       page.getByRole("button", { name: "Run it: Someone keeps guessing passwords" }),
     ).toHaveCount(1);
+    await page
+      .locator("section", {
+        has: page.getByRole("heading", { name: "Or choose where the logs come from" }),
+      })
+      .getByRole("link", { name: /^BlueGene\/L/ })
+      .click();
+    await expect(page).toHaveURL(/\/console\/runs\/new\?log=bgl$/);
+    await expect(page.getByRole("heading", { level: 2, name: "BlueGene/L" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Run it: / })).toHaveCount(5);
+    await expectAccessible(page, "new triage, one log's issues");
+    await page.getByRole("link", { name: "All logs" }).click();
+    await expect(page).toHaveURL(/\/console\/runs\/new$/);
+
+    // A group of logs, from an older link, lists its issues a few at first.
+    await page.goto("/console/runs/new?source=hpc");
     const browse = page.locator("section", {
       has: page.getByRole("heading", { name: "Where do the logs come from?" }),
     });
@@ -190,7 +211,8 @@ test.describe("console", () => {
     await expect(page).toHaveURL(/\/console\/runs\/new\?source=noise$/);
     await expect(browse.getByRole("button", { name: /^Run it: / })).toHaveCount(3);
     await page.goBack();
-    await expect(page).toHaveURL(/\/console\/runs\/new$/);
+    await expect(page).toHaveURL(/\/console\/runs\/new\?source=hpc$/);
+    await page.goto("/console/runs/new");
     // A tab is a step Back can undo, like a filter.
     await page.getByRole("tab", { name: "Your own logs" }).click();
     await expect(page).toHaveURL(/\/console\/runs\/new\?tab=own$/);
@@ -435,6 +457,7 @@ test.describe("console at 320 px", () => {
       .click();
     await expect(page.getByRole("heading", { name: "How serious", exact: true })).toBeVisible();
     await expectNoSidewaysScroll(page, "run view");
+    await page.getByText("Technical details", { exact: true }).click();
     for (const tab of ["What ARIA did", "Evidence", "Logs", "History"]) {
       await page.getByRole("tab", { name: new RegExp(tab) }).click();
       await expectNoSidewaysScroll(page, `run view, ${tab}`);
