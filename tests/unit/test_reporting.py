@@ -17,8 +17,8 @@ from aria.config import (
     SeverityConfig,
 )
 from aria.contracts.base import Claim, EvidenceKind, Severity
-from aria.contracts.report import ActionItem
-from aria.contracts.retrieval import Hypothesis, Investigation
+from aria.contracts.report import ActionItem, IncidentReport
+from aria.contracts.retrieval import Hypothesis, Investigation, RetrievalResult, SimilarIncident
 from aria.data.scenarios import LinePools, ScenarioBuilder
 from aria.db.engine import get_engine, init_db
 from aria.evidence import EvidenceStore
@@ -181,7 +181,7 @@ async def test_the_draft_is_grounded_by_construction(builder: ScenarioBuilder) -
     assert report.title.startswith(str(ctx.severity.severity))
     assert report.suspected_cause
     assert "Kernel panics" in report.suspected_cause[0].text
-    assert "confidence 80%" in report.suspected_cause[0].text  # quoted from the hypothesis evidence
+    assert "80% sure" in report.suspected_cause[0].text  # quoted from the hypothesis evidence
     assert any(a.runbook_slug == "bgl-kernel-panic" for a in report.actions)
     ids = {e.id for e in report.evidence}
     assert all(set(c.evidence_ids) <= ids for _, c in report.claims())
@@ -214,7 +214,7 @@ async def test_the_severity_check_says_why_a_person_must_confirm(builder: Scenar
         "Confirm the severity: the model could not rule out SEV2 or SEV3."
     )
     summary = compose_draft(one).summary[0].text
-    assert "The most severe class in the prediction set, pending review" in summary
+    assert "ARIA is not sure enough to decide alone" in summary
     assert "Severity " not in summary
     unsure = replace(one, severity=one.severity.model_copy(update={"set_empty": True}))
     assert (
@@ -222,7 +222,28 @@ async def test_the_severity_check_says_why_a_person_must_confirm(builder: Scenar
         .actions[0]
         .text.startswith("Confirm the severity: no severity was likely enough to decide alone (")
     )
-    assert "Too uncertain to decide alone" in compose_draft(unsure).summary[0].text
+    assert "No level was likely enough" in compose_draft(unsure).summary[0].text
+
+
+async def test_a_moderate_window_without_errors_is_not_said_to_have_them(
+    builder: ScenarioBuilder,
+) -> None:
+    ctx = await _context(builder)
+    quiet = ctx.batch.features.model_copy(update={"error_events": 0, "error_ratio": 0.0})
+    moderate = replace(
+        ctx,
+        batch=ctx.batch.model_copy(update={"features": quiet}),
+        severity=ctx.severity.model_copy(update={"severity": Severity.SEV3}),
+    )
+    level = compose_draft(moderate).summary[0].text
+    assert level.startswith("SEV3 (moderate): a contained problem with limited user impact.")
+    assert "contained errors" not in level
+    noisy = replace(moderate, batch=ctx.batch)
+    assert (
+        compose_draft(noisy)
+        .summary[0]
+        .text.startswith("SEV3 (moderate): contained errors with limited user impact.")
+    )
 
 
 async def test_validator_catches_every_kind_of_defect(builder: ScenarioBuilder) -> None:
@@ -374,7 +395,7 @@ async def test_markdown_and_postmortem_render_with_citations(builder: ScenarioBu
     ):
         assert heading in md
     assert "[E" in md
-    assert "synthetic" in md  # seeded history is labelled as such
+    assert "(from a sample)" in md  # seeded history is labelled as such
     assert "_Validation: passed" in md
     post = render_postmortem(report)
     assert "## What went well" in post
@@ -539,6 +560,76 @@ def test_cut_text_never_ends_on_part_of_a_number() -> None:
         assert {n.value for n in numbers_in(cut)} <= whole, cut
 
 
+async def test_a_rare_decisive_line_reaches_the_summary() -> None:
+    """A full disk logged once decided the incident, yet the summary quoted only the most frequent
+    error: the most serious line is said too."""
+    lines = [
+        f"2026-10-31 09:59:{10 + i:02d} ERROR orders-svc[884]: database query timed out after 5000ms"
+        for i in range(4)
+    ] + [
+        "2026-10-31 09:59:44 ERROR postgres[1201]: could not write to file: No space left on device",
+        "2026-10-31 09:59:50 INFO api-gateway[2231]: GET /v1/orders 200 41ms",
+    ]
+    store = EvidenceStore()
+    batch = parse_lines(lines, system="generic", guard=GuardrailConfig(), evidence=store).batch
+    severity = (
+        await SeverityEngine.load(SeverityConfig()).assess(
+            batch.features, system="generic", evidence=store, use_llm=False
+        )
+    ).assessment
+    ctx = ReportContext(
+        run_id="run-disk",
+        system="generic",
+        batch=batch,
+        severity=severity,
+        evidence=store.all(),
+        retrieval=RetrievalResult(),
+        investigation=Investigation(),
+        runbooks=RUNBOOKS,
+    )
+    summary = [c.text for c in compose_draft(ctx).summary]
+    assert len(summary) <= 5
+    serious = [t for t in summary if t.startswith("The most serious line")]
+    assert serious
+    assert "No space left on device" in serious[0]
+
+
+async def test_a_one_line_paste_is_counted_in_words_that_fit_it() -> None:
+    """One pasted line read "1 errors (100.0% of 1 lines over 0.0 minutes of logs)"."""
+    lines = ["2026-10-31 09:59:44 ERROR postgres[1201]: could not write to file: disk full"]
+    store = EvidenceStore()
+    batch = parse_lines(lines, system="generic", guard=GuardrailConfig(), evidence=store).batch
+    severity = (
+        await SeverityEngine.load(SeverityConfig()).assess(
+            batch.features, system="generic", evidence=store, use_llm=False
+        )
+    ).assessment
+    ctx = ReportContext(
+        run_id="run-one",
+        system="generic",
+        batch=batch,
+        severity=severity,
+        evidence=store.all(),
+        retrieval=RetrievalResult(),
+        investigation=Investigation(),
+        runbooks=RUNBOOKS,
+    )
+    summary = " ".join(c.text for c in compose_draft(ctx).summary)
+    assert "1 error (100.0% of 1 line within a minute of logs)" in summary
+    assert "1 errors" not in summary
+    assert "0.0 minutes" not in summary
+
+
+def test_a_sentence_starting_with_a_name_keeps_the_name_as_written() -> None:
+    """The cause claim starts with the investigation's statement; capitalising it turned the
+    component "payments.Gateway" into "Payments.Gateway", a name the logs never use."""
+    from aria.text import sentence_start
+
+    assert sentence_start("the disk is full") == "The disk is full"
+    for named in ("payments.Gateway is failing", "eth0 is down", "blk_42 was lost", "x86 host"):
+        assert sentence_start(named) == named
+
+
 def test_failure_modes_read_as_words_and_keep_their_capitals() -> None:
     from aria.reporting.composer import _mode_words, _sentence
 
@@ -546,3 +637,359 @@ def test_failure_modes_read_as_words_and_keep_their_capitals() -> None:
     assert _sentence(_mode_words("resourcemanager_unreachable")) == "ResourceManager unreachable"
     assert _sentence(_mode_words("bruteforce")) == "Brute-force attempts"
     assert _sentence(_mode_words("quorum_connection_loss")) == "Quorum connection loss"
+
+
+async def test_a_report_quotes_real_lines_and_names_past_incidents(
+    builder: ScenarioBuilder,
+) -> None:
+    """Plain text: one real line instead of the mined pattern, past incidents by title, and no
+    internal IDs in a sentence (the evidence chips carry them)."""
+    ctx = await _context(builder)
+    report = (
+        await ReportWriter(None, RUNBOOKS).write(ctx, report_id="rep-plain", use_llm=False)
+    ).report
+    assert report.validation.ok, report.validation.issues
+    frequent = next(c for c in report.summary if c.text.startswith("Most frequent"))
+    assert "<*>" not in frequent.text
+    assert "like this one" in frequent.text
+    assert len(frequent.evidence_ids) == 2  # the pattern's count and the line it quotes
+    sentences = [c.text for _, c in report.claims()] + [t.text for t in report.timeline]
+    assert not [s for s in sentences if "syn-" in s or "inc-" in s]
+    first = next(t for t in report.timeline if t.text.startswith("First of"))
+    assert "<*>" not in first.text
+    cause = report.suspected_cause[0].text if report.suspected_cause else ""
+    if "past incident" in cause:
+        assert '"' in cause  # named by its title
+
+
+def test_the_markdown_writes_a_repeated_fix_once() -> None:
+    rows = [
+        SimilarIncident(
+            incident_id=f"syn-{n}",
+            title=f"DataNodes failing to serve blocks ({n} nodes)",
+            system="hdfs",
+            failure_mode="block_serve_exceptions",
+            severity=Severity.SEV3,
+            score=0.5,
+            lexical_score=0.5,
+            dense_score=0.5,
+            occurrences=4,
+            resolution="Decommission the failing DataNode.",
+            source="curated",
+        )
+        for n in (3, 8)
+    ]
+    md = render_markdown(
+        IncidentReport.model_validate(
+            {
+                "report_id": "rep-md",
+                "run_id": "run-md",
+                "title": "SEV3 · Block serve exceptions in HDFS",
+                "severity": "SEV3",
+                "summary": [{"text": "A sentence.", "evidence_ids": ["E1"]}],
+                "similar_incidents": [r.model_dump() for r in rows],
+            }
+        ),
+        decided_by="rules",
+    )
+    assert md.count("Decommission the failing DataNode.") == 1
+    assert "| Same as above |" in md
+    assert md.count("(from a sample)") == 2
+
+
+def test_offline_answers_read_as_sentences_without_ids() -> None:
+    from aria.api.ask import _plain
+
+    store = EvidenceStore()
+    template = store.add(
+        EvidenceKind.TEMPLATE,
+        "46x <*>:50010:Got exception while serving <*> to /<*>:",
+        source="parser",
+        data={"template_id": "Tb70ad336a0", "count": 46},
+    )
+    line = store.add(
+        EvidenceKind.LOG,
+        "line 31: ip-af187e5b:50010:Got exception while serving blk_1 to /ip-f29a3842:",
+        source="parser",
+        data={"line": 31, "template_id": "Tb70ad336a0"},
+    )
+    hypothesis = store.add(
+        EvidenceKind.HYPOTHESIS,
+        'H1 supported: Block serve exceptions, as in the past incident "DataNodes failing"',
+        source="investigator",
+        data={"id": "H1", "status": "supported", "confidence": 0.95},
+    )
+    incident = store.add(
+        EvidenceKind.INCIDENT,
+        "Similar incident syn-hdfs-1: DataNodes failing to serve blocks (SEV3; 4x on hdfs)",
+        source="mcp.search_incidents",
+        data={"incident_id": "syn-hdfs-1", "synthetic": True, "occurrences": 4},
+    )
+    by_id = {item.id: item for item in store.all()}
+    texts = [_plain(by_id[e]) for e in (template, line, hypothesis, incident)]
+    assert (
+        texts[0]
+        == '46 log lines follow one pattern: "…:50010:Got exception while serving … to /…:"'
+    )
+    assert texts[1].startswith('Line 31 of the log reads: "ip-af187e5b:50010')
+    assert texts[2].startswith("The investigation supports this cause: Block serve exceptions")
+    assert texts[3] == (
+        "A similar past incident (built from a sample): DataNodes failing to serve blocks "
+        "(SEV3; 4x on hdfs)"
+    )
+    assert not any("syn-" in t or t.startswith("H1") for t in texts)
+
+
+def test_offline_answers_say_a_shared_fix_once_and_cite_every_incident() -> None:
+    from aria.api.ask import _claims, _clip
+
+    store = EvidenceStore()
+    fix = "Followed runbook zookeeper-quorum-loss: Restore connectivity between peers first."
+    same = [
+        store.add(
+            EvidenceKind.INCIDENT,
+            f"Past incident syn-zk-{n}: ZooKeeper quorum connection loss across {n} peers",
+            source="memory.search",
+            data={
+                "title": f"ZooKeeper quorum connection loss across {n} peers",
+                "resolution": fix,
+                "source": "curated",
+                "synthetic": True,
+            },
+        )
+        for n in (2, 30, 8)
+    ]
+    other = store.add(
+        EvidenceKind.INCIDENT,
+        "Past incident inc-1: SSH brute force",
+        source="memory.search",
+        data={
+            "title": "SSH brute force",
+            "resolution": "Block the addresses.",
+            "source": "curated",
+        },
+    )
+    claims = _claims(store.all())
+    assert [claim.evidence_ids for claim in claims] == [same, [other]]
+    # The runbook is cited on its own: the fix reads as its steps, without the runbook's ID.
+    assert claims[0].text == (
+        "Three similar past incidents (built from samples), such as ZooKeeper quorum connection "
+        "loss across 2 peers, were resolved the same way: Restore connectivity between peers "
+        "first."
+    )
+    assert claims[1].text == (
+        "A similar past incident, SSH brute force, was resolved this way: Block the addresses."
+    )
+    assert _clip("restore connectivity first, then restart", 24) == "restore connectivity…"
+
+
+def test_offline_answers_say_a_learned_fix_and_a_recorded_one_once() -> None:
+    """ARIA's own approved steps and a recorded fix that start alike are one statement, with no
+    runbook ID and no ".;" where steps ending in a full stop were joined."""
+    from aria.api.ask import _claims
+
+    store = EvidenceStore()
+    learned = store.add(
+        EvidenceKind.INCIDENT,
+        "Past incident inc-1: Quorum loss on 3 nodes",
+        source="memory.search",
+        data={
+            "title": "Quorum loss on 3 nodes",
+            "resolution": "Restore connectivity first.; Restart peers one at a time.",
+            "source": "run",
+            "synthetic": True,
+        },
+    )
+    curated = store.add(
+        EvidenceKind.INCIDENT,
+        "Past incident syn-zk-2: Quorum loss across 2 peers",
+        source="memory.search",
+        data={
+            "title": "Quorum loss across 2 peers",
+            "resolution": "Followed runbook zookeeper-quorum-loss: Restore connectivity first; "
+            "Restart peers one at a time.",
+            "source": "curated",
+            "synthetic": True,
+        },
+    )
+    claims = _claims(store.all())
+    assert [claim.evidence_ids for claim in claims] == [[learned, curated]]
+    assert claims[0].text == (
+        "Two similar past incidents (built from samples), such as Quorum loss on 3 nodes, were "
+        "handled the same way: Restore connectivity first; restart peers one at a time."
+    )
+
+
+def test_a_question_about_history_hears_only_of_incidents_that_match_it() -> None:
+    """ "Before" and "similar" match every past incident, so an incident must also mention what
+    the question is about; with none that do, the answer says there is not enough evidence."""
+    from aria.api.ask import _fallback, rank
+
+    store = EvidenceStore()
+    quorum = store.add(
+        EvidenceKind.INCIDENT,
+        "Past incident inc-1: Quorum loss on 3 nodes (SEV2, zookeeper)",
+        source="memory.search",
+        detail="Failure mode: quorum_loss\nResolution: Restore connectivity first.",
+    )
+    store.add(
+        EvidenceKind.INCIDENT,
+        "Past incident inc-2: Kernel panic on a compute node (SEV1, bgl)",
+        source="memory.search",
+        detail="Failure mode: kernel_panic\nResolution: Drain the node and reboot it.",
+    )
+    assert [item.id for item in rank("Has quorum been lost before?", store.all())] == [quorum]
+    assert [item.id for item in rank("Has ZooKeeper failed like this?", store.all())] == [quorum]
+    unrelated = rank("Have disks filled up before?", store.all())
+    assert unrelated == []
+    assert _fallback(unrelated).insufficient_evidence
+    # With nothing named, the question is about history in general: every incident answers.
+    assert len(rank("Has this happened before?", store.all())) == 2
+
+
+def test_one_shared_word_does_not_make_an_unrelated_record_an_answer() -> None:
+    """Words match whole: "run" is not "runbook", and a past incident must mention at least half
+    of what the question is about, so "killed" alone does not tie a pod to a kernel panic."""
+    from aria.api.ask import notes, rank
+
+    store = EvidenceStore()
+    store.add(
+        EvidenceKind.INCIDENT,
+        "Past incident inc-1: Kernel panics on 5 compute nodes (SEV1, bgl)",
+        source="memory.search",
+        detail="Failure mode: kernel_panic\nResolution: Drain the nodes; killed jobs restart.",
+    )
+    store.add(
+        EvidenceKind.RUNBOOK,
+        "Runbook zk-quorum: ZooKeeper quorum connection loss",
+        source="mcp.get_runbook",
+        detail="1. Restore connectivity between the peers.",
+    )
+    items = store.all()
+    assert rank("Was a Kubernetes pod OOM killed?", items) == []
+    assert rank("Did the payment database run out of disk space?", items) == []
+    kernel = rank("Which kernel panics killed jobs?", items)
+    assert [item.kind for item in kernel] == [EvidenceKind.INCIDENT]
+    # What the answer cannot say, said: subjects no source mentions, and anything about now.
+    assert notes("Did a kernel panic kill jobs during the deploy?", kernel, run_scoped=False) == [
+        "Nothing below mentions “deploy”."
+    ]
+    now = notes("Is this still happening?", [], run_scoped=True)
+    assert now == [
+        (
+            "ARIA can't see your systems as they are now. It knows only the logs this triage "
+            "read and its records."
+        )
+    ]
+
+
+def test_offline_answers_find_evidence_from_plain_questions() -> None:
+    from aria.api.ask import _plain, rank
+
+    store = EvidenceStore()
+    hypothesis = store.add(
+        EvidenceKind.HYPOTHESIS,
+        "H1 supported: Brute force from one address",
+        source="investigator",
+        data={"id": "H1", "status": "supported"},
+    )
+    template = store.add(
+        EvidenceKind.TEMPLATE, "16x Failed password for root from <*>", source="parser"
+    )
+    single = store.add(EvidenceKind.TEMPLATE, "1x POSSIBLE BREAK-IN ATTEMPT <*>", source="parser")
+    runbook = store.add(
+        EvidenceKind.RUNBOOK, "Runbook ssh-bruteforce: SSH brute-force attempts", source="runbooks"
+    )
+    items = store.all()
+    assert rank("What did the investigation find?", items)[0].id == hypothesis
+    assert rank("Which errors appeared most often?", items)[0].id == template
+    assert rank("What should I check first?", items)[0].id == runbook
+    assert rank("What is the weather today?", items) == []
+    by_id = {item.id: item for item in items}
+    assert (
+        _plain(by_id[single])
+        == 'One log line has a pattern of its own: "POSSIBLE BREAK-IN ATTEMPT …"'
+    )
+
+
+def test_offline_answers_explain_a_rating_and_the_first_step_without_tool_records() -> None:
+    from aria.api.ask import _fallback, rank
+
+    store = EvidenceStore()
+    rule = store.add(
+        EvidenceKind.RULE,
+        "Rule degradation_signs (score SEV3): Retries, timeouts or degradation messages",
+        source="severity.rules",
+        data={"effect": "score", "severity": "SEV3"},
+    )
+    store.add(
+        EvidenceKind.RULE,
+        "Rule auth_attack (floor SEV2): SSH brute-force attempts",
+        source="severity.rules",
+        data={"effect": "floor", "severity": "SEV2"},
+    )
+    model = store.add(
+        EvidenceKind.MODEL,
+        "Severity probabilities: SEV1 0.03, SEV2 0.40, SEV3 0.45, SEV4 0.12",
+        source="severity.model",
+        data={"prediction_set": ["SEV2", "SEV3"]},
+    )
+    past = store.add(
+        EvidenceKind.INCIDENT,
+        "Similar incident syn-hdfs-1: DataNodes failing to serve blocks (SEV3; 4x on hdfs)",
+        source="mcp.search_incidents",
+        detail="Resolution: Decommission the failing DataNode.\nSummary: 3 nodes.",
+        data={"incident_id": "syn-hdfs-1", "synthetic": True},
+    )
+    runbook = store.add(
+        EvidenceKind.RUNBOOK,
+        "Runbook hdfs-block-serve: DataNodes failing to serve blocks",
+        source="mcp.get_runbook",
+        detail="1. Decommission a DataNode whose disk is failing. [risk: medium]\n2. Watch it.",
+    )
+    store.add(
+        EvidenceKind.TOOL,
+        "search_incidents: 1 similar incident: syn-hdfs-1 block_serve_exceptions (SEV3, 4x)",
+        source="mcp.search_incidents",
+    )
+    servers = store.add(
+        EvidenceKind.TOOL,
+        "node_breakdown: 2 nodes with errors or warnings; top: dn-7 (4 errors, 9 warnings)",
+        source="mcp.node_breakdown",
+    )
+    items = store.all()
+
+    output = _fallback(rank("Why was this rated SEV3, and what should I do first?", items))
+    assert [claim.evidence_ids for claim in output.answer] == [[rule], [model], [runbook]]
+    assert [claim.text for claim in output.answer] == [
+        "One severity rule, on its own, would say SEV3: retries, timeouts or degradation messages.",
+        (
+            "The severity model finds SEV3 most likely (45%); its short list of likely levels "
+            "is SEV2 or SEV3."
+        ),
+        (
+            'The runbook "DataNodes failing to serve blocks" starts with: decommission a '
+            "DataNode whose disk is failing (risk: medium)."
+        ),
+    ]
+    floor_text = _fallback(rank("Is the brute-force rule serious?", items)).answer[0].text
+    assert (
+        floor_text
+        == "A severity rule keeps this at SEV2 or more serious: SSH brute-force attempts."
+    )
+    before = _fallback(rank("How was this fixed before?", items)).answer
+    assert before[0].evidence_ids == [past]
+    assert before[0].text == (
+        "A similar past incident, DataNodes failing to serve blocks (built from a sample), was "
+        "resolved this way: Decommission the failing DataNode."
+    )
+    where = _fallback(rank("Which servers are affected?", items)).answer
+    assert [claim.evidence_ids for claim in where] == [[servers]]
+    assert where[0].text.startswith("By server: 2 nodes with errors or warnings")
+    every = " ".join(
+        c.text
+        for q in ("what first?", "similar incidents?")
+        for c in _fallback(rank(q, items)).answer
+    )
+    assert "search_incidents" not in every
+    assert "syn-" not in every

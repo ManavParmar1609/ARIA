@@ -3,6 +3,10 @@ import "server-only";
 import { type NextRequest } from "next/server";
 
 import { MAX_BODY_BYTES } from "@/lib/limits";
+import { VISITOR_COOKIE, VISITOR_SHAPE, visitorCookieValue } from "@/lib/visitor-cookie";
+import { UNREACHABLE } from "@/lib/unreachable";
+
+export { VISITOR_COOKIE };
 
 /** Where the ARIA API listens, as seen from this server (never from the browser). */
 export function apiBase(): string {
@@ -12,6 +16,67 @@ export function apiBase(): string {
 /** The HttpOnly cookie that holds the signed-in API key. Page scripts cannot read it. */
 export const KEY_COOKIE = "aria_key";
 const KEY_MAX_AGE_S = 12 * 60 * 60;
+
+/**
+ * The HttpOnly cookie that holds a visitor's own model key, as "<provider>~<key>". It goes to the
+ * ARIA API only with the requests that can call a model, and lasts a working day at most.
+ */
+export const MODEL_KEY_COOKIE = "aria_model_key";
+export const MODEL_KEY_MAX_AGE_S = 8 * 60 * 60;
+/** A key as the API accepts it: a plain token, so it can never break a header. */
+export const MODEL_KEY_SHAPE = /^[A-Za-z0-9._-]{20,200}$/;
+export const MODEL_KIND_SHAPE = /^[a-z][a-z0-9-]{0,23}$/;
+
+export interface ModelKey {
+  provider: string;
+  key: string;
+}
+
+/**
+ * The HttpOnly cookie that holds this browser's private session id. A server that keeps visitors
+ * apart (ARIA_VISITOR_SCOPE) files each visitor's incidents under it, so no one else sees them.
+ * It is a random id, not a secret about the visitor, and lasts a month.
+ */
+
+export interface Visitor {
+  id: string;
+  /** Made for this request, so the response must set the cookie. */
+  fresh: boolean;
+}
+
+/** This browser's session id, or a new one when it has none or a malformed one. */
+export function visitorFrom(request: NextRequest): Visitor {
+  const value = request.cookies.get(VISITOR_COOKIE)?.value ?? "";
+  if (VISITOR_SHAPE.test(value)) return { id: value, fresh: false };
+  return { id: crypto.randomUUID(), fresh: true };
+}
+
+export function visitorCookie(request: NextRequest, id: string): string {
+  return visitorCookieValue(id, cookieOptions(request).secure);
+}
+
+/** Requests that can call a model; only these carry a visitor's own key. */
+const MODEL_KEY_ROUTES = [
+  /^\/api\/v1\/runs$/,
+  /^\/api\/v1\/runs\/[^/]+\/fork$/,
+  /^\/api\/v1\/scenarios\/[^/]+\/runs$/,
+  /^\/api\/v1\/real-incidents\/[^/]+\/replay$/,
+  /^\/api\/v1\/ask$/,
+  /^\/agui$/,
+];
+
+export function carriesModelKey(method: string, path: string): boolean {
+  return method === "POST" && MODEL_KEY_ROUTES.some((route) => route.test(path));
+}
+
+export function modelKeyFrom(request: NextRequest): ModelKey | undefined {
+  const value = request.cookies.get(MODEL_KEY_COOKIE)?.value ?? "";
+  const at = value.indexOf("~");
+  const provider = value.slice(0, at);
+  const key = value.slice(at + 1);
+  if (at < 1 || !MODEL_KIND_SHAPE.test(provider) || !MODEL_KEY_SHAPE.test(key)) return undefined;
+  return { provider, key };
+}
 
 const FORWARD_REQUEST_HEADERS = ["accept", "content-type", "last-event-id"];
 const FORWARD_RESPONSE_HEADERS = ["content-type", "retry-after", "cache-control", "x-request-id"];
@@ -95,13 +160,14 @@ export async function readBody(
 }
 
 /**
- * Forward a request to the ARIA API with the signed-in key, streaming the answer back
- * (server-sent events included). Only known-safe headers cross in either direction.
+ * Forward a request to the ARIA API with the signed-in key and this browser's session id,
+ * streaming the answer back (server-sent events included). Only known-safe headers cross in
+ * either direction. A browser without a session id gets one with the answer.
  */
 export async function forward(
   request: NextRequest,
   path: string,
-  init: { key?: string; method?: string } = {},
+  init: { key?: string; method?: string; visitor?: Visitor } = {},
 ): Promise<Response> {
   const method = init.method ?? request.method;
   if (method !== "GET" && method !== "HEAD" && !isSameOrigin(request)) {
@@ -117,6 +183,13 @@ export async function forward(
   }
   const key = init.key ?? keyFrom(request);
   if (key) headers.set("x-api-key", key);
+  const visitor = init.visitor ?? visitorFrom(request);
+  headers.set("x-visitor-id", visitor.id);
+  const modelKey = carriesModelKey(method, path) ? modelKeyFrom(request) : undefined;
+  if (modelKey) {
+    headers.set("x-model-provider", modelKey.provider);
+    headers.set("x-model-key", modelKey.key);
+  }
 
   let body: Uint8Array<ArrayBuffer> | undefined;
   if (method !== "GET" && method !== "HEAD") {
@@ -138,7 +211,7 @@ export async function forward(
   } catch (error) {
     if (request.signal.aborted) return new Response(null, { status: 499 });
     console.error("ARIA API unreachable", { target: target.origin, error: String(error) });
-    return problem(502, "The ARIA API is not reachable. Check that it is running.");
+    return problem(502, UNREACHABLE);
   }
 
   const out = new Headers();
@@ -153,5 +226,6 @@ export async function forward(
   } else if (!out.has("cache-control")) {
     out.set("cache-control", "no-store");
   }
+  if (visitor.fresh) out.append("set-cookie", visitorCookie(request, visitor.id));
   return new Response(upstream.body, { status: upstream.status, headers: out });
 }

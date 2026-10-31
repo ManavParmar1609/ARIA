@@ -1,6 +1,7 @@
 // Display names for the log systems ARIA knows (mirrors SYSTEM_NAMES in the report composer).
 export const SYSTEM_NAMES: Record<string, string> = {
-  generic: "Generic",
+  // Logs whose format was not named ("Not sure" on New triage).
+  generic: "Unknown system",
   android: "Android",
   apache: "Apache",
   bgl: "BlueGene/L",
@@ -30,12 +31,13 @@ const TRIGGERS: Record<string, string> = {
   webhook: "from a webhook alert",
   agui: "from an AG-UI client",
   a2a: "delegated by another agent",
-  cli: "from the CLI",
+  cli: "from the command line",
   eval: "from an evaluation",
   demo: "a recorded demo",
   scan: "from a log scan",
-  fork: "forked from another run",
+  fork: "copied from another incident",
   replay: "a real incident, replayed",
+  sample: "a sample, built from real lines",
 };
 
 export const triggerLabel = (trigger: string | null | undefined): string =>

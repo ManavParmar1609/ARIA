@@ -1,114 +1,36 @@
-"use client";
-
 import { ArrowUpRightIcon } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import Link from "next/link";
 
 const LINK =
-  "relative z-10 rounded-sm px-3 py-1.5 text-sm whitespace-nowrap text-charcoal transition-colors duration-(--duration-quick) hover:text-heading aria-[current=true]:text-heading dark:text-foreground";
+  "inline-flex items-center rounded-sm px-3 py-1.5 text-sm whitespace-nowrap text-charcoal transition-colors duration-(--duration-quick) hover:bg-foreground/6 hover:text-heading dark:text-foreground";
 
 interface NavLink {
   href: string;
   label: string;
 }
 
+/** Whether a link leaves the site (the source on GitHub): only those carry the arrow. */
+export const leavesSite = (href: string) => /^https?:/.test(href);
+
 /**
- * The landing page's section links. A keylime pill glides to the link of the section being read:
- * the one crossing a thin band just above the middle of the screen. Above the first section (the
- * hero) no link is current and the pill is hidden.
+ * The home page's links, in plain charcoal: the console pages that explain ARIA, and its source.
+ * Below the large breakpoint they move into the menu.
  */
 export function SectionNav({ links }: { links: NavLink[] }) {
-  const nav = useRef<HTMLElement>(null);
-  const pill = useRef<HTMLSpanElement>(null);
-  const [current, setCurrent] = useState<string | null>(null);
-
-  useEffect(() => {
-    const ids = links.map((link) => link.href).filter((href) => href.startsWith("#"));
-    const crossing = new Set<string>();
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          const id = `#${entry.target.id}`;
-          if (entry.isIntersecting) crossing.add(id);
-          else crossing.delete(id);
-        }
-        setCurrent(ids.filter((id) => crossing.has(id)).at(-1) ?? null);
-      },
-      { rootMargin: "-40% 0px -55% 0px" },
-    );
-    for (const id of ids) {
-      const section = document.getElementById(id.slice(1));
-      if (section) observer.observe(section);
-    }
-    return () => observer.disconnect();
-  }, [links]);
-
-  // Move the pill under the current link (FLIP: it takes its new size at once, starts drawn where
-  // it is now with a transform, mid-move or not, and eases to the link, so only transform and
-  // opacity animate). It re-measures without animating when the links change size at a breakpoint.
-  useLayoutEffect(() => {
-    const el = pill.current;
-    const root = nav.current;
-    if (!el || !root) return;
-    const place = (animate: boolean) => {
-      const link = current ? root.querySelector<HTMLAnchorElement>(`a[href="${current}"]`) : null;
-      if (!link) {
-        el.style.opacity = "0";
-        return;
-      }
-      const [x, y, w] = [link.offsetLeft, link.offsetTop, link.offsetWidth];
-      let from: { x: number; w: number } | null = null;
-      if (animate && el.style.opacity === "1") {
-        const box = el.getBoundingClientRect();
-        from = { x: box.left - root.getBoundingClientRect().left, w: box.width };
-      }
-      el.style.width = `${w}px`;
-      el.style.height = `${link.offsetHeight}px`;
-      el.style.transition = "none";
-      el.style.transform = from
-        ? `translate(${from.x}px, ${y}px) scaleX(${from.w / w})`
-        : `translate(${x}px, ${y}px)`;
-      void el.offsetWidth;
-      el.style.transition = "";
-      el.style.transform = `translate(${x}px, ${y}px)`;
-      el.style.opacity = "1";
-    };
-    place(true);
-    // ResizeObserver also reports once on observe; only a real change of width re-places.
-    let width = root.offsetWidth;
-    const resize = new ResizeObserver(() => {
-      if (root.offsetWidth === width) return;
-      width = root.offsetWidth;
-      place(false);
-    });
-    resize.observe(root);
-    return () => resize.disconnect();
-  }, [current]);
-
   return (
-    <nav
-      ref={nav}
-      aria-label="Page sections"
-      className="relative hidden items-center gap-0.5 lg:flex"
-    >
-      <span
-        ref={pill}
-        aria-hidden
-        className="absolute top-0 left-0 origin-left rounded-sm bg-panel-keylime opacity-0 transition-[transform,opacity] duration-(--duration-moderate) ease-(--ease-out) dark:bg-highlight"
-      />
-      {links.map((link) => (
-        <a
-          key={link.href}
-          href={link.href}
-          aria-current={link.href === current ? "true" : undefined}
-          className={LINK}
-        >
-          {link.label}
-          {/* The source leaves the page; every other link stays on it. */}
-          {link.href.startsWith("#") ? null : (
-            <ArrowUpRightIcon aria-hidden className="ml-1 inline size-4 align-[-2px]" />
-          )}
-        </a>
-      ))}
+    <nav aria-label="Main" className="hidden items-center gap-0.5 lg:flex">
+      {links.map((link) =>
+        leavesSite(link.href) ? (
+          <a key={link.href} href={link.href} className={LINK}>
+            {link.label}
+            <ArrowUpRightIcon aria-hidden className="ml-1 size-4" />
+          </a>
+        ) : (
+          <Link key={link.href} href={link.href as never} prefetch={false} className={LINK}>
+            {link.label}
+          </Link>
+        ),
+      )}
     </nav>
   );
 }

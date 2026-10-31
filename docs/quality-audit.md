@@ -463,6 +463,61 @@ What held: escaping (HTML and Markdown show as text everywhere), right-to-left a
 empty state, the new-triage form's limits and double-submit guard, outage and recovery, keyboard
 focus, 200% zoom and reduced motion.
 
+## The fourth audit: a link anyone can use
+
+Before the link was shared, the owner asked for a site that anyone with the link can use without
+errors, on their own model key or the owner's, decluttered and easy to read, with understanding
+above all. Rounds of three independent reviewers then took turns, each on its own offline copy
+shaped like the public demo (visitor scope, the 1 MB paste limit, three triages at once per
+visitor, rate limits): a first-time visitor's journey, the owner's requirements and
+accessibility, breaking every flow under stress, and in the last round looks, navigation and
+sleekness.
+
+### Understanding
+
+- **Fixed: plain words everywhere.** Evidence reads as what it means: a log pattern as a count of
+  lines like it, a window as lines and errors, a rule by what it found and what it does, the severity
+  model's chances as percentages, its measurements by name, and its settings hidden. Reports say
+  "servers", quote the most serious line, keep the summary to five points, and count a one-line
+  paste in the right number.
+- **Fixed: honest certainty.** The sentence under the severity says who stands behind a single
+  likely level, calls a level under half likely "the likeliest" rather than probable, and Seen
+  before warns when the closest past incident is a weak match or from another system.
+- **Fixed: no operator talk for visitors.** Server errors, the library and Settings no longer
+  give advice only the site's owner could act on; the hero says nothing is sent until you approve.
+
+### Navigation
+
+- **Fixed: Back does what it says.** Filters and tabs are steps Back can undo; in-page links do
+  not add steps; the library keeps its search in the address; Ask ARIA and a paste survive a trip
+  away and a reload (kept for the browser tab only).
+- **Fixed: focus never gets lost.** Citations beside the report keep focus while the evidence
+  column scrolls; on a phone the evidence panel takes focus, with a way back to the claim; focus
+  is never hidden under the phone header; "+N" sources hands focus to the first one it shows.
+
+### Under stress
+
+- **Fixed: six open incidents froze the site.** Each incident page waiting for review held a live
+  connection, and a browser allows six to one server; the stream now ends at the review pause and
+  the rest is read once. Chat triage now counts toward the three-at-once limit; an incident
+  deleted in another tab shows as gone; phones show when the server is not answering.
+- **Fixed: a copy of an example stuck on "Running".** A copy starts where its original stopped,
+  so it never runs the steps before that again, and the step-by-step replay waited for them for
+  ever. Those steps now count as done in the original, and only what the copy does plays back.
+- **What held:** every control clicked on desktop and phone, loading, empty and error states on
+  every page, double clicks that send one request, many visitors at once, megabyte pastes, odd
+  and hostile input, cold starts and recovery, and the keyboard.
+
+### Looks and the home page
+
+- **Fixed: the home page was a long scroll with empty space.** It now keeps the headline with a
+  real report, three claims that each link to their proof, the four steps in a line each and the
+  way in, in larger type. The rest moved to How ARIA works in the console: five short pages (what
+  ARIA does, one real incident, the four steps, the tests and the questions people ask), each with
+  next and back buttons.
+- **Fixed: links that look external.** Header links that stay on the site no longer carry the
+  outbound arrow; only the source on GitHub does.
+
 ## What was left
 
 These are recorded rather than fixed, because each needs a design change, infrastructure or an

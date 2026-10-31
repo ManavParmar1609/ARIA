@@ -6,6 +6,9 @@ from aria.contracts.base import Claim
 from aria.contracts.report import IncidentReport
 from aria.reporting.writer import cited_evidence
 
+# How a reviewer's note is stored in a report's open questions (``reporting.review``).
+REVIEWER_NOTE = "Reviewer note: "
+
 # Report text quotes log lines, which anyone can write. The exports are pasted into other tools,
 # so HTML, links, images and chat mentions (<!channel>) in that text must stay inert text, and so
 # must emphasis and code marks: a template's "<*>" must not turn the text after it italic.
@@ -72,13 +75,17 @@ def render_markdown(report: IncidentReport, *, decided_by: str | None = None) ->
             "| Incident | Severity | Seen | Resolution | Evidence |",
             "|---|---|---|---|---|",
         ]
+        previous = None
         for inc in report.similar_incidents:
-            label = f"{inc.title}{' (synthetic history)' if inc.source == 'curated' else ''}"
+            label = f"{inc.title}{' (from a sample)' if inc.source == 'curated' else ''}"
             seen = f"{inc.occurrences}x" + (
                 f", last {inc.last_seen:%Y-%m-%d}" if inc.last_seen else ""
             )
+            # The same fix, row after row, says nothing new: write it once.
+            fix = "Same as above" if inc.resolution == previous else inc.resolution[:200]
+            previous = inc.resolution
             lines.append(
-                f"| {_cell(label)} | {inc.severity} | {seen} | {_cell(inc.resolution[:200])} | {_cite([inc.evidence_id] if inc.evidence_id else [])} |"
+                f"| {_cell(label)} | {inc.severity} | {seen} | {_cell(fix)} | {_cite([inc.evidence_id] if inc.evidence_id else [])} |"
             )
         lines.append("")
     if report.ticket_history is not None:
@@ -103,8 +110,15 @@ def render_markdown(report: IncidentReport, *, decided_by: str | None = None) ->
                 f"- [ ] {_safe(action.text)} ({risk}{runbook}) {_cite(action.evidence_ids)}"
             )
         lines.append("")
-    if report.open_questions:
-        lines += ["## Open questions", *[f"- {_safe(q)}" for q in report.open_questions], ""]
+    # A reviewer's note travels with the open questions but is not one, so it gets its own heading.
+    notes = [
+        q.removeprefix(REVIEWER_NOTE) for q in report.open_questions if q.startswith(REVIEWER_NOTE)
+    ]
+    questions = [q for q in report.open_questions if not q.startswith(REVIEWER_NOTE)]
+    if questions:
+        lines += ["## Open questions", *[f"- {_safe(q)}" for q in questions], ""]
+    if notes:
+        lines += ["## Reviewer's note", *[f"- {_safe(n)}" for n in notes], ""]
 
     cited = cited_evidence(report)
     if cited:
@@ -119,7 +133,8 @@ def render_markdown(report: IncidentReport, *, decided_by: str | None = None) ->
     )
     if any(inc.source == "curated" for inc in report.similar_incidents):
         lines.append(
-            "_Similar incidents marked synthetic come from ARIA's seeded, semi-synthetic history._"
+            '_Incidents marked "from a sample" were built from ARIA\'s samples, not taken from real '
+            "history._"
         )
     return "\n".join(lines) + "\n"
 

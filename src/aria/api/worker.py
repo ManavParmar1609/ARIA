@@ -12,8 +12,12 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import ctypes
+import ctypes.util
+import gc
 import json
 import socket
+import sys
 import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -25,6 +29,29 @@ from aria.graph.runner import RunBusyError, TriageRunner
 from aria.observability.logging import get_logger
 
 log = get_logger(__name__)
+
+
+def _malloc_trim() -> Callable[[int], int] | None:
+    """glibc's malloc_trim, where the C library has one (Linux with glibc)."""
+    if not sys.platform.startswith("linux"):
+        return None
+    try:
+        libc = ctypes.CDLL(ctypes.util.find_library("c") or "libc.so.6")
+        trim: Callable[[int], int] = libc.malloc_trim
+    except (OSError, AttributeError):
+        return None
+    return trim
+
+
+_TRIM = _malloc_trim()
+
+
+def release_memory() -> None:
+    """Hand the memory a finished run used back to the system. A large paste leaves big freed
+    blocks that the C allocator otherwise keeps, so a small host's memory only ever grew."""
+    gc.collect()
+    if _TRIM is not None:
+        _TRIM(0)
 
 
 class Worker:
@@ -60,6 +87,8 @@ class Worker:
                     log.info("worker.busy", run_id=run_id)
                 except Exception:  # the runner already recorded the failure on the run
                     log.exception("worker.job_failed", run_id=run_id)
+                finally:
+                    await asyncio.to_thread(release_memory)
 
         task = asyncio.create_task(guarded(), name=f"aria-run-{run_id}")
         self._tasks[task] = run_id
@@ -81,7 +110,10 @@ class Worker:
         self._streams += 1
         try:
             async with self._slots:
-                return await job
+                try:
+                    return await job
+                finally:
+                    await asyncio.to_thread(release_memory)
         finally:
             self._streams -= 1
 

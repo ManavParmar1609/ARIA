@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
   type ReactNode,
 } from "react";
@@ -15,20 +16,44 @@ import {
 import { Button } from "@/components/ui/button";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/popover";
 import type { Evidence, LogEvent } from "@/lib/api/types";
+import { chance, evidenceDetail, evidenceTitle, featureName } from "@/lib/evidence-text";
+import { failureName } from "@/lib/failure-modes";
 import { cn } from "@/lib/utils";
+
+const SOURCE_LABEL: Record<string, string> = {
+  parser: "the log parser",
+  "parser.flows": "the log parser",
+  guardrail: "the injection guard",
+  "severity.rules": "the severity rules",
+  "severity.model": "the severity model",
+  "severity.ticket_model": "the ticket model",
+  scenario_policy: "the sample's policy",
+  investigator: "the investigation",
+  reviewer: "the review",
+  curated: "the incident library",
+  run: "an approved incident",
+  "memory.search": "the incident library",
+  "memory.feedback": "reviewers' past corrections",
+  "mcp.search_incidents": "the incident library",
+  "mcp.ticket_history": "the ticket history",
+  "mcp.get_runbook": "the runbooks",
+};
+
+/** Where evidence came from, in words: "the severity rules" rather than "severity.rules". */
+export const sourceLabel = (source: string) => SOURCE_LABEL[source] ?? source;
 
 export const KIND_LABEL: Record<string, string> = {
   log: "Log line",
   template: "Log template",
-  feature: "Computed feature",
+  feature: "Measurement",
   rule: "Severity rule",
-  model: "Model output",
+  model: "Estimate",
   alert: "Alert",
   incident: "Past incident",
   tickets: "Ticket history",
   runbook: "Runbook",
-  tool: "Tool call",
-  hypothesis: "Hypothesis",
+  tool: "Investigation check",
+  hypothesis: "Tested cause",
   feedback: "Reviewer feedback",
   review: "Review",
 };
@@ -40,6 +65,11 @@ interface EvidenceState {
   pinned: string | null;
   /** The citation that pinned the evidence, so a phone reader can get back to the claim. */
   origin: HTMLElement | null;
+  /** The element that shows a pinned citation: the evidence panel, or an answer's sources. */
+  panelId: string;
+  /** Where the panel sits beside the text (a media query): pointing at a citation fills it there,
+   * so no card opens on top to say the same. */
+  besidePanel: string | null;
   hover: (id: string | null) => void;
   pin: (id: string | null, from?: HTMLElement | null) => void;
   linesFor: (id: string) => LogEvent[];
@@ -54,10 +84,14 @@ const Ctx = createContext<EvidenceState | null>(null);
 export function EvidenceProvider({
   evidence,
   events,
+  panelId = "evidence-panel",
+  besidePanel = null,
   children,
 }: {
   evidence: Evidence[];
   events: LogEvent[];
+  panelId?: string;
+  besidePanel?: string | null;
   children: ReactNode;
 }) {
   const [hovered, setHovered] = useState<string | null>(null);
@@ -94,11 +128,13 @@ export function EvidenceProvider({
       active: hovered ?? pinned,
       pinned,
       origin,
+      panelId,
+      besidePanel,
       hover: setHovered,
       pin,
       linesFor,
     }),
-    [byId, events, hovered, pinned, origin, pin, linesFor],
+    [byId, events, hovered, pinned, origin, panelId, besidePanel, pin, linesFor],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -114,15 +150,15 @@ function EvidencePreview({ evidence, lines }: { evidence: Evidence; lines: LogEv
     <div className="grid gap-2">
       <p className="text-xs text-muted-foreground">
         <span className="font-mono text-foreground">{evidence.id}</span>{" "}
-        {KIND_LABEL[evidence.kind] ?? evidence.kind}, from {evidence.source}
+        {KIND_LABEL[evidence.kind] ?? evidence.kind}, from {sourceLabel(evidence.source)}
       </p>
-      <p className="text-sm leading-snug font-medium wrap-anywhere">{evidence.title}</p>
+      <p className="text-sm leading-snug font-medium wrap-anywhere">{evidenceTitle(evidence)}</p>
       {evidence.detail ? (
         <p className="line-clamp-4 text-xs leading-5 wrap-anywhere whitespace-pre-wrap text-muted-foreground">
-          {evidence.detail}
+          {evidenceDetail(evidence)}
         </p>
       ) : null}
-      <LogLines lines={lines} limit={4} wrap />
+      <LogLines lines={lines} limit={4} />
       <p className="text-xs text-faint">Click the citation to keep it in the evidence panel.</p>
     </div>
   );
@@ -133,18 +169,27 @@ function EvidencePreview({ evidence, lines }: { evidence: Evidence; lines: LogEv
  * its own, just far enough to show the panel, so the page stays put; in one column the panel sits
  * below the report, so the page scrolls to it.
  */
-function revealPanel() {
-  const panel = document.getElementById("evidence-panel");
+function revealPanel(panelId: string, pinning = false) {
+  const panel = document.getElementById(panelId);
   if (!panel) return;
   const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches
     ? "auto"
     : "smooth";
-  const column = panel.closest("aside");
-  if (!column || !window.matchMedia("(min-width: 1280px)").matches) {
-    panel.scrollIntoView({ block: "nearest", behavior });
+  // Beside the report from 1280 px (the page's xl column); below the report otherwise. Asked of
+  // the screen, not of the markup: the panel's column is no longer an <aside> (RQ-M2).
+  if (!window.matchMedia("(min-width: 1280px)").matches) {
+    // Its top, where its title and "Back to the claim" are: "nearest" would show only the bottom
+    // of a panel taller than the screen (J-M3).
+    panel.scrollIntoView({ block: pinning ? "start" : "nearest", behavior });
+    // Far from the claim, the reader continues from the panel: its "Back to the claim" is next.
+    if (pinning && panel.getAttribute("tabindex") === "-1") panel.focus({ preventScroll: true });
     return;
   }
-  const top = panel.offsetTop;
+  // Beside the report, focus stays on the citation and only the side column scrolls.
+  const column = scrollingParent(panel);
+  if (!column) return;
+  const top =
+    panel.getBoundingClientRect().top - column.getBoundingClientRect().top + column.scrollTop;
   const bottom = top + panel.offsetHeight;
   const { scrollTop, clientHeight } = column;
   if (top < scrollTop) column.scrollTo({ top, behavior });
@@ -153,18 +198,65 @@ function revealPanel() {
   }
 }
 
+/** The nearest ancestor that scrolls on its own, if any. */
+function scrollingParent(element: HTMLElement): HTMLElement | null {
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    const { overflowY } = window.getComputedStyle(node);
+    if (overflowY === "auto" || overflowY === "scroll") return node;
+  }
+  return null;
+}
+
 // The citation "Back to the claim" hands focus back to; its preview card stays shut for that focus.
 let returning: HTMLElement | null = null;
+
+const HOVER = "(hover: hover) and (pointer: fine)";
+
+function onHoverChange(changed: () => void) {
+  const query = window.matchMedia(HOVER);
+  query.addEventListener("change", changed);
+  return () => query.removeEventListener("change", changed);
+}
+
+/** Whether the pointer can hover. On a touch screen a tap pins the evidence in the panel, and
+ * no preview card opens over the report. */
+function useCanHover(): boolean {
+  return useSyncExternalStore(
+    onHoverChange,
+    () => window.matchMedia(HOVER).matches,
+    () => true,
+  );
+}
+
+/** Whether ``query`` matches; false when there is none. */
+function useMatches(query: string | null): boolean {
+  const subscribe = useCallback(
+    (changed: () => void) => {
+      if (!query) return () => {};
+      const media = window.matchMedia(query);
+      media.addEventListener("change", changed);
+      return () => media.removeEventListener("change", changed);
+    },
+    [query],
+  );
+  return useSyncExternalStore(
+    subscribe,
+    () => (query ? window.matchMedia(query).matches : false),
+    () => false,
+  );
+}
 
 /**
  * A citation. Hovering shows the evidence beside it; focusing or hovering also fills the
  * evidence panel (announced to screen readers); a click pins it there.
  */
-export function EvidenceChip({ id }: { id: string }) {
-  const { byId, active, pinned, hover, pin, linesFor } = useEvidence();
+export function EvidenceChip({ id, label }: { id: string; label?: string }) {
+  const { byId, active, pinned, panelId, besidePanel, hover, pin, linesFor } = useEvidence();
   const [preview, setPreview] = useState(false);
+  const beside = useMatches(besidePanel);
   // After a click pins the evidence, the card stays shut until the pointer or focus leaves.
   const quiet = useRef(false);
+  const canHover = useCanHover();
   const evidence = byId.get(id);
   const button = (
     <button
@@ -173,10 +265,10 @@ export function EvidenceChip({ id }: { id: string }) {
       aria-pressed={pinned === id}
       aria-label={
         evidence
-          ? `Evidence ${id}: ${KIND_LABEL[evidence.kind] ?? evidence.kind}, ${evidence.title}`
+          ? `${label ? `Source ${label}` : `Evidence ${id}`}: ${KIND_LABEL[evidence.kind] ?? evidence.kind}, ${evidenceTitle(evidence)}`
           : `Evidence ${id} (missing)`
       }
-      aria-controls="evidence-panel"
+      aria-controls={panelId}
       onMouseEnter={() => hover(id)}
       onMouseLeave={() => {
         hover(null);
@@ -194,10 +286,11 @@ export function EvidenceChip({ id }: { id: string }) {
         quiet.current = false;
       }}
       onClick={(event) => {
-        pin(pinned === id ? null : id, event.currentTarget);
+        const pinning = pinned !== id;
+        pin(pinning ? id : null, event.currentTarget);
         quiet.current = true; // the panel shows it now; a card on top would repeat it
         setPreview(false);
-        requestAnimationFrame(() => revealPanel());
+        requestAnimationFrame(() => revealPanel(panelId, pinning));
       }}
       className={cn(
         "inline-flex h-6 items-center rounded-xs border px-1.5 align-baseline font-mono text-xs transition-colors duration-(--duration-quick)",
@@ -208,10 +301,10 @@ export function EvidenceChip({ id }: { id: string }) {
             : "border-control text-muted-foreground hover:border-foreground hover:text-foreground"),
       )}
     >
-      {id}
+      {label ?? id}
     </button>
   );
-  if (!evidence) return button;
+  if (!evidence || !canHover || beside) return button;
   return (
     <HoverCard
       open={preview}
@@ -222,7 +315,7 @@ export function EvidenceChip({ id }: { id: string }) {
       <HoverCardTrigger asChild>{button}</HoverCardTrigger>
       <HoverCardContent
         side="top"
-        className="max-h-(--radix-hover-card-content-available-height) w-96 overflow-auto"
+        className="max-h-(--radix-hover-card-content-available-height) w-96 max-w-[calc(100vw-2rem)] overflow-auto"
       >
         <EvidencePreview evidence={evidence} lines={linesFor(id)} />
       </HoverCardContent>
@@ -230,13 +323,46 @@ export function EvidenceChip({ id }: { id: string }) {
   );
 }
 
-export function Citations({ ids, className }: { ids: string[]; className?: string }) {
+/** How many citations a claim shows before "+N": two read as sources, more as noise. */
+const SHOWN_CITATIONS = 2;
+
+export function Citations({
+  ids,
+  labels,
+  className,
+}: {
+  ids: string[];
+  /** Short names to show instead of the ids, such as an answer's source numbers. */
+  labels?: ReadonlyMap<string, string>;
+  className?: string;
+}) {
+  const [all, setAll] = useState(false);
+  const list = useRef<HTMLSpanElement>(null);
   if (ids.length === 0) return null;
+  const hidden = all ? 0 : Math.max(0, ids.length - SHOWN_CITATIONS);
+  // The "+N" button goes once pressed: focus moves to the first source it showed, not the page
+  // (FL-11).
+  const showAll = () => {
+    setAll(true);
+    requestAnimationFrame(() =>
+      list.current?.querySelectorAll<HTMLElement>("button")[SHOWN_CITATIONS]?.focus(),
+    );
+  };
   return (
-    <span className={cn("inline-flex flex-wrap gap-1 align-baseline", className)}>
-      {ids.map((id) => (
-        <EvidenceChip key={id} id={id} />
+    <span ref={list} className={cn("inline-flex flex-wrap gap-1 align-baseline", className)}>
+      {ids.slice(0, ids.length - hidden).map((id) => (
+        <EvidenceChip key={id} id={id} label={labels?.get(id)} />
       ))}
+      {hidden ? (
+        <button
+          type="button"
+          onClick={showAll}
+          aria-label={`Show ${hidden} more ${hidden === 1 ? "source" : "sources"}`}
+          className="inline-flex h-6 items-center rounded-xs border border-dashed border-control px-1.5 align-baseline font-mono text-xs text-muted-foreground hover:border-foreground hover:text-foreground"
+        >
+          +{hidden}
+        </button>
+      ) : null}
     </span>
   );
 }
@@ -245,7 +371,13 @@ export function Citations({ ids, className }: { ids: string[]; className?: strin
 function show(value: unknown): string {
   const flat = (v: unknown) => v === null || typeof v !== "object";
   const num = (v: unknown) =>
-    typeof v === "number" && !Number.isInteger(v) ? String(+v.toFixed(3)) : String(v);
+    typeof v === "boolean"
+      ? v
+        ? "yes"
+        : "no"
+      : typeof v === "number" && !Number.isInteger(v)
+        ? String(+v.toFixed(3))
+        : String(v);
   if (Array.isArray(value)) {
     return value.every(flat) ? value.map(num).join(", ") : JSON.stringify(value);
   }
@@ -258,35 +390,167 @@ function show(value: unknown): string {
   return num(value);
 }
 
-function DataTable({ data }: { data: Record<string, unknown> }) {
+// Field names a reader would not guess; the rest read fine with spaces for underscores.
+const FIELD_NAMES: Record<string, string> = {
+  novel: "new to this system",
+  synthetic: "built from a sample",
+  error_like: "looks like an error",
+  template_id: "pattern",
+  duration_s: "duration, seconds",
+  prediction_set: "short list",
+  set_empty: "short list empty",
+  coverage_target: "short list target",
+  conformal: "calibrated short list",
+  failure_mode: "kind of failure",
+};
+
+// A past incident's search scores, named for what each one measures.
+const INCIDENT_FIELDS: Record<string, string> = {
+  incident_id: "record",
+  score: "match score",
+  lexical: "shared words",
+  dense: "similar meaning",
+  rerank: "reranked match",
+  occurrences: "times seen",
+};
+
+// The severity model's and the rules' numbers, named for what each one measures.
+const MODEL_FIELDS: Record<string, string> = {
+  probabilities: "how likely",
+  sla_breach_risk: "risk of missing the deadline",
+  top_contributions: "weighed most",
+  outside_training: "unlike what it learned from",
+  rule_id: "rule",
+  effect: "what it does",
+};
+
+// Record ids, raw search scores and the model's settings: the title and detail already say what
+// they mean (J-M4, RQ-m5).
+const HIDDEN_FIELDS = new Set([
+  "template_id",
+  "incident_id",
+  "score",
+  "lexical",
+  "dense",
+  "rerank",
+  "alpha",
+  "conformal",
+  "conformal_q",
+  "set_empty",
+  "temperature",
+  "weight",
+  "rules_version",
+]);
+
+/** A field's value as a person reads it: chances as percentages, the model's measurements by
+ * name, the rest as recorded. `toward` is the level the measurements are weighed for. */
+function fieldValue(key: string, value: unknown, toward: string | null): string {
+  if (key === "failure_mode" && typeof value === "string") return failureName(value);
+  if ((key === "coverage_target" || key === "sla_breach_risk") && typeof value === "number") {
+    return chance(value);
+  }
+  if (key === "probabilities" && value && typeof value === "object" && !Array.isArray(value)) {
+    return Object.entries(value)
+      .map(([level, p]) => `${level} ${typeof p === "number" ? chance(p) : show(p)}`)
+      .join(", ");
+  }
+  if (key === "effect" && (value === "score" || value === "floor")) {
+    return value === "floor" ? "sets a safety floor" : "adds to a level's score";
+  }
+  if (key === "outside_training" && Array.isArray(value)) {
+    return value.map((name) => featureName(String(name))).join(", ");
+  }
+  if (key === "top_contributions" && Array.isArray(value)) {
+    return value
+      .filter((part): part is [string, number] => Array.isArray(part) && part.length === 2)
+      .map(([name, weight]) => {
+        const side = weight >= 0 ? "for" : "against";
+        return `${featureName(name)} (${side}${toward ? ` ${toward}` : ""})`;
+      })
+      .join(", ");
+  }
+  return show(value);
+}
+
+/** The most likely level in a model's probabilities, which its contributions are weighed for. */
+function likeliest(data: Record<string, unknown>): string | null {
+  const probabilities = data.probabilities;
+  if (!probabilities || typeof probabilities !== "object" || Array.isArray(probabilities)) {
+    return null;
+  }
+  let best: [string, number] | null = null;
+  for (const [level, p] of Object.entries(probabilities)) {
+    if (typeof p === "number" && (!best || p > best[1])) best = [level, p];
+  }
+  return best?.[0] ?? null;
+}
+
+function DataTable({ data, kind }: { data: Record<string, unknown>; kind: string }) {
   const entries = Object.entries(data).filter(
-    ([, v]) => v !== null && v !== "" && !(Array.isArray(v) && v.length === 0),
+    ([k, v]) =>
+      !HIDDEN_FIELDS.has(k) &&
+      !(k === "nodes" && v === 0) &&
+      v !== null &&
+      v !== "" &&
+      !(Array.isArray(v) && v.length === 0),
   );
   if (entries.length === 0) return null;
+  const names =
+    kind === "incident"
+      ? { ...FIELD_NAMES, ...INCIDENT_FIELDS }
+      : kind === "model" || kind === "rule"
+        ? { ...FIELD_NAMES, ...MODEL_FIELDS }
+        : FIELD_NAMES;
+  const toward = kind === "model" ? likeliest(data) : null;
   return (
     <dl className="grid grid-cols-[minmax(0,9rem)_1fr] gap-x-3 gap-y-1 text-xs">
       {entries.slice(0, 14).map(([key, value]) => (
         <div key={key} className="contents">
           <dt className="truncate text-muted-foreground">
-            {key.replace(/^n_/, "").replaceAll("_", " ")}
+            {names[key] ?? key.replace(/^n_/, "").replaceAll("_", " ")}
           </dt>
-          <dd className="min-w-0 font-mono break-words">{show(value)}</dd>
+          <dd className="min-w-0 font-mono break-words">{fieldValue(key, value, toward)}</dd>
         </div>
       ))}
     </dl>
   );
 }
 
+// A log line or pattern can run to thousands of characters: past this, show its start and let the
+// reader ask for the rest, so one line does not become a wall.
+const LONG_LINE = 400;
+
+/** A long line's start, and the whole of it on request. */
+export function LongLine({ text }: { text: string }) {
+  const [whole, setWhole] = useState(false);
+  if (text.length <= LONG_LINE || whole) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, LONG_LINE)}…{" "}
+      <button
+        type="button"
+        onClick={() => setWhole(true)}
+        className="font-sans text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+      >
+        Show all {text.length.toLocaleString("en")} characters
+      </button>
+    </>
+  );
+}
+
 export function LogLines({
   lines,
   limit = 12,
-  wrap = false,
   sweep = false,
+  more = true,
+  label = "Log lines",
 }: {
   lines: LogEvent[];
   limit?: number;
-  /** Wrap long lines instead of scrolling (inside hover cards, where nothing can take focus). */
-  wrap?: boolean;
+  /** The block's name, told apart from the page's other blocks of lines. */
+  label?: string;
+  /** Say how many lines are past the limit (off for a single example line). */
+  more?: boolean;
   /** Sweep one pass of the highlight across the lines as they appear (globals.css: .thread-pass). */
   sweep?: boolean;
 }) {
@@ -297,8 +561,8 @@ export function LogLines({
         <li
           key={line.idx}
           className={cn(
-            "grid grid-cols-[2.5rem_2.75rem_1fr] gap-2 px-2",
-            wrap ? "break-all whitespace-pre-wrap" : "whitespace-pre",
+            // Long lines wrap under their own message, so nothing hides past the panel's edge.
+            "grid grid-cols-[2.5rem_2.75rem_1fr] gap-2 px-2 wrap-anywhere whitespace-pre-wrap",
             sweep && "thread-pass",
           )}
           style={sweep ? ({ "--thread-i": i } as CSSProperties) : undefined}
@@ -315,28 +579,23 @@ export function LogLines({
           >
             {line.level ?? ""}
           </span>
-          <span>{line.message}</span>
+          <span>
+            <LongLine text={line.message} />
+          </span>
         </li>
       ))}
     </ol>
   );
-  const frame =
-    "rounded-sm border border-rule bg-sunken py-1.5 font-mono text-[0.6875rem] leading-5";
   return (
     <div className="grid gap-1">
-      {wrap ? (
-        <div className={frame}>{list}</div>
-      ) : (
-        <div
-          tabIndex={0}
-          role="region"
-          aria-label="Log lines"
-          className={cn(frame, "overflow-x-auto")}
-        >
-          {list}
-        </div>
-      )}
-      {lines.length > limit ? (
+      <div
+        role="group"
+        aria-label={label}
+        className="min-w-0 rounded-sm border border-rule bg-sunken py-1.5 font-mono text-xs leading-5"
+      >
+        {list}
+      </div>
+      {more && lines.length > limit ? (
         <p className="text-xs text-muted-foreground">
           and {(lines.length - limit).toLocaleString("en")} more lines like these
         </p>
@@ -347,8 +606,10 @@ export function LogLines({
 
 /** The evidence behind whatever citation the reader is pointing at. */
 export function EvidencePanel({ className }: { className?: string }) {
-  const { active, pinned, origin, byId, pin, linesFor } = useEvidence();
+  const { active, pinned, origin, panelId, byId, pin, linesFor } = useEvidence();
   const evidence = active ? byId.get(active) : undefined;
+  // In one column the panel sits above later citations, so it opens only on a click there:
+  // appearing on hover or focus would push the citation being read down the page.
   // In one column the page scrolled down to this panel; this takes the reader back up.
   const backToClaim = () => {
     if (!origin?.isConnected) return;
@@ -357,23 +618,34 @@ export function EvidencePanel({ className }: { className?: string }) {
     returning = origin;
     origin.focus({ preventScroll: true });
   };
+  const pinnedEvidence = pinned ? byId.get(pinned) : undefined;
   return (
     <section
-      id="evidence-panel"
+      id={panelId}
       aria-label="Evidence"
-      aria-live="polite"
-      className={cn("grid min-w-0 content-start gap-3 rounded-lg bg-raised p-4 sm:p-5", className)}
+      // Focus lands here after a pin in one column, where the panel sits far below the claim.
+      tabIndex={-1}
+      className={cn(
+        "grid min-w-0 content-start gap-3 rounded-lg bg-raised p-4 outline-none focus-visible:ring-2 focus-visible:ring-ring sm:p-5",
+        !(evidence && pinned) && "max-xl:hidden",
+        className,
+      )}
     >
+      {/* Only a pin is announced, in a few words: a citation's own name already gives its title,
+          and reading whole cards out as focus moves would bury the report. */}
+      <p className="sr-only" aria-live="polite">
+        {pinnedEvidence ? `Pinned ${pinnedEvidence.id}: ${evidenceTitle(pinnedEvidence)}` : ""}
+      </p>
       {evidence ? (
         <>
           <div className="flex items-start justify-between gap-3">
             <div className="grid min-w-0 gap-1">
               <p className="text-xs text-muted-foreground">
                 <span className="font-mono text-foreground">{evidence.id}</span>{" "}
-                {KIND_LABEL[evidence.kind] ?? evidence.kind}, from {evidence.source}
+                {KIND_LABEL[evidence.kind] ?? evidence.kind}, from {sourceLabel(evidence.source)}
               </p>
               <h3 className="font-sans text-sm leading-snug font-semibold wrap-anywhere">
-                {evidence.title}
+                {evidenceTitle(evidence)}
               </h3>
             </div>
             {pinned === evidence.id ? (
@@ -414,12 +686,17 @@ export function EvidencePanel({ className }: { className?: string }) {
               aria-label="Evidence detail"
               className="max-h-48 overflow-auto rounded-sm bg-sunken p-2 text-xs leading-5 whitespace-pre-wrap"
             >
-              {evidence.detail}
+              {evidenceDetail(evidence)}
             </pre>
           ) : null}
           {/* Keyed by evidence, so each citation pointed at sends its own pass of light. */}
-          <LogLines key={evidence.id} lines={linesFor(evidence.id)} sweep />
-          <DataTable data={(evidence.data ?? {}) as Record<string, unknown>} />
+          <LogLines
+            key={evidence.id}
+            lines={linesFor(evidence.id)}
+            sweep
+            label={`Log lines behind ${evidence.id}`}
+          />
+          <DataTable data={(evidence.data ?? {}) as Record<string, unknown>} kind={evidence.kind} />
         </>
       ) : (
         <div className="grid gap-1.5">

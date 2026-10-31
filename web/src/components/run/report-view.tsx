@@ -3,10 +3,10 @@
 import { CircleCheckIcon, CircleAlertIcon, ShieldAlertIcon } from "lucide-react";
 import Link from "next/link";
 
-import { SeverityBadge } from "@/components/aria/severity";
+import { CodeText } from "@/components/ui/code-text";
+import { useRunbooks } from "@/lib/api/hooks";
 import type { Claim, IncidentReport } from "@/lib/api/types";
-import { isSeverity } from "@/lib/api/types";
-import { clockTime, percent, stripSeverity, writtenOffline } from "@/lib/format";
+import { percent, stripSeverity, writtenOffline } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import { Citations } from "./evidence";
@@ -21,7 +21,7 @@ function ClaimList({ claims }: { claims: Claim[] }) {
         >
           <span aria-hidden className="mt-2.5 block size-1.5 rounded-full bg-control" />
           <p>
-            {claim.text} <Citations ids={claim.evidence_ids ?? []} />
+            <CodeText>{claim.text}</CodeText> <Citations ids={claim.evidence_ids ?? []} />
           </p>
         </li>
       ))}
@@ -45,9 +45,20 @@ const RISK: Record<string, string> = {
   high: "text-danger",
 };
 
-/** The cited report. Each claim carries its citations; nothing in it is uncited. */
-/** The report as published. `titleHidden` keeps its heading for screen readers only, for a page
- * whose own heading already says the same thing. */
+const STATUS: Record<string, string> = {
+  draft: "draft, nothing sent yet",
+  published: "published",
+  rejected: "discarded",
+};
+
+/**
+ * The report as it will be published (or was): ARIA's conclusions, next steps and open
+ * questions, each claim with its sources. When it happened, and the incidents seen before, are
+ * the panels above it. `titleHidden` drops the report's own title when the page's heading
+ * already says the same thing.
+ */
+const REVIEWER_NOTE = "Reviewer note: ";
+
 export function ReportView({
   report,
   titleHidden = false,
@@ -55,20 +66,46 @@ export function ReportView({
   report: IncidentReport;
   titleHidden?: boolean;
 }) {
+  // Runbooks by what they are about, not their IDs (the list is cached for a few minutes).
+  const runbooks = useRunbooks().data;
+  const runbookTitle = (slug: string) => runbooks?.find((rb) => rb.slug === slug)?.title ?? slug;
   const validation = report.validation;
   const ok = validation?.ok ?? false;
+  // A reviewer's note is kept with the open questions (prefixed "Reviewer note: ") but is not one.
+  const all = report.open_questions ?? [];
+  const notes = all
+    .filter((q) => q.startsWith(REVIEWER_NOTE))
+    .map((q) => q.slice(REVIEWER_NOTE.length));
+  const questions = all.filter((q) => !q.startsWith(REVIEWER_NOTE));
   return (
-    <article aria-labelledby="report-title" className="grid gap-8 wrap-anywhere">
-      <header className="grid gap-3">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground">
+    <article
+      aria-labelledby="report-title"
+      className="grid gap-7 rounded-lg bg-raised p-5 wrap-anywhere"
+    >
+      <header className="grid gap-2">
+        <h2 id="report-title" className="text-base font-medium">
+          The report
+        </h2>
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
           <span>
-            Report v{report.version ?? 1}, {report.status ?? "draft"}
+            Version {report.version ?? 1}, {STATUS[report.status ?? "draft"] ?? report.status}
           </span>
           <span>
             written by{" "}
-            {writtenOffline(report)
-              ? "ARIA's evidence template (offline mode)"
-              : `the LLM (${report.model ?? "model"})`}
+            {writtenOffline(report) ? (
+              <>
+                ARIA&apos;s evidence template (
+                <Link
+                  href="/console/settings#set-model-key"
+                  className="underline decoration-control underline-offset-2 hover:text-foreground hover:decoration-foreground"
+                >
+                  offline mode
+                </Link>
+                )
+              </>
+            ) : (
+              `a language model (${report.model ?? "model"})`
+            )}
           </span>
           <span
             className={cn(
@@ -85,13 +122,10 @@ export function ReportView({
               ? `Validated: ${validation?.checked_claims ?? 0} claims, ${percent(validation?.citation_coverage ?? 0)} cited`
               : "Failed validation"}
           </span>
-        </div>
-        <h2
-          id="report-title"
-          className={cn("text-2xl leading-tight tracking-heading", titleHidden && "sr-only")}
-        >
-          {stripSeverity(report.title)}
-        </h2>
+        </p>
+        {titleHidden ? null : (
+          <p className="text-xl leading-tight tracking-heading">{stripSeverity(report.title)}</p>
+        )}
         {!ok && validation?.issues?.length ? (
           <ul className="grid gap-1 rounded-lg bg-danger/10 p-4 text-sm">
             {validation.issues.map((issue, i) => (
@@ -117,31 +151,6 @@ export function ReportView({
           <ClaimList claims={report.suspected_cause} />
         </Section>
       ) : null}
-      {report.timeline?.length ? (
-        <Section title="Timeline">
-          <ol className="grid gap-2 border-l border-rule pl-4">
-            {report.timeline.map((entry, i) => (
-              <li key={i} className="relative grid gap-0.5 leading-relaxed">
-                <span
-                  aria-hidden
-                  className="absolute top-2 -left-[1.3rem] block size-2 rounded-full border border-control bg-background"
-                />
-                {entry.ts ? (
-                  <time
-                    dateTime={entry.ts}
-                    className="tabular font-mono text-xs text-muted-foreground"
-                  >
-                    {clockTime(entry.ts)}
-                  </time>
-                ) : null}
-                <p>
-                  {entry.text} <Citations ids={entry.evidence_ids ?? []} />
-                </p>
-              </li>
-            ))}
-          </ol>
-        </Section>
-      ) : null}
       {report.actions?.length ? (
         <Section title="Next steps">
           <ol className="grid gap-3">
@@ -152,20 +161,20 @@ export function ReportView({
                 </span>
                 <div>
                   <p>
-                    {action.text} <Citations ids={action.evidence_ids ?? []} />
+                    <CodeText>{action.text}</CodeText> <Citations ids={action.evidence_ids ?? []} />
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     <span className={RISK[action.risk ?? "low"]}>{action.risk ?? "low"} risk</span>
                     {action.runbook_slug ? (
                       <>
-                        {", from runbook "}
+                        {", from the runbook "}
                         <Link
                           href={
                             `/console/runbooks/${encodeURIComponent(action.runbook_slug)}` as never
                           }
                           className="underline decoration-control underline-offset-2 hover:decoration-foreground"
                         >
-                          {action.runbook_slug}
+                          {runbookTitle(action.runbook_slug)}
                         </Link>
                       </>
                     ) : null}
@@ -176,37 +185,20 @@ export function ReportView({
           </ol>
         </Section>
       ) : null}
-      {report.similar_incidents?.length ? (
-        <Section title="Similar past incidents">
-          <ul className="grid gap-2">
-            {report.similar_incidents.map((incident) => (
-              <li key={incident.incident_id} className="grid gap-1 rounded-lg bg-raised p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <SeverityBadge
-                    severity={isSeverity(incident.severity) ? incident.severity : null}
-                    size="sm"
-                  />
-                  <span className="font-medium">{incident.title}</span>
-                  {incident.evidence_id ? <Citations ids={[incident.evidence_id]} /> : null}
-                </div>
-                <p className="text-sm text-muted-foreground">{incident.resolution}</p>
-                <p className="text-xs text-faint">
-                  seen {incident.occurrences} {incident.occurrences === 1 ? "time" : "times"}
-                  {incident.mttr_minutes != null
-                    ? `, resolved in about ${Math.round(incident.mttr_minutes)} min`
-                    : ""}
-                  {incident.source === "memory" ? ", synthetic memory" : ""}
-                </p>
-              </li>
+      {questions.length ? (
+        <Section title="Open questions">
+          <ul className="grid list-disc gap-1.5 pl-5 text-muted-foreground">
+            {questions.map((q) => (
+              <li key={q}>{q}</li>
             ))}
           </ul>
         </Section>
       ) : null}
-      {report.open_questions?.length ? (
-        <Section title="Open questions">
-          <ul className="grid list-disc gap-1.5 pl-5 text-muted-foreground">
-            {report.open_questions.map((q) => (
-              <li key={q}>{q}</li>
+      {notes.length ? (
+        <Section title="Reviewer's note">
+          <ul className="grid gap-1.5 text-muted-foreground">
+            {notes.map((n) => (
+              <li key={n}>{n}</li>
             ))}
           </ul>
         </Section>
@@ -221,22 +213,44 @@ export function ReportView({
   );
 }
 
+// A sentence in the report writer's streamed JSON: its "text" or "title", the last one perhaps
+// still being written.
+const DRAFT_SENTENCE = /"(?:text|title)"\s*:\s*"((?:[^"\\]|\\.)*)/g;
+
+/** The sentences so far in the report writer's output, which streams as JSON: what a person
+ * reads, not the brackets and field names around it (SL-M2). Plain text passes through. */
+export function draftSentences(text: string): string[] {
+  if (!/^\s*[{[]/.test(text)) return text.trim() ? [text.trim()] : [];
+  return [...text.matchAll(DRAFT_SENTENCE)]
+    .map((match) =>
+      (match[1] ?? "").replace(/\\n/g, " ").replace(/\\"/g, '"').replace(/\\\\/g, "\\").trim(),
+    )
+    .filter(Boolean);
+}
+
 /** Model output while the report is being written (live only; tokens are never stored). */
 export function LiveDraft({ text }: { text: string }) {
+  const sentences = draftSentences(text).slice(-12);
   return (
     <section aria-label="Report being written" className="grid gap-2 rounded-lg bg-sunken p-5">
       <p className="flex items-center gap-2 text-sm font-medium">
         <span aria-hidden className="block size-2 animate-pulse-dot rounded-full bg-primary" />
         Writing the report
       </p>
-      <pre
-        tabIndex={0}
-        role="region"
-        aria-label="Report text so far"
-        className="max-h-80 overflow-auto font-mono text-xs leading-5 whitespace-pre-wrap text-muted-foreground"
-      >
-        {text.slice(-4000)}
-      </pre>
+      {sentences.length ? (
+        <ul
+          tabIndex={0}
+          role="region"
+          aria-label="Report text so far"
+          className="grid max-h-80 gap-1.5 overflow-auto text-sm leading-6 text-muted-foreground"
+        >
+          {sentences.map((sentence, i) => (
+            <li key={i} className="wrap-anywhere">
+              {sentence}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </section>
   );
 }

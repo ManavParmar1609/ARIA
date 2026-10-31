@@ -16,6 +16,8 @@ export function HoverCardContent({
   className,
   align = "start",
   sideOffset = 6,
+  // Clear of the screen's edge, like the page's own gutter.
+  collisionPadding = 16,
   ...props
 }: ComponentProps<typeof HoverCardPrimitive.Content>) {
   return (
@@ -24,6 +26,7 @@ export function HoverCardContent({
         data-slot="hover-card-content"
         align={align}
         sideOffset={sideOffset}
+        collisionPadding={collisionPadding}
         className={cn(panel, className)}
         {...props}
       />

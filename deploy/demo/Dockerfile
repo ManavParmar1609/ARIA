@@ -1,4 +1,4 @@
-# ARIA's API as a public demo: open, offline and seeded, for a free container host.
+# ARIA's API as a public demo: open, offline unless a visitor brings a model key, and seeded.
 #
 # Built from the repository root, so the image matches the commit being deployed:
 #   docker build -f deploy/demo/Dockerfile -t aria-demo .
@@ -29,25 +29,51 @@ COPY src ./src
 RUN --mount=type=secret,id=ca,required=false \
     if [ -s /run/secrets/ca ]; then export SSL_CERT_FILE=/run/secrets/ca UV_SYSTEM_CERTS=1; fi; \
     uv sync --locked --no-dev --no-editable --no-cache
+# The Loghub samples the severity model learned from: a few MB from the commit data/manifest.yaml
+# pins, fetched with git. Samples built from them rate as the model expects. If git or the samples
+# cannot be fetched, the demo still builds, on the small test fixtures, where several harmless
+# samples look like incidents.
+COPY data/manifest.yaml ./data/manifest.yaml
+RUN --mount=type=secret,id=ca,required=false \
+    mkdir -p data/raw; \
+    if [ -s /run/secrets/ca ]; then export GIT_SSL_CAINFO=/run/secrets/ca; fi; \
+    { apt-get update && apt-get install -y --no-install-recommends git \
+        && rm -rf /var/lib/apt/lists/* \
+        && /app/.venv/bin/aria data download --source loghub-2k; } \
+    || echo "The Loghub samples could not be fetched: the demo uses the test fixtures."
 
 # --- demo: the API and its seeded demo, run as an unprivileged user ----------------------------
 FROM ${PYTHON_IMAGE}
 # User 1000, which some hosts insist on.
 RUN useradd --create-home --uid 1000 aria
-# A public demo: no API key (anyone may try it), no model provider keys (every step runs on the
-# offline provider, so nothing a visitor sends leaves the server) and no Slack, Teams or webhook
-# targets. The rate limit is shared, since every console visitor arrives through one proxy, and a
-# request may carry at most 8 MB, as through the console. Runs go one at a time, so a few large
-# ones arriving together stay inside a free plan's 512 MB.
+# A public demo: no API key (anyone may try it) and no Slack, Teams or webhook targets. Every step
+# runs on the offline provider unless a visitor brings a key or the service is given one (below).
+# Visitors may paste their own Claude, Gemini, OpenAI or NVIDIA key in the console's Settings: it
+# answers only their own runs and questions, sending them to that provider, and is held in memory
+# while they run, never stored. Each visitor sees only the incidents they started, plus the seeded
+# examples, which nobody can change or delete. Each visitor has a rate limit of their own, and
+# the site's limit caps them all, since every console visitor arrives through one proxy. Runs go
+# one at a time, and a visitor may have 3 waiting or running, so nobody's pile holds up the next
+# visitor for long. A request may carry at most 1 MB (about 5,000 log lines of ordinary length):
+# a run's memory grows with its lines, and pastes this size, even many arriving together, keep
+# the API inside a free plan's 512 MB, where 20,000-line ones did not.
+# With a model key set on the service (GEMINI_API_KEY, say), a visitor without a key of their own
+# gets 5 model-written runs and answers a day, and everyone together 100; past that, offline.
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:${PATH}" \
     ARIA_ENV=dev \
     ARIA_LOG_FORMAT=json \
     ARIA_WORKER_MODE=inprocess \
+    ARIA_VISITOR_KEYS=true \
+    ARIA_VISITOR_SCOPE=true \
+    ARIA_SHARED_PER_VISITOR=5 \
+    ARIA_SHARED_PER_DAY=100 \
     ARIA_WORKER_CONCURRENCY=1 \
-    ARIA_RATE_LIMIT_PER_MINUTE=600 \
-    ARIA_MAX_BODY_BYTES=8388608 \
+    ARIA_RATE_LIMIT_PER_MINUTE=120 \
+    ARIA_RATE_LIMIT_SITE_PER_MINUTE=1800 \
+    ARIA_MAX_BODY_BYTES=1048576 \
+    ARIA_MAX_ACTIVE_RUNS_PER_VISITOR=3 \
     ARIA_DATABASE_URL=sqlite:////home/aria/demo/aria.db \
     ARIA_DATA_DIR=/home/aria/demo/data \
     ARIA_MODELS_DIR=/home/aria/demo/models
@@ -60,11 +86,12 @@ COPY models/severity_log.json models/severity_log.report.json \
 COPY docs/eval-results.json ./docs/eval-results.json
 COPY tests/fixtures/loghub ./tests/fixtures/loghub
 COPY tests/fixtures/real ./tests/fixtures/real
+RUN install -d -o aria -g aria /home/aria/demo /home/aria/demo/data /home/aria/demo/models
+COPY --from=build --chown=aria:aria /app/data/raw /home/aria/demo/data/raw
 USER aria
-# Incident memory from the bundled Loghub samples (as `docker compose up` seeds it), one approved
-# run and two waiting for review.
-RUN mkdir -p /home/aria/demo/data /home/aria/demo/models \
-    && aria db upgrade \
+# Incident memory from the Loghub samples (or the bundled fixtures, when they could not be
+# downloaded), one approved run and two waiting for review.
+RUN aria db upgrade \
     && aria seed --workers 2 \
     && aria triage --scenario zookeeper.quorum_connection_loss --approve \
     && aria triage --scenario bgl.kernel_panic \

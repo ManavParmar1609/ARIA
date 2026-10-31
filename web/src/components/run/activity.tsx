@@ -3,8 +3,6 @@
 import {
   BotIcon,
   CircleCheckIcon,
-  CircleDotIcon,
-  CircleIcon,
   FlagIcon,
   GaugeIcon,
   OctagonAlertIcon,
@@ -21,30 +19,16 @@ import * as m from "motion/react-m";
 import { useMemo } from "react";
 
 import type { RunEvent } from "@/lib/api/types";
-import { duration } from "@/lib/format";
+import { capitalise, decisionWords, duration, reviewerName } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import { NODE_LABEL } from "@/lib/steps";
 
 import { Citations } from "./evidence";
 
-const PATH = [
-  "plan",
-  "parse_shard",
-  "merge",
-  "severity",
-  "recall",
-  "investigate",
-  "assess",
-  "report",
-  "comms",
-  "review",
-  "publish",
-];
-
 type StepState = "pending" | "running" | "done" | "paused" | "failed";
 
-function stepStates(events: RunEvent[]) {
+export function stepStates(events: RunEvent[]) {
   const state: Record<string, StepState> = {};
   const started: Record<string, number> = {};
   const took: Record<string, number> = {};
@@ -66,70 +50,6 @@ function stepStates(events: RunEvent[]) {
   return { state, took };
 }
 
-/**
- * Where the run is in the graph: each step done, running, paused for review or still to come.
- * Steps sit in equal cells, so the layout does not move when timings arrive.
- */
-export function GraphProgress({
-  events,
-  finalStatus,
-}: {
-  events: RunEvent[];
-  finalStatus: string;
-}) {
-  const { state, took } = useMemo(() => stepStates(events), [events]);
-  const path = finalStatus === "rejected" ? [...PATH.slice(0, -1), "reject"] : PATH;
-  const replanned = events.some((e) => e.kind === "replan");
-  return (
-    <ol
-      aria-label="Run progress"
-      className="grid grid-cols-[repeat(auto-fill,minmax(min(9.5rem,45%),1fr))] gap-1.5"
-    >
-      {path.map((node) => {
-        const s = state[node] ?? "pending";
-        return (
-          <li
-            key={node}
-            className={cn(
-              "flex h-8 min-w-0 items-center gap-1.5 rounded-xs border px-2 text-xs",
-              s === "done" && "border-rule text-foreground",
-              s === "running" && "border-primary bg-highlight text-highlight-foreground",
-              s === "paused" && "border-primary bg-highlight font-medium text-highlight-foreground",
-              s === "failed" && "border-danger text-danger",
-              s === "pending" && "border-dashed border-rule text-faint",
-            )}
-          >
-            {s === "done" ? (
-              <CircleCheckIcon aria-hidden className="size-3 shrink-0 text-ok" />
-            ) : s === "running" ? (
-              <CircleDotIcon
-                aria-hidden
-                className="size-3 shrink-0 animate-pulse motion-reduce:animate-none"
-              />
-            ) : s === "paused" ? (
-              <UserRoundCheckIcon aria-hidden className="size-3 shrink-0" />
-            ) : s === "failed" ? (
-              <OctagonAlertIcon aria-hidden className="size-3 shrink-0" />
-            ) : (
-              <CircleIcon aria-hidden className="size-3 shrink-0" />
-            )}
-            <span className="truncate">{NODE_LABEL[node] ?? node}</span>
-            {node === "assess" && replanned ? (
-              <RefreshCwIcon aria-label="replanned" className="size-3 shrink-0" />
-            ) : null}
-            {took[node] != null && s === "done" ? (
-              <span className="tabular ml-auto hidden shrink-0 text-faint sm:inline">
-                {duration(took[node])}
-              </span>
-            ) : null}
-            <span className="sr-only">: {s}</span>
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
 interface Row {
   key: string;
   t: number;
@@ -144,7 +64,7 @@ interface Row {
 const MESSAGE_OUTCOME: Record<string, string> = {
   sent: "Sent",
   failed: "Not delivered",
-  skipped: "Not sent, channel not set up",
+  skipped: "Kept as a preview (no channel connected)",
   approved: "Sending",
 };
 
@@ -257,7 +177,7 @@ function rows(events: RunEvent[], { offline = false, titles = {} }: RowOptions =
           t,
           icon: FlagIcon,
           tone: "accent",
-          title: `Review: ${String(p.decision)} by ${String(p.reviewer ?? "a reviewer")}`,
+          title: `${capitalise(decisionWords(String(p.decision)))} by ${reviewerName(typeof p.reviewer === "string" ? p.reviewer : null)}`,
         });
         break;
       case "action":

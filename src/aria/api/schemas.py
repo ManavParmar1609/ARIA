@@ -74,6 +74,8 @@ class RunSummary(BaseModel):
     error: str | None = None
     created_at: datetime
     updated_at: datetime
+    # On a server that keeps visitors apart: a run every visitor sees and none may change.
+    example: bool = False
 
 
 class Delivery(BaseModel):
@@ -92,6 +94,8 @@ class Delivery(BaseModel):
 
 class RunDetail(RunSummary):
     links: Links
+    # For a queued run: how many triages are waiting or running ahead of it (none otherwise).
+    ahead: int | None = None
     deliveries: list[Delivery] = Field(default_factory=list)
     review: dict[str, Any] | None = None
     plan: dict[str, Any] | None = None
@@ -99,6 +103,47 @@ class RunDetail(RunSummary):
     notes: list[str] = Field(default_factory=list)
     replan_reasons: list[str] = Field(default_factory=list)
     errors: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class SizeOptionOut(BaseModel):
+    value: int
+    label: str
+
+
+class SizeChoiceOut(BaseModel):
+    """A size a visitor may choose for a sample, offered only where it changes the severity."""
+
+    question: str
+    unit: Literal["servers", "per_minute"]
+    default: int
+    options: list[SizeOptionOut]
+
+
+class ScenarioOut(BaseModel):
+    """A sample the console can build: real Loghub lines arranged into an incident."""
+
+    id: str
+    title: str
+    technology: str
+    source: str
+    source_name: str
+    summary: str
+    system: str
+    benign: bool
+    headline: bool
+    # One of its lines tries to talk ARIA out of the incident, for the injection guard to catch.
+    tricky: bool = False
+    preview: list[str] = Field(default_factory=list)
+    servers: SizeChoiceOut | None = None
+    rate: SizeChoiceOut | None = None
+
+
+class SampleRunRequest(Body):
+    """How to build a sample: a size it offers (or its default), and the run's options."""
+
+    servers: Annotated[int, Field(ge=1, le=64)] | None = None
+    rate: Annotated[int, Field(ge=1, le=1_000)] | None = None
+    options: RunOptions = Field(default_factory=RunOptions)
 
 
 class RunPage(BaseModel):
@@ -165,6 +210,8 @@ class AskResponse(BaseModel):
     answer: list[ClaimOut]
     insufficient_evidence: bool
     follow_ups: list[str] = Field(default_factory=list)
+    # What the answer cannot say: that ARIA can't see systems now, or subjects no source mentions.
+    notes: list[str] = Field(default_factory=list)
     evidence: list[Evidence]
     answered_by: Literal["llm", "retrieval"]
     model: str | None = None
@@ -273,6 +320,15 @@ class Me(BaseModel):
     auth_required: bool
 
 
+class SharedModelOut(BaseModel):
+    """This visitor's share today of the server's own model keys (``llm.shared``). None means
+    no limit; ``left`` 0 means this visitor's work runs offline until tomorrow (UTC)."""
+
+    left: int | None = None
+    per_visitor: int | None = None
+    per_day: int | None = None
+
+
 class SettingsOut(BaseModel):
     """The configuration a reviewer may see: limits, guardrails and routing, never secrets."""
 
@@ -290,6 +346,24 @@ class SettingsOut(BaseModel):
     safety: list[str]
     # Per message kind: whether its webhook URL is set. True or false only, never the URL.
     channels: dict[str, bool] = Field(default_factory=dict)
+    # The kinds of model key visitors may bring (X-Model-Provider); none while that is off.
+    visitor_keys: list[str] = Field(default_factory=list)
+    # Whether each visitor sees only their own runs and the examples (ARIA_VISITOR_SCOPE).
+    visitor_scope: bool = False
+    # The server's own model for visitors without a key, and this visitor's share of it today;
+    # None when the server has no model of its own (its work runs offline).
+    shared_model: SharedModelOut | None = None
+    # The largest request the API reads, so the console can say so before sending a paste.
+    max_body_bytes: int | None = None
+
+
+class ModelKeyCheck(BaseModel):
+    """What a provider said about a visitor's own key. The key itself is not kept."""
+
+    provider: str
+    accepted: bool
+    model: str
+    detail: str
 
 
 class ReviewOut(BaseModel):

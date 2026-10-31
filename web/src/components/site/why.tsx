@@ -11,12 +11,12 @@ const POINTS: { icon: LucideIcon; title: string; body: string }[] = [
   {
     icon: GaugeIcon,
     title: "Severity you can check",
-    body: "Rules and a calibrated model agree on a short set of likely severities. Safety floors stop a dangerous pattern from being rated too low.",
+    body: "Rules and a calibrated model agree on a short list of likely levels, and say when they aren't sure. Safety floors stop a dangerous pattern from being rated too low.",
   },
   {
     icon: FileCheck2Icon,
     title: "Every claim cites its evidence",
-    body: "A validator rejects any sentence whose citation is missing or whose numbers disagree with the logs.",
+    body: "A check rejects any sentence whose source is missing or whose numbers disagree with the logs.",
   },
   {
     icon: HistoryIcon,
@@ -25,8 +25,8 @@ const POINTS: { icon: LucideIcon; title: string; body: string }[] = [
   },
   {
     icon: ShieldCheckIcon,
-    title: "Nothing goes out without you",
-    body: "Messages for Slack, Teams or a status page wait for a person to approve, edit or reject them.",
+    title: "Keeps bad input out",
+    body: "Secrets and personal details are masked, and a line that reads like an instruction is kept out of the analysis: a model sees it only as quoted text.",
   },
 ];
 
@@ -36,7 +36,8 @@ export function Why() {
       {POINTS.map(({ icon: Icon, title, body }) => (
         <li
           key={title}
-          className="grid content-start gap-4 rounded-card border border-rule bg-raised p-7"
+          // Each card spans three rows of the list, so titles and bodies line up across a row.
+          className="row-span-3 grid grid-rows-subgrid gap-4 rounded-card border border-rule bg-raised p-7"
         >
           <span className="grid size-11 place-items-center rounded-[10px] bg-panel-keylime text-heading">
             <Icon aria-hidden className="size-5" strokeWidth={1.5} />

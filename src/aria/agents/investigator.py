@@ -42,7 +42,7 @@ from aria.llm.schemas import (
 from aria.mcp.client import ToolBelt, ToolNotAllowedError
 from aria.parsing.flows import load_flow_settings
 from aria.parsing.signals import signal_components, signal_templates
-from aria.text import clip
+from aria.text import clip, failure_words, headline, plain_template
 
 INVESTIGATOR_TOOLS = (
     "search_logs",
@@ -53,6 +53,8 @@ INVESTIGATOR_TOOLS = (
     "get_runbook",
 )
 _WORDS = re.compile(r"[a-z][a-z0-9_]{2,}")
+MAX_QUERY = 300  # search_incidents refuses longer queries
+MAX_QUERY_WORD = 40
 GENERIC_CAUSE = "component_errors"  # "<component> is failing": the window's own signal
 LIFECYCLE_CAUSE = "unfinished_work"  # units of work that stop partway (parsing/flows.py)
 Emit = Callable[[str, dict[str, Any]], None]
@@ -181,10 +183,10 @@ def candidate_hypotheses(inputs: InvestigationInputs, *, limit: int = 3) -> list
         if not incident.applies_to(inputs.system, batch.features.components):
             continue
         seen.add(incident.failure_mode)
-        label = incident.failure_mode.replace("_", " ")
+        label = failure_words(incident.failure_mode)
         out.append(
             NewHypothesis(
-                statement=f"{label.capitalize()}, as in past incident {incident.incident_id}",
+                statement=f'{label[:1].upper()}{label[1:]}, as in the past incident "{clip(headline(incident.title), 80)}"',
                 failure_mode=incident.failure_mode,
                 component=_component_for(incident, batch, component),
             )
@@ -195,7 +197,10 @@ def candidate_hypotheses(inputs: InvestigationInputs, *, limit: int = 3) -> list
         where = top.components[0] if top.components else component
         out.append(
             NewHypothesis(
-                statement=f'{where} is failing: "{clip(top.template, 80)}" repeats {top.count} times',
+                statement=(
+                    f'{where} is failing: "{clip(plain_template(top.template), 80)}" repeats '
+                    f"{top.count} times"
+                ),
                 failure_mode=GENERIC_CAUSE,
                 component=where,
             )
@@ -228,7 +233,9 @@ def suggested_plan(inputs: InvestigationInputs) -> list[dict[str, Any]]:
         plan.append({"tool": "component_timeline", "arguments": {"component": component}})
         plan.append({"tool": "node_breakdown", "arguments": {"component": component}})
     if signal:
-        words = " ".join(_WORDS.findall(signal[0].template.lower())[:8])
+        # Within the tool's own limits: a log can hold "words" thousands of characters long.
+        found = _WORDS.findall(signal[0].template.lower())[:8]
+        words = " ".join(word[:MAX_QUERY_WORD] for word in found)[:MAX_QUERY].strip()
         if len(words) >= 2:
             plan.append({"tool": "search_incidents", "arguments": {"query": words, "limit": 3}})
     runbook = next(

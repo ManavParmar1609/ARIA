@@ -30,13 +30,12 @@ import hashlib
 import hmac
 import math
 import weakref
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any, TypedDict
 
 import httpx
 from langgraph.cache.base import BaseCache
-from langgraph.cache.memory import InMemoryCache
 from langgraph.errors import NodeError
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -72,6 +71,7 @@ from aria.db import repository as repo
 from aria.db.engine import session_scope
 from aria.db.models import LogEventRow
 from aria.evidence import EvidenceStore
+from aria.graph.cache import BoundedCache
 from aria.graph.state import Json, TriageState, dump_evidence, evidence_of, usage_delta
 from aria.llm.budget import BudgetGuard
 from aria.llm.router import LLMRouter
@@ -119,11 +119,23 @@ TRANSIENT = RetryPolicy(
 
 @dataclass
 class TriageContext:
-    """Per-invocation context: long-lived services, and where the investigator's tools live."""
+    """Per-invocation context: long-lived services, and where the investigator's tools live.
+
+    ``router``, when set, answers this run's model calls instead of the services' router: it
+    carries the visitor's own key the run was started with.
+    """
 
     services: Services
     tools: Target | None = None
+    router: LLMRouter | None = None
     _server: MCPServer | None = field(default=None, repr=False)
+
+    def with_router(self, router: LLMRouter) -> TriageContext:
+        """This context for one run whose model calls go through ``router``. The copy shares
+        this context's tool server, built here first so it is built once."""
+        if self.tools is None and not self.services.settings.mcp_url and self._server is None:
+            self._server = build_server(self.services)
+        return replace(self, router=router)
 
     def tools_target(self) -> Target:
         """A target for one tool belt (remote targets are single-use, so make one per belt)."""
@@ -284,8 +296,10 @@ def _guard(state: TriageState, services: Services) -> BudgetGuard:
     return BudgetGuard(_limits(services, _request(state)), usage)
 
 
-def _router(services: Services, request: TriageRequest, plan: Plan) -> LLMRouter | None:
-    return services.router.prefer(request.options.provider) if plan.use_llm else None
+def _router(context: TriageContext, request: TriageRequest, plan: Plan) -> LLMRouter | None:
+    if not plan.use_llm:
+        return None
+    return (context.router or context.services.router).prefer(request.options.provider)
 
 
 def _emit(runtime: Runtime[TriageContext], kind: str, node: str, **payload: Any) -> None:
@@ -480,7 +494,7 @@ async def severity(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
         system=request.system,
         evidence=evidence,
         alerts=request.alerts,
-        router=_router(services, request, run_plan),
+        router=_router(runtime.context, request, run_plan),
         budget=guard,
         use_llm=run_plan.use_llm,
     )
@@ -573,6 +587,7 @@ async def _retrieve(
         widen_level=run_plan.widen_level,
         budget=guard,
         use_llm=run_plan.use_llm,
+        router=runtime.context.router,
     )
     return {
         "retrieval": result.model_dump(mode="json"),
@@ -607,7 +622,7 @@ async def investigate(state: TriageState, runtime: Runtime[TriageContext]) -> Js
     config = services.config.investigation
     # The LLM chooses the tools on the first pass; replans add steps but run the
     # deterministic policy, so a hard incident cannot spend the whole budget investigating.
-    router = _router(services, request, run_plan) if run_plan.replans == 0 else None
+    router = _router(runtime.context, request, run_plan) if run_plan.replans == 0 else None
     investigator = Investigator(
         router,
         max_steps=config.max_steps + 2 * run_plan.replans,  # a replan buys more steps
@@ -725,7 +740,7 @@ async def report(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
     guard = _guard(state, services)
     before = guard.snapshot()
     writer = ReportWriter(
-        _router(services, request, run_plan),
+        _router(runtime.context, request, run_plan),
         services.runbooks,
         safety_check=services.config.guardrails.safety_model,
     )
@@ -769,7 +784,7 @@ async def comms(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
         incident,
         service=service_name(request),
         run_url=run_link(services.settings, state["run_id"]),
-        router=_router(services, request, run_plan),
+        router=_router(runtime.context, request, run_plan),
         budget=guard,
         use_llm=run_plan.use_llm,
         safety_check=services.config.guardrails.safety_model,
@@ -916,6 +931,8 @@ async def _record_feedback(
     failure_mode: str,
 ) -> None:
     services = runtime.context.services
+    if await _private(services, state["run_id"]):
+        return
     request = _request(state)
     value = {
         "run_id": state["run_id"],
@@ -944,6 +961,13 @@ async def _record_feedback(
         await runtime.store.aput(("feedback", request.system, failure_mode), state["run_id"], value)
 
 
+async def _private(services: Services, run_id: str) -> bool:
+    """A visitor's run on a server that keeps visitors apart. It stays theirs: it never joins
+    the incident library other visitors search, the templates other runs are compared with, or
+    the reviews that recalibrate the severity model."""
+    return await _db(repo.run_visitor, services.engine, run_id) is not None
+
+
 async def publish(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
     services = runtime.context.services
     request = _request(state)
@@ -970,8 +994,10 @@ async def publish(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
         reviewer=decision.reviewer,
         comment=decision.comment,
     )
+    private = await _private(services, run_id)
     memory = _memory_incident(state, incident, assessment, request.synthetic)
-    await services.memory.remember(memory)
+    if not private:
+        await services.memory.remember(memory)
 
     approved = set(decision.approve_actions)
     already = await _db(repo.action_statuses, services.engine, run_id)
@@ -1004,7 +1030,8 @@ async def publish(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
         actions.append(action)
 
     batch = ParsedBatch.model_validate(state["batch"])
-    await _remember_templates(runtime.store, batch)
+    if not private:
+        await _remember_templates(runtime.store, batch)
     if decision.reviewer != "aria:auto":
         await _record_feedback(
             state,
@@ -1129,7 +1156,7 @@ def build_graph(
     return builder.compile(
         checkpointer=checkpointer,
         store=store,
-        cache=cache or InMemoryCache(),
+        cache=cache or BoundedCache(),
         name="aria-triage",
     )
 

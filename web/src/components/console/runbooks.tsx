@@ -1,29 +1,32 @@
 "use client";
 
-import { BookOpenIcon } from "lucide-react";
+import { ArrowLeftIcon, BookOpenIcon } from "lucide-react";
 import Link from "next/link";
 
 import { EmptyState, ErrorState, LoadingRows, PageHeader } from "@/components/console/states";
 import { Button } from "@/components/ui/button";
+import { CodeText } from "@/components/ui/code-text";
 import { useRunbook, useRunbooks } from "@/lib/api/hooks";
 import { ApiError } from "@/lib/api/client";
-import type { RunbookStep } from "@/lib/api/types";
+import type { RunbookOut, RunbookStep } from "@/lib/api/types";
 import { systemName } from "@/lib/systems";
 import { cn } from "@/lib/utils";
 import { useDocumentTitle } from "@/lib/document-title";
+import { failureName } from "@/lib/failure-modes";
 
-// Risk keeps to ink and the danger red: the severity hues mean severity only.
+// Risk is quiet text, not a badge: the calm budget keeps badges for what needs a decision. It
+// keeps to ink and the danger red; the severity hues mean severity only.
 const RISK: Record<string, string> = {
-  low: "border-rule text-muted-foreground",
-  medium: "border-control text-foreground",
-  high: "border-danger/60 text-danger",
+  low: "text-muted-foreground",
+  medium: "text-muted-foreground",
+  high: "font-medium text-danger",
 };
 
 function Risk({ risk }: { risk: string }) {
   return (
     <span
       className={cn(
-        "inline-flex h-5 shrink-0 items-center justify-self-start rounded-xs border px-1.5 text-xs font-medium whitespace-nowrap",
+        "inline-flex shrink-0 items-center justify-self-start text-xs whitespace-nowrap",
         RISK[risk] ?? RISK.low,
       )}
     >
@@ -32,22 +35,20 @@ function Risk({ risk }: { risk: string }) {
   );
 }
 
-// Failure modes as people write them; the rest read fine with spaces for underscores.
-const FAILURE_NAMES: Record<string, string> = {
-  dns_resolution: "DNS resolution",
-  hdfs_lease_renewal: "HDFS lease renewal",
-  mod_jk_worker_error: "mod_jk worker errors",
-  psu_failure: "PSU failure",
-  resourcemanager_unreachable: "ResourceManager unreachable",
-  unfinished_work: "work that stops partway",
-};
+const RISK_ORDER = ["low", "medium", "high"];
+
+/** A runbook's risk is its riskiest step's, so a "low risk" runbook never holds a high-risk step. */
+export function highestRisk(rb: Pick<RunbookOut, "risk" | "diagnose" | "mitigate" | "verify">) {
+  const all = [rb.risk, ...[...rb.diagnose, ...rb.mitigate, ...rb.verify].map((s) => s.risk)];
+  return all.reduce((top, risk) =>
+    RISK_ORDER.indexOf(risk) > RISK_ORDER.indexOf(top) ? risk : top,
+  );
+}
 
 /** What a runbook covers, in words: "HDFS, for block serve exceptions" or "Any system". */
 function covers(rb: { systems: string[]; failure_modes: string[] }): string {
   const systems = rb.systems.includes("*") ? "Any system" : rb.systems.map(systemName).join(", ");
-  const modes = rb.failure_modes
-    .filter((f) => f !== "*")
-    .map((f) => FAILURE_NAMES[f] ?? f.replaceAll("_", " "));
+  const modes = rb.failure_modes.filter((f) => f !== "*").map(failureName);
   return modes.length ? `${systems}, for ${modes.join(", ")}` : systems;
 }
 
@@ -58,7 +59,7 @@ export function Runbooks() {
     <div className="grid gap-6">
       <PageHeader
         title="Runbooks"
-        description="ARIA proposes next steps only from these runbooks, and cites the one it used. Edit them as Markdown in the repository's runbooks folder."
+        description="ARIA proposes next steps only from these runbooks, and cites the one it used. A team adds its own as short text files kept with ARIA. A runbook's risk is that of its riskiest step."
       />
       {runbooks.isPending ? (
         <LoadingRows rows={6} label="Loading runbooks" />
@@ -86,10 +87,10 @@ export function Runbooks() {
                 >
                   {rb.title}
                 </Link>
-                <Risk risk={rb.risk} />
+                <Risk risk={highestRisk(rb)} />
               </div>
               <p className="line-clamp-2 text-sm text-muted-foreground">
-                <Text>{rb.when_to_use}</Text>
+                <CodeText>{rb.when_to_use}</CodeText>
               </p>
               <p className="text-xs text-faint">{covers(rb)}</p>
             </li>
@@ -101,22 +102,6 @@ export function Runbooks() {
 }
 
 /** Runbook text uses Markdown backticks for commands; show those as code. */
-function Text({ children }: { children: string }) {
-  return (
-    <>
-      {children.split("`").map((part, i) =>
-        i % 2 === 1 ? (
-          <code key={i} className="rounded-xs bg-sunken px-1 py-0.5 text-[0.85em]">
-            {part}
-          </code>
-        ) : (
-          part
-        ),
-      )}
-    </>
-  );
-}
-
 function Steps({ title, steps }: { title: string; steps: RunbookStep[] }) {
   if (steps.length === 0) return null;
   return (
@@ -130,7 +115,7 @@ function Steps({ title, steps }: { title: string; steps: RunbookStep[] }) {
             </span>
             <div className="grid gap-1">
               <p className="leading-relaxed">
-                <Text>{step.text}</Text>
+                <CodeText>{step.text}</CodeText>
               </p>
               {/* Most steps are low risk; only the ones to think twice about are tagged. */}
               {step.risk !== "low" ? <Risk risk={step.risk} /> : null}
@@ -149,7 +134,7 @@ export function RunbookDetail({ slug }: { slug: string }) {
   if (runbook.isError) {
     if (runbook.error instanceof ApiError && runbook.error.status === 404) {
       return (
-        <EmptyState title="No runbook by that name">
+        <EmptyState heading="h1" title="No runbook by that name">
           <Link href="/console/runbooks" className="underline">
             See all runbooks
           </Link>
@@ -172,23 +157,33 @@ export function RunbookDetail({ slug }: { slug: string }) {
   const rb = runbook.data;
   return (
     <article className="grid max-w-3xl gap-8">
-      <nav aria-label="Breadcrumb" className="text-sm text-muted-foreground">
-        <Link href="/console/runbooks" className="hover:text-foreground">
+      <nav
+        aria-label="Breadcrumb"
+        className="flex min-w-0 items-center text-sm text-muted-foreground"
+      >
+        <Link
+          href="/console/runbooks"
+          className="inline-flex min-h-6 shrink-0 items-center hover:text-foreground"
+        >
           Runbooks
         </Link>
-        <span aria-hidden className="px-2 text-faint">
+        <span aria-hidden className="shrink-0 px-2 text-faint">
           /
         </span>
-        <span aria-current="page" className="font-mono text-xs">
-          {rb.slug}
+        <span aria-current="page" className="min-w-0 truncate">
+          {rb.title}
         </span>
       </nav>
       <PageHeader
         title={rb.title}
-        description={<Text>{rb.when_to_use}</Text>}
-        actions={<Risk risk={rb.risk} />}
+        description={<CodeText>{rb.when_to_use}</CodeText>}
+        actions={<Risk risk={highestRisk(rb)} />}
       >
         <p className="text-sm text-muted-foreground">{covers(rb)}</p>
+        <p className="max-w-prose text-sm text-muted-foreground">
+          Steps marked medium or high risk could make things worse if done wrongly. ARIA flags them
+          in its reports, for a person to approve before anyone acts on them.
+        </p>
       </PageHeader>
       <Steps title="Diagnose" steps={rb.diagnose} />
       <Steps title="Mitigate" steps={rb.mitigate} />
@@ -197,10 +192,17 @@ export function RunbookDetail({ slug }: { slug: string }) {
         <section className="grid gap-2">
           <h2 className="text-xl tracking-heading">Escalate</h2>
           <p className="leading-relaxed text-muted-foreground">
-            <Text>{rb.escalate}</Text>
+            <CodeText>{rb.escalate}</CodeText>
           </p>
         </section>
       ) : null}
+      <Link
+        href="/console/runbooks"
+        className="inline-flex w-fit items-center gap-1.5 text-sm underline underline-offset-4"
+      >
+        <ArrowLeftIcon aria-hidden className="size-4" />
+        All runbooks
+      </Link>
     </article>
   );
 }

@@ -73,14 +73,14 @@ export const Opening = () => {
           style={{
             margin: 0,
             ...serif,
-            fontSize: 120,
+            fontSize: 112,
             lineHeight: 1.02,
             letterSpacing: "-0.03em",
-            maxWidth: "11ch",
+            maxWidth: "13ch",
             ...enter(frame, 4, 36),
           }}
         >
-          Incident triage that shows its work.
+          Turn a wall of logs into a report you can check.
         </h1>
         <p
           style={{
@@ -91,8 +91,9 @@ export const Opening = () => {
             ...enter(frame, 18),
           }}
         >
-          ARIA reads the alert and its logs, rates severity with calibrated confidence and drafts a
-          report in which every claim cites its evidence. Nothing is sent until a person approves.
+          ARIA reads an alert&apos;s logs, rates how serious it is, finds what happened before and
+          drafts the report, with every claim citing its log line. Nothing is sent without your
+          approval.
         </p>
         <p style={{ margin: "24px 0 0", fontSize: 24, maxWidth: 700, ...enter(frame, 30) }}>
           A recorded ARIA run.
@@ -227,7 +228,7 @@ export const Opening = () => {
               })}
             </div>
             <span style={{ marginTop: "auto", fontSize: 22, color: color.muted }}>
-              Prediction set: {assessment.set.join(" or ")}
+              Short list: {assessment.set.join(" or ")}
             </span>
           </Card>
           <Card name="Report" at={32}>
@@ -264,31 +265,9 @@ export const Opening = () => {
                 </span>
               ))}
             </span>
-            <span style={{ marginTop: "auto", display: "flex", gap: 10 }}>
-              <span
-                style={{
-                  backgroundColor: color.heading,
-                  color: color.onForest,
-                  borderRadius: 10,
-                  padding: "6px 16px",
-                  fontSize: 22,
-                  fontWeight: 500,
-                }}
-              >
-                Approve
-              </span>
-              <span
-                style={{
-                  backgroundColor: "rgb(34 34 34 / 0.06)",
-                  color: color.heading,
-                  borderRadius: 10,
-                  padding: "6px 16px",
-                  fontSize: 22,
-                  fontWeight: 500,
-                }}
-              >
-                Edit
-              </span>
+            {/* A status, not a button: nobody approves anything in a video. */}
+            <span style={{ marginTop: "auto", fontSize: 22, color: color.muted }}>
+              Waiting for a person to approve
             </span>
           </Card>
         </div>

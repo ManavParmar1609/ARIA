@@ -1,14 +1,29 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 
-import { SeverityBadge } from "@/components/aria/severity";
-import type { Evidence, GuardReport, ParsedBatch, RetrievalResult } from "@/lib/api/types";
-import { isSeverity } from "@/lib/api/types";
-import { percent } from "@/lib/format";
+import type { Evidence, GuardReport, ParsedBatch } from "@/lib/api/types";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useDensity } from "@/lib/density";
+import { evidenceTitle } from "@/lib/evidence-text";
+import { capitalise, minutesWords, percent, plainTemplate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-import { Citations, EvidenceChip, KIND_LABEL, useEvidence } from "./evidence";
+import { DensityToggle } from "./density-toggle";
+import {
+  Citations,
+  EvidenceChip,
+  KIND_LABEL,
+  LongLine,
+  sourceLabel,
+  useEvidence,
+} from "./evidence";
 
 /** All evidence the run collected, filterable by kind. */
 export function EvidenceTable({ evidence, cited }: { evidence: Evidence[]; cited: Set<string> }) {
@@ -20,40 +35,46 @@ export function EvidenceTable({ evidence, cited }: { evidence: Evidence[]; cited
     return [...counts.entries()].sort((a, b) => b[1] - a[1]);
   }, [evidence]);
   const shown = kind === "all" ? evidence : evidence.filter((e) => e.kind === kind);
+  const compact = useDensity() === "compact";
+  const id = useId();
   return (
     <div className="grid gap-4">
-      <div role="group" aria-label="Filter evidence by kind" className="flex flex-wrap gap-1.5">
-        {[["all", evidence.length] as const, ...kinds].map(([k, n]) => (
-          <button
-            key={k}
-            type="button"
-            aria-pressed={kind === k}
-            onClick={() => setKind(k)}
-            className={cn(
-              "h-7 rounded-md border px-2.5 text-xs",
-              kind === k
-                ? "border-primary bg-highlight text-highlight-foreground"
-                : "border-rule text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {k === "all" ? "All" : (KIND_LABEL[k] ?? k)} <span className="tabular">{n}</span>
-          </button>
-        ))}
+      {/* One quiet control instead of a chip per kind: the calm budget allows four badges. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-sm">
+          <label htmlFor={`${id}-kind`} className="text-muted-foreground">
+            Show
+          </label>
+          <Select value={kind} onValueChange={setKind}>
+            <SelectTrigger id={`${id}-kind`} className="h-8 w-auto min-w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[["all", evidence.length] as const, ...kinds].map(([k, n]) => (
+                <SelectItem key={k} value={k}>
+                  {k === "all" ? "All evidence" : capitalise(KIND_LABEL[k] ?? k)} ({n})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <DensityToggle />
       </div>
-      <ul className="grid gap-1.5">
+      <ul className={cn("grid", compact ? "gap-0.5" : "gap-1.5")}>
         {shown.map((e) => (
           <li
             key={e.id}
             className={cn(
-              "grid grid-cols-[3.75rem_1fr] items-baseline gap-3 rounded-sm px-2 py-1.5 text-sm",
+              "grid grid-cols-[3.75rem_1fr] items-baseline gap-3 rounded-sm px-2 text-sm",
+              compact ? "py-0.5" : "py-1.5",
               active === e.id && "bg-highlight",
             )}
           >
             <EvidenceChip id={e.id} />
             <button type="button" onClick={() => pin(e.id)} className="min-w-0 text-left">
-              <span className="block truncate">{e.title}</span>
+              <span className="block truncate">{evidenceTitle(e)}</span>
               <span className="block text-xs text-muted-foreground">
-                {KIND_LABEL[e.kind] ?? e.kind}, from {e.source}
+                {KIND_LABEL[e.kind] ?? e.kind}, from {sourceLabel(e.source)}
                 {cited.has(e.id) ? ", cited in the report" : ""}
               </span>
             </button>
@@ -103,8 +124,12 @@ function Guard({ guard, raw }: { guard: GuardReport; raw: number }) {
         {redactions.length
           ? `Redacted or pseudonymised: ${redactions.map(([k, n]) => redacted(k, n)).join(", ")}.`
           : "Nothing needed redacting."}{" "}
-        {guard.truncated_lines ? `${guard.truncated_lines} over-long lines were truncated. ` : ""}
-        {guard.dropped_lines ? `${guard.dropped_lines} lines beyond the limit were dropped.` : ""}
+        {guard.truncated_lines
+          ? `${guard.truncated_lines.toLocaleString("en")} over-long ${guard.truncated_lines === 1 ? "line was" : "lines were"} shortened. `
+          : ""}
+        {guard.dropped_lines
+          ? `${guard.dropped_lines.toLocaleString("en")} ${guard.dropped_lines === 1 ? "line" : "lines"} beyond the limit ${guard.dropped_lines === 1 ? "was" : "were"} left out.`
+          : ""}
       </p>
       {guard.injections?.length ? (
         <div className="grid gap-2">
@@ -142,22 +167,32 @@ function Guard({ guard, raw }: { guard: GuardReport; raw: number }) {
 /** What the parser made of the logs: templates by weight, and what the guard caught. */
 export function Templates({ batch }: { batch: ParsedBatch }) {
   const f = batch.features;
+  const compact = useDensity() === "compact";
   return (
     <div className="grid gap-5">
       <p className="text-sm text-muted-foreground">
         {f.n_events.toLocaleString("en")} events in {f.n_templates} templates over{" "}
-        {Math.round(f.duration_s / 60)} minutes ({f.events_per_min.toFixed(1)} a minute).{" "}
-        {f.error_events} errors ({percent(f.error_ratio, 1)})
+        {minutesWords(f.duration_s)}
+        {f.duration_s >= 60 ? ` (${f.events_per_min.toFixed(1)} a minute)` : ""}. {f.error_events}{" "}
+        errors ({percent(f.error_ratio, 1)})
         {f.level_counts.WARN ? ` and ${f.level_counts.WARN} warnings` : ""}
-        {f.distinct_nodes ? ` across ${f.distinct_nodes} nodes` : ""}.{" "}
-        {batch.shards > 1 ? `Parsed by ${batch.shards} parsers at once` : "Parsed in one pass"}
+        {f.distinct_nodes
+          ? ` across ${f.distinct_nodes} ${f.distinct_nodes === 1 ? "server" : "servers"}`
+          : ""}
+        . {batch.shards > 1 ? `Parsed by ${batch.shards} parsers at once` : "Parsed in one pass"}
         {batch.template_history ? `, judged against ${batch.template_history} known templates` : ""}
         .
       </p>
-      <ul className="grid gap-2">
+      <DensityToggle className="justify-self-end" />
+      <ul className={cn("grid", compact ? "gap-1" : "gap-2")}>
         {batch.templates.map((t) => (
-          <li key={t.template_id} className="grid gap-1.5 rounded-lg bg-raised p-4">
-            <p className="font-mono text-xs leading-5 break-all">{t.template}</p>
+          <li
+            key={t.template_id}
+            className={cn("grid rounded-lg bg-raised", compact ? "gap-1 px-3 py-2" : "gap-1.5 p-4")}
+          >
+            <p className="font-mono text-xs leading-5 wrap-anywhere">
+              <LongLine text={plainTemplate(t.template)} />
+            </p>
             <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span className="tabular font-medium text-foreground">
                 {t.count.toLocaleString("en")}x
@@ -177,14 +212,20 @@ export function Templates({ batch }: { batch: ParsedBatch }) {
                   {levels.length > 1 ? `${level} ${n.toLocaleString("en")}` : level}
                 </span>
               ))}
-              {t.nodes ? <span>{t.nodes} nodes</span> : null}
+              {t.nodes ? (
+                <span>
+                  {t.nodes} {t.nodes === 1 ? "server" : "servers"}
+                </span>
+              ) : null}
               {t.components.length ? <span>{t.components.join(", ")}</span> : null}
               {t.novel ? (
                 <span className="rounded-xs border border-primary/70 px-1 text-primary">new</span>
               ) : null}
-              {t.error_like ? (
+              {/* Only where no level already says so: an ERROR line needs no second tag (J-m12). */}
+              {t.error_like &&
+              !Object.keys(t.levels).some((l) => /ERR|FATAL|CRIT|SEVERE/.test(l)) ? (
                 <span className="rounded-xs border border-sev1-fg/60 px-1 text-sev1-fg">
-                  error-like
+                  reads like an error
                 </span>
               ) : null}
               <Citations ids={[t.evidence_id]} />
@@ -193,63 +234,6 @@ export function Templates({ batch }: { batch: ParsedBatch }) {
         ))}
       </ul>
       <Guard guard={batch.guard} raw={batch.n_raw_lines} />
-    </div>
-  );
-}
-
-/** Past incidents retrieval found, with how they matched, and each retrieval attempt. */
-export function Similar({ retrieval }: { retrieval: RetrievalResult }) {
-  return (
-    <div className="grid gap-5">
-      {retrieval.incidents.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No similar incident was found in memory.</p>
-      ) : (
-        <ol className="grid gap-2">
-          {retrieval.incidents.map((incident, i) => (
-            <li key={incident.incident_id} className="grid gap-1.5 rounded-lg bg-raised p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="tabular text-xs text-faint">#{i + 1}</span>
-                <SeverityBadge
-                  severity={isSeverity(incident.severity) ? incident.severity : null}
-                  size="sm"
-                />
-                <span className="font-medium">{incident.title}</span>
-                {incident.evidence_id ? <Citations ids={[incident.evidence_id]} /> : null}
-              </div>
-              <p className="text-sm text-muted-foreground">{incident.resolution}</p>
-              <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-faint">
-                <span>failure mode {incident.failure_mode.replaceAll("_", " ")}</span>
-                <span className="tabular">keyword match {incident.lexical_score.toFixed(2)}</span>
-                <span className="tabular">meaning match {incident.dense_score.toFixed(2)}</span>
-                {incident.rerank_score != null ? (
-                  <span className="tabular">rerank {incident.rerank_score.toFixed(2)}</span>
-                ) : null}
-                {incident.components?.length ? (
-                  <span>components {incident.components.slice(0, 3).join(", ")}</span>
-                ) : null}
-                <span>{incident.source === "memory" ? "synthetic memory" : incident.source}</span>
-              </p>
-            </li>
-          ))}
-        </ol>
-      )}
-      {retrieval.attempts.length ? (
-        <div className="grid gap-2">
-          <h3 className="font-sans text-sm font-semibold">Retrieval attempts</h3>
-          <ol className="grid gap-1.5 text-xs">
-            {retrieval.attempts.map((a) => (
-              <li key={a.attempt} className="grid gap-0.5 rounded-sm bg-sunken p-2">
-                <span className="text-muted-foreground">
-                  Attempt {a.attempt}
-                  {a.widened ? " (widened)" : ""}: {a.candidates} candidates, grade{" "}
-                  {a.grade.toFixed(2)}
-                </span>
-                <span className="font-mono break-words">{a.query}</span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      ) : null}
     </div>
   );
 }

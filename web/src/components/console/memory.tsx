@@ -2,9 +2,10 @@
 
 import { LibraryIcon, SearchIcon } from "lucide-react";
 import Link from "next/link";
-import { useDeferredValue, useId, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useDeferredValue, useEffect, useId, useMemo, useState } from "react";
 
-import { SeverityBadge } from "@/components/aria/severity";
+import { SeverityDot } from "@/components/aria/severity";
 import { EmptyState, ErrorState, LoadingRows, PageHeader } from "@/components/console/states";
 import { SearchSpot } from "@/components/illustrations/spots";
 import { Button } from "@/components/ui/button";
@@ -16,9 +17,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useIncidents } from "@/lib/api/hooks";
+import { useIncidents, useSettingsView } from "@/lib/api/hooks";
 import { isSeverity, type IncidentOut } from "@/lib/api/types";
-import { relativeTime, stripSeverity } from "@/lib/format";
+import { failureName } from "@/lib/failure-modes";
+import { capitalise, plainResolution, relativeTime, stripSeverity } from "@/lib/format";
 import { systemName } from "@/lib/systems";
 
 const PAGE = 20;
@@ -32,14 +34,66 @@ function seen(incident: IncidentOut): string {
       : when
         ? `seen ${when}`
         : "";
-  return [systemName(incident.system), count].filter(Boolean).join(", ");
+  return capitalise([systemName(incident.system), count].filter(Boolean).join(", "));
 }
+
+/**
+ * Entries that tell the same story (system, title, fix and source) as one, counting all their
+ * sightings: the seeded library holds the same sample incident more than once.
+ */
+export function oneOfEach(incidents: IncidentOut[]): IncidentOut[] {
+  const seenAs = new Map<string, IncidentOut>();
+  for (const incident of incidents) {
+    const key = [
+      incident.system,
+      stripSeverity(incident.title),
+      incident.resolution,
+      incident.source,
+    ].join("\u0000");
+    const first = seenAs.get(key);
+    if (!first) {
+      seenAs.set(key, incident);
+      continue;
+    }
+    const lasts = [first.last_seen, incident.last_seen].filter((when): when is string => !!when);
+    seenAs.set(key, {
+      ...first,
+      occurrences: Math.max(1, first.occurrences) + Math.max(1, incident.occurrences),
+      last_seen: lasts.sort().at(-1) ?? null,
+    });
+  }
+  return [...seenAs.values()];
+}
+
+// Where a library entry came from, in the words "Seen before" uses on the incident page.
+const SOURCE_WORDS: Record<string, string> = {
+  curated: "built from a sample",
+  memory: "from the library",
+};
 
 /** What ARIA remembers: past incidents it searches when a new one comes in. */
 export function Memory() {
   const id = useId();
-  const [query, setQuery] = useState("");
-  const [system, setSystem] = useState("all");
+  const params = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  // The search lives in the address, so Back, a reload or a shared link finds it again (FL-04).
+  const [query, setQuery] = useState(() => params.get("q") ?? "");
+  const [system, setSystem] = useState(() => params.get("system") ?? "all");
+  useEffect(() => {
+    const later = window.setTimeout(() => {
+      const next = new URLSearchParams(params.toString());
+      if (query.trim()) next.set("q", query.trim());
+      else next.delete("q");
+      if (system !== "all") next.set("system", system);
+      else next.delete("system");
+      const qs = next.toString();
+      if (qs !== params.toString()) {
+        router.replace((qs ? `${pathname}?${qs}` : pathname) as never, { scroll: false });
+      }
+    }, 400);
+    return () => window.clearTimeout(later);
+  }, [query, system, params, pathname, router]);
   const [limit, setLimit] = useState(PAGE);
   const deferred = useDeferredValue(query.trim());
   const searching = deferred.length >= 2;
@@ -48,30 +102,45 @@ export function Memory() {
     system === "all" ? undefined : system,
   );
   const all = useIncidents();
+  // On a shared demo, what a visitor publishes stays theirs: it never joins this library.
+  // Unknown until the settings load: neither sentence is said before then (FL-17).
+  const shared = useSettingsView().data?.visitor_scope;
   const systems = useMemo(
     () => [...new Set((all.data ?? []).map((i) => i.system))].sort(),
     [all.data],
   );
-  const shown = incidents.data ?? [];
+  const shown = useMemo(() => oneOfEach(incidents.data ?? []), [incidents.data]);
   const synthetic = shown.filter((i) => i.synthetic).length;
-  // Tag the rarer kind, so a seeded memory does not repeat "synthetic" on nearly every row.
+  // Tag the rarer kind, so a seeded library does not repeat "from a sample" on nearly every row.
   const tagRuns = synthetic > shown.length / 2;
   const tag = (incident: IncidentOut) =>
-    tagRuns ? (incident.synthetic ? null : "from a run") : incident.synthetic ? "synthetic" : null;
+    tagRuns
+      ? incident.synthetic
+        ? null
+        : "from an approved incident"
+      : incident.synthetic
+        ? "from a sample"
+        : null;
   const kinds =
     synthetic === 0
       ? ""
       : synthetic === shown.length
-        ? "; all are synthetic seed incidents"
+        ? "; all were built from ARIA's samples, not taken from real history"
         : tagRuns
-          ? `; ${shown.length - synthetic} came from published runs, tagged so, and the rest are synthetic seed incidents`
-          : `; ${synthetic} are synthetic seed incidents, tagged so`;
+          ? `; ${shown.length - synthetic} came from approved incidents, tagged so, and the rest were built from samples`
+          : `; ${synthetic} were built from samples, tagged so`;
 
   return (
     <div className="grid gap-6">
       <PageHeader
-        title="Incident memory"
-        description="Past incidents ARIA searches when a new one comes in, by keyword and by meaning. Each published report adds one."
+        title="Incident library"
+        description={`Past incidents ARIA searches when a new one comes in, by keyword and by meaning.${
+          shared === undefined
+            ? ""
+            : shared
+              ? " On this shared demo, the incidents you publish stay yours and don't join it."
+              : " Each published report adds one."
+        }`}
       >
         <div className="flex flex-wrap items-end gap-3">
           <div className="grid min-w-64 flex-1 gap-1.5 md:max-w-md">
@@ -87,7 +156,7 @@ export function Memory() {
                 id={`${id}-q`}
                 type="search"
                 className="pl-9"
-                placeholder="disk, quorum, brute force..."
+                placeholder="For example: disk, quorum, brute force"
                 value={query}
                 onChange={(e) => {
                   setQuery(e.target.value);
@@ -124,25 +193,36 @@ export function Memory() {
       </PageHeader>
 
       {incidents.isPending ? (
-        <LoadingRows rows={6} label="Loading incident memory" />
+        <LoadingRows rows={6} label="Loading the incident library" />
       ) : incidents.isError ? (
         <ErrorState
-          title="Incident memory could not be searched"
+          title="The incident library could not be searched"
           error={incidents.error}
           onRetry={() => void incidents.refetch()}
         />
       ) : !searching && system === "all" && shown.length === 0 ? (
-        <EmptyState icon={LibraryIcon} title="Incident memory is empty">
-          Seed it with <code>aria seed</code>, or publish a report: every approved run is
+        <EmptyState icon={LibraryIcon} title="The incident library is empty">
+          Seed it with <code>aria seed</code>, or publish a report: every approved incident is
           remembered.
         </EmptyState>
       ) : (
         <>
+          {/* While a new search loads, the last results stay on screen; the count waits for the
+              new ones, so it never announces the old list under the new words (RQ-p10). */}
           <p className="text-sm text-muted-foreground" aria-live="polite">
-            {searching
-              ? `The ${shown.length} closest incidents to "${deferred}", by keyword and by meaning, closest first`
-              : `The ${shown.length} most recent incidents`}
-            {kinds}.
+            {incidents.isPlaceholderData
+              ? "Searching…"
+              : `${
+                  searching
+                    ? shown.length === 0
+                      ? `No incident matches "${deferred}"`
+                      : shown.length === 1
+                        ? `The closest incident to "${deferred}", by keyword and by meaning`
+                        : `The ${shown.length} closest incidents to "${deferred}", by keyword and by meaning, closest first`
+                    : shown.length === 1
+                      ? "The most recent incident"
+                      : `The ${shown.length} most recent incidents`
+                }${kinds}.`}
           </p>
           {shown.length === 0 ? (
             <EmptyState
@@ -157,9 +237,8 @@ export function Memory() {
                 <li key={incident.incident_id}>
                   <details className="group rounded-lg bg-raised">
                     <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 [&::-webkit-details-marker]:hidden">
-                      <SeverityBadge
+                      <SeverityDot
                         severity={isSeverity(incident.severity) ? incident.severity : null}
-                        size="sm"
                       />
                       {/* At least 12rem before the date and tag wrap below, so a phone never
                           squeezes the title to a word per line. */}
@@ -168,21 +247,37 @@ export function Memory() {
                       </span>
                       <span className="text-xs text-muted-foreground">{seen(incident)}</span>
                       {tag(incident) ? (
-                        <span className="rounded-xs border border-rule px-1.5 text-xs text-muted-foreground">
-                          {tag(incident)}
-                        </span>
+                        <span className="text-xs text-muted-foreground">{tag(incident)}</span>
                       ) : null}
                     </summary>
                     <div className="grid gap-3 border-t border-rule px-4 py-3 text-sm">
                       <p>{incident.summary}</p>
                       <p>
                         <span className="font-medium">Resolution: </span>
-                        <span className="text-muted-foreground">{incident.resolution}</span>
+                        <span className="text-muted-foreground">
+                          {plainResolution(incident.resolution)}
+                        </span>
                       </p>
                       <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-faint">
-                        <span>failure mode {incident.failure_mode.replaceAll("_", " ")}</span>
-                        <span>source {incident.source}</span>
-                        <span className="font-mono">{incident.incident_id}</span>
+                        <span>{failureName(incident.failure_mode)}</span>
+                        {incident.source === "run" && incident.incident_id.startsWith("inc-") ? (
+                          // An approved incident's entry is named after its run: inc-X came from run-X.
+                          <Link
+                            href={
+                              `/console/runs/run-${encodeURIComponent(incident.incident_id.slice(4))}` as never
+                            }
+                            className="text-foreground underline decoration-control underline-offset-2"
+                          >
+                            from an approved incident: open it
+                          </Link>
+                        ) : (
+                          <>
+                            <span>
+                              {SOURCE_WORDS[incident.source] ?? `source ${incident.source}`}
+                            </span>
+                            <span className="font-mono">{incident.incident_id}</span>
+                          </>
+                        )}
                         {incident.runbook_slug ? (
                           <Link
                             href={
@@ -190,7 +285,7 @@ export function Memory() {
                             }
                             className="text-foreground underline decoration-control underline-offset-2"
                           >
-                            runbook {incident.runbook_slug}
+                            open its runbook
                           </Link>
                         ) : null}
                       </p>

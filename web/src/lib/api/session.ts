@@ -7,4 +7,6 @@ export interface Session {
   name: string | null;
   /** False when this server could not reach the ARIA API at all. */
   reachable: boolean;
+  /** True when the API answered but turned the request away for now (too many at once). */
+  busy?: boolean;
 }

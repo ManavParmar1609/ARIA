@@ -40,6 +40,7 @@ class ProviderKind(StrEnum):
     NVIDIA_NIM = "nvidia_nim"
     AZURE_OPENAI = "azure_openai"
     OPENAI_COMPATIBLE = "openai_compatible"
+    ANTHROPIC = "anthropic"  # Claude, through Anthropic's own SDK
     FAKE = "fake"
     LOCAL = "local"
 
@@ -78,7 +79,16 @@ class ProviderConfig(_Strict):
     stream_always: bool = False
     stall_timeout_s: float | None = Field(default=None, gt=0)
     reasoning_effort: str | None = None  # sent only when set: low | medium | high
+    # Reasoning models (OpenAI's GPT-5 and later) take max_completion_tokens instead of
+    # max_tokens and refuse temperature; their reasoning counts against the reply's limit, so
+    # reasoning_tokens is added to it.
+    max_tokens_field: Literal["max_tokens", "max_completion_tokens"] = "max_tokens"
+    sampling: bool = True
+    reasoning_tokens: int = Field(default=0, ge=0, le=64_000)
     extra_body: dict[str, Any] = Field(default_factory=dict)
+    extra_headers: dict[str, str] = Field(default_factory=dict)
+    # The model list answers anyone, so checking a key needs one tiny request instead (NVIDIA's).
+    public_catalog: bool = False
     timeout_s: float = Field(default=60.0, gt=0)
     max_retries: int = Field(default=2, ge=0, le=6)
     price_input_per_mtok: float | None = Field(default=None, ge=0)
@@ -123,12 +133,43 @@ class ProviderConfig(_Strict):
         return self.allow_no_key or self.azure_ad or self.api_key() is not None
 
 
+class VisitorKeysConfig(_Strict):
+    """Whether a caller may send its own model key, and which providers each kind of key fills.
+
+    ``providers`` maps the name a caller picks (``claude``, ``gemini``, ...) to the providers in
+    this file that its key stands in for. The key arrives with a request (``X-Model-Provider`` and
+    ``X-Model-Key``) and answers only the run or question it came with. Endpoints and models
+    still come from this file, never from the caller.
+    """
+
+    enabled: bool = False
+    providers: dict[str, list[str]] = Field(default_factory=dict)
+
+    def accepted(self) -> list[str]:
+        """The kinds of key a caller may send, or none while the feature is off."""
+        return list(self.providers) if self.enabled else []
+
+
+class SharedAllowanceConfig(_Strict):
+    """How much model work this server's own keys do, per UTC day, for visitors who bring none.
+
+    ``per_visitor`` counts each visitor's model-written runs and answers, ``per_day`` everyone's
+    together; 0 means no limit. Past either, the work runs offline. A visitor's own key never
+    counts.
+    """
+
+    per_visitor: int = Field(default=0, ge=0)
+    per_day: int = Field(default=0, ge=0)
+
+
 class LLMConfig(_Strict):
     providers: dict[str, ProviderConfig]
     routing: dict[str, list[str]] = Field(default_factory=dict)
     embeddings: list[str] = Field(default_factory=lambda: ["local"])
     rerank: list[str] = Field(default_factory=list)
     safety: list[str] = Field(default_factory=list)
+    visitor_keys: VisitorKeysConfig = Field(default_factory=VisitorKeysConfig)
+    shared: SharedAllowanceConfig = Field(default_factory=SharedAllowanceConfig)
 
     @model_validator(mode="after")
     def _chains_reference_known_providers(self) -> LLMConfig:
@@ -140,6 +181,24 @@ class LLMConfig(_Strict):
         if unknown:
             msg = f"routing references unknown providers: {', '.join(unknown)}"
             raise ValueError(msg)
+        for kind, names in self.visitor_keys.providers.items():
+            if not re.fullmatch(r"[a-z][a-z0-9-]{0,23}", kind) or not names:
+                msg = f"visitor_keys: {kind!r} needs a short lower-case name and its providers"
+                raise ValueError(msg)
+            for name in names:
+                # A visitor's key may only replace a key: the endpoint and model stay this file's.
+                cfg = self.providers.get(name)
+                keyed = cfg is not None and cfg.kind in (
+                    ProviderKind.OPENAI_COMPATIBLE,
+                    ProviderKind.NVIDIA_NIM,
+                    ProviderKind.ANTHROPIC,
+                )
+                if not (keyed and cfg and cfg.api_key_names() and cfg.base_url and cfg.chat_model):
+                    msg = (
+                        f"visitor_keys names {name!r}: it must be a provider with an endpoint, "
+                        "a chat model and an API key setting"
+                    )
+                    raise ValueError(msg)
         return self
 
     def chain(self, role: str) -> list[str]:
@@ -270,8 +329,19 @@ class Settings(BaseSettings):
     worker_health_port: int | None = Field(default=None, ge=1, le=65_535)
     require_approval: bool = True
     rate_limit_per_minute: int = Field(default=120, ge=1)
+    # For a shared demo whose console sends every visitor from one address: above 0, a caller
+    # that names its visitor (X-Visitor-Id) gets rate_limit_per_minute of its own, and this caps
+    # each address. 0 keeps one allowance per address.
+    rate_limit_site_per_minute: int = Field(default=0, ge=0)
+    # On a shared demo, the triages one visitor may have waiting or running at once (0: no limit),
+    # so one visitor's pile of pastes cannot hold up everyone else's next triage.
+    max_active_runs_per_visitor: int = Field(default=0, ge=0)
     # Largest request body the API reads; 20,000 lines of 2,000 characters fit with room to spare.
     max_body_bytes: int = Field(default=48 * 1024 * 1024, ge=1024)
+    # For a shared public demo with no API keys: each visitor sees only the incidents they started
+    # (the console sends a private session id as X-Visitor-Id), plus the examples the server was
+    # seeded with, which nobody can change. Callers with an API key still see everything.
+    visitor_scope: bool = False
     public_base_url: str = "http://localhost:8000"
     # Where people open a run (the web console). Messages link there; without it they link to
     # the run in the API.
@@ -306,8 +376,10 @@ class Settings(BaseSettings):
 
 def _interpolate(value: Any) -> Any:
     if isinstance(value, str):
+        # As in the shell, ${NAME:-default} takes the default when NAME is unset or empty, so an
+        # empty passthrough (compose's `NAME: ${NAME:-}`) keeps the default written here.
         return _ENV_REF.sub(
-            lambda m: os.environ.get(m.group("name"), m.group("default") or ""), value
+            lambda m: os.environ.get(m.group("name")) or m.group("default") or "", value
         )
     if isinstance(value, dict):
         return {key: _interpolate(item) for key, item in value.items()}

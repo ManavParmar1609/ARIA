@@ -176,6 +176,61 @@ def test_unknown_system_falls_back_to_generic_parsing() -> None:
     assert rec.ts == datetime(2026, 3, 2, 10, 15, tzinfo=UTC)
 
 
+@pytest.mark.parametrize(
+    ("line", "when", "level", "component", "message"),
+    [
+        # Hadoop's compact time and a thread number before the level: a pasted WARN stays a WARN.
+        (
+            "081109 203807 222 WARN dfs.DataNode$DataXceiver: Got exception while serving",
+            datetime(2008, 11, 9, 20, 38, 7, tzinfo=UTC),
+            "WARN",
+            "dfs.DataNode$DataXceiver",
+            "Got exception while serving",
+        ),
+        # A Java logger's comma before the milliseconds, and a thread before the component.
+        (
+            "2026-10-31 10:00:01,250 ERROR [main] org.app.Server: connection refused",
+            datetime(2026, 10, 31, 10, 0, 1, 250_000, tzinfo=UTC),
+            "ERROR",
+            "org.app.Server",
+            "connection refused",
+        ),
+        (
+            "2026/10/31 10:00:02 INFO worker: started",
+            datetime(2026, 10, 31, 10, 0, 2, tzinfo=UTC),
+            "INFO",
+            "worker",
+            "started",
+        ),
+    ],
+)
+def test_generic_parser_reads_common_timestamps_and_levels(
+    line: str, when: datetime, level: str, component: str, message: str
+) -> None:
+    rec = parse_generic_line("svc", line)
+    assert (rec.ts, rec.level, rec.component, rec.message) == (when, level, component, message)
+
+
+def test_generic_parser_reads_syslog_times_and_keeps_a_lone_bracket_in_the_message() -> None:
+    rec = parse_generic_line("svc", "Oct 31 10:00:01 host sshd[123]: Failed password for root")
+    assert rec.ts is not None
+    assert (rec.ts.month, rec.ts.day, rec.ts.hour, rec.ts.second) == (10, 31, 10, 1)
+    assert rec.message == "host sshd[123]: Failed password for root"
+    # A bracket that does not lead to a component is part of what the line says.
+    tagged = parse_generic_line("svc", "[Controller id=1] Processing automatic rebalance")
+    assert tagged.message == "[Controller id=1] Processing automatic rebalance"
+
+
+def test_generic_parser_names_a_service_with_its_process_id() -> None:
+    """ "orders-svc[884]:" is the service orders-svc: read as the whole message, a paste of many
+    services was blamed on the one service that wrote a plain "name:" prefix."""
+    rec = parse_generic_line("svc", "2026-10-31 09:59:15 ERROR orders-svc[884]: query timed out")
+    assert (rec.level, rec.component, rec.message) == ("ERROR", "orders-svc", "query timed out")
+    # A host before the process is not a component.
+    host = parse_generic_line("svc", "Oct 31 10:00:01 host sshd[123]: Failed password for root")
+    assert host.component is None
+
+
 def test_generic_parser_derives_level_from_message() -> None:
     assert parse_generic_line("svc", "kernel panic - not syncing").level == "FATAL"
     assert parse_generic_line("svc", "connection refused by peer").level == "ERROR"

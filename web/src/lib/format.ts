@@ -44,6 +44,22 @@ export function clockTime(iso: string | null | undefined): string {
   });
 }
 
+/** "00:42": the time of day to the minute, for a sentence ("approved by you at 00:42"). */
+export function shortTime(iso: string | null | undefined): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+/** A log pattern as people read it: each part that varies ("<*>") becomes "…". */
+export const plainTemplate = (template: string): string => template.replaceAll("<*>", "…");
+
+/** How long a stretch of logs spans: "under a minute", "1 minute", "7.7 minutes". */
+export function minutesWords(seconds: number): string {
+  if (seconds < 60) return "under a minute";
+  const minutes = Number((seconds / 60).toFixed(1));
+  return minutes === 1 ? "1 minute" : `${minutes} minutes`;
+}
+
 /** 734 -> "734 ms", 12_400 -> "12.4 s", 193_000 -> "3 min 13 s", 7_260_000 -> "2 h 1 min". */
 export function duration(ms: number | null | undefined): string {
   if (ms == null) return "";
@@ -103,9 +119,38 @@ export function stripSeverity(title: string | null | undefined): string {
   return (title ?? "").replace(/^SEV[1-4]\s*·\s*/, "");
 }
 
+/** A past incident's fix as a person reads it: steps a sample's runbook recorded lose the
+ * runbook's ID ("Followed runbook zookeeper-quorum-loss: ..."), and steps that ended in a full
+ * stop read "first; restart", not "first.; Restart". */
+export function plainResolution(text: string | null | undefined): string {
+  return (text ?? "")
+    .replace(/^Followed runbook \S+:\s*/, "")
+    .replace(/\.;\s*(\S)/g, (_, next: string) => `; ${next.toLowerCase()}`)
+    .replace(/\.\.$/, ".");
+}
+
 const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
 
 /** A count as prose writes it: words below ten ("six benchmarks"), digits from ten on. */
 export function count(n: number): string {
   return (Number.isInteger(n) && WORDS[n]) || n.toLocaleString("en");
+}
+
+/** A reviewer as a person reads them: the name they signed in with, "the operator" for a review
+ * made from the command line (as the seeded examples were), "a reviewer" when nobody signed in. */
+export function reviewerName(reviewer: string | null | undefined): string {
+  if (!reviewer || reviewer === "anonymous") return "a reviewer";
+  return reviewer === "cli" ? "the operator, from the command line" : reviewer;
+}
+
+/** What a reviewer did, in a past-tense phrase: "approve" reads "approved". */
+export function decisionWords(decision: string): string {
+  return (
+    { approve: "approved", reject: "discarded", edit: "edited and approved" }[decision] ?? decision
+  );
+}
+
+/** A phrase with its first letter in capitals, to start a sentence. */
+export function capitalise(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }

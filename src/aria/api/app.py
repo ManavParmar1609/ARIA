@@ -28,8 +28,9 @@ from aria import __version__
 from aria.api.a2a import a2a_routes
 from aria.api.agui import router as agui_router
 from aria.api.jobs import start_background_jobs
+from aria.api.keys import may_use_model
 from aria.api.metrics import Metrics
-from aria.api.routers import catalog, intake, learning, replays, runs, system
+from aria.api.routers import catalog, intake, learning, replays, runs, scenarios, system
 from aria.api.security import AuthMiddleware, BodyLimit, KeyAuth, RateLimiter
 from aria.api.state import AppState
 from aria.api.worker import Worker
@@ -41,6 +42,7 @@ from aria.graph.runner import (
     RunStateError,
     TriageRunner,
 )
+from aria.llm.allowance import SharedAllowance
 from aria.mcp.server import build_server
 from aria.observability.logging import configure_logging, get_logger
 from aria.observability.tracing import configure_tracing
@@ -108,6 +110,8 @@ def create_app(
         )
         raise RuntimeError(msg)
     limiter = RateLimiter(settings.rate_limit_per_minute)
+    site = settings.rate_limit_site_per_minute
+    site_limiter = RateLimiter(site) if site else None
     holder: dict[str, AppState] = {}
 
     def current() -> AppState:
@@ -116,7 +120,7 @@ def create_app(
             raise RuntimeError(msg)
         return holder["state"]
 
-    mcp = build_server(provider=lambda: current().services)
+    mcp = build_server(provider=lambda: current().services, mounted=True)
     mcp_app = mcp.streamable_http_app(
         streamable_http_path="/mcp",
         stateless_http=True,
@@ -141,7 +145,9 @@ def create_app(
         metrics = Metrics(svc.engine)
         run.observers.append(metrics.observe)
         worker = Worker(run, concurrency=settings.worker_concurrency)
-        state = AppState(svc, run, worker, auth, limiter, metrics)
+        state = AppState(
+            svc, run, worker, auth, limiter, metrics, SharedAllowance(svc.config.llm.shared)
+        )
         holder["state"] = state
         app.state.aria = state
         if auth.open:
@@ -182,7 +188,7 @@ def create_app(
         redoc_url="/redoc" if docs else None,
         openapi_url="/openapi.json" if docs else None,
     )
-    app.add_middleware(AuthMiddleware, auth=auth, limiter=limiter)
+    app.add_middleware(AuthMiddleware, auth=auth, limiter=limiter, site_limiter=site_limiter)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -199,7 +205,7 @@ def create_app(
     app.add_middleware(BodyLimit, max_bytes=settings.max_body_bytes)
     app.add_middleware(SecurityHeaders)
 
-    for module in (system, runs, catalog, intake, learning, replays):
+    for module in (system, runs, scenarios, catalog, intake, learning, replays):
         app.include_router(module.router)
     app.include_router(replays.runs_router)
     app.include_router(agui_router)
@@ -210,7 +216,12 @@ def create_app(
         return current().worker.gated(job)
 
     card_routes, rpc_routes = a2a_routes(
-        lambda: current().runner, settings, secured=not auth.open, gate=gate
+        lambda: current().runner,
+        settings,
+        secured=not auth.open,
+        gate=gate,
+        # A task brings no visitor key: the server's model within the daily allowance, or none.
+        may_use_model=lambda tag, wanted: may_use_model(current(), None, tag, wanted),
     )
     add_a2a_routes_to_fastapi(app, agent_card_routes=card_routes, jsonrpc_routes=rpc_routes)
 

@@ -10,15 +10,18 @@ from hypothesis import strategies as st
 
 from aria.config import get_app_config
 from aria.contracts.base import Claim, EvidenceKind, Severity
-from aria.contracts.report import IncidentReport, ReviewDecision
+from aria.contracts.report import ActionItem, IncidentReport, ReviewDecision
 from aria.contracts.run import BudgetUsage, RunStatus
 from aria.contracts.severity import SeverityAssessment
 from aria.db import repository as repo
 from aria.db.engine import get_engine, init_db
 from aria.evidence import EvidenceStore
+from aria.graph.cache import BoundedCache
 from aria.graph.state import add_usage, merge_evidence, usage_delta
 from aria.graph.store import SqlStore
 from aria.llm.router import LLMRouter
+from aria.reporting.grounding import validate_report
+from aria.reporting.markdown import render_markdown
 from aria.reporting.review import apply_review
 
 
@@ -138,6 +141,63 @@ def test_approval_keeps_the_report_and_records_the_review() -> None:
     assert "comment: ok" in out.evidence[-1].detail
 
 
+def test_approving_a_severity_aria_was_unsure_of_says_a_person_confirmed_it() -> None:
+    store = EvidenceStore()
+    report, assessment = _report_and_assessment(store)
+    model = store.add(EvidenceKind.MODEL, "Model: SEV2 or SEV3", source="severity.model")
+    report = report.model_copy(
+        update={
+            "actions": [
+                ActionItem(
+                    text="Confirm the severity: the model could not rule out SEV2 or SEV3.",
+                    evidence_ids=[model],
+                ),
+                ActionItem(text="Restart the DataNodes.", evidence_ids=[model]),
+            ],
+            "evidence": store.all(),
+        }
+    )
+    unsure = assessment.model_copy(
+        update={
+            "decided_by": "fallback",
+            "needs_review": True,
+            "prediction_set": [Severity.SEV2, Severity.SEV3],
+        }
+    )
+    out, _ = apply_review(report, unsure, ReviewDecision(decision="approve", reviewer="ana"), store)
+    assert [c.text for c in out.summary] == [
+        "40 errors in the window.",
+        "A reviewer confirmed SEV2.",
+    ]
+    assert out.summary[1].evidence_ids == [out.evidence[-1].id]
+    assert "severity: SEV2 kept" in out.evidence[-1].detail
+    assert [a.text for a in out.actions] == ["Restart the DataNodes."]  # the asked-for step is done
+    assert validate_report(out, evidence=store.all(), expected_severity=Severity.SEV2).ok
+    # Edited but the level kept: confirmed too, and an added step does not bring the old one back.
+    edited, _ = apply_review(
+        report,
+        unsure,
+        ReviewDecision.model_validate(
+            {"decision": "edit", "reviewer": "ana", "edits": {"add_actions": ["Page storage."]}}
+        ),
+        store,
+    )
+    assert "A reviewer confirmed SEV2." in [c.text for c in edited.summary]
+    assert [a.text for a in edited.actions] == ["Restart the DataNodes.", "Page storage."]
+    # No person confirmed anything: approval was off for the run, or the draft was rejected.
+    for decision in (
+        ReviewDecision(decision="approve", reviewer="aria:auto"),
+        ReviewDecision(decision="reject", reviewer="ana"),
+    ):
+        same, _ = apply_review(report, unsure, decision, store)
+        assert (same.summary, same.actions) == (report.summary, report.actions)
+    # A level ARIA settled on its own needs no confirming.
+    sure, _ = apply_review(
+        report, assessment, ReviewDecision(decision="approve", reviewer="ana"), store
+    )
+    assert sure.summary == report.summary
+
+
 def test_reviewer_may_go_below_the_floor_as_an_accountable_human_decision() -> None:
     store = EvidenceStore()
     report, assessment = _report_and_assessment(store)
@@ -156,6 +216,23 @@ def test_reviewer_may_go_below_the_floor_as_an_accountable_human_decision() -> N
     assert out.open_questions == ["Reviewer note: test env"]
 
 
+def test_an_anonymous_reviewer_is_named_plainly_and_their_note_has_its_own_heading() -> None:
+    store = EvidenceStore()
+    report, assessment = _report_and_assessment(store)
+    decision = ReviewDecision.model_validate(
+        {
+            "decision": "edit",
+            "reviewer": "anonymous",
+            "edits": {"severity": "SEV3", "note": "Seen this before"},
+        }
+    )
+    out, _ = apply_review(report, assessment, decision, store)
+    assert out.summary[0].text == "A reviewer assigned SEV3; ARIA's assessment was SEV2."
+    text = render_markdown(out)
+    assert "## Reviewer's note\n- Seen this before" in text
+    assert "## Open questions" not in text
+
+
 def test_a_summary_line_the_reviewer_kept_still_cites_its_evidence() -> None:
     store = EvidenceStore()
     report, assessment = _report_and_assessment(store)
@@ -169,3 +246,31 @@ def test_a_summary_line_the_reviewer_kept_still_cites_its_evidence() -> None:
     out, _ = apply_review(report, assessment, decision, store)
     assert out.summary[0] == report.summary[0]  # kept: still cites the parser's evidence
     assert out.summary[1].evidence_ids == [out.evidence[-1].id]  # new: cites the review
+
+
+def test_the_node_cache_keeps_to_its_budget_and_forgets_expired_entries() -> None:
+    now = [0.0]
+    cache = BoundedCache(max_bytes=3_000, clock=lambda: now[0])
+    shard = ("parse_shard",)
+    value = {"shards": ["x" * 900]}
+    cache.set({(shard, "a"): (value, 60), (shard, "b"): (value, None)})
+    assert cache.get([(shard, "a")]) == {(shard, "a"): value}
+    cache.set({(shard, "c"): (value, None), (shard, "d"): (value, None)})
+    # Past the budget the least recently used goes first: "b", since "a" was just read.
+    assert set(cache.get([(shard, k) for k in "abcd"])) == {
+        (shard, "a"),
+        (shard, "c"),
+        (shard, "d"),
+    }
+    assert cache.size <= 3_000
+    now[0] = 61.0  # "a" has expired: it goes when the cache next writes, read or not
+    cache.set({(shard, "e"): ({"shards": []}, None)})
+    assert (shard, "a") not in cache.get([(shard, "a")])
+    # A value larger than the whole budget is never kept, and nothing is evicted for it.
+    held = cache.size
+    cache.set({(shard, "huge"): ({"shards": ["y" * 5_000]}, None)})
+    assert cache.get([(shard, "huge")]) == {}
+    assert cache.size == held
+    cache.clear([shard])
+    assert cache.size == 0
+    assert cache.get([(shard, "c")]) == {}

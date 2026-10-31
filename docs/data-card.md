@@ -53,10 +53,86 @@ its integrity (see [What is in git](#what-is-in-git-and-what-is-not)).
 | `openstack-faults` | The dessertlab OpenStack fault-injection dataset (Cotroneo et al., ESEC/FSE 2019) at commit `f16a73f8`: 911 runs, each with one bug injected into Nova, Cinder or Neutron, how each ended (failed or not, the check that caught it, and the API error that reported it, if any) and every service's logs | The injected-bugs evaluation: each run's Nova, Cinder, Neutron, Glance and Heat logs from the round with the bug, triaged end to end | Downloaded: a sparse checkout of just those logs, stored gzipped. Keystone's logs, the client's output and the injector's traces are left out, so ARIA cannot read the outcome from them |
 | `cloud-postmortems` | Public post-mortems of AWS, Azure and Google Cloud incidents from 2011 to 2021, structured by Li et al. (ISSRE 2022) with each incident's layered root cause, detection and mitigations, at commit `161e7cc9` | The post-mortem evaluation: past incidents with the same root cause or kind of fix, from each later incident's title and summary of impact | Downloaded: a sparse checkout of the structured collection only |
 | `gaia-logs` | GAIA's companion log data (CloudWise's Generic AIOps Atlas) at commit `238a9e24`: 10,000 lines from each of 14 systems, each labelled with its template, five of them systems ARIA has no format for (ArangoDB, ClickHouse, Kafka, Redis, Tengine) | The parsing evaluation scores the production parser against these labels as well | Downloaded: one zip, checked against the sha256 in the manifest |
+| `loghub2-full` | Loghub-2.0 (Jiang et al., ISSTA 2024), Zenodo [8275861](https://zenodo.org/records/8275861): the whole logs of ten systems (Apache, Hadoop, HealthApp, HPC, Linux, Mac, OpenSSH, OpenStack, Proxifier and Zookeeper), every line labelled with its template | The parsing evaluation scores the production parser on every line of each log, beside the 2k samples it was set up on | Downloaded: ten zips, each checked against the sha256 in the manifest |
+| `loghub2-thunderbird` | Loghub-2.0's stretch of the Thunderbird log (Sandia), with its administrators' alert tags (Oliner and Stearley, DSN 2007), same record | Contiguous, real Thunderbird windows ([below](#contiguous-thunderbird-windows)) | Kept zipped (`extract: false`): the evaluation reads the log inside the zip as it streams, so it never needs the disk space of the extracted log |
+| `logchunks` | LogChunks (Brandt et al., MSR 2020), Zenodo [3632351](https://zenodo.org/records/3632351): 797 failed Travis CI builds from 80 GitHub repositories in 29 languages, each with the chunk of its log a person marked as the reason it failed | The build-failure evaluation ([below](#failed-ci-builds)): each log triaged end to end | Downloaded: one zip, checked against the sha256 in the manifest |
 | `uci-incidents` | The UCI "Incident management process enriched event log" (dataset 498): a ServiceNow audit trail of 141,712 events for 24,918 incidents, with anonymised categorical codes and no free text | The ticket priority and SLA-breach models and their evaluation, and the outcome statistics of similar tickets | Downloaded from a mirror: two public copies of UCI's zip, checked against the sha256 in the manifest (the same CSV is in nine more repositories) |
 | `bipia`, `injecagent`, `cyberseceval-pi`, `tensor-trust`, `giskard-injections`, `jailbreak-llms` | Public prompt-injection benchmarks: BIPIA (Yi et al.), InjecAgent (Zhan et al.), CyberSecEval 2 (Meta), Tensor Trust (Toyer et al.), Giskard's collection and in-the-wild jailbreaks (Shen et al.), each at a pinned commit | Measuring the injection detector on attacks it was never tuned on | Downloaded |
 | `notinject` | NotInject (Li, Liu et al.): benign sentences that use one, two or three words common in injections | Measuring the detector's over-defence | Downloaded |
 | `gitlab-incidents` | GitLab.com's production incidents (public issues in gitlab-com/gl-infra/production, created before October 2026), with the responders' severity, service and root-cause labels | The incident-memory evaluation: similar past incidents from each later incident's title | Downloaded through the issues API. A live source: the download records its snapshot's sha256 and date, and issues edited later can make a fresh download differ |
+
+### Licences and citations
+
+The Loghub datasets ship under this licence:
+
+> The datasets are freely available for research or academic work, subject to the following
+> condition: For any usage or distribution of the loghub datasets, please refer to the loghub
+> repository URL (https://github.com/logpai/loghub) and cite the following loghub paper where
+> applicable.
+
+The paper is J. Zhu, S. He, P. He, J. Liu and M. R. Lyu, "Loghub: A Large Collection of System
+Log Datasets for AI-driven Log Analytics", ISSRE 2023. The full notice ships with the fixtures
+in [`tests/fixtures/loghub/LICENSE`](../tests/fixtures/loghub/LICENSE). The manifest lists the
+paper to cite for each derived source.
+
+The UCI incident log is licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+(DOI [10.24432/C57S4H](https://doi.org/10.24432/C57S4H)). Cite C. Amaral, M. Fantinato,
+H. Reijers and S. Peres, "Enhancing Completion Time Prediction Through Attribute Selection",
+2018.
+
+BIPIA, CyberSecEval 2 (its `CybersecurityBenchmarks` folder), NotInject, Giskard's collection
+and the jailbreak prompts are MIT-licensed. InjecAgent and Tensor Trust state no licence in
+their repositories; ARIA reads them only to evaluate the detector and never redistributes them.
+The manifest lists the paper to cite for each.
+
+The OpenStack fault-injection dataset is licensed AGPL-3.0. ARIA reads it only to evaluate and
+never redistributes it or any part of it. Cite D. Cotroneo, L. De Simone, P. Liguori, R. Natella
+and N. Bidokhti, "How Bad Can a Bug Get? An Empirical Analysis of Software Failures in the
+OpenStack Cloud Computing Platform", ESEC/FSE 2019.
+
+GAIA is licensed GPL-2.0. ARIA reads its companion log data only to evaluate the parser and never
+redistributes it. Cite CloudWise, GAIA (Generic AIOps Atlas), github.com/CloudWise-OpenSource/GAIA-DataSet.
+
+The structured post-mortems state no licence; the write-ups they structure are the clouds' own
+public status pages. ARIA reads them only to evaluate incident memory and never redistributes
+them. Cite X. Li et al., "Going through the Life Cycle of Faults in Clouds: Guidelines on Fault
+Handling", ISSRE 2022.
+
+GitLab.com's production incidents are public issues in
+[gitlab-com/gl-infra/production](https://gitlab.com/gitlab-com/gl-infra/production/-/issues),
+with no licence stated. ARIA reads them through GitLab's issues API only to evaluate incident
+memory, keeps them under `data/raw/`, and never redistributes them.
+
+ARIA's code is MIT-licensed, but the data terms still apply to everything derived from the data.
+That includes the committed severity model and the seeded incident memory, which are built from
+Loghub lines. Check the Loghub terms before any commercial use.
+
+### Sources considered and not used
+
+The search for real, labelled data covered public log, incident, ticket, postmortem and
+prompt-injection collections. These were reachable but left out, or could not be reached:
+
+| Source | Why it is not used |
+|---|---|
+| BPI Challenge 2014 (Rabobank ICT incidents) | Its priority is a fixed function of impact and urgency (every pair maps to one priority) and it has no SLA outcome, so it would only confirm the matrix the UCI log already measures |
+| BPI Challenge 2013 (Volvo IT incidents) | Impact only, no priority, SLA or free text |
+| Nezha (Yu et al., ESEC/FSE 2023) | Reachable and labelled, but about 2 GB of logs from microservices ARIA has no parser or failure modes for; a candidate for a future fault-localisation evaluation |
+| Thunderbird sample (LogLead), splunk attack_data, OTRF Security-Datasets | Lines sampled out of order (no windows), or labels per dataset file rather than per line or window |
+| GitHub, Google Cloud and AWS status-page archives; danluu and Kubernetes postmortem lists | Short public notices or link lists: too little text, or no labels ARIA can be scored against |
+| Spirit, Liberty, HDFS_v2, Eadro | Hosted only on hosts that could not be reached when ARIA's datasets were gathered, and no verifiable copy was found elsewhere |
+
+### Found later, for the next round
+
+Zenodo and Hugging Face became reachable after the first results on this page were produced.
+Loghub-2.0, its Thunderbird log and LogChunks are now in the table above. These are recorded with
+what each would test and why it is not used yet:
+
+| Source | What it holds | Why it is not used yet |
+|---|---|---|
+| Loghub HDFS_v1, Zenodo [8196385](https://zenodo.org/records/8196385), CC BY 4.0 | `HDFS_v1.zip` (186,645,559 bytes): the whole HDFS log, with every block labelled. The manifest pins it as `hdfs-v1` and keeps it zipped | The check for units of work that stop partway runs on overlapping windows of the 100,000-line sample; the whole log needs the same check on contiguous windows first, so blocks that cross a window boundary are still judged |
+| MSDS (Nedelkoski et al., ESOCC 2020), Zenodo [3549604](https://zenodo.org/records/3549604), CC BY 4.0 | Two archives (`sequential_data.zip`, 315 MB, and `concurrent data.zip`, 335 MB) of logs, metrics and traces from an OpenStack testbed with injected faults | Its labels are the times faults were injected, not lines or windows; ARIA already scores fault detection on OpenStack with the dessertlab runs, so this would be a second check of the same kind |
+| RCAEval (Pham et al., 2025), Zenodo [14590730](https://zenodo.org/records/14590730), CC BY 4.0 | 735 failures in three microservice systems (Online Boutique, Sock Shop and Train Ticket), each with its root-cause service: RE1 holds metrics only, RE2 adds logs (8.6 to 26.9 million lines per system) and traces, and RE3 holds code-level faults with logs | The task is naming the service at fault from metrics, logs and traces together. ARIA reads logs only and has no format for these services, and RE2's archives (up to 2.8 GB each) are larger than this environment's disk. RE3, with logs, is the closest fit |
+| ITBench-Lite (IBM Research), Hugging Face `ibm-research/ITBench-Lite`, Apache-2.0 | 65 scenarios: 35 for site reliability (snapshots of a Kubernetes environment during an incident), 15 for cost anomalies and 15 for compliance | Its incident scenarios grade an agent that reads Kubernetes state, alerts, events and traces; ARIA has no tools for those yet. The cost and compliance scenarios are out of ARIA's scope |
 
 ### Licences and citations
 
@@ -175,7 +251,8 @@ In git:
 - Results and recordings derived from the data:
   - [`docs/eval-results.json`](eval-results.json) and [`docs/eval-live.json`](eval-live.json):
     evaluation results.
-  - `web/src/data/demo-run.json`: one recorded offline run on a semi-synthetic scenario.
+  - `web/src/data/demo-run.json`: one recorded run on a semi-synthetic scenario, with a language
+    model doing the investigation, the report and the messages (`"llm": true` in the file).
 
 Not in git (see [`.gitignore`](../.gitignore)):
 
@@ -378,6 +455,28 @@ Every scenario is marked `synthetic=True`. Seeded memory incidents are marked sy
 `source="curated"`. Their time to resolve is left empty, because the scenarios do not record
 how long a fix took.
 
+### The console's samples
+
+The console offers every failure mode as a sample, built on the server by
+`ScenarioBuilder.sample` (`GET /api/v1/scenarios`, `POST /api/v1/scenarios/{id}/runs`):
+
+- **One fixed window.** Each sample uses one seed and an 8-minute window, so it reads the same
+  every time.
+- **Every chosen server shows the failure.** The sample spreads its first lines over each node it
+  names, so the spread its label rests on is the spread the visitor chose. The evaluation's
+  windows leave spread to chance, as before.
+- **Sizes only where they change the rating.** A visitor sees the severity a run gives, not the
+  sample's label, so `aria seed` builds each sample at several server counts and rates and rates
+  each one the way a run without a model does (`src/aria/severity/samples.py`). A sample offers
+  the smallest size, then each size that makes it more serious; a bigger size rated less serious
+  is left out. The result is saved as `models/sample_sizes.json` with a fingerprint of the lines,
+  catalog, rules, model and guardrails it was rated from. When the file is missing or its inputs
+  have changed, the sizes follow the samples' labels until `aria seed` runs again. False alarms
+  get no size.
+- **Plain cards.** Each failure mode's `card` in `config/scenarios.yaml` gives the console a plain
+  title, the technology and a one-line summary. One sample, the SSH brute force, carries a line
+  that tries to talk ARIA out of the incident, which the injection guard quarantines.
+
 ### Seeds and splits
 
 Each split uses its own scenario seeds, so no window appears in two splits.
@@ -427,6 +526,23 @@ ARIA from its lines alone, with the alert tags replaced by `-` before parsing. L
 sample was drawn from this log, so the evaluation reports how many lines carry a message that
 also appears in the sample the scenarios are built from.
 
+### Contiguous Thunderbird windows
+
+Thunderbird's log is read the same way as BGL's, from inside its zip: contiguous 20-minute
+windows, each labelled from its alert tags and rated by ARIA from its lines alone, with the tags
+replaced by `-` before parsing. Its rubric is below. No scenario was labelled with it, and Loghub's
+2k Thunderbird sample holds no alerts, so nothing in training saw a Thunderbird alert.
+
+### Failed CI builds
+
+Each LogChunks build's log is cleaned as a terminal shows it: escape codes are removed, and a line
+rewritten in place (a progress bar) keeps only its last version. The marked chunk is then found in
+the cleaned log: its first line, with its last line close after it. A chunk that cannot be found
+(the label was trimmed or reworded) is counted and left out. ARIA triages each log end to end
+offline; a build counts as found when one of the raw lines ARIA keeps as evidence lies inside the
+chunk. Baselines keep the same number of lines from the same log: the last lines, the last lines
+that look like an error, and lines picked at random.
+
 ## Labels
 
 ARIA uses four levels:
@@ -459,6 +575,17 @@ severity. In a scenario they read the tags of the injected incident lines.
 | SEV2 | At least 1 critical alert; major tags on 8 or more nodes; 100 or more major alerts |
 | SEV3 | At least 1 major alert; 5 or more minor alerts |
 | SEV4 | Everything else |
+
+### Thunderbird windows: the alert-tag rubric
+
+[`config/labeling/thunderbird_alert_impact.yaml`](../config/labeling/thunderbird_alert_impact.yaml)
+maps the seven tags found in Loghub-2.0's Thunderbird log, from what their messages say, and uses
+BGL's window rules above:
+
+- **Critical:** none. No tag in this log stops a node outright, as a kernel panic would.
+- **Major (5 tags):** a file-system journal that aborted, a disk taken offline, a memory device in
+  critical state, a failed drive in an array, and an unexplained hardware interrupt.
+- **Minor (2 tags):** lost timer ticks, and a SCSI controller aborting one task.
 
 ### Other systems: the scenario policy
 

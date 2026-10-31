@@ -38,7 +38,9 @@ The workflow is one `StateGraph` over one state type, in
   only node that interrupts, and nothing in it before `interrupt()` has side effects.
 - Every node shares one retry policy (transient database and network errors) and an error
   handler that ends the run as failed with the reason. Nodes that call models or tools have run
-  and idle timeouts, and `parse_shard` has a cache policy.
+  and idle timeouts, and `parse_shard` has a cache policy. Its cache
+  ([`cache.py`](../../src/aria/graph/cache.py)) holds at most 16 MB, so large pastes cannot grow
+  the API's memory.
 
 ## Alternatives considered
 

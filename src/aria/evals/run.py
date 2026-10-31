@@ -31,6 +31,7 @@ from aria.evals import edge as ed
 from aria.evals import gitlab as gl
 from aria.evals import hadoop as hd
 from aria.evals import injection as inj
+from aria.evals import logchunks as lc
 from aria.evals import openstack as osf
 from aria.evals import parsing as ps
 from aria.evals import pipeline as pl
@@ -120,7 +121,7 @@ async def run(
         "llm": use_llm,
         "data": {
             "synthetic": True,
-            "description": "semi-synthetic scenarios composed from real Loghub sample lines",
+            "description": "samples built from real Loghub log lines, arranged into incidents",
             "test_seeds": list(size.severity_seeds),
             "memory_seeds": list(MEMORY_SEEDS),
             "fixtures": is_fixtures(loghub_dir),
@@ -128,8 +129,11 @@ async def run(
     }
     if suite in ("smoke", "parsing", "all"):
         results["parsing"] = ps.summarize(loghub_dir)
-    if suite in ("parsing", "all"):  # 140,000 lines: too many for the smoke gate
+    if suite in ("parsing", "all"):  # 140,000 and 1.9 million lines: too many for the smoke gate
         results["parsing"]["gaia"] = ps.summarize_gaia()
+        results["parsing"]["loghub2"] = await asyncio.to_thread(
+            ps.summarize_loghub2, workers=workers
+        )
     if suite in ("smoke", "edge", "all"):
         results["edge"] = ed.evaluate(ed.generate())
     if suite in ("edge", "all"):
@@ -152,9 +156,20 @@ async def run(
             else set(),
             workers=workers,
         )
+        tbird_pool = loghub_dir / "Thunderbird" / "Thunderbird_2k.log_structured.csv"
+        results["real"]["thunderbird"] = bg.summarize(
+            engine=SeverityEngine.load(config.severity),
+            known=known_templates(builder, "thunderbird"),
+            pool={r.message for r in iter_structured_csv("thunderbird", tbird_pool)}
+            if tbird_pool.exists()
+            else set(),
+            workers=workers,
+            log=bg.THUNDERBIRD,
+        )
         results["real"]["uci_tickets"] = tk.summarize(Path(config.severity.ticket_model_file))
         results["real"]["hadoop"] = await _hadoop(builder, loghub_dir, size, workers)
         results["real"]["openstack"] = await _openstack(builder, loghub_dir, size, workers)
+        results["real"]["logchunks"] = await _logchunks(builder, loghub_dir, size, workers)
         results["real"]["gitlab"] = gl.summarize()
         results["real"]["postmortems"] = pmx.summarize()
     test = sv.held_out(
@@ -312,6 +327,64 @@ async def _openstack_rows(
                 if sample.exists()
                 else None,
             )
+        finally:
+            await env.aclose()
+
+
+async def _logchunks(
+    builder: ScenarioBuilder,
+    loghub_dir: Path,
+    size: Size,
+    workers: int,
+    *,
+    root: Path = lc.LOGCHUNKS_DIR,
+) -> dict[str, Any]:
+    """LogChunks' failed builds, each triaged end to end offline, shared out like OpenStack's."""
+    builds = lc.read_builds(root)
+    if not builds:
+        return dict(lc.MISSING)
+    located = sum(b.chunk is not None for b in builds)
+    if workers > 1:
+        loop = asyncio.get_running_loop()
+        with ProcessPoolExecutor(max_workers=workers, mp_context=get_context("spawn")) as pool:
+            shares = await asyncio.gather(
+                *(
+                    loop.run_in_executor(
+                        pool,
+                        _logchunks_share,
+                        str(loghub_dir),
+                        i,
+                        workers,
+                        size.memory_per_mode,
+                        str(root),
+                    )
+                    for i in range(workers)
+                )
+            )
+        rows = sorted((row for share in shares for row in share), key=lambda r: r["log"])
+    else:
+        rows = await _logchunks_rows(builder, builds, size.memory_per_mode)
+    return lc.summarize(rows, builds=len(builds), located=located)
+
+
+def _logchunks_share(
+    loghub_dir: str, index: int, workers: int, memory_per_mode: int, root: str
+) -> list[dict[str, Any]]:
+    """One process's share of the builds: every ``workers``-th one, from ``index``."""
+    builder = ScenarioBuilder(LinePools.from_loghub(Path(loghub_dir)))
+    builds = lc.read_builds(Path(root))[index::workers]
+    return asyncio.run(_logchunks_rows(builder, builds, memory_per_mode))
+
+
+async def _logchunks_rows(
+    builder: ScenarioBuilder, builds: Sequence[lc.Build], memory_per_mode: int
+) -> list[dict[str, Any]]:
+    with tempfile.TemporaryDirectory(prefix="aria-eval-logchunks-") as tmp:
+        env = await pl.EvalEnvironment.create(
+            builder, db_path=Path(tmp) / "logchunks.db", memory_per_mode=memory_per_mode
+        )
+        try:
+            return await lc.triage(env, builds)
         finally:
             await env.aclose()
 

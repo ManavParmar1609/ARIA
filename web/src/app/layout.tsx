@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { type ReactNode } from "react";
 
+import { HashLinks } from "@/components/hash-links";
 import { THEME_SCRIPT } from "@/lib/theme-script";
 
 import { geistMono, inter, newsreader } from "./fonts";
@@ -26,10 +27,9 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fffefc" },
-    { media: "(prefers-color-scheme: dark)", color: "#0f1a13" },
-  ],
+  // The page starts light whatever the system prefers, so the browser bar does too; choosing the
+  // dark theme switches it (lib/theme.ts) (SL-p8).
+  themeColor: "#fffefc",
   colorScheme: "light dark",
 };
 
@@ -49,7 +49,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           }}
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <HashLinks />
+      </body>
     </html>
   );
 }

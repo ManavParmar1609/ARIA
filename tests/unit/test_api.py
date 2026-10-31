@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import re
 import socket
 import threading
 import time
@@ -213,6 +214,83 @@ async def test_rate_limit_answers_429_with_retry_after(monkeypatch: pytest.Monke
             limited = await c.get("/api/v1/runs", headers=ANA)
             assert int(limited.headers["retry-after"]) >= 1
             assert (await c.get("/healthz")).status_code == 200  # health is never limited
+
+
+async def test_demo_visitors_each_get_their_own_allowance_under_a_site_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A web console sends every visitor from one address: with a site limit set, each visitor
+    # spends their own bucket, the address's bucket caps them all, and a caller that names no
+    # visitor (or a malformed one) still spends the address's own small bucket.
+    monkeypatch.setenv("ARIA_RATE_LIMIT_PER_MINUTE", "2")
+    monkeypatch.setenv("ARIA_RATE_LIMIT_SITE_PER_MINUTE", "5")
+    monkeypatch.setenv("ARIA_VISITOR_SCOPE", "true")
+    reset_caches()
+    init_db(get_engine())
+    app = create_app()
+    ana, bo, cy = ("visitor-ana-0000000001", "visitor-bo-00000000002", "visitor-cy-00000000003")
+    async with LifespanManager(app) as manager:
+        transport = httpx.ASGITransport(app=manager.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://localhost:8000") as c:
+
+            async def get(visitor: str | None) -> int:
+                headers = {"x-visitor-id": visitor} if visitor else {}
+                return (await c.get("/api/v1/runs", headers=headers)).status_code
+
+            assert [await get(ana) for _ in range(3)] == [200, 200, 429]  # Ana's own bucket
+            assert [await get(bo) for _ in range(2)] == [200, 200]  # Ana's flood spared Bo
+            assert await get(cy) == 200  # the fifth request from this address
+            assert await get(cy) == 429  # the site cap holds for everyone here
+            assert await get(None) == 200  # no visitor named: the address's own bucket
+            assert await get("bad id") == 422  # spent the address's bucket, then refused
+            assert await get(None) == 429
+
+
+async def test_a_visitor_waits_for_a_triage_before_queueing_more(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """On a shared demo one visitor's pile of triages must not hold up everyone else's."""
+    monkeypatch.setenv("ARIA_VISITOR_SCOPE", "true")
+    monkeypatch.setenv("ARIA_MAX_ACTIVE_RUNS_PER_VISITOR", "2")
+    monkeypatch.setenv("ARIA_WORKER_MODE", "external")  # nothing claims them: they stay queued
+    reset_caches()
+    builder = await _seed()
+    lines = builder.build("bgl.kernel_panic", seed=8, nodes=4, duration_min=6).lines
+    app = create_app()
+    ana, bo = "visitor-ana-0000000001", "visitor-bo-00000000002"
+    async with LifespanManager(app) as manager:
+        transport = httpx.ASGITransport(app=manager.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://localhost:8000") as c:
+
+            async def start(visitor: str) -> httpx.Response:
+                body = {"system": "bgl", "logs": lines}
+                return await c.post("/api/v1/runs", json=body, headers={"x-visitor-id": visitor})
+
+            assert [(await start(ana)).status_code for _ in range(2)] == [202, 202]
+            third = await start(ana)
+            assert third.status_code == 429
+            assert third.json()["detail"].startswith("You already have 2 triages queued")
+            # Triage in chat is held to the same share of the queue.
+            chat = {
+                "threadId": "ana-chat-1",
+                "runId": "ui-1",
+                "messages": [{"id": "u1", "role": "user", "content": "\n".join(lines)}],
+                "forwardedProps": {"system": "bgl"},
+            }
+            answer = await c.post("/agui", json=chat, headers={"x-visitor-id": ana})
+            events = [
+                json.loads(line[5:])
+                for line in answer.text.replace("\r\n", "\n").splitlines()
+                if line.startswith("data:")
+            ]
+            assert (events[-1]["type"], events[-1]["code"]) == ("RUN_ERROR", "too_many_active")
+            assert events[-1]["message"].startswith("You already have 2 triages queued")
+            assert (await start(bo)).status_code == 202  # Ana's queue does not stop Bo
+            # Starts that arrive together, from several tabs, take turns: they cannot all pass
+            # the count before any of them is recorded.
+            cy = "visitor-cy-00000000003"
+            together = await asyncio.gather(*(start(cy) for _ in range(5)))
+            assert sorted(r.status_code for r in together) == [202, 202, 429, 429, 429]
 
 
 def test_the_rate_limiter_forgets_idle_callers_without_changing_an_answer() -> None:
@@ -540,7 +618,8 @@ async def test_a_real_incident_replays_as_an_ordinary_run(api: Api) -> None:
     run_id = created.json()["run_id"]
     detail = await wait_for(api, run_id, "awaiting_review", timeout_s=120)
     assert detail["trigger"] == "replay"
-    assert detail["title"].endswith("HDFS blocks stopping partway")
+    # The run keeps the incident's name, the one its card showed.
+    assert detail["title"] == incident["title"]
     values = (await api.client.get(f"/api/v1/runs/{run_id}/state")).json()["values"]
     assert values["request"]["synthetic"] is False
     assert values["batch"]["features"]["broken_flows"] >= 3
@@ -889,11 +968,107 @@ async def test_ask_cites_run_evidence(api: Api, monkeypatch: pytest.MonkeyPatch)
     assert memory["evidence"]
     assert any("openssh" in e["title"] for e in memory["evidence"])
     # Without a model the answer still reads as one: the incident and how it was fixed.
-    assert "was resolved this way" in memory["answer"][0]["text"]
+    assert re.search(
+        r"(was resolved this way|were resolved the same way): ", memory["answer"][0]["text"]
+    )
     nothing = (await api.client.post("/api/v1/ask", json={"question": "zzzqqq wwwxxx"})).json()
     assert nothing["insufficient_evidence"] is True
     missing = await api.client.post("/api/v1/ask", json={"question": "why?", "run_id": "run-nope"})
     assert missing.status_code == 404
+
+
+async def test_ask_cites_each_kind_of_past_incident_once(api: Api) -> None:
+    """The library keeps several sightings of an incident; an answer names it once."""
+    runbooks = load_runbooks(Path("runbooks"))
+    again = [
+        incident_from_scenario(
+            api.builder.build(
+                "openssh.bruteforce", seed=seed, nodes=nodes, duration_min=5, incident_per_min=6
+            ),
+            runbooks,
+        )
+        for seed, nodes in ((11, 5), (12, 12))
+    ]
+    await api.state.services.memory.bulk_insert(again)
+    asked = await api.client.post("/api/v1/ask", json={"question": "brute force ssh logins"})
+    past = [e for e in asked.json()["evidence"] if e["title"].startswith("Past incident")]
+    assert sum("openssh" in e["title"] for e in past) == 1
+
+
+async def test_ask_names_runbooks_and_says_it_cannot_see_systems_now(api: Api) -> None:
+    library = await api.client.post(
+        "/api/v1/ask", json={"question": "Which runbook covers kernel panics?"}
+    )
+    titles = [e["title"] for e in library.json()["evidence"]]
+    assert any(title.startswith("Runbook ") and "Kernel panic" in title for title in titles)
+    now = (
+        await api.client.post("/api/v1/ask", json={"question": "Is the quorum loss still going?"})
+    ).json()
+    assert now["answer"] == []
+    assert now["notes"][0].startswith("ARIA can't see your systems as they are now.")
+
+
+async def test_past_the_daily_allowance_the_sites_model_steps_aside(
+    api: Api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The server's own key does a visitor's work while their share lasts; then work runs
+    offline, and the settings say how much is left."""
+    from aria.config import SharedAllowanceConfig
+    from aria.llm.allowance import SharedAllowance
+
+    api.state.allowance = SharedAllowance(SharedAllowanceConfig(per_visitor=1, per_day=5))
+    monkeypatch.setattr(api.state.services.router, "has_real_llm", lambda role: True)
+    settings = (await api.client.get("/api/v1/settings")).json()
+    assert settings["shared_model"] == {"left": 1, "per_visitor": 1, "per_day": 5}
+    body = {"system": "bgl", "logs": logs(api), "options": {"investigate": False}}
+    ids = [(await api.client.post("/api/v1/runs", json=body)).json()["run_id"] for _ in range(2)]
+    used = [
+        repo.get_run(api.state.services.engine, run_id)["request"]["options"]["use_llm"]
+        for run_id in ids
+    ]
+    assert used == [True, False]
+    left = (await api.client.get("/api/v1/settings")).json()["shared_model"]["left"]
+    assert left == 0
+    asked = await api.client.post("/api/v1/ask", json={"question": "brute force ssh logins"})
+    assert asked.json()["answered_by"] == "retrieval"  # the answer is offline too
+    for run_id in ids:
+        await wait_for(api, run_id, "awaiting_review")
+
+
+async def test_alerts_and_agent_tasks_count_against_the_daily_allowance(
+    api: Api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An alert or an A2A task brings no visitor key: it may use the server's model only within
+    the daily allowance, like a visitor's own run, and runs offline past it."""
+    from aria.config import SharedAllowanceConfig
+    from aria.llm.allowance import SharedAllowance
+
+    api.state.allowance = SharedAllowance(SharedAllowanceConfig(per_visitor=1, per_day=5))
+    monkeypatch.setattr(api.state.services.router, "has_real_llm", lambda role: True)
+    accepted = [
+        (await api.client.post("/api/v1/alerts", json=[alert])).json()
+        for alert in (
+            {"name": "DiskFull", "fingerprint": "d1", "labels": {"job": "x"}},
+            {"name": "NodeDown", "fingerprint": "n1", "labels": {"job": "y"}},
+        )
+    ]
+    engine = api.state.services.engine
+    used = [repo.get_run(engine, a["run_id"])["request"]["options"]["use_llm"] for a in accepted]
+    assert used == [True, False]
+    message = {
+        "messageId": "m1",
+        "role": "ROLE_USER",
+        "parts": [{"text": "\n".join(logs(api))}],
+        "metadata": {"system": "bgl"},
+    }
+    rpc = {"jsonrpc": "2.0", "id": 1, "method": "SendMessage", "params": {"message": message}}
+    headers = {**ANA, "A2A-Version": "1.0"}
+    task = (await api.client.post("/a2a", json=rpc, headers=headers)).json()["result"]["task"]
+    run = repo.get_run(engine, f"a2a-{task['id']}")
+    assert run is not None
+    assert run["request"]["options"]["use_llm"] is False
+    for a in accepted:
+        await wait_for(api, a["run_id"], "awaiting_review")
 
 
 async def test_asking_about_a_queued_run_says_it_is_not_ready(api: Api) -> None:
@@ -904,6 +1079,16 @@ async def test_asking_about_a_queued_run_says_it_is_not_ready(api: Api) -> None:
     )
     assert queued.status_code == 409  # it exists; it has no evidence yet
     assert "queued" in queued.json()["detail"]
+
+
+async def test_a_queued_run_says_how_many_triages_are_ahead_of_it(api: Api) -> None:
+    engine = api.state.services.engine
+    request = TriageRequest(system="bgl", logs=["x"]).model_dump(mode="json")
+    for run_id in ("run-first", "run-second"):
+        repo.create_run(engine, run_id, request=request, system="bgl")
+    first = (await api.client.get("/api/v1/runs/run-first")).json()
+    second = (await api.client.get("/api/v1/runs/run-second")).json()
+    assert (first["ahead"], second["ahead"]) == (0, 1)
 
 
 async def test_catalog_lists_incidents_and_runbooks(api: Api) -> None:
@@ -1551,6 +1736,30 @@ async def test_a_stream_follows_a_run_another_process_drives_to_its_end(api: Api
     # A reconnect with Last-Event-ID gets only what came after it, and ends at the finish.
     resumed = await _collect(run_events(runner, queued, after=0, poll_s=0.01, max_s=5))
     assert [m["event"] for m in resumed] == ["node_started", "run_finished"]
+    await runner.delete(queued)
+
+
+async def test_a_stream_on_a_run_waiting_for_review_checks_for_news_less_often(
+    api: Api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Nothing happens to a paused run until a person decides, so an open incident page should
+    # not query the database every second for an hour.
+    from aria.api import sse
+
+    runner, engine = api.state.runner, api.state.services.engine
+    queued = runner.submit(TriageRequest(system="bgl", logs=logs(api)))  # never executed here
+    repo.update_run(engine, queued, status=RunStatus.AWAITING_REVIEW)
+    await asyncio.to_thread(repo.append_event, engine, queued, "interrupt")
+    reads = [0]
+    listed = repo.list_events
+
+    def counted(*args: Any, **kwargs: Any) -> Any:
+        reads[0] += 1
+        return listed(*args, **kwargs)
+
+    monkeypatch.setattr(sse.repo, "list_events", counted)
+    await _collect(sse.run_events(runner, queued, poll_s=0.02, max_s=0.6))
+    assert reads[0] <= 5  # the first read, then one every 0.2 s rather than every 0.02 s
     await runner.delete(queued)
 
 

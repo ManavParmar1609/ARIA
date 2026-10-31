@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState, type CSSProperties } from "react";
 
 import { SeverityScale, TagStrip } from "@/components/aria/severity";
+import { decisionPhrase } from "@/lib/decision";
 import { useWideMotion } from "@/lib/motion";
 import type { Replay } from "@/lib/site-data";
 import { cx } from "@/lib/cx";
@@ -17,13 +18,6 @@ const KIND_LABEL: Record<string, string> = {
   runbook: "runbook",
   tool: "tool call",
   hypothesis: "hypothesis",
-};
-
-const DECIDED: Record<string, string> = {
-  rules: "Rules decided it.",
-  model: "The calibrated model decided it.",
-  fallback: "Too uncertain to decide alone, so a person confirms.",
-  llm: "The LLM chose within the model's prediction set.",
 };
 
 /**
@@ -46,6 +40,8 @@ export function TriageReplay({ data }: { data: Replay }) {
     return order;
   }, [lit, data.lines]);
   const evidence = active ? data.evidence[active] : undefined;
+  // The first line the evidence lights, quoted under the tag on a phone, where the log is far up.
+  const firstLit = data.lines.find((line) => lit.has(line.lineNo));
   const p = Math.round((data.probabilities[data.severity] ?? 0) * 100);
   const firstShown = data.lines[0]?.lineNo ?? 1;
 
@@ -57,15 +53,21 @@ export function TriageReplay({ data }: { data: Replay }) {
     gsap
       .timeline({
         defaults: { ease: "power3.out" },
-        scrollTrigger: { trigger: root.current, start: "top 75%", once: true },
+        // Starts as the example enters the screen and is done in about a second and a half, so
+        // a visitor scrolling past never meets an empty card (SL-m6).
+        scrollTrigger: { trigger: root.current, start: "top 92%", once: true },
       })
-      .fromTo("[data-anim=line]", { autoAlpha: 0, y: 6 }, { ...show, duration: 0.3, stagger: 0.05 })
-      .fromTo("[data-anim=flag]", { autoAlpha: 0, x: -8 }, { ...show, duration: 0.35 }, "-=0.05")
+      .fromTo(
+        "[data-anim=line]",
+        { autoAlpha: 0, y: 6 },
+        { ...show, duration: 0.25, stagger: 0.03 },
+      )
+      .fromTo("[data-anim=flag]", { autoAlpha: 0, x: -8 }, { ...show, duration: 0.3 }, "-=0.1")
       .fromTo(
         "[data-tag] [data-bar]",
         { scaleY: 0 },
-        { scaleY: 1, transformOrigin: "bottom", duration: 0.6, stagger: 0.07 },
-        "-=0.35",
+        { scaleY: 1, transformOrigin: "bottom", duration: 0.45, stagger: 0.05 },
+        "-=0.3",
       )
       // the severity lands like a rubber stamp (it scales and turns but never fades, so its label
       // keeps its contrast), then the prediction-set bracket draws across
@@ -85,10 +87,10 @@ export function TriageReplay({ data }: { data: Replay }) {
       .fromTo(
         "[data-anim=claim]",
         { autoAlpha: 0, y: 8 },
-        { ...show, duration: 0.4, stagger: 0.09 },
+        { ...show, duration: 0.3, stagger: 0.06 },
         "-=0.3",
       )
-      .fromTo("[data-anim=status]", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.4 })
+      .fromTo("[data-anim=status]", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.3 })
       // the waiting dot pulses three times as the status appears, then rests
       .to("[data-pulse]", {
         opacity: 0.35,
@@ -140,7 +142,8 @@ export function TriageReplay({ data }: { data: Replay }) {
         <div className="flex items-baseline justify-between gap-4 border-b border-rule px-5 py-3 text-xs text-muted-foreground">
           <span className="font-mono">hdfs.log</span>
           <span className="tabular">
-            lines {firstShown} to {firstShown + 8} and {data.lines.at(-1)?.lineNo} of {data.nLines}
+            lines {firstShown} to {firstShown + 8} and {data.lines.at(-1)?.lineNo} of{" "}
+            {data.fileLines}
           </span>
         </div>
         <ol
@@ -184,7 +187,7 @@ export function TriageReplay({ data }: { data: Replay }) {
                   </span>
                   <span
                     className={cx(
-                      "break-all sm:truncate",
+                      "wrap-anywhere sm:truncate",
                       line.quarantined && "line-through decoration-danger/70",
                     )}
                   >
@@ -213,12 +216,12 @@ export function TriageReplay({ data }: { data: Replay }) {
               <span className="font-mono text-foreground">{evidence.id}</span>{" "}
               <span>({KIND_LABEL[evidence.kind] ?? evidence.kind})</span>{" "}
               <span className="text-foreground">{evidence.title}</span>
-              {evidence.lines.length > 1 ? (
+              {evidence.lines.length > 1 && evidence.kind !== "template" ? (
                 <span> {evidence.lines.length} lines in this window carry it.</span>
               ) : null}
             </>
           ) : (
-            "Point at a citation on the tag to see the evidence behind its claim."
+            "The lines behind a citation appear here when you point at or tap it."
           )}
         </p>
       </div>
@@ -227,9 +230,10 @@ export function TriageReplay({ data }: { data: Replay }) {
       <article
         data-tag
         aria-label={`Triage tag: ${data.severity}, ${data.title}`}
-        className="flex overflow-hidden rounded-lg bg-raised"
+        className="flex flex-col overflow-hidden rounded-lg bg-raised sm:flex-row"
       >
-        <TagStrip severity={data.severity} className="w-12 sm:w-14" />
+        {/* On a phone the stamp sits above the text, so the text keeps the card's full width. */}
+        <TagStrip severity={data.severity} className="mx-5 mt-5 w-12 sm:m-3 sm:w-14" />
         <div className="min-w-0 flex-1 p-5 sm:p-6">
           <h3 className="text-xl leading-snug tracking-heading">{data.title}</h3>
           <p className="mt-0.5 text-sm text-muted-foreground">
@@ -246,7 +250,14 @@ export function TriageReplay({ data }: { data: Replay }) {
               <span className="font-medium">
                 {data.severity}, {p}% likely.
               </span>{" "}
-              <span className="text-muted-foreground">{DECIDED[data.decidedBy] ?? ""}</span>
+              <span className="text-muted-foreground">
+                {decisionPhrase({
+                  severity: data.severity,
+                  decided_by: data.decidedBy,
+                  prediction_set: data.predictionSet,
+                  set_empty: data.setEmpty,
+                })}
+              </span>
             </p>
           </div>
           <h4 className="eyebrow mt-5 border-t border-rule pt-5 text-muted-foreground">
@@ -261,9 +272,14 @@ export function TriageReplay({ data }: { data: Replay }) {
               >
                 <span aria-hidden className="mt-2.5 block size-1.5 rounded-full bg-foreground/70" />
                 <span className="wrap-anywhere">
-                  {claim.text}{" "}
-                  <span className="inline-flex flex-wrap gap-1 align-baseline">
-                    {claim.evidence.slice(0, 3).map(chip)}
+                  {claim.text} {/* Two sources per claim, then a count, as on the incident page. */}
+                  <span className="inline-flex flex-wrap items-baseline gap-1 align-baseline">
+                    {claim.evidence.slice(0, 2).map(chip)}
+                    {claim.evidence.length > 2 ? (
+                      <span className="text-xs text-muted-foreground">
+                        +{claim.evidence.length - 2}
+                      </span>
+                    ) : null}
                   </span>
                 </span>
               </li>
@@ -278,6 +294,11 @@ export function TriageReplay({ data }: { data: Replay }) {
             >
               <span className="font-mono text-foreground">{evidence.id}</span>{" "}
               <span className="text-foreground">{evidence.title}</span>
+              {firstLit ? (
+                <span className="mt-1 block font-mono text-xs break-all">
+                  Line {firstLit.lineNo}: {firstLit.text}
+                </span>
+              ) : null}
             </p>
           ) : null}
           <div
@@ -293,7 +314,7 @@ export function TriageReplay({ data }: { data: Replay }) {
               Waiting for a person to approve
             </span>
             <span className="tabular text-xs text-muted-foreground">
-              ready for review {(data.timeToReviewMs / 1000).toFixed(1)} s after the logs arrived
+              Ready for review {(data.timeToReviewMs / 1000).toFixed(1)} s after the logs arrived
             </span>
           </div>
         </div>

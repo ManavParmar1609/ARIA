@@ -3,9 +3,9 @@
 import {
   BookOpenIcon,
   CompassIcon,
+  PlugIcon,
   CornerDownLeftIcon,
   FlaskConicalIcon,
-  GaugeIcon,
   HomeIcon,
   InboxIcon,
   KeyboardIcon,
@@ -18,6 +18,7 @@ import {
   PlusIcon,
   SearchIcon,
   SettingsIcon,
+  SparklesIcon,
   SunIcon,
   TextQuoteIcon,
   UserRoundCheckIcon,
@@ -42,14 +43,20 @@ import { runTitle } from "@/components/console/run-row";
 import { STATUS_LABEL } from "@/components/console/status";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { useCreateRun, useRuns, useSession, useSignOut } from "@/lib/api/hooks";
+import {
+  useRunbooks,
+  useRuns,
+  useScenarios,
+  useSession,
+  useSignOut,
+  useStartSample,
+} from "@/lib/api/hooks";
 import { isSeverity } from "@/lib/api/types";
 import { GLOSSARY } from "@/lib/glossary";
 import { GO_KEYS, isTypingTarget, setShortcutsEnabled, useShortcutsEnabled } from "@/lib/shortcuts";
 import { systemName } from "@/lib/systems";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
-import type sampleData from "@/data/samples.json";
 
 interface Commands {
   openPalette: () => void;
@@ -63,8 +70,8 @@ export function useCommands(): Commands {
   return useContext(CommandsContext);
 }
 
-type Group = "Pages" | "Incidents" | "Samples" | "Words" | "Actions";
-const GROUPS: Group[] = ["Pages", "Incidents", "Samples", "Words", "Actions"];
+type Group = "Pages" | "Incidents" | "Samples" | "Runbooks" | "Words" | "Actions";
+const GROUPS: Group[] = ["Pages", "Incidents", "Samples", "Runbooks", "Words", "Actions"];
 
 interface Item {
   id: string;
@@ -82,18 +89,18 @@ interface Item {
 const PAGES: { href: string; label: string; hint: string; icon: LucideIcon; keywords?: string }[] =
   [
     {
-      href: "/console",
-      label: "Overview",
-      hint: "What is waiting and how ARIA is doing",
-      icon: GaugeIcon,
-      keywords: "home dashboard",
+      href: "/console/how-it-works",
+      label: "How ARIA works",
+      hint: "What ARIA does, a real incident from start to finish, the four steps and questions",
+      icon: SparklesIcon,
+      keywords: "explain example steps faq questions about overview",
     },
     {
       href: "/console/runs",
       label: "Incidents",
-      hint: "Every triage run, newest first",
+      hint: "Every incident ARIA has triaged, newest first",
       icon: InboxIcon,
-      keywords: "runs queue list",
+      keywords: "run runs queue list triaged",
     },
     {
       href: "/console/runs?status=awaiting_review",
@@ -112,16 +119,16 @@ const PAGES: { href: string; label: string; hint: string; icon: LucideIcon; keyw
     {
       href: "/console/ask",
       label: "Ask ARIA",
-      hint: "Questions about past incidents and runbooks",
+      hint: "Questions about an incident, past incidents and runbooks",
       icon: MessageSquareTextIcon,
-      keywords: "chat question agui",
+      keywords: "question answer sources",
     },
     {
       href: "/console/memory",
-      label: "Incident memory",
+      label: "Incident library",
       hint: "Search past incidents by meaning",
       icon: LibraryIcon,
-      keywords: "search history similar",
+      keywords: "memory search history similar past",
     },
     {
       href: "/console/runbooks",
@@ -132,24 +139,32 @@ const PAGES: { href: string; label: string; hint: string; icon: LucideIcon; keyw
     },
     {
       href: "/console/evals",
-      label: "Evaluation",
-      hint: "How well ARIA does, with caveats",
+      label: "Test results",
+      hint: "How ARIA was tested, and where it falls short",
       icon: FlaskConicalIcon,
-      keywords: "accuracy metrics results",
+      keywords: "evaluation accuracy metrics results",
     },
     {
       href: "/console/guide",
-      label: "How to use ARIA",
-      hint: "Samples, how to read a run, the words",
+      label: "Guide",
+      hint: "First steps, how to read an incident, the words",
       icon: CompassIcon,
-      keywords: "help guide tour",
+      keywords: "help how to use tour",
+    },
+    {
+      href: "/console/guide/connect",
+      label: "Connect ARIA to your systems",
+      hint: "Alerts, the command line, other agents, message channels, triage in chat",
+      icon: PlugIcon,
+      keywords: "alertmanager grafana webhook a2a agui chat mcp cli slack teams integrations",
     },
     {
       href: "/console/settings",
       label: "Settings",
-      hint: "Session, theme, model providers",
+      hint: "Your model key, theme and session",
       icon: SettingsIcon,
-      keywords: "preferences providers theme",
+      keywords:
+        "preferences providers theme key keys api model language llm claude anthropic gemini google openai gpt nvidia nim",
     },
     {
       href: "/",
@@ -172,37 +187,36 @@ function score(item: Item, words: string[]): number {
   return words.every((w) => label.includes(w)) ? 2 : 1;
 }
 
-type Samples = typeof sampleData;
-
-function Palette({ onClose, onHelp }: { onClose: () => void; onHelp: () => void }) {
+function Palette({
+  onClose,
+  onLeave,
+  onHelp,
+}: {
+  onClose: () => void;
+  /** Close for a command that opens another page: that page's content takes focus. */
+  onLeave: () => void;
+  onHelp: () => void;
+}) {
   const router = useRouter();
   const runs = useRuns("all", 30);
-  const create = useCreateRun();
+  // The samples the server offers, under the names New triage gives them.
+  const scenarios = useScenarios();
+  const runbooks = useRunbooks();
+  const start = useStartSample();
   const session = useSession();
   const signOut = useSignOut();
   const { setTheme } = useTheme();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
-  // The samples carry whole log files, so they load when the palette opens, not with each page.
-  const [samples, setSamples] = useState<Samples>([]);
-  useEffect(() => {
-    let live = true;
-    void import("@/data/samples.json").then((loaded) => {
-      if (live) setSamples(loaded.default);
-    });
-    return () => {
-      live = false;
-    };
-  }, []);
   const listId = useId();
   const list = useRef<HTMLDivElement>(null);
 
   const go = useCallback(
     (href: string) => {
-      onClose();
+      onLeave();
       router.push(href as never);
     },
-    [onClose, router],
+    [onLeave, router],
   );
 
   const items = useMemo<Item[]>(() => {
@@ -229,33 +243,52 @@ function Palette({ onClose, onHelp }: { onClose: () => void; onHelp: () => void 
         run: () => go(`/console/runs/${encodeURIComponent(run.id)}`),
       });
     }
-    for (const sample of samples) {
+    for (const sample of scenarios.data ?? []) {
       all.push({
         id: `sample:${sample.id}`,
         group: "Samples",
-        label: `Triage a sample: ${sample.label}`,
-        hint: `${systemName(sample.system)}, ${sample.lines.length} lines, synthetic`,
-        keywords: "sample demo try example",
+        label: `Triage a sample: ${sample.title}`,
+        hint: `${sample.technology}${sample.benign ? ", harmless" : ""}`,
+        keywords: `sample demo try example ${systemName(sample.system)} ${sample.summary}`,
         icon: PlayIcon,
         run: () => {
-          onClose();
-          create.mutate(
-            {
-              system: sample.system,
-              logs: sample.lines,
-              synthetic: true,
-              options: { use_llm: true, investigate: true, require_approval: true },
-            },
-            {
-              onSuccess: (accepted) => {
-                toast.success("Triage started", { description: "Following the run live." });
-                router.push(`/console/runs/${encodeURIComponent(accepted.run_id)}` as never);
+          onLeave();
+          // The palette closes at once, so the answer is awaited here rather than in mutate's
+          // own callbacks, which are dropped once the palette is gone. A note bridges the
+          // second before the incident page opens; the page then says the run has started.
+          const note = toast.loading(`Starting "${sample.title}"`);
+          start
+            .mutateAsync({
+              id: sample.id,
+              body: {
+                servers: null,
+                rate: null,
+                options: { use_llm: true, investigate: true, require_approval: true },
               },
-              onError: (error) =>
-                toast.error("The sample could not be started", { description: error.message }),
-            },
-          );
+            })
+            .then((accepted) => {
+              toast.dismiss(note);
+              router.push(`/console/runs/${encodeURIComponent(accepted.run_id)}` as never);
+            })
+            .catch((error: Error) =>
+              toast.error("The sample could not be started", {
+                id: note,
+                description: error.message,
+              }),
+            );
         },
+      });
+    }
+    for (const book of runbooks.data ?? []) {
+      all.push({
+        id: `runbook:${book.slug}`,
+        group: "Runbooks",
+        label: book.title,
+        // The runbook marks log text with backticks; a hint is plain text, so it quotes instead.
+        hint: book.when_to_use.replace(/`([^`]+)`/g, "“$1”"),
+        keywords: `runbook playbook steps fix ${book.slug} ${book.systems.map(systemName).join(" ")}`,
+        icon: BookOpenIcon,
+        run: () => go(`/console/runbooks/${encodeURIComponent(book.slug)}`),
       });
     }
     for (const [key, entry] of Object.entries(GLOSSARY)) {
@@ -329,7 +362,20 @@ function Palette({ onClose, onHelp }: { onClose: () => void; onHelp: () => void 
       });
     }
     return all;
-  }, [runs.data, samples, session.data, go, create, router, onClose, onHelp, setTheme, signOut]);
+  }, [
+    runs.data,
+    scenarios.data,
+    runbooks.data,
+    session.data,
+    go,
+    start,
+    router,
+    onClose,
+    onLeave,
+    onHelp,
+    setTheme,
+    signOut,
+  ]);
 
   const shown = useMemo(() => {
     const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -337,7 +383,7 @@ function Palette({ onClose, onHelp }: { onClose: () => void; onHelp: () => void 
       // Without a query: the pages, a few recent incidents, the samples and the actions.
       let incidents = 0;
       return items.filter((item) => {
-        if (item.group === "Words") return false;
+        if (item.group === "Words" || item.group === "Runbooks") return false;
         if (item.group === "Incidents") return ++incidents <= 5;
         return true;
       });
@@ -376,7 +422,8 @@ function Palette({ onClose, onHelp }: { onClose: () => void; onHelp: () => void 
     }
   };
 
-  let index = -1;
+  // Each result's place in ``shown``, which the list draws in the same order, group by group.
+  const position = new Map(shown.map((item, i) => [item.id, i]));
   return (
     <>
       <div className="flex items-center gap-3 border-b border-rule px-5">
@@ -388,7 +435,7 @@ function Palette({ onClose, onHelp }: { onClose: () => void; onHelp: () => void 
           aria-controls={listId}
           aria-autocomplete="list"
           aria-activedescendant={shown.length ? optionId(activeIndex) : undefined}
-          aria-label="Search pages, incidents, samples, words and actions"
+          aria-label="Search pages, incidents, samples, runbooks, words and actions"
           placeholder="Jump to a page, an incident, a sample…"
           value={query}
           onChange={(event) => {
@@ -402,83 +449,86 @@ function Palette({ onClose, onHelp }: { onClose: () => void; onHelp: () => void 
           Esc
         </kbd>
       </div>
+      {/* Outside the list: a listbox may hold only options and their groups (RQ-m2). */}
+      {shown.length === 0 ? (
+        <p className="px-5 py-8 text-center text-muted-foreground" role="status">
+          Nothing matches “{query}”. Try a page name, an incident, or a word such as “prediction
+          set”.
+        </p>
+      ) : null}
       <div
         ref={list}
         id={listId}
         role="listbox"
         aria-label="Results"
-        className="max-h-[min(60vh,32rem)] overflow-y-auto p-2"
-      >
-        {shown.length === 0 ? (
-          <p className="px-3 py-8 text-center text-muted-foreground" role="status">
-            Nothing matches “{query}”. Try a page name, an incident, or a word such as “prediction
-            set”.
-          </p>
-        ) : (
-          GROUPS.map((group) => {
-            const inGroup = shown.filter((item) => item.group === group);
-            if (inGroup.length === 0) return null;
-            const headingId = `${listId}-${group}`;
-            return (
-              <div key={group} role="group" aria-labelledby={headingId} className="pb-1">
-                <div
-                  id={headingId}
-                  role="presentation"
-                  className="px-3 pt-3 pb-1.5 text-sm font-medium text-muted-foreground"
-                >
-                  {group}
-                </div>
-                {inGroup.map((item) => {
-                  index += 1;
-                  const i = index;
-                  const Icon = item.icon;
-                  const selected = i === activeIndex;
-                  return (
-                    // Keyboard selection goes through the input (aria-activedescendant), as the
-                    // ARIA combobox pattern asks; options take clicks but never focus.
-                    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus
-                    <div
-                      key={item.id}
-                      id={optionId(i)}
-                      role="option"
-                      aria-selected={selected}
-                      onMouseMove={() => setActive(i)}
-                      onClick={() => item.run()}
-                      className={cn(
-                        "flex cursor-pointer items-center gap-3 rounded-md px-3 py-2.5",
-                        selected
-                          ? "bg-panel-keylime text-heading dark:bg-highlight"
-                          : "text-foreground",
-                      )}
-                    >
-                      <Icon aria-hidden className="size-4 shrink-0" strokeWidth={1.75} />
-                      <span className="grid min-w-0 flex-1">
-                        <span className="truncate">{item.label}</span>
-                        {item.hint ? (
-                          <span
-                            className={cn(
-                              "truncate text-sm",
-                              selected ? "text-heading" : "text-muted-foreground",
-                            )}
-                          >
-                            {item.hint}
-                          </span>
-                        ) : null}
-                      </span>
-                      {item.badge}
-                      {selected ? (
-                        <CornerDownLeftIcon aria-hidden className="size-4 shrink-0" />
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })
+        className={cn(
+          "max-h-[min(60vh,32rem)] overflow-y-auto p-2",
+          shown.length === 0 && "hidden",
         )}
+      >
+        {GROUPS.map((group) => {
+          const inGroup = shown.filter((item) => item.group === group);
+          if (inGroup.length === 0) return null;
+          const headingId = `${listId}-${group}`;
+          return (
+            <div key={group} role="group" aria-labelledby={headingId} className="pb-1">
+              <div
+                id={headingId}
+                role="presentation"
+                className="px-3 pt-3 pb-1.5 text-sm font-medium text-muted-foreground"
+              >
+                {group}
+              </div>
+              {inGroup.map((item) => {
+                const i = position.get(item.id) ?? 0;
+                const Icon = item.icon;
+                const selected = i === activeIndex;
+                return (
+                  // Keyboard selection goes through the input (aria-activedescendant), as the
+                  // ARIA combobox pattern asks; options take clicks but never focus.
+                  // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus
+                  <div
+                    key={item.id}
+                    id={optionId(i)}
+                    role="option"
+                    aria-selected={selected}
+                    onMouseMove={() => setActive(i)}
+                    onClick={() => item.run()}
+                    className={cn(
+                      "flex cursor-pointer items-center gap-3 rounded-md px-3 py-2.5",
+                      selected
+                        ? "bg-panel-keylime text-heading dark:bg-highlight"
+                        : "text-foreground",
+                    )}
+                  >
+                    <Icon aria-hidden className="size-4 shrink-0" strokeWidth={1.75} />
+                    <span className="grid min-w-0 flex-1">
+                      <span className="truncate">{item.label}</span>
+                      {item.hint ? (
+                        <span
+                          className={cn(
+                            "truncate text-sm",
+                            selected ? "text-heading" : "text-muted-foreground",
+                          )}
+                        >
+                          {item.hint}
+                        </span>
+                      ) : null}
+                    </span>
+                    {item.badge}
+                    {selected ? (
+                      <CornerDownLeftIcon aria-hidden className="size-4 shrink-0" />
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-rule px-5 py-3 text-sm text-muted-foreground">
-        <span>Arrow keys to move, Enter to open</span>
+        {/* Keys mean nothing on a touch screen, where a tap opens a result. */}
+        <span className="[@media(pointer:coarse)]:hidden">Arrow keys to move, Enter to open</span>
         <button
           type="button"
           onClick={() => {
@@ -514,11 +564,11 @@ function ShortcutsHelp() {
           <Key>⌘</Key>
           <Key>K</Key>
         </dt>
-        <dd className="self-center text-muted-foreground">Open the command palette</dd>
+        <dd className="self-center text-muted-foreground">Open search</dd>
         <dt>
           <Key>/</Key>
         </dt>
-        <dd className="self-center text-muted-foreground">Open the command palette</dd>
+        <dd className="self-center text-muted-foreground">Open search</dd>
         <dt>
           <Key>?</Key>
         </dt>
@@ -563,22 +613,46 @@ export function ConsoleCommands({ children }: { children: ReactNode }) {
   const [palette, setPalette] = useState(false);
   const [help, setHelp] = useState(false);
   const pendingG = useRef(0);
+  // Neither dialog has a button of its own (a shortcut or a search button opens them), so they
+  // remember what had focus and give it back when they close. After a command that opens a page,
+  // the page's content takes focus instead, as it does with nothing focused before.
+  const opener = useRef<HTMLElement | null>(null);
+  const toPage = useRef(false);
+  const remember = useCallback(() => {
+    const active = document.activeElement;
+    opener.current = active instanceof HTMLElement && active !== document.body ? active : null;
+    toPage.current = false;
+  }, []);
+  const showPalette = useCallback(() => {
+    remember();
+    setHelp(false);
+    setPalette(true);
+  }, [remember]);
+  const giveFocusBack = useCallback((event: Event) => {
+    event.preventDefault();
+    const back =
+      !toPage.current && opener.current?.isConnected
+        ? opener.current
+        : document.getElementById("console-main");
+    back?.focus({ preventScroll: true });
+  }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        setHelp(false);
-        setPalette((open) => !open);
+        if (palette) setPalette(false);
+        else showPalette();
         return;
       }
       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
       if (!enabled || palette || help || isTypingTarget(event.target)) return;
       if (event.key === "/") {
         event.preventDefault();
-        setPalette(true);
+        showPalette();
       } else if (event.key === "?") {
         event.preventDefault();
+        remember();
         setHelp(true);
       } else if (event.key === "g") {
         pendingG.current = Date.now();
@@ -593,13 +667,23 @@ export function ConsoleCommands({ children }: { children: ReactNode }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [enabled, palette, help, router]);
+  }, [enabled, palette, help, router, remember, showPalette]);
 
   const commands = useMemo<Commands>(
-    () => ({ openPalette: () => setPalette(true), openHelp: () => setHelp(true) }),
-    [],
+    () => ({
+      openPalette: showPalette,
+      openHelp: () => {
+        remember();
+        setHelp(true);
+      },
+    }),
+    [remember, showPalette],
   );
   const closePalette = useCallback(() => setPalette(false), []);
+  const leavePalette = useCallback(() => {
+    toPage.current = true;
+    setPalette(false);
+  }, []);
   const openHelp = useCallback(() => setHelp(true), []);
 
   return (
@@ -608,18 +692,26 @@ export function ConsoleCommands({ children }: { children: ReactNode }) {
       <Dialog open={palette} onOpenChange={setPalette}>
         <DialogContent
           instant
-          closeLabel="Close the command palette"
+          onCloseAutoFocus={giveFocusBack}
+          closeLabel="Close search"
           className="top-[12vh] max-w-2xl translate-y-0 gap-0 overflow-hidden p-0 [&>button:last-child]:hidden"
         >
-          <DialogTitle className="sr-only">Command palette</DialogTitle>
+          <DialogTitle className="sr-only">Search</DialogTitle>
           <DialogDescription className="sr-only">
-            Type to find a page, an incident, a sample or a word, then press Enter.
+            Type to find a page, an incident, a sample, a runbook or a word, then press Enter.
           </DialogDescription>
-          {palette ? <Palette onClose={closePalette} onHelp={openHelp} /> : null}
+          {palette ? (
+            <Palette onClose={closePalette} onLeave={leavePalette} onHelp={openHelp} />
+          ) : null}
         </DialogContent>
       </Dialog>
       <Dialog open={help} onOpenChange={setHelp}>
-        <DialogContent instant closeLabel="Close the shortcuts" className="max-w-xl">
+        <DialogContent
+          instant
+          onCloseAutoFocus={giveFocusBack}
+          closeLabel="Close the shortcuts"
+          className="max-w-xl"
+        >
           <DialogTitle>Keyboard shortcuts</DialogTitle>
           <DialogDescription>
             Move around the console without the mouse. Shortcuts wait while you type in a field.

@@ -254,6 +254,29 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/model-key/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Model Key
+         * @description Check a visitor's own key before it is used, and keep nothing.
+         *
+         *     The provider lists its models for the key, which costs nothing. Where that list answers
+         *     anyone (NVIDIA's), one tiny request checks the key instead.
+         */
+        post: operations["check_model_key_api_v1_model_key_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/providers": {
         parameters: {
             query?: never;
@@ -476,7 +499,8 @@ export type paths = {
         put?: never;
         /**
          * Fork
-         * @description Branch a new run from a checkpoint, optionally with different run options.
+         * @description Branch a new run from a checkpoint, optionally with different run options. The new run is
+         *     the caller's own, so forking an example is how a visitor gets a copy to change.
          */
         post: operations["fork_api_v1_runs__run_id__fork_post"];
         delete?: never;
@@ -621,6 +645,48 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/scenarios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Scenarios
+         * @description The samples this server can build, by where their logs come from. Each is made of real
+         *     Loghub lines arranged into an incident, and offers a size only where the size changes how
+         *     serious the incident is.
+         */
+        get: operations["list_scenarios_api_v1_scenarios_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scenarios/{scenario_id}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Scenario
+         * @description Build a sample on this server and triage it as a run; follow it on ``links.stream``.
+         */
+        post: operations["run_scenario_api_v1_scenarios__scenario_id__runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings": {
         parameters: {
             query?: never;
@@ -630,7 +696,8 @@ export type paths = {
         };
         /**
          * Settings View
-         * @description Budgets, guardrails, severity, retrieval and routing settings in force. No secrets.
+         * @description Budgets, guardrails, severity, retrieval and routing settings in force, and the caller's
+         *     share today of the server's own model. No secrets.
          */
         get: operations["settings_view_api_v1_settings_get"];
         put?: never;
@@ -802,6 +869,8 @@ export type components = {
             insufficient_evidence: boolean;
             /** Model */
             model?: string | null;
+            /** Notes */
+            notes?: string[];
         };
         AuthenticationInfo: {
             /** @example  */
@@ -1215,6 +1284,20 @@ export type components = {
             task_id?: string;
         };
         /**
+         * ModelKeyCheck
+         * @description What a provider said about a visitor's own key. The key itself is not kept.
+         */
+        ModelKeyCheck: {
+            /** Accepted */
+            accepted: boolean;
+            /** Detail */
+            detail: string;
+            /** Model */
+            model: string;
+            /** Provider */
+            provider: string;
+        };
+        /**
          * @example {
          *       "text": ""
          *     }
@@ -1394,6 +1477,8 @@ export type components = {
         };
         /** RunDetail */
         RunDetail: {
+            /** Ahead */
+            ahead?: number | null;
             /** Alert Group Id */
             alert_group_id?: string | null;
             /** Auditable */
@@ -1424,6 +1509,11 @@ export type components = {
             errors?: {
                 [key: string]: unknown;
             }[];
+            /**
+             * Example
+             * @default false
+             */
+            example?: boolean;
             /** Forked From Checkpoint */
             forked_from_checkpoint?: string | null;
             /** Id */
@@ -1559,6 +1649,11 @@ export type components = {
             decided_by?: string | null;
             /** Error */
             error?: string | null;
+            /**
+             * Example
+             * @default false
+             */
+            example?: boolean;
             /** Forked From Checkpoint */
             forked_from_checkpoint?: string | null;
             /** Id */
@@ -1594,6 +1689,62 @@ export type components = {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * SampleRef
+         * @description The console sample a run's logs were built from, at the sizes chosen (None: no choice).
+         */
+        SampleRef: {
+            /** Id */
+            id: string;
+            /** Rate */
+            rate?: number | null;
+            /** Servers */
+            servers?: number | null;
+        };
+        /**
+         * SampleRunRequest
+         * @description How to build a sample: a size it offers (or its default), and the run's options.
+         */
+        SampleRunRequest: {
+            options?: components["schemas"]["RunOptions"];
+            /** Rate */
+            rate?: number | null;
+            /** Servers */
+            servers?: number | null;
+        };
+        /**
+         * ScenarioOut
+         * @description A sample the console can build: real Loghub lines arranged into an incident.
+         */
+        ScenarioOut: {
+            /** Benign */
+            benign: boolean;
+            /** Headline */
+            headline: boolean;
+            /** Id */
+            id: string;
+            /** Preview */
+            preview?: string[];
+            rate?: components["schemas"]["SizeChoiceOut"] | null;
+            servers?: components["schemas"]["SizeChoiceOut"] | null;
+            /** Source */
+            source: string;
+            /** Source Name */
+            source_name: string;
+            /** Summary */
+            summary: string;
+            /** System */
+            system: string;
+            /** Technology */
+            technology: string;
+            /** Title */
+            title: string;
+            /**
+             * Tricky
+             * @default false
+             */
+            tricky?: boolean;
         };
         SendMessageConfiguration: {
             /**
@@ -1642,6 +1793,8 @@ export type components = {
             investigation: {
                 [key: string]: unknown;
             };
+            /** Max Body Bytes */
+            max_body_bytes?: number | null;
             /** Rate Limit Per Minute */
             rate_limit_per_minute: number;
             /** Require Approval */
@@ -1660,6 +1813,14 @@ export type components = {
             severity: {
                 [key: string]: unknown;
             };
+            shared_model?: components["schemas"]["SharedModelOut"] | null;
+            /** Visitor Keys */
+            visitor_keys?: string[];
+            /**
+             * Visitor Scope
+             * @default false
+             */
+            visitor_scope?: boolean;
             /** Worker Mode */
             worker_mode: string;
         };
@@ -1669,6 +1830,19 @@ export type components = {
          * @enum {string}
          */
         Severity: "SEV1" | "SEV2" | "SEV3" | "SEV4";
+        /**
+         * SharedModelOut
+         * @description This visitor's share today of the server's own model keys (``llm.shared``). None means
+         *     no limit; ``left`` 0 means this visitor's work runs offline until tomorrow (UTC).
+         */
+        SharedModelOut: {
+            /** Left */
+            left?: number | null;
+            /** Per Day */
+            per_day?: number | null;
+            /** Per Visitor */
+            per_visitor?: number | null;
+        };
         /** SimilarIncident */
         SimilarIncident: {
             /** Components */
@@ -1709,6 +1883,30 @@ export type components = {
             system: string;
             /** Title */
             title: string;
+        };
+        /**
+         * SizeChoiceOut
+         * @description A size a visitor may choose for a sample, offered only where it changes the severity.
+         */
+        SizeChoiceOut: {
+            /** Default */
+            default: number;
+            /** Options */
+            options: components["schemas"]["SizeOptionOut"][];
+            /** Question */
+            question: string;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "servers" | "per_minute";
+        };
+        /** SizeOptionOut */
+        SizeOptionOut: {
+            /** Label */
+            label: string;
+            /** Value */
+            value: number;
         };
         SubscribeToTaskRequest: {
             /** @example id */
@@ -1839,6 +2037,7 @@ export type components = {
             options?: components["schemas"]["RunOptions"];
             /** Replay Of */
             replay_of?: string | null;
+            sample?: components["schemas"]["SampleRef"] | null;
             /** Service */
             service?: string | null;
             /**
@@ -1962,7 +2161,14 @@ export interface operations {
     agui_agui_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true. */
+                "X-Model-Key"?: string | null;
+                /** @description The kind of key in X-Model-Key: claude, gemini, openai or nvidia. */
+                "X-Model-Provider"?: string | null;
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1977,12 +2183,24 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     alerts_api_v1_alerts_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2015,7 +2233,10 @@ export interface operations {
     alertmanager_api_v1_alerts_alertmanager_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2050,7 +2271,10 @@ export interface operations {
     grafana_api_v1_alerts_grafana_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2085,7 +2309,14 @@ export interface operations {
     ask_api_v1_ask_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true. */
+                "X-Model-Key"?: string | null;
+                /** @description The kind of key in X-Model-Key: claude, gemini, openai or nvidia. */
+                "X-Model-Provider"?: string | null;
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2252,6 +2483,40 @@ export interface operations {
             };
         };
     };
+    check_model_key_api_v1_model_key_check_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true. */
+                "X-Model-Key"?: string | null;
+                /** @description The kind of key in X-Model-Key: claude, gemini, openai or nvidia. */
+                "X-Model-Provider"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelKeyCheck"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     providers_api_v1_providers_get: {
         parameters: {
             query?: never;
@@ -2295,7 +2560,14 @@ export interface operations {
     replay_real_incident_api_v1_real_incidents__incident_id__replay_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true. */
+                "X-Model-Key"?: string | null;
+                /** @description The kind of key in X-Model-Key: claude, gemini, openai or nvidia. */
+                "X-Model-Provider"?: string | null;
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path: {
                 incident_id: string;
             };
@@ -2427,7 +2699,10 @@ export interface operations {
                 limit?: number;
                 status?: components["schemas"]["RunStatus"] | null;
             };
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2456,7 +2731,14 @@ export interface operations {
     create_run_api_v1_runs_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true. */
+                "X-Model-Key"?: string | null;
+                /** @description The kind of key in X-Model-Key: claude, gemini, openai or nvidia. */
+                "X-Model-Provider"?: string | null;
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2489,7 +2771,10 @@ export interface operations {
     get_run_api_v1_runs__run_id__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -2520,7 +2805,10 @@ export interface operations {
     delete_run_api_v1_runs__run_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -2549,7 +2837,10 @@ export interface operations {
     resend_action_api_v1_runs__run_id__actions__action_id__resend_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path: {
                 action_id: string;
                 run_id: string;
@@ -2584,7 +2875,10 @@ export interface operations {
                 after?: number;
                 limit?: number;
             };
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -2615,7 +2909,10 @@ export interface operations {
     expert_check_api_v1_runs__run_id__expert_check_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -2646,7 +2943,14 @@ export interface operations {
     fork_api_v1_runs__run_id__fork_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true. */
+                "X-Model-Key"?: string | null;
+                /** @description The kind of key in X-Model-Key: claude, gemini, openai or nvidia. */
+                "X-Model-Provider"?: string | null;
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -2683,7 +2987,10 @@ export interface operations {
             query?: {
                 limit?: number;
             };
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -2714,7 +3021,10 @@ export interface operations {
     get_postmortem_api_v1_runs__run_id__postmortem_md_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -2745,7 +3055,10 @@ export interface operations {
     get_report_api_v1_runs__run_id__report_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -2776,7 +3089,10 @@ export interface operations {
     get_report_markdown_api_v1_runs__run_id__report_md_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -2807,7 +3123,10 @@ export interface operations {
     review_api_v1_runs__run_id__review_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -2844,7 +3163,10 @@ export interface operations {
             query?: {
                 checkpoint_id?: string | null;
             };
-            header?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -2882,6 +3204,8 @@ export interface operations {
             };
             header?: {
                 "last-event-id"?: string | null;
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
             };
             path: {
                 run_id: string;
@@ -2910,7 +3234,7 @@ export interface operations {
             };
         };
     };
-    settings_view_api_v1_settings_get: {
+    list_scenarios_api_v1_scenarios_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2925,7 +3249,81 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["ScenarioOut"][];
+                };
+            };
+        };
+    };
+    run_scenario_api_v1_scenarios__scenario_id__runs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true. */
+                "X-Model-Key"?: string | null;
+                /** @description The kind of key in X-Model-Key: claude, gemini, openai or nvidia. */
+                "X-Model-Provider"?: string | null;
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
+            path: {
+                scenario_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SampleRunRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunAccepted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    settings_view_api_v1_settings_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
                     "application/json": components["schemas"]["SettingsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

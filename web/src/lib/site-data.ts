@@ -5,6 +5,7 @@ import evals from "@/data/eval-results.json";
 import live from "@/data/eval-live.json";
 
 import type { Severity } from "./api/types";
+import { evidenceTitle } from "./evidence-text";
 
 // Everything the landing page quotes comes from three committed files: the offline evaluation
 // (docs/eval-results.json), the live-provider run (docs/eval-live.json) and one recorded run
@@ -40,6 +41,8 @@ export interface Replay {
   severity: Severity;
   probabilities: Record<Severity, number>;
   predictionSet: Severity[];
+  /** True when no level cleared the bar: the set then holds the likeliest level as a stand-in. */
+  setEmpty: boolean;
   decidedBy: string;
   needsReview: boolean;
   confidence: number;
@@ -48,10 +51,15 @@ export interface Replay {
   hiddenBefore: number;
   claims: ReplayClaim[];
   evidence: Record<string, ReplayEvidence>;
+  /** The lines ARIA read, as its report counts them: the planted line is set aside, not read. */
   nLines: number;
+  /** Every line in the log file, the planted one included. */
+  fileLines: number;
   timeToReviewMs: number;
   recordedAt: string;
   gitSha: string;
+  /** The language model that did the model's part of the run, or null when it ran offline. */
+  model: { service: string; name: string } | null;
 }
 
 const stripSeverity = (title: string) => title.replace(/^SEV[1-4]\s*·\s*/, "");
@@ -103,7 +111,8 @@ export function replay(): Replay {
     evidence: claim.evidence_ids,
   });
   const newWarning = report.summary.find((c) => c.text.startsWith("Most frequent"));
-  const scale = report.summary.find((c) => /error events/.test(c.text));
+  // How much of the log was errors: worded "N error events" before, "No errors, but ..." now.
+  const scale = report.summary.find((c) => /error events|^No errors|\d+ errors? \(/.test(c.text));
   const cause = report.suspected_cause[0];
   const quarantine = report.actions.find((a) => a.text.includes("quarantined"));
   const claims = [newWarning, scale, cause]
@@ -121,7 +130,7 @@ export function replay(): Replay {
     replayEvidence[id] = {
       id,
       kind: e.kind,
-      title: e.title,
+      title: evidenceTitle(e),
       detail: e.detail.length > 280 ? `${e.detail.slice(0, 277)}...` : e.detail,
       lines: linesFor(id),
     };
@@ -134,6 +143,7 @@ export function replay(): Replay {
     severity: sev.severity as Severity,
     probabilities: sev.probabilities as Record<Severity, number>,
     predictionSet: sev.prediction_set as Severity[],
+    setEmpty: sev.set_empty ?? false,
     decidedBy: sev.decided_by,
     needsReview: sev.needs_review,
     confidence: sev.confidence,
@@ -142,11 +152,21 @@ export function replay(): Replay {
     hiddenBefore: start - 1,
     claims,
     evidence: replayEvidence,
-    nLines: demo.input.n_lines,
+    nLines: demo.batch.features.n_events,
+    fileLines: demo.input.n_lines,
     timeToReviewMs: demo.timings.time_to_review_ms,
     recordedAt: demo.recorded_at,
     gitSha: demo.git_sha,
+    model: writtenBy(),
   };
+}
+
+/** "gemini-lite/gemini-3.5-flash-lite" as the service and the model, when a model wrote it. */
+function writtenBy(): Replay["model"] {
+  const id = demo.report.model;
+  if (!demo.llm || !id) return null;
+  const [provider = "", ...name] = id.split("/");
+  return { service: PROVIDER_NAMES[provider] ?? "a language model", name: name.join("/") || id };
 }
 
 /** Facts about each graph step of the recorded run, for the "how a run works" section. */
@@ -159,7 +179,8 @@ export function runFacts() {
   const report = demo.report;
   const ms = demo.timings.stage_ms as Record<string, number>;
   return {
-    lines: demo.input.n_lines,
+    // The lines read, as the report counts them; the planted line is counted as quarantined.
+    lines: demo.batch.features.n_events,
     shards: batch.shards,
     templates: batch.templates.length,
     pseudonyms: guard.redactions.pseudonyms,
@@ -211,6 +232,8 @@ const PROVIDER_NAMES: Record<string, string> = {
   nim: "NVIDIA NIM",
   "nim-fallback": "NVIDIA NIM",
   "nim-local": "a self-hosted NIM",
+  claude: "Anthropic Claude",
+  openai: "OpenAI",
   azure: "Azure OpenAI",
   openai_compat: "an OpenAI-compatible endpoint",
 };
@@ -257,7 +280,6 @@ export function evaluation() {
   return {
     createdAt: evals.created_at,
     gitSha: evals.git_sha,
-    dataDescription: evals.data.description,
     severity: {
       n: sev.n,
       labels: sev.label_distribution,
@@ -477,7 +499,16 @@ const auroc = (d: { auroc: number; auroc_ci95: number[] }) => ({
  * Every number comes from docs/eval-results.json.
  */
 export function realData() {
-  const { bgl, hadoop, openstack, uci_tickets: tickets, gitlab, postmortems } = evals.real;
+  const {
+    bgl,
+    thunderbird,
+    hadoop,
+    openstack,
+    uci_tickets: tickets,
+    gitlab,
+    postmortems,
+    logchunks,
+  } = evals.real;
   const errors = openstack.baselines.any_error_line;
   const injection = evals.injection_benchmarks;
   const retrieval = (m: (typeof gitlab.by.service.methods)["aria"]) => ({
@@ -496,7 +527,10 @@ export function realData() {
     random: retrieval(b.methods.random),
     commonest: retrieval(b.methods.commonest_label),
   });
-  const severity = (m: (typeof bgl.methods)["aria_policy"]) => ({
+  // Thunderbird's labels hold no SEV1 or SEV2, so recall is keyed by the levels each log has.
+  const severity = (
+    m: Omit<(typeof bgl.methods)["aria_policy"], "recall"> & { recall: Record<string, number> },
+  ) => ({
     accuracy: m.accuracy,
     accuracyCi: m.accuracy_ci95,
     macroF1: m.macro_f1,
@@ -540,6 +574,36 @@ export function realData() {
       targetCoverage: bgl.conformal.target_coverage,
       autoDecided: bgl.automation.auto_decided,
       overlapShare: bgl.overlap_with_training_sample.share,
+    },
+    thunderbird: {
+      citation: thunderbird.citation,
+      lines: thunderbird.lines,
+      days: thunderbird.days,
+      alertLines: thunderbird.alert_lines,
+      windows: thunderbird.windows,
+      windowMin: thunderbird.window_min,
+      labels: thunderbird.labels as Record<string, number>,
+      quiet: (thunderbird.labels as Record<string, number>).SEV4 ?? 0,
+      aria: severity(thunderbird.methods.aria_policy),
+      rules: severity(thunderbird.methods.rules_only),
+      keyword: severity(thunderbird.methods.keyword),
+      majority: severity(thunderbird.methods.majority_class),
+      coverage: thunderbird.conformal.coverage,
+      targetCoverage: thunderbird.conformal.target_coverage,
+      autoDecided: thunderbird.automation.auto_decided,
+      /** The rules that fired most often on the quiet windows ARIA paged on, with their counts. */
+      pagedBy: thunderbird.rules_on_paged_quiet_windows as [string, number][],
+    },
+    builds: {
+      citation: logchunks.citation,
+      builds: logchunks.triaged,
+      languages: logchunks.languages,
+      medianLines: logchunks.median_lines,
+      meanKept: logchunks.mean_kept,
+      aria: logchunks.aria,
+      lastErrorLines: logchunks.baselines.last_error_lines,
+      lastLines: logchunks.baselines.last_lines,
+      randomLines: logchunks.baselines.random_lines,
     },
     hadoop: {
       citation: hadoop.citation,

@@ -24,19 +24,38 @@ import { useFork, useHistory } from "@/lib/api/hooks";
 import { isSeverity, type Checkpoint } from "@/lib/api/types";
 import { clockTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { NODE_LABEL } from "@/lib/steps";
 
-function describe(cp: Checkpoint): string {
-  if (cp.next.length === 0) return "The end of the run";
+import { stepLabel } from "./progress";
+
+// What a later part of a step does, so a checkpoint inside a step does not read as one before
+// it: "During “Read the logs”: joining what was read".
+const PART: Record<string, string> = {
+  parse_shard: "reading the lines",
+  merge: "joining what was read",
+  widen: "widening the search",
+  comms: "drafting the messages",
+};
+
+/** A checkpoint, named by the steps the progress strip shows: "Before “Rate severity”". */
+export function checkpointName(cp: Pick<Checkpoint, "next" | "interrupted">): string {
+  if (cp.next.length === 0) return "The end of the triage";
   if (cp.next.includes("__start__")) return "The input, before anything ran";
-  // Parallel shards repeat one step: "parse (3 in parallel)", not "parse and parse and parse".
+  const nodes = new Set(cp.next);
+  const only = nodes.size === 1 ? cp.next[0] : undefined;
+  if (only && PART[only] && !cp.interrupted) {
+    // Parallel parts run one node several times: "(3 parts at once)", not the step three times.
+    const k = cp.next.length;
+    return `During “${stepLabel(only)}”: ${PART[only]}${k > 1 ? ` (${k} parts at once)` : ""}`;
+  }
   const counts = new Map<string, number>();
-  for (const n of cp.next) counts.set(n, (counts.get(n) ?? 0) + 1);
-  const next = [...counts].map(([n, k]) => {
-    const label = (NODE_LABEL[n] ?? n).toLowerCase();
-    return k > 1 ? `${label} (${k} in parallel)` : label;
-  });
-  if (cp.interrupted) return `Paused before ${next.join(" and ")}`;
+  for (const n of cp.next) {
+    const label = stepLabel(n);
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  const next = [...counts].map(([label, k]) =>
+    k > 1 ? `“${label}” (${k} parts at once)` : `“${label}”`,
+  );
+  if (cp.interrupted) return `Paused at ${next.join(" and ")}`;
   return `Before ${next.join(" and ")}`;
 }
 
@@ -88,7 +107,9 @@ export function History({
       {
         onSuccess: (accepted) => {
           setForking(null);
-          toast.success("Fork started", { description: `New run ${accepted.run_id}` });
+          toast.success("Your copy is starting", {
+            description: "It replays from the step you chose, as a new incident.",
+          });
           router.push(`/console/runs/${encodeURIComponent(accepted.run_id)}` as never);
         },
         onSettled: () => {
@@ -101,8 +122,9 @@ export function History({
   return (
     <div className="grid gap-4">
       <p className="max-w-prose text-sm text-muted-foreground">
-        ARIA keeps a checkpoint after every step. View the run as it was at any of them, or fork a
-        new run from one, for example to try it again with an LLM or without investigation.
+        ARIA keeps a checkpoint after every step. View the incident as it was at any of them, or
+        copy it from one into a new incident, for example to try it again with a model or without
+        investigation.
       </p>
       <ol className="grid gap-1.5">
         {items.map((cp) => {
@@ -122,7 +144,7 @@ export function History({
                       step {cp.step}
                     </span>
                   ) : null}
-                  {describe(cp)}
+                  {checkpointName(cp)}
                 </p>
                 <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   {cp.created_at ? (
@@ -146,7 +168,7 @@ export function History({
                 {cp.next.length > 0 && !cp.next.includes("__start__") ? (
                   <Button size="sm" onClick={() => setForking(cp)}>
                     <GitForkIcon aria-hidden />
-                    Fork
+                    Copy from here
                   </Button>
                 ) : null}
               </div>
@@ -158,10 +180,10 @@ export function History({
       <Dialog open={forking !== null} onOpenChange={(open) => !open && setForking(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Fork a new run from this checkpoint</DialogTitle>
+            <DialogTitle>Copy this incident from an earlier step</DialogTitle>
             <DialogDescription>
-              {forking ? describe(forking) : ""}. The original run is not changed, and the new run
-              waits for its own review.
+              {forking ? checkpointName(forking) : ""}. The original incident stays as it is, and
+              the copy waits for its own review.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
@@ -177,7 +199,7 @@ export function History({
               />
             </div>
             <div className="flex items-center justify-between gap-4">
-              <Label htmlFor={`${id}-llm`}>Use an LLM if one is configured</Label>
+              <Label htmlFor={`${id}-llm`}>Use a language model if one is set up</Label>
               <Switch id={`${id}-llm`} checked={useLlm} onCheckedChange={setUseLlm} />
             </div>
             <div className="flex items-center justify-between gap-4">
@@ -193,7 +215,7 @@ export function History({
           <DialogFooter>
             <Button onClick={() => setForking(null)}>Cancel</Button>
             <Button variant="primary" onClick={startFork} disabled={fork.isPending}>
-              {fork.isPending ? "Forking" : "Start the fork"}
+              {fork.isPending ? "Starting" : "Start the copy"}
             </Button>
           </DialogFooter>
         </DialogContent>

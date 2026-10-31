@@ -69,6 +69,20 @@ def test_env_interpolation_uses_defaults_and_overrides(
     assert nim.chat_model == "nvidia/test-model"
 
 
+def test_an_empty_variable_takes_the_default_like_the_shell(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # compose passes `ANTHROPIC_CHAT_MODEL: ${ANTHROPIC_CHAT_MODEL:-}`, which sets it to "".
+    for name in ("ANTHROPIC_CHAT_MODEL", "OPENAI_CHAT_MODEL", "ARIA_SCAN_INTERVAL_S"):
+        monkeypatch.setenv(name, "")
+    reset_caches()
+    config = get_app_config()
+    assert config.llm.providers["claude"].chat_model == "claude-opus-5-5"
+    assert config.llm.providers["openai"].chat_model == "gpt-6.1-sol"
+    assert config.llm.visitor_keys.providers["claude"] == ["claude"]
+    assert config.triggers.scan_interval_s == 0
+
+
 def test_unknown_provider_in_routing_is_rejected() -> None:
     with pytest.raises(ValidationError, match="unknown providers: ghost"):
         AppConfig.model_validate(

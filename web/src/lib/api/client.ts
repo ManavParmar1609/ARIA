@@ -2,6 +2,8 @@
 // which forward it to the API with the signed-in key (see src/app/api/v1/[...path]/route.ts), so
 // no key ever reaches page JavaScript.
 
+import { UNREACHABLE } from "@/lib/unreachable";
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -14,12 +16,39 @@ export class ApiError extends Error {
   get needsSignIn(): boolean {
     return this.status === 401;
   }
+
+  /** The server did not answer (asleep, restarting, or the connection dropped). */
+  get unreachable(): boolean {
+    return this.status === 0 || this.status === 502 || this.status === 503 || this.status === 504;
+  }
 }
 
 // The stock reason phrases servers send with a 5xx: they say nothing a person can act on.
 const STOCK = new Set(["Internal Server Error", "Bad Gateway", "Service Unavailable"]);
 
+/** A refused paste, in sizes a person can act on. The API says "request body larger than N
+ * bytes"; this console's own server says "The request is larger than 8 MB." */
+function tooLarge(body: unknown): string {
+  const detail = body && typeof body === "object" && "detail" in body ? String(body.detail) : "";
+  const bytes = /larger than (\d+) bytes/.exec(detail)?.[1];
+  const most = bytes
+    ? `${Math.round((Number(bytes) / 1024 / 1024) * 10) / 10} MB`
+    : (/larger than ([\d.]+ ?[KMG]B)/.exec(detail)?.[1] ?? null);
+  return most
+    ? `These logs are larger than this server accepts per triage (${most}). Send fewer lines, or split them over several triages.`
+    : "These logs are larger than this server accepts per triage. Send fewer lines, or split them over several triages.";
+}
+
 function describe(status: number, body: unknown): string {
+  // A busy server's own words ("rate limit exceeded") say nothing a visitor can act on; a
+  // refusal that says what to do (a visitor's triages already waiting) is passed on.
+  if (status === 429) {
+    const detail = body && typeof body === "object" && "detail" in body ? body.detail : null;
+    return typeof detail === "string" && detail.startsWith("You ")
+      ? detail
+      : "ARIA is busy right now. Wait a moment and try again.";
+  }
+  if (status === 413) return tooLarge(body);
   if (body && typeof body === "object" && "detail" in body) {
     const detail = (body as { detail: unknown }).detail;
     if (typeof detail === "string" && !STOCK.has(detail)) return detail;
@@ -30,12 +59,9 @@ function describe(status: number, body: unknown): string {
     }
   }
   if (status === 401) return "Sign in with an API key to use the console.";
-  if (status === 429) return "Too many requests. Wait a moment and try again.";
-  if (status === 502 || status === 503 || status === 504) {
-    return "The ARIA API is not reachable. Check that it is running.";
-  }
+  if (status === 502 || status === 503 || status === 504) return UNREACHABLE;
   if (status >= 500) {
-    return "The ARIA API hit an unexpected error. Try again; if it keeps failing, its log says why.";
+    return "Something went wrong on ARIA's side. Try again in a moment.";
   }
   return `The request failed (HTTP ${status}).`;
 }

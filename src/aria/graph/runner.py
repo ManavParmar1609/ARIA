@@ -43,6 +43,7 @@ from aria.graph.workflow import (
     run_link,
     run_salt,
 )
+from aria.llm.visitor import VisitorKeys
 from aria.mcp.client import Target
 from aria.notify import send_action
 from aria.observability.logging import get_logger
@@ -223,6 +224,8 @@ class TriageRunner:
         # Runs this process has claimed: a run it is driving, or one it took and has yet to start.
         self.owner = process_owner()
         self.held: set[str] = set()
+        # Visitors' own model keys, held in memory until the runs they came with start.
+        self.keys = VisitorKeys()
 
     @staticmethod
     def config(run_id: str, checkpoint_id: str | None = None) -> RunnableConfig:
@@ -338,6 +341,8 @@ class TriageRunner:
         if trigger != "replay" and request.replay_of is not None:
             # Only the replay endpoint may tie a run to a real incident's expert labels.
             request = request.model_copy(update={"replay_of": None})
+        if trigger != "sample" and request.sample is not None:
+            request = request.model_copy(update={"sample": None})  # only the samples endpoint
         request = self._cleaned(self._capped(request), run_id)
         repo.create_run(
             self.engine,
@@ -500,11 +505,15 @@ class TriageRunner:
     async def _stream(
         self, run_id: str, graph_input: Any, config: RunnableConfig | None
     ) -> RunOutcome:
+        # A run started with a visitor's key gets a router of its own, closed when it stops.
+        visitor = self.keys.take(run_id)
+        own = self.services.router.with_key(visitor) if visitor is not None else None
+        context = self.context.with_router(own) if own is not None else self.context
         try:
             async for part in self.graph.astream(
                 graph_input,
                 config or self.config(run_id),
-                context=self.context,
+                context=context,
                 stream_mode=STREAM_MODES,
                 version="v2",
             ):
@@ -518,6 +527,9 @@ class TriageRunner:
             await self._event(run_id, "error", payload={"error": message})
             await self._event(run_id, "run_finished", payload={"status": str(RunStatus.FAILED)})
             return RunOutcome(run_id, RunStatus.FAILED, error=message)
+        finally:
+            if own is not None:
+                await own.aclose()
         return await self._settle(run_id)
 
     async def _settle(self, run_id: str) -> RunOutcome:
@@ -617,12 +629,14 @@ class TriageRunner:
         options: Json | None = None,
         title: str | None = None,
         execute: bool = True,
+        visitor: str | None = None,
     ) -> RunOutcome:
         """Branch a new run from a checkpoint of ``run_id``, optionally with new run options.
 
         The new run gets its own run, report and action ids, its own copy of the run's log lines
         and a fresh budget clock; the original run is not touched. With ``execute=False`` the
-        fork is only prepared (queued); ``execute(new_run_id)`` continues it.
+        fork is only prepared (queued); ``execute(new_run_id)`` continues it. ``visitor`` is whose
+        run the fork is, on a server that keeps visitors apart.
         """
         snapshot = await self.snapshot(run_id, checkpoint_id)
         if not snapshot.next:
@@ -634,7 +648,9 @@ class TriageRunner:
             if earlier is None:
                 msg = f"cannot fork in front of {' and '.join(snapshot.next)}; fork from an earlier step"
                 raise RunStateError(msg)
-            return await self.fork(run_id, earlier, options=options, title=title, execute=execute)
+            return await self.fork(
+                run_id, earlier, options=options, title=title, execute=execute, visitor=visitor
+            )
         stored = snapshot.values.get("request")
         if stored is None:  # the input checkpoint, before the graph has read it
             run = await asyncio.to_thread(repo.get_run, self.engine, run_id)
@@ -650,7 +666,7 @@ class TriageRunner:
             request = request.model_copy(update={"title": title})
         if not snapshot.values.get("plan"):  # nothing has run yet: a fork is simply a new run
             new_id = await asyncio.to_thread(
-                self.submit, request, trigger="fork", parent_run_id=run_id
+                self.submit, request, trigger="fork", parent_run_id=run_id, visitor=visitor
             )
             return await self.execute(new_id) if execute else RunOutcome(new_id, RunStatus.QUEUED)
 
@@ -684,6 +700,7 @@ class TriageRunner:
             status=RunStatus.QUEUED,
             parent_run_id=run_id,
             forked_from_checkpoint=checkpoint_id,
+            visitor=visitor,
         )
         await asyncio.to_thread(self._save_forked_report, update, snapshot.values)
         started = {"forked_from": run_id, "checkpoint_id": checkpoint_id}
@@ -766,6 +783,7 @@ class TriageRunner:
                 msg = f"run {run_id} is running in another process"
                 raise RunBusyError(msg)
             await self._purge(run_id)
+        self.keys.drop(run_id)
         self._locks.pop(run_id, None)
 
     async def _purge(self, run_id: str) -> None:

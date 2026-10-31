@@ -19,7 +19,7 @@ export default function NotFound() {
         This page is not here
       </h1>
       <p className="text-lg text-muted-foreground">
-        The link may be out of date, or the run it pointed to was deleted.
+        The link may be out of date, or what it pointed to was moved or deleted.
       </p>
       <div className="flex flex-wrap justify-center gap-3">
         <Button asChild variant="primary" size="lg">

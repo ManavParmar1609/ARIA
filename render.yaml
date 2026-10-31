@@ -15,3 +15,7 @@ services:
       # Keys each run's pseudonyms; Render generates a random value once.
       - key: ARIA_PSEUDONYM_KEY
         generateValue: true
+      # The console's address (your Vercel site), so drafted messages link to the incident's
+      # page rather than to the API. Render asks for it; leave it empty until the site exists.
+      - key: ARIA_CONSOLE_URL
+        sync: false

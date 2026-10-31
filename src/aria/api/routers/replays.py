@@ -7,6 +7,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from aria.api.keys import VisitorKeyDep, may_use_model, offline
 from aria.api.schemas import (
     ExpertCheckOut,
     FlaggedUnit,
@@ -17,6 +18,7 @@ from aria.api.schemas import (
     links_for,
 )
 from aria.api.state import AppState, app_state
+from aria.api.visitors import ViewerDep, make_room
 from aria.contracts.inputs import TriageRequest
 from aria.contracts.parsing import FlowCheck
 from aria.contracts.run import RunStatus
@@ -56,30 +58,44 @@ async def list_real_incidents() -> list[RealIncidentOut]:
     "/{incident_id}/replay", status_code=status.HTTP_202_ACCEPTED, response_model=RunAccepted
 )
 async def replay_real_incident(
-    incident_id: str, state: State, body: ReplayRequest | None = None
+    incident_id: str,
+    state: State,
+    visitor: VisitorKeyDep,
+    viewer: ViewerDep,
+    body: ReplayRequest | None = None,
 ) -> RunAccepted:
     """Triage a real incident's logs as a normal run; follow it on ``links.stream``."""
     incident = real_incident(incident_id)
     if incident is None or not await asyncio.to_thread(lambda: incident.available):
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"no real incident {incident_id}")
-    lines = await asyncio.to_thread(incident.lines)
-    request = TriageRequest(
-        system=incident.system,
-        logs=lines,
-        options=(body or ReplayRequest()).options,
-        replay_of=incident.id,
-    )
-    run_id = await asyncio.to_thread(state.runner.submit, request, trigger="replay")
+    async with make_room(state, viewer):
+        lines = await asyncio.to_thread(incident.lines)
+        options = (body or ReplayRequest()).options
+        if not may_use_model(state, visitor, viewer.tag, options.use_llm):
+            options = offline(options)
+        # The run keeps the name the visitor chose it by; the report says what ARIA found.
+        request = TriageRequest(
+            system=incident.system,
+            title=incident.title,
+            logs=lines,
+            options=options,
+            replay_of=incident.id,
+        )
+        run_id = await asyncio.to_thread(
+            state.runner.submit, request, trigger="replay", visitor=viewer.tag
+        )
+    if visitor is not None:
+        state.runner.keys.hold(run_id, visitor)
     if state.inprocess:
         state.worker.execute(run_id)
     return RunAccepted(run_id=run_id, status=str(RunStatus.QUEUED), links=links_for(run_id))
 
 
 @runs_router.get("/{run_id}/expert-check", response_model=ExpertCheckOut)
-async def expert_check(run_id: RunId, state: State) -> ExpertCheckOut:
+async def expert_check(run_id: RunId, state: State, viewer: ViewerDep) -> ExpertCheckOut:
     """For a replayed real incident: the units ARIA flagged, with the experts' label for each."""
     run = await asyncio.to_thread(repo.get_run, state.services.engine, run_id)
-    if run is None:
+    if run is None or not viewer.can_see(run):
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"run {run_id} not found")
     try:
         values = (await state.runner.snapshot(run_id)).values

@@ -104,15 +104,50 @@ def get_run(engine: Engine, run_id: str) -> dict[str, Any] | None:
         return run_dict(row) if row is not None else None
 
 
+def runs_ahead(engine: Engine, run_id: str) -> int:
+    """How many runs are waiting or running that started before this one: the triages a queued
+    run waits behind. A count only, so it says nothing about whose they are."""
+    with session_scope(engine) as session:
+        mine = session.get(RunRow, run_id)
+        if mine is None:
+            return 0
+        ahead = session.scalar(
+            select(func.count())
+            .select_from(RunRow)
+            .where(
+                RunRow.status.in_(("queued", "running")),
+                RunRow.created_at < mine.created_at,
+                RunRow.id != run_id,
+            )
+        )
+        return int(ahead or 0)
+
+
+def active_runs(engine: Engine, visitor: str) -> int:
+    """How many of one visitor's runs are waiting or running."""
+    with session_scope(engine) as session:
+        count = session.scalar(
+            select(func.count())
+            .select_from(RunRow)
+            .where(RunRow.status.in_(("queued", "running")), RunRow.visitor == visitor)
+        )
+        return int(count or 0)
+
+
 def list_runs(
     engine: Engine,
     *,
     limit: int = 50,
     status: str | None = None,
     before: datetime | None = None,
+    seen_by: str | None = None,
 ) -> list[dict[str, Any]]:
     """The newest runs, without their stored request: a list never needs the raw input, and
-    loading it made the list slower as runs piled up."""
+    loading it made the list slower as runs piled up.
+
+    ``seen_by`` keeps one visitor's runs and the examples (runs with no visitor); without it,
+    every run is listed.
+    """
     with session_scope(engine) as session:
         stmt = (
             select(RunRow)
@@ -123,7 +158,15 @@ def list_runs(
             stmt = stmt.where(RunRow.status == status)
         if before is not None:
             stmt = stmt.where(RunRow.created_at < before)
+        if seen_by is not None:
+            stmt = stmt.where(or_(RunRow.visitor.is_(None), RunRow.visitor == seen_by))
         return [run_dict(row, skip=_LIST_SKIP) for row in session.scalars(stmt.limit(limit))]
+
+
+def run_visitor(engine: Engine, run_id: str) -> str | None:
+    """Whose run this is on a server that keeps visitors apart (None: an example, or unknown)."""
+    with session_scope(engine) as session:
+        return session.scalar(select(RunRow.visitor).where(RunRow.id == run_id))
 
 
 _LIST_SKIP = frozenset({"request"})

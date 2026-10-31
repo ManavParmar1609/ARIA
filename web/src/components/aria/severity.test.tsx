@@ -15,11 +15,11 @@ describe("severity components", () => {
     );
     const figure = screen.getByRole("figure");
     expect(figure.getAttribute("aria-label")).toBe(
-      "Model probabilities: SEV1 3%, SEV2 15%, SEV3 70%, SEV4 12%. 90% prediction set: SEV3. Decided: SEV3. Safety floor: SEV3.",
+      "Model probabilities: SEV1 3%, SEV2 15%, SEV3 70%, SEV4 12%. Short list, built to hold the right level 90% of the time: SEV3. Decided: SEV3. Safety floor: SEV3.",
     );
   });
 
-  it("says when no class reached the prediction set", () => {
+  it("says when no level made the short list", () => {
     render(
       <SeverityScale
         probabilities={{ SEV1: 0.05, SEV2: 0.28, SEV3: 0.34, SEV4: 0.33 }}
@@ -29,7 +29,7 @@ describe("severity components", () => {
       />,
     );
     expect(screen.getByRole("figure").getAttribute("aria-label")).toContain(
-      "No class is likely enough for the 90% prediction set.",
+      "No level is likely enough to make the short list, so the likeliest stands in.",
     );
     expect(screen.getByText(/Dashed bracket/)).toBeTruthy();
   });
@@ -46,7 +46,7 @@ describe("severity components", () => {
     const label = screen.getByRole("figure").getAttribute("aria-label") ?? "";
     expect(label).toContain("Rule scores (the calibrated model was not used)");
     expect(label).toContain("Levels the rules leave open: SEV2, SEV3, SEV4.");
-    expect(label).not.toContain("prediction set");
+    expect(label).not.toContain("short list");
     expect(screen.getByText(/^Bars: rule scores/)).toBeTruthy();
     expect(screen.queryByText(/calibrated model probability/)).toBeNull();
   });

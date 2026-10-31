@@ -2,7 +2,10 @@
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { apiFetch, postJson } from "./client";
+import { markStarted } from "@/lib/started";
+
+import { ApiError, apiFetch, postJson } from "./client";
+import type { ModelKeyCheck, SavedModelKey } from "./model-key";
 import type { Session } from "./session";
 import type {
   AskRequest,
@@ -19,6 +22,8 @@ import type {
   RunState,
   RunStatus,
   RunbookOut,
+  SampleRunRequest,
+  Scenario,
   TriageRequest,
 } from "./types";
 import type { components } from "./schema";
@@ -31,6 +36,7 @@ export type ExpertCheck = components["schemas"]["ExpertCheckOut"];
 
 export const keys = {
   session: ["session"] as const,
+  modelKey: ["model-key"] as const,
   health: ["health"] as const,
   runs: (status?: RunStatus | "all", limit?: number) =>
     ["runs", status ?? "all", limit ?? 50] as const,
@@ -46,6 +52,7 @@ export const keys = {
   settings: ["settings"] as const,
   feedback: ["feedback"] as const,
   realIncidents: ["real-incidents"] as const,
+  scenarios: ["scenarios"] as const,
 };
 
 const v1 = (path: string) => `/api/v1${path}`;
@@ -56,6 +63,15 @@ export function useSession() {
     queryKey: keys.session,
     queryFn: () => apiFetch<Session>("/api/session"),
     staleTime: 60_000,
+    // While the API is asleep, starting or busy, ask again every few seconds, so an open tab
+    // carries on by itself once it answers.
+    refetchInterval: (query) => {
+      const session = query.state.data;
+      const waiting =
+        query.state.status === "error" ||
+        (session !== undefined && (!session.reachable || session.busy === true));
+      return waiting ? 5_000 : false;
+    },
   });
 }
 
@@ -80,31 +96,67 @@ export function useSignOut() {
   });
 }
 
+/** The visitor's own model key, if they saved one: its provider and last four characters. */
+export function useModelKey() {
+  return useQuery({
+    queryKey: keys.modelKey,
+    queryFn: () => apiFetch<SavedModelKey>("/api/model-key"),
+    staleTime: 60_000,
+  });
+}
+
+/** Check a key with its provider through the ARIA API, and keep it only if it is accepted. */
+export function useSaveModelKey() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { provider: string; key: string }) =>
+      postJson<ModelKeyCheck>("/api/model-key", body),
+    onSuccess: async (result) => {
+      if (result.accepted) await client.invalidateQueries({ queryKey: keys.modelKey });
+    },
+  });
+}
+
+export function useForgetModelKey() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<void>("/api/model-key", { method: "DELETE" }),
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: keys.modelKey });
+    },
+  });
+}
+
 export function useHealth() {
   return useQuery({
     queryKey: keys.health,
     queryFn: () => apiFetch<Health>("/api/ready"),
-    refetchInterval: 30_000,
+    // Every quarter minute, so an open page notices an outage soon (any failed call also checks
+    // at once); every five seconds while the server is not answering.
+    refetchInterval: (query) => (query.state.status === "error" ? 5_000 : 15_000),
   });
 }
 
-export function useRuns(status: RunStatus | "all" = "all", limit = 50) {
+/** Incidents, newest first, checked again every ``every`` ms (a count in the menu can wait longer
+ * than a list someone is reading). */
+export function useRuns(status: RunStatus | "all" = "all", limit = 50, every = 10_000) {
   const query = new URLSearchParams({ limit: String(limit) });
   if (status !== "all") query.set("status", status);
   return useQuery({
     queryKey: keys.runs(status, limit),
     queryFn: () => apiFetch<RunPage>(v1(`/runs?${query.toString()}`)),
-    refetchInterval: 10_000,
+    refetchInterval: every,
     placeholderData: keepPreviousData,
   });
 }
 
 const ACTIVE: ReadonlySet<string> = new Set(["queued", "running"]);
 
-export function useRun(id: string) {
+export function useRun(id: string, enabled = true) {
   return useQuery({
     queryKey: keys.run(id),
     queryFn: () => apiFetch<RunDetail>(runPath(id)),
+    enabled,
     refetchInterval: (query) => (ACTIVE.has(query.state.data?.status ?? "") ? 4_000 : false),
   });
 }
@@ -179,6 +231,28 @@ export function useFeedback(limit = 8) {
   });
 }
 
+/** The samples this server can build, by where their logs come from. */
+export function useScenarios() {
+  return useQuery({
+    queryKey: keys.scenarios,
+    queryFn: () => apiFetch<Scenario[]>(v1("/scenarios")),
+    staleTime: 10 * 60_000,
+  });
+}
+
+/** Build a sample on the server, at a size it offers, and start its triage. */
+export function useStartSample() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: SampleRunRequest }) =>
+      postJson<RunAccepted>(v1(`/scenarios/${encodeURIComponent(id)}/runs`), body),
+    onSuccess: (accepted) => {
+      markStarted(accepted.run_id);
+      return client.invalidateQueries({ queryKey: ["runs"] });
+    },
+  });
+}
+
 export function useRealIncidents() {
   return useQuery({
     queryKey: keys.realIncidents,
@@ -203,7 +277,10 @@ export function useCreateRun() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (request: TriageRequest) => postJson<RunAccepted>(v1("/runs"), request),
-    onSuccess: () => client.invalidateQueries({ queryKey: ["runs"] }),
+    onSuccess: (accepted) => {
+      markStarted(accepted.run_id);
+      return client.invalidateQueries({ queryKey: ["runs"] });
+    },
   });
 }
 
@@ -212,7 +289,10 @@ export function useReplay() {
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: ReplayRequest }) =>
       postJson<RunAccepted>(v1(`/real-incidents/${encodeURIComponent(id)}/replay`), body),
-    onSuccess: () => client.invalidateQueries({ queryKey: ["runs"] }),
+    onSuccess: (accepted) => {
+      markStarted(accepted.run_id);
+      return client.invalidateQueries({ queryKey: ["runs"] });
+    },
   });
 }
 
@@ -226,6 +306,13 @@ export function useReview(id: string) {
         client.invalidateQueries({ queryKey: ["run", id] }),
         client.invalidateQueries({ queryKey: ["runs"] }),
       ]);
+    },
+    // Deleted or decided elsewhere (another tab, another reviewer): look again, so the page shows
+    // what is true now instead of offering a review that can no longer happen (FL-08).
+    onError: async (error) => {
+      if (error instanceof ApiError && (error.status === 404 || error.status === 409)) {
+        await client.invalidateQueries({ queryKey: ["run", id] });
+      }
     },
   });
 }
@@ -246,7 +333,10 @@ export function useFork(id: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (body: ForkRequest) => postJson<RunAccepted>(runPath(id, "/fork"), body),
-    onSuccess: () => client.invalidateQueries({ queryKey: ["runs"] }),
+    onSuccess: (accepted) => {
+      markStarted(accepted.run_id);
+      return client.invalidateQueries({ queryKey: ["runs"] });
+    },
   });
 }
 

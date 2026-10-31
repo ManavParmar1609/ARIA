@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import samples from "@/data/samples.json";
+import { useScenarios } from "@/lib/api/hooks";
 import { isSeverity } from "@/lib/api/types";
 import { SYSTEM_NAMES } from "@/lib/systems";
 import { cn } from "@/lib/utils";
@@ -71,10 +72,15 @@ const STEP: Record<string, string> = {
  */
 export function AguiChat() {
   const id = useId();
+  // The chat pastes a sample's whole log, which only the bundled file carries; its name is the
+  // one New triage gives the same sample.
+  const titles = useScenarios().data;
+  const titleOf = (sampleId: string, fallback: string) =>
+    titles?.find((card) => card.id === sampleId)?.title ?? fallback;
   const [items, setItems] = useState<Item[]>([]);
   // While a review waits for an answer, its approve button is the one primary action.
   const awaiting = items.some((i) => i.kind === "review" && !i.answered);
-  const [system, setSystem] = useState("hdfs");
+  const [system, setSystem] = useState("generic");
   const [text, setText] = useState("");
   // A loaded sample is semi-synthetic, so its run never counts as a real incident in memory.
   const [sample, setSample] = useState<string | null>(null);
@@ -223,7 +229,7 @@ export function AguiChat() {
 
   return (
     <div className="grid gap-6">
-      <p className="max-w-3xl text-muted-foreground">
+      <p className="max-w-prose text-muted-foreground">
         Paste logs and ARIA triages them here, over the AG-UI protocol: each step, tool call and the
         report stream in as events, and the review comes back as an interrupt you answer below.
       </p>
@@ -238,7 +244,7 @@ export function AguiChat() {
                     key={item.id}
                     className="justify-self-end rounded-md bg-sunken px-4 py-2.5 text-sm"
                   >
-                    {item.lines} {SYSTEM_NAMES[item.system] ?? item.system} log lines
+                    {`${item.lines} ${item.system === "generic" ? "" : `${SYSTEM_NAMES[item.system] ?? item.system} `}log ${item.lines === 1 ? "line" : "lines"}`}
                   </li>
                 );
               case "step":
@@ -340,7 +346,7 @@ export function AguiChat() {
                           disabled={running}
                           onClick={() => void answer(item, "reject")}
                         >
-                          Reject
+                          Discard the draft
                         </Button>
                       </div>
                     )}
@@ -377,7 +383,7 @@ export function AguiChat() {
       <form onSubmit={(e) => void start(e)} className="grid gap-3 rounded-lg bg-raised p-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="grid gap-1.5">
-            <Label htmlFor={`${id}-system`}>Log format</Label>
+            <Label htmlFor={`${id}-system`}>What wrote these logs?</Label>
             <Select value={system} onValueChange={setSystem}>
               <SelectTrigger id={`${id}-system`} className="w-48">
                 <SelectValue />
@@ -385,7 +391,7 @@ export function AguiChat() {
               <SelectContent>
                 {Object.entries(SYSTEM_NAMES).map(([value, name]) => (
                   <SelectItem key={value} value={value}>
-                    {name}
+                    {value === "generic" ? "Not sure" : name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -404,7 +410,7 @@ export function AguiChat() {
                   setText(s.lines.join("\n"));
                 }}
               >
-                Sample: {s.label}
+                Sample: {titleOf(s.id, s.label)}
               </Button>
             ))}
           </div>

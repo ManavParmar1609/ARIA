@@ -26,6 +26,7 @@ htmlcov
 
 # Data, reports and docs are mounted or published, not baked in
 data
+!data/manifest.yaml
 reports
 docs
 !docs/eval-results.json

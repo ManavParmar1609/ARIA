@@ -9,13 +9,21 @@ const BAR_HEIGHT = 230;
 
 /** Rules, then calibrated probabilities, then the conformal set, then the decision. */
 export const Severity = () => {
+  // How the recorded run settled the level, in the words the site uses.
+  const sure = `${Math.round(100 * assessment.confidence)}%`;
+  const decision =
+    assessment.decidedBy === "llm"
+      ? `The model is ${sure} sure, and a language model chose ${assessment.severity} from the short list.`
+      : assessment.needsReview
+        ? `The model is ${sure} sure: not enough to decide alone, so a person confirms it.`
+        : `The model is ${sure} sure, enough to decide alone.`;
   const frame = useCurrentFrame();
   const bracket = progress(frame, 190, 30);
   const decided = progress(frame, 260, 24);
   const inSet = new Set(assessment.set);
   return (
     <Stage>
-      <Heading>Severity: rules, a model, then a prediction set.</Heading>
+      <Heading>Severity: rules, a model, then a short list.</Heading>
       <div style={{ display: "flex", gap: 56, alignItems: "stretch" }}>
         <Panel style={{ width: 640, display: "flex", flexDirection: "column", gap: 22 }}>
           <div
@@ -119,9 +127,8 @@ export const Severity = () => {
             })}
           </div>
           <div style={{ fontSize: 32, color: color.heading, opacity: bracket }}>
-            The {assessment.coverage} prediction set: {"{"}
-            {assessment.set.join(", ")}
-            {"}"}
+            Short list: {assessment.set.join(" or ")}, built to hold the right level{" "}
+            {assessment.coverage} of the time
           </div>
         </Panel>
       </div>
@@ -135,10 +142,7 @@ export const Severity = () => {
         }}
       >
         <SevBadge severity={assessment.severity} scale={1.3} />
-        <Lead style={{ color: color.foreground }}>
-          The model is {Math.round(100 * assessment.confidence)}% sure: not enough to decide alone,
-          so a person confirms it.
-        </Lead>
+        <Lead style={{ color: color.foreground }}>{decision}</Lead>
       </div>
       <Rail active="Severity" />
     </Stage>

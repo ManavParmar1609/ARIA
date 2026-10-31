@@ -139,7 +139,8 @@ def download_zenodo(source: DataSource, dest: Path) -> Path:
                 target.unlink(missing_ok=True)
                 msg = f"{name}: {algorithm} mismatch (expected {expected}, got {actual})"
                 raise DownloadError(msg)
-        _extract(target, dest)
+        if source.extract:
+            _extract(target, dest)
     return dest
 
 

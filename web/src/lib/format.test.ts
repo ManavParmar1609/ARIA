@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { count, duration, median, money, percent, relativeTime, stripSeverity } from "./format";
+import {
+  count,
+  duration,
+  median,
+  money,
+  percent,
+  plainResolution,
+  relativeTime,
+  stripSeverity,
+} from "./format";
 
 describe("format", () => {
   it("writes durations a person can read", () => {
@@ -41,6 +50,17 @@ describe("format", () => {
       "Block serve exceptions in HDFS",
     );
     expect(stripSeverity("Kernel panics")).toBe("Kernel panics");
+  });
+
+  it("writes a past fix without the runbook's ID or doubled stops", () => {
+    expect(
+      plainResolution(
+        "Followed runbook zookeeper-quorum-loss: Restore connectivity first.; Restart peers one at a time..",
+      ),
+    ).toBe("Restore connectivity first; restart peers one at a time.");
+    expect(plainResolution("Drained the node and rebooted it.")).toBe(
+      "Drained the node and rebooted it.",
+    );
     expect(stripSeverity(null)).toBe("");
   });
 });

@@ -120,6 +120,9 @@
 }
 
 @theme inline {
+  /* Running text at about 68 characters a line: Tailwind's 65ch is the width of 65 zeros, which
+     in Inter holds about 85 ordinary characters. */
+  --max-width-prose: 56ch;
   --color-background: var(--background);
   --color-app: var(--app);
   --color-foreground: var(--foreground);
@@ -176,12 +179,14 @@
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* The reference's scale: 12 (the floor; it shows 10 and 11), 14, 15, 18, 20, 23, 28, 40, 56, 74. */
-  --text-xs: 0.75rem;
-  --text-xs--line-height: 1.1rem;
-  --text-sm: 0.875rem;
-  --text-sm--line-height: 1.35rem;
-  --text-base: 0.9375rem;
-  --text-base--line-height: 1.5rem;
+  /* Raised a step after owner feedback that the text was too small (round 8): body copy is
+     16 px, small print 15 px and the smallest labels 13 px. */
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.2rem;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.45rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.6rem;
   --text-lg: 1.125rem;
   --text-lg--line-height: 1.6rem;
   --text-xl: 1.25rem;
@@ -221,8 +226,8 @@
   --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 
-  /* Infinite only while work is under way (a reply or a report being written); a status that
-     waits for a person pulses three times and then rests. */
+  /* Only while work is under way (a reply or a report being written); a status that waits for a
+     person stays still. */
   --animate-pulse-dot: pulse-dot 1.6s var(--ease-in-out) infinite;
   --animate-in: aria-enter var(--tw-animation-duration, var(--tw-duration, 0.15s))
     var(--tw-ease, ease) var(--tw-animation-delay, 0s) var(--tw-animation-iteration-count, 1)
@@ -230,7 +235,6 @@
   --animate-out: aria-exit var(--tw-animation-duration, var(--tw-duration, 0.15s))
     var(--tw-ease, ease) var(--tw-animation-delay, 0s) var(--tw-animation-iteration-count, 1)
     var(--tw-animation-direction, normal) var(--tw-animation-fill-mode, none);
-  --animate-pulse-dot-thrice: pulse-dot 1.6s var(--ease-in-out) 3;
 
   @keyframes pulse-dot {
     0%,
@@ -257,6 +261,18 @@
   html:has([data-fixed-header]) {
     scroll-padding-top: 6rem;
   }
+  /* On a phone the console's bar stays at the top, so anchors land below it. Zero specificity:
+     a heading that sets its own offset keeps it. */
+  @media (width < 64rem) {
+    :where(#console-main [id]) {
+      scroll-margin-top: 5rem;
+    }
+    /* Keyboard focus that scrolls the page, going back up with Shift+Tab, stops below the bar
+       too, never under it (WCAG 2.4.11). */
+    html:has(#console-main) {
+      scroll-padding-top: 5rem;
+    }
+  }
   html.dark {
     color-scheme: dark;
   }
@@ -277,7 +293,8 @@
   samp,
   pre {
     @apply font-mono;
-    font-size: 0.875em;
+    /* A shade smaller than the text around it, but never under 12 px. */
+    font-size: max(0.875em, 0.75rem);
   }
   h1,
   h2,
@@ -354,7 +371,7 @@
   }
   /* The subhead under a heading: 15 to 18 px. */
   .text-lead {
-    font-size: clamp(0.9375rem, 0.3vw + 0.875rem, 1.125rem);
+    font-size: clamp(1.0625rem, 0.3vw + 1rem, 1.25rem);
     line-height: 1.55;
     color: var(--muted-foreground);
   }
@@ -404,28 +421,18 @@
   }
 }
 
-/* Hero entrance (hero.tsx): the three product cards rise into place one after another and the
-   thread joining them draws across. Transform only, never opacity, so every card keeps its full
-   contrast in every frame; the headline (the largest paint) never moves. */
+/* Hero entrance (hero.tsx): the report card rises into place once. Transform only, never
+   opacity, so the card keeps its full contrast in every frame; the headline (the largest paint)
+   never moves. */
 @media (prefers-reduced-motion: no-preference) and (min-width: 640px) {
   .hero-rise {
     animation: hero-rise 600ms var(--ease-out) var(--d, 0ms) both;
-  }
-  .hero-thread {
-    transform-origin: left;
-    animation: hero-thread 600ms var(--ease-out) 200ms both;
   }
 }
 
 @keyframes hero-rise {
   from {
     transform: translateY(28px) scale(0.97);
-  }
-}
-
-@keyframes hero-thread {
-  from {
-    transform: scaleX(0);
   }
 }
 
@@ -440,40 +447,6 @@
   .js .draw[data-drawn] path {
     stroke-dashoffset: 0;
     transition: stroke-dashoffset 1800ms var(--ease-out) calc(var(--i, 0) * 70ms);
-  }
-}
-
-/* Ticker: a list that drifts past (globals: .ticker). It pauses while pointed at or focused, and
-   its button stops it (WCAG 2.2.2); with reduced motion it stands still and scrolls by hand. */
-.ticker {
-  overflow: hidden;
-  mask-image: linear-gradient(transparent, #000 18%, #000 82%, transparent);
-}
-.ticker-track {
-  display: grid;
-}
-@media (prefers-reduced-motion: no-preference) {
-  .ticker-track {
-    animation: ticker var(--ticker-s, 40s) linear infinite;
-  }
-  .ticker:hover .ticker-track,
-  .ticker:focus-within .ticker-track,
-  .ticker[data-paused] .ticker-track {
-    animation-play-state: paused;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .ticker {
-    overflow-y: auto;
-  }
-  .ticker-track > [aria-hidden="true"] {
-    display: none;
-  }
-}
-
-@keyframes ticker {
-  to {
-    transform: translateY(-50%);
   }
 }
 

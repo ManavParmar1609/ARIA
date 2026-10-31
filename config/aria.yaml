@@ -12,19 +12,40 @@ llm:
   # The adjudicator has no fake fallback: without a real model, the conservative severity policy
   # decides (most severe class in the prediction set, flagged for review).
   # nim-local (a self-hosted NIM) leads every chain; it is skipped until NIM_LOCAL_BASE_URL is set.
-  # Gemini comes next, then hosted NIM: each is skipped until its key is set, and a provider that
-  # fails, stalls or reaches its free-tier limit hands the call to the next.
+  # Gemini comes next, then hosted NIM, Claude and OpenAI: each is skipped until its key is set,
+  # and a provider that fails, stalls or reaches its limit hands the call to the next.
   routing:
-    adjudicator: [nim-local, gemini, gemini-lite, nim, nim-fallback, azure, openai_compat]
-    investigator: [nim-local, gemini, gemini-lite, nim, nim-fallback, azure, openai_compat, fake]
-    reporter: [nim-local, gemini, gemini-lite, nim, nim-fallback, azure, openai_compat, fake]
-    critic: [nim-local, gemini, gemini-lite, nim, nim-fallback, azure, openai_compat, fake]
-    comms: [nim-local, gemini, gemini-lite, nim, nim-fallback, azure, openai_compat, fake]
-    ask: [nim-local, gemini, gemini-lite, nim, nim-fallback, azure, openai_compat, fake]
-    default: [nim-local, gemini, gemini-lite, nim, nim-fallback, azure, openai_compat, fake]
+    adjudicator: [nim-local, gemini, gemini-lite, nim, nim-fallback, claude, openai, azure, openai_compat]
+    investigator: [nim-local, gemini, gemini-lite, nim, nim-fallback, claude, openai, azure, openai_compat, fake]
+    reporter: [nim-local, gemini, gemini-lite, nim, nim-fallback, claude, openai, azure, openai_compat, fake]
+    critic: [nim-local, gemini, gemini-lite, nim, nim-fallback, claude, openai, azure, openai_compat, fake]
+    comms: [nim-local, gemini, gemini-lite, nim, nim-fallback, claude, openai, azure, openai_compat, fake]
+    ask: [nim-local, gemini, gemini-lite, nim, nim-fallback, claude, openai, azure, openai_compat, fake]
+    default: [nim-local, gemini, gemini-lite, nim, nim-fallback, claude, openai, azure, openai_compat, fake]
   embeddings: [nim, azure, local]
   rerank: [nim]
   safety: [nim]
+  # A visitor's own key (the console's Settings page, or the X-Model-Provider and X-Model-Key
+  # headers), off unless ARIA_VISITOR_KEYS=true, as in the public demo image. A key stands in for
+  # this server's key in the providers listed for its kind, which then lead every chain, for the
+  # run or question it came with only: it is held in memory while that work runs, and never
+  # stored, logged or shown.
+  visitor_keys:
+    enabled: ${ARIA_VISITOR_KEYS:-false}
+    providers:
+      claude: [claude]
+      gemini: [gemini, gemini-lite]
+      openai: [openai]
+      nvidia: [nim, nim-fallback]
+
+  # This server's own keys, for visitors who bring none: how many model-written runs and answers
+  # each visitor (per_visitor) and everyone together (per_day) may have per UTC day; 0 means no
+  # limit. Past either, the work runs offline, which still works end to end. A visitor's own key
+  # never counts. Counts live in memory: a restart starts the day afresh. The public demo image
+  # sets both (docs/deploy-free.md).
+  shared:
+    per_visitor: ${ARIA_SHARED_PER_VISITOR:-0}
+    per_day: ${ARIA_SHARED_PER_DAY:-0}
 
   providers:
     nim-local:
@@ -83,6 +104,7 @@ llm:
       kind: nvidia_nim
       base_url: ${NVIDIA_NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}
       api_key_env: NVIDIA_API_KEY
+      public_catalog: true
       chat_model: ${NVIDIA_NIM_CHAT_MODEL:-openai/gpt-oss-20b}
       reasoning_effort: ${NVIDIA_NIM_REASONING_EFFORT:-low}
       embedding_model: ${NVIDIA_NIM_EMBED_MODEL:-nvidia/nemotron-3.5-embed-1b}
@@ -109,6 +131,7 @@ llm:
       kind: nvidia_nim
       base_url: ${NVIDIA_NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}
       api_key_env: NVIDIA_API_KEY
+      public_catalog: true
       chat_model: ${NVIDIA_NIM_FALLBACK_MODEL:-minimaxai/minimax-m3.1-flash}
       structured_output: json_schema
       stream_always: true
@@ -133,15 +156,67 @@ llm:
         fields are deployment names. GPT-4 is retired; Microsoft lists gpt-5.1 as the successor
         to gpt-4o. Set AZURE_OPENAI_USE_ENTRA=true to use managed identity instead of an API key.
 
+    claude:
+      kind: anthropic
+      base_url: ${ANTHROPIC_BASE_URL:-https://api.anthropic.com}
+      api_key_env: ANTHROPIC_API_KEY
+      chat_model: ${ANTHROPIC_CHAT_MODEL:-claude-opus-5-5}
+      reasoning_effort: ${ANTHROPIC_EFFORT:-low}
+      # Claude always thinks a little first, and the thinking counts against each reply's limit.
+      reasoning_tokens: 4000
+      structured_output: json_schema
+      stream_always: true
+      stall_timeout_s: 30
+      timeout_s: 120
+      max_retries: 0
+      price_input_per_mtok: 4.0
+      price_output_per_mtok: 20.0
+      # A request a safety classifier declines is run again on a model Anthropic picks for it.
+      # Remove both lines for a model that has no server-side fallback (Claude Haiku).
+      extra_headers: {anthropic-beta: server-side-fallback-2026-07-01}
+      extra_body: {fallbacks: default}
+      verified: false
+      notes: >-
+        Claude through Anthropic's own Python SDK and the Messages API: the system prompt apart
+        from the turns, schema-constrained JSON through output_config.format, depth through
+        output_config.effort, and no temperature (current Claude models refuse it).
+        claude-opus-5-5 is Anthropic's default model ($4 and $20 per million input and output
+        tokens on 2026-10-30); set ANTHROPIC_CHAT_MODEL to choose another. Not yet called live
+        from ARIA, so unverified.
+
+    openai:
+      kind: openai_compatible
+      base_url: https://api.openai.com/v1
+      api_key_env: OPENAI_API_KEY
+      chat_model: ${OPENAI_CHAT_MODEL:-gpt-6.1-sol}
+      reasoning_effort: ${OPENAI_REASONING_EFFORT:-low}
+      max_tokens_field: max_completion_tokens
+      sampling: false
+      reasoning_tokens: 4000
+      structured_output: json_schema
+      stream_always: true
+      stall_timeout_s: 30
+      timeout_s: 120
+      max_retries: 0
+      price_input_per_mtok: 2.0
+      price_output_per_mtok: 10.0
+      verified: false
+      notes: >-
+        OpenAI's own API through Chat Completions. gpt-6.1-sol is OpenAI's model for balancing
+        capability and cost ($2 and $10 per million input and output tokens on 2026-10-30); it
+        takes Chat Completions with strict json_schema and streaming, reasoning effort low or
+        above, max_completion_tokens instead of max_tokens, and no temperature while it reasons.
+        Not yet called live from ARIA, so unverified.
+
     openai_compat:
       kind: openai_compatible
-      base_url: ${OPENAI_BASE_URL:-}
-      api_key_env: OPENAI_API_KEY
-      chat_model: ${OPENAI_CHAT_MODEL:-}
-      embedding_model: ${OPENAI_EMBED_MODEL:-}
+      base_url: ${OPENAI_COMPAT_BASE_URL:-}
+      api_key_env: OPENAI_COMPAT_API_KEY
+      chat_model: ${OPENAI_COMPAT_CHAT_MODEL:-}
+      embedding_model: ${OPENAI_COMPAT_EMBED_MODEL:-}
       structured_output: json_schema
       verified: false
-      notes: Any OpenAI-compatible endpoint (OpenAI, vLLM, Ollama, LM Studio).
+      notes: Any other OpenAI-compatible endpoint (vLLM, Ollama, LM Studio).
 
     fake:
       kind: fake

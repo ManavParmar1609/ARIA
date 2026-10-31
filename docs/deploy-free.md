@@ -18,13 +18,18 @@ For a production deployment with API keys, a managed database and monitoring, se
 visitor ──▶ Vercel: landing page, console, /api/* proxy ──▶ Render: ARIA API, seeded demo
 ```
 
-- The landing page needs no API. It shows a recorded run and the published results, so it stays
-  up and fast even while the API sleeps.
+- The home page and the console's How ARIA works need no API. They show a recorded run and the
+  published results, so they stay up and fast even while the API sleeps.
 - The console reaches the API through Vercel's server. The browser never talks to Render
   directly.
-- The API runs the [demo image](../deploy/demo/Dockerfile). It needs no API key, sends nothing to
-  a model provider (every step runs on ARIA's offline provider) and starts from a demo seeded at
-  build time: past incidents in memory, one approved run and two waiting for review.
+- The API runs the [demo image](../deploy/demo/Dockerfile). It needs no API key and starts from a
+  demo seeded at build time: past incidents in memory, one approved run and two waiting for
+  review, and each sample's sizes already rated, so the first visitor after a wake-up does not
+  wait for them. Every step runs on ARIA's offline provider, unless a visitor brings their own
+  model key or you set one (see [Language models on the demo](#language-models-on-the-demo)).
+- The build downloads the public Loghub log samples (a few MB) that the samples are made from
+  and the severity model learned from. If the download fails, the build carries on with the small
+  copies in the repository, where some harmless samples are rated as incidents.
 
 ## Before you start
 
@@ -70,21 +75,36 @@ visitor ──▶ Vercel: landing page, console, /api/* proxy ──▶ Render: 
    | Name | Value | Why |
    |---|---|---|
    | `ARIA_API_URL` | Your Render address, such as `https://aria-api.onrender.com` | Where the console's server finds the API |
-   | `ARIA_PUBLIC_DEMO` | `1` | Tells visitors, beside the log box, that other visitors can see their runs |
+   | `ARIA_PUBLIC_DEMO` | `1` | Tells visitors, beside the log box, that the demo runs on a shared server, so they paste only logs they could share |
 
 5. Choose **Deploy**. When it finishes, open the address Vercel gives you, such as
    `https://aria.vercel.app`.
+6. Back in Render, open the `aria-api` service's **Environment** settings and set
+   `ARIA_CONSOLE_URL` to that address. Messages ARIA drafts then link to the incident's page in
+   the console instead of to the API.
 
 Link previews on LinkedIn, X and Slack use the production address automatically. If you add a
 custom domain later, set `ARIA_WEB_URL` to it and redeploy.
 
 ## Step 3: check it as a visitor would
 
-1. The landing page loads and the replay plays.
-2. **Open the console** shows the overview, with two incidents waiting for review.
-3. In **New triage**, load a sample and choose **Start triage**. The run view follows the run
-   live; when it finishes, approve it.
-4. If the console says it is still connecting, the API is waking up. See the next section.
+1. The home page loads. On the console's **How ARIA works**, its example incident lights up the
+   log lines behind a citation when you point at it.
+2. **Open the console** opens **New triage**. **Incidents** lists the examples: two waiting for
+   review and one approved.
+3. In **New triage**, choose **Run it** on a sample. The incident page follows the run live; when
+   it waits for you, approve it.
+4. If the console says ARIA's server is waking up, wait a minute. See the next section.
+5. Before you share the link, stress the API from your own machine the way many visitors would
+   use it at once:
+
+   ```bash
+   uv run python -I scripts/stress_demo.py --base https://<your-api>.onrender.com --visitors 12
+   ```
+
+   It should end with "no problems": no server errors, no visitor seeing another's incidents, and
+   a clear refusal for every bad request. It stops at once if the API has a model key of its own,
+   because every simulated visitor would spend that key's allowance.
 
 ## What to expect from the free plans
 
@@ -105,18 +125,94 @@ custom domain later, set `ARIA_WEB_URL` to it and redeploy.
   rebuilds the site. If you push often, turn off Auto-Deploy in the Render service's settings and
   deploy by hand.
 
+## Language models on the demo
+
+Out of the box the demo uses no language model: rules, the calibrated model and the grounded
+report template do the work, and nothing leaves the server. Two ways bring a model in.
+
+### Visitors bring their own key
+
+The demo image sets `ARIA_VISITOR_KEYS=true`, so the console's **Settings** page shows a **Your
+model key** section. A visitor picks Claude, Gemini, OpenAI or NVIDIA NIM, pastes a key and
+chooses **Check and save key**.
+
+- ARIA checks the key with the provider first and keeps only a key the provider accepts.
+- The visitor's browser keeps the key in a cookie that page scripts cannot read, for up to a
+  working day, and sends it only with requests that can call a model.
+- The API uses it for that visitor's runs and questions alone, holds it in memory while they run,
+  and never stores, logs or shows it.
+- Their logs, after ARIA's redaction, go to the provider they chose, and the cost falls on their
+  key, capped per run by ARIA's budget.
+
+Nothing costs you anything. To turn it off, set `ARIA_VISITOR_KEYS=false` in the Render service's
+**Environment** settings.
+
+### Each visitor sees only their own incidents
+
+The demo image also sets `ARIA_VISITOR_SCOPE=true`, so visitors who share the link never see one
+another's work.
+
+- The console gives each browser a private session id, in a cookie page scripts cannot read, and
+  sends it with every request. The API files each new incident under a hash of that id.
+- A visitor's **Incidents** page lists the incidents they started, plus the three examples the
+  image triaged when it was built. The examples are marked **Example**.
+- Nobody can review, send or delete an example, so it is the same for the next visitor. **Make my
+  own copy** on an example gives the visitor a private copy to review.
+- A visitor's incidents never join the incident library, the templates other runs are compared
+  with, or the reviews that recalibrate the severity model.
+- Anyone calling the API directly without a session id shares one anonymous space, and a caller
+  with an API key still sees every incident.
+
+### You set your own key
+
+Add your key as an environment variable on Render (for example `GEMINI_API_KEY`), then choose
+**Save and deploy**; **Save only** keeps the variable but the running service does not see it
+until its next deploy. Check it in the console under **Settings**, **Model providers**: the
+provider's row should say **Ready**.
+
+Every visitor without a key of their own then uses yours, within a daily allowance the demo image
+sets: 5 model-written runs and answers per visitor, and 100 for everyone together, per UTC day.
+Past either, that visitor's work runs offline, which still works end to end, and the console says
+so: **Settings** and **New triage** show "The site's key (shared, limited)" with what is left
+today, then "Offline". A visitor's own key always comes first and never counts against yours.
+Change the allowance with `ARIA_SHARED_PER_VISITOR` and `ARIA_SHARED_PER_DAY` (0 means no limit).
+
+Before you add your key, weigh three things:
+
+- **Cost.** A free-tier key (Google AI Studio without billing, for example) costs nothing: when its
+  daily quota runs out, runs fall back to the offline path until it resets. With billing, the cost
+  is at most the daily allowance times one run's budget, since ARIA caps each run's tokens, calls
+  and time. The counts live in the service's memory, so a restart (the free plan sleeps after 15
+  minutes without visitors) starts the day's count afresh.
+- **Quota.** Visitors share your key's provider quota; the per-visitor allowance keeps one busy
+  visitor from using it all. A visitor is a browser session, so clearing cookies starts a new
+  share: the daily total is the real cap.
+- **Privacy.** Visitors' pasted logs, after redaction, go to your provider account. On Gemini's
+  free tier, Google may use prompts to improve its products.
+
 ## What a public demo exposes
 
-- **No sign-in.** Anyone with the address can start runs, review them and delete them. A restart
-  puts everything back.
-- **Visitors see each other's runs.** The console asks them to load a sample or paste only logs
-  they can share.
-- **Nothing leaves the server.** The demo has no model provider keys and no Slack, Teams or
-  webhook targets. Keep it that way: anyone could spend a provider key on a public demo, and
-  pasted text would go to the provider.
-- **One shared rate limit.** Every console visitor reaches the API through Vercel's servers, so
-  they share the limit of 600 requests a minute. If visitors see "rate limit exceeded", raise
-  `ARIA_RATE_LIMIT_PER_MINUTE` in the Render service's **Environment** settings.
+- **No sign-in.** Anyone with the address can start triages, review them and delete them. A
+  restart puts everything back.
+- **Each visitor sees only their own incidents.** A visitor is a browser session: it sees the
+  incidents it started, plus the shared examples, which nobody can change or delete. The console
+  still asks visitors to paste only logs they could share, because the server is shared.
+- **Nothing goes to a model unless a key is there.** The demo has no model provider keys of its
+  own and no Slack, Teams or webhook targets. A visitor who saves their own key sends their own
+  triages to their chosen provider. A key you set yourself serves every other visitor within the
+  daily allowance, alerts and agent tasks included, and past it their work runs offline (see
+  [Language models on the demo](#language-models-on-the-demo)).
+- **A rate limit for each visitor, and one for the site.** Each visitor may make 120 requests a
+  minute, and since every console visitor reaches the API through Vercel's servers, all of them
+  together may make 1,800. When either runs out, the console says ARIA is busy and carries on by
+  itself a few seconds later. To allow more, raise `ARIA_RATE_LIMIT_PER_MINUTE` (each visitor) or
+  `ARIA_RATE_LIMIT_SITE_PER_MINUTE` (everyone) in the Render service's **Environment** settings.
+- **Room for everyone in the queue.** The free plan runs one triage at a time, so each visitor may
+  have 3 waiting or running; the console asks for a fourth to wait until one is ready
+  (`ARIA_MAX_ACTIVE_RUNS_PER_VISITOR`).
+- **Pastes up to 1 MB.** A run's memory grows with its lines, and the free plan has 512 MB, so the
+  demo takes pastes of up to 1 MB, about 5,000 log lines; the console says so before sending a
+  larger one. On a server with more memory, raise `ARIA_MAX_BODY_BYTES` (in bytes).
 
 ## If something goes wrong
 
@@ -125,8 +221,10 @@ custom domain later, set `ARIA_WEB_URL` to it and redeploy.
 | The Render build fails | Open the deploy's log. If it names a missing branch or file, check that the Blueprint points at the branch you merged into. |
 | The console says "ARIA's API is not answering" | Check that Render shows the service as Live, and that `ARIA_API_URL` starts with `https://` and has no path after the address. Vercel applies changed variables to new deployments only, so redeploy after a change. |
 | The Vercel install fails with `ERR_INVALID_THIS` or a lockfile error | Vercel used its own pnpm instead of `web/vercel.json`'s. Check that the project's root directory is `web` and that no install command override is set, then deploy the newest commit on `main`. |
-| Visitors see "rate limit exceeded" | Raise `ARIA_RATE_LIMIT_PER_MINUTE` on Render. |
+| The console often says ARIA is busy | Raise `ARIA_RATE_LIMIT_SITE_PER_MINUTE` on Render, or `ARIA_RATE_LIMIT_PER_MINUTE` if one visitor sees it alone. |
+| Render restarts the API saying it ran out of memory | Lower `ARIA_MAX_BODY_BYTES`, or move to a plan with more memory. |
 | Link previews show no image | Set `ARIA_WEB_URL` to your site's address and redeploy. |
+| The deploy log says the Loghub samples could not be downloaded | The demo still works, on the small copies of the logs in the repository, where some harmless samples are rated as incidents. Redeploy to try the download again. |
 
 ## Other places to run the API
 

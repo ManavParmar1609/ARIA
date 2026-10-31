@@ -11,11 +11,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import text
 
 from aria import __version__
+from aria.api.keys import VisitorKeyDep, accepted_kinds
 from aria.api.metrics import CONTENT_TYPE
-from aria.api.schemas import Health, Me, ProviderOut, SettingsOut
+from aria.api.schemas import Health, Me, ModelKeyCheck, ProviderOut, SettingsOut, SharedModelOut
 from aria.api.security import Principal
 from aria.api.state import AppState, app_state, current_principal
+from aria.api.visitors import ViewerDep
 from aria.db.engine import session_scope
+from aria.llm.base import Message, ProviderError
 from aria.notify import channel_env
 
 router = APIRouter(tags=["system"])
@@ -97,9 +100,16 @@ async def me(state: State, caller: Caller) -> Me:
 
 
 @router.get("/api/v1/settings", response_model=SettingsOut)
-async def settings_view(state: State) -> SettingsOut:
-    """Budgets, guardrails, severity, retrieval and routing settings in force. No secrets."""
+async def settings_view(state: State, viewer: ViewerDep) -> SettingsOut:
+    """Budgets, guardrails, severity, retrieval and routing settings in force, and the caller's
+    share today of the server's own model. No secrets."""
     settings, config = state.services.settings, state.services.config
+    shared = None
+    if state.services.router.has_real_llm("reporter"):
+        share = state.allowance.check(viewer.tag or "all")
+        shared = SharedModelOut(
+            left=share.left, per_visitor=share.per_visitor, per_day=share.per_day
+        )
     return SettingsOut(
         environment=str(settings.env),
         require_approval=settings.require_approval,
@@ -117,4 +127,60 @@ async def settings_view(state: State) -> SettingsOut:
             kind: bool(os.environ.get(channel_env(kind, config.comms), "").strip())
             for kind in ("slack", "teams", "webhook", "status_page", "ticket_draft")
         },
+        visitor_keys=accepted_kinds(state),
+        visitor_scope=settings.visitor_scope,
+        shared_model=shared,
+        max_body_bytes=settings.max_body_bytes,
     )
+
+
+_KEY_NAMES = {"claude": "Anthropic", "gemini": "Google", "openai": "OpenAI", "nvidia": "NVIDIA"}
+
+
+def _refused(company: str, exc: ProviderError) -> str:
+    if exc.status in (400, 401, 403, 404):
+        return (
+            f"{company} did not accept this key (HTTP {exc.status}). Check that you copied all "
+            "of it and that it is still active."
+        )
+    if exc.status == 429:
+        return f"{company} is limiting this key's requests right now (HTTP 429). Try again soon."
+    return f"{company} could not be reached to check the key. Try again in a minute."
+
+
+@router.post("/api/v1/model-key/check", response_model=ModelKeyCheck)
+async def check_model_key(state: State, visitor: VisitorKeyDep) -> ModelKeyCheck:
+    """Check a visitor's own key before it is used, and keep nothing.
+
+    The provider lists its models for the key, which costs nothing. Where that list answers
+    anyone (NVIDIA's), one tiny request checks the key instead.
+    """
+    if visitor is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Send the key in X-Model-Key and its provider in X-Model-Provider.",
+        )
+    own = state.services.router.with_key(visitor)
+    name = own.config.visitor_keys.providers[visitor.provider][0]
+    cfg = own.config.providers[name]
+    model, company = cfg.chat_model or "", _KEY_NAMES.get(visitor.provider, visitor.provider)
+    try:
+        if cfg.public_catalog:
+            await own.provider(name).chat([Message("user", "Reply with OK.")], max_tokens=16)
+            listed = True
+        else:
+            catalog = await own.provider(name).list_models()
+            listed = not catalog or model in catalog
+    except ProviderError as exc:
+        return ModelKeyCheck(
+            provider=visitor.provider, accepted=False, model=model, detail=_refused(company, exc)
+        )
+    finally:
+        await own.aclose()
+    detail = (
+        f"{company} accepted the key. Runs you start will use {model} first."
+        if listed
+        else f"{company} accepted the key, but {model} is not among its models, so runs may "
+        "fall back to this server's own."
+    )
+    return ModelKeyCheck(provider=visitor.provider, accepted=True, model=model, detail=detail)

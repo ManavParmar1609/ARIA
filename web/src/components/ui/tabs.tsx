@@ -12,8 +12,9 @@ export function TabsList({ className, ...props }: ComponentProps<typeof TabsPrim
     <TabsPrimitive.List
       data-slot="tabs-list"
       className={cn(
-        // inline-size containment: the row scrolls instead of widening the page on a phone.
-        "flex [scrollbar-width:none] items-end gap-1 overflow-x-auto border-b border-rule [contain:inline-size]",
+        // Tabs that don't fit wrap onto a second row on a phone, rather than hiding off the edge;
+        // inline-size containment keeps them from widening the page.
+        "flex flex-wrap items-end gap-1 border-b border-rule [contain:inline-size]",
         className,
       )}
       {...props}

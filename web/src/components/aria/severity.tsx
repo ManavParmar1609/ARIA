@@ -2,6 +2,7 @@ import { type CSSProperties } from "react";
 
 import { SEVERITIES, SEVERITY_MEANING, type Severity } from "@/lib/api/types";
 import { cx } from "@/lib/cx";
+import { LEVEL_WORD } from "@/lib/levels";
 
 export const SEVERITY_BG: Record<Severity, string> = {
   SEV1: "bg-sev1",
@@ -10,12 +11,8 @@ export const SEVERITY_BG: Record<Severity, string> = {
   SEV4: "bg-sev4",
 };
 
-const SHORT: Record<Severity, string> = {
-  SEV1: "Critical",
-  SEV2: "High",
-  SEV3: "Moderate",
-  SEV4: "Low",
-};
+const short = (severity: Severity) =>
+  `${LEVEL_WORD[severity].charAt(0).toUpperCase()}${LEVEL_WORD[severity].slice(1)}`;
 
 /**
  * Severity as a small tag: the colour strip carries the level and the text says it, so the
@@ -64,8 +61,79 @@ export function SeverityBadge({
         {severity}
       </span>
       {withMeaning ? (
-        <span className="text-sm text-muted-foreground">{SHORT[severity]}</span>
+        <span className="text-sm text-muted-foreground">{short(severity)}</span>
       ) : null}
+    </span>
+  );
+}
+
+/**
+ * The level as a dot and its name, for long lists where a badge on every row would crowd the page.
+ * The text says the level, so it never depends on colour alone.
+ */
+export function SeverityDot({
+  severity,
+  className,
+}: {
+  severity: Severity | null | undefined;
+  className?: string;
+}) {
+  if (!severity) {
+    return <span className={cx("text-xs text-faint", className)}>Not rated</span>;
+  }
+  return (
+    <span
+      className={cx("tabular inline-flex items-center gap-1.5 text-xs font-medium", className)}
+      title={SEVERITY_MEANING[severity]}
+    >
+      <span
+        aria-hidden
+        className={cx("block size-2.5 rounded-full border border-sev-edge", SEVERITY_BG[severity])}
+      />
+      {severity}
+    </span>
+  );
+}
+
+/**
+ * The level and its word in one chip, "SEV2 · high": the answer an incident page leads with.
+ * The colour carries the level and the text says it, so it never depends on colour alone.
+ */
+export function LevelChip({
+  severity,
+  stamp = false,
+  className,
+}: {
+  severity: Severity | null | undefined;
+  /** Land like a rubber stamp when it appears (globals.css: .sev-stamp). */
+  stamp?: boolean;
+  className?: string;
+}) {
+  if (!severity) {
+    return (
+      <span
+        className={cx(
+          "inline-flex h-7 items-center rounded-sm border border-dashed border-control px-2.5 text-sm font-medium text-faint",
+          className,
+        )}
+      >
+        Not rated yet
+      </span>
+    );
+  }
+  return (
+    <span
+      title={SEVERITY_MEANING[severity]}
+      className={cx(
+        "tabular inline-flex h-7 items-center gap-1.5 rounded-sm border border-sev-edge px-2.5 text-sm font-medium whitespace-nowrap text-sev-ink",
+        SEVERITY_BG[severity],
+        stamp && "sev-stamp",
+        className,
+      )}
+    >
+      {severity}
+      <span aria-hidden>·</span>
+      {LEVEL_WORD[severity]}
     </span>
   );
 }
@@ -83,7 +151,7 @@ export function TagStrip({
   return (
     <div
       className={cx(
-        "relative m-3 grid aspect-square shrink-0 place-items-center self-start rounded-[18px]",
+        "relative grid aspect-square shrink-0 place-items-center self-start rounded-[18px]",
         severity ? SEVERITY_BG[severity] : "bg-sunken",
         className,
       )}
@@ -146,7 +214,7 @@ export function SeverityScale({
   return (
     <figure
       className={cx("grid gap-1", className)}
-      aria-label={`${rulesOnly ? "Rule scores (the calibrated model was not used)" : "Model probabilities"}: ${described}. ${rulesOnly ? `Levels the rules leave open: ${predictionSet.join(", ")}.` : setEmpty ? `No class is likely enough for the ${coverage}% prediction set.` : `${coverage}% prediction set: ${predictionSet.join(", ")}.`} Decided: ${decided}.${floor ? ` Safety floor: ${floor}.` : ""}`}
+      aria-label={`${rulesOnly ? "Rule scores (the calibrated model was not used)" : "Model probabilities"}: ${described}. ${rulesOnly ? `Levels the rules leave open: ${predictionSet.join(", ")}.` : setEmpty ? `No level is likely enough to make the short list, so the likeliest stands in.` : `Short list, built to hold the right level ${coverage}% of the time: ${predictionSet.join(", ")}.`} Decided: ${decided}.${floor ? ` Safety floor: ${floor}.` : ""}`}
     >
       <div className="relative grid grid-cols-4 gap-1.5" aria-hidden>
         {setIdx.length > 0 ? (
@@ -211,8 +279,8 @@ export function SeverityScale({
           {rulesOnly
             ? "Bars: rule scores, as shares. Bracket: the levels the rules leave open."
             : setEmpty
-              ? `Bars: calibrated model probability. Dashed bracket: no class is likely enough for the ${coverage}% prediction set, so it stands in with the most likely.`
-              : `Bars: calibrated model probability. Bracket: the ${coverage}% prediction set.`}
+              ? `Bars: calibrated model probability. Dashed bracket: no level is likely enough to make the short list, so the likeliest stands in.`
+              : `Bars: calibrated model probability. Bracket: the short list, built to hold the right level ${coverage}% of the time.`}
         </figcaption>
       ) : null}
     </figure>

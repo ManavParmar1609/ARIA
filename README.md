@@ -11,7 +11,7 @@ ARIA runs offline with no API keys. Set a Gemini key (free tier available) or an
 and the agents write with hosted models. Azure OpenAI and any OpenAI-compatible server work the
 same way: switching is a config change.
 
-![ARIA's landing page: the headline "Incident triage that shows its work." on a sage-green panel beside three cards from a recorded run (the alert, its severity and the report waiting for approval) on a slate-blue panel.](docs/images/hero.webp)
+![ARIA's home page: the headline "Turn a wall of logs into a report you can check." on a sage-green panel, and beside it, on a slate-blue panel, a report card from a recorded run: the level, a claim with its citation open on the log line it cites, and a note that it is waiting for a person to approve.](docs/images/hero.webp)
 
 > [!IMPORTANT]
 > Several results use **real data with the labels its owners gave it**: a Hadoop cluster's log (the
@@ -47,9 +47,10 @@ same way: switching is a config change.
 7. **Learn.** Approved reports join incident memory. Reviewer corrections go to a feedback
    queue, and once enough gather, the severity model's prediction sets are recalibrated on them.
 
-![A recorded run on the landing page: the HDFS log on the left, with the two lines behind evidence E2 lit up, and the triage tag on the right, whose claims each cite evidence IDs.](docs/images/replay.webp)
+![A recorded run on the console's How ARIA works page: the HDFS log on the left, with the lines behind evidence E2 lit up, and the triage tag on the right, whose claims each cite evidence IDs.](docs/images/replay.webp)
 
-*One recorded run. Pointing at a citation on the tag lights up the log lines behind it.*
+*One recorded run, with a language model doing the investigation, the report and the messages.
+Pointing at a citation on the tag lights up the log lines behind it.*
 
 ## Architecture
 
@@ -106,13 +107,13 @@ uv run aria db upgrade && uv run aria seed
 make dev
 ```
 
-Open http://localhost:3000 for the landing page, then **Open the console**. New to ARIA? The
-console's **How to use ARIA** page replays a real incident (ten minutes of a real Hadoop
-cluster's log) or starts a sample triage in one click, and explains how to read a run. A replayed
-run shows the blocks ARIA flagged next to the label Hadoop experts gave each one, and the run
-page's first tab tells the run as each agent's turn. In the console, Ctrl or ⌘ + K opens a
-command palette that jumps to any page, recent incident, sample or definition, and `?` lists the
-keyboard shortcuts. The API listens on
+Open http://localhost:3000 for the home page, then **Open the console**. New to ARIA? The
+console's **How ARIA works** explains it in five short pages, and its **Guide** page replays a
+real incident (ten minutes of a real Hadoop cluster's log) or starts a sample triage in one click,
+and explains how to read a run. A replayed run shows the blocks ARIA flagged next to the label
+Hadoop experts gave each one, and the run page's first tab tells the run as each agent's turn. In
+the console, Ctrl or ⌘ + K opens search, which jumps to any page, recent incident, sample, runbook
+or definition, and `?` lists the keyboard shortcuts. The API listens on
 http://127.0.0.1:8000 (OpenAPI docs at `/docs`). If those ports are taken,
 `make dev API_PORT=8010 WEB_PORT=3010` moves both.
 
@@ -197,7 +198,7 @@ lines. With `ARIA_ENV=prod`, every call needs an API key from `ARIA_API_KEYS`.
 
 | Surface | Where | What it is for |
 |---|---|---|
-| Console | `web/`, http://localhost:3000/console | Queue, live run view with rule trace, prediction set, evidence and cited report; review, time travel, Ask ARIA, evals, memory, settings, a guide with one-click samples, and a command palette with keyboard shortcuts |
+| Console | `web/`, http://localhost:3000/console | Queue, live run view with rule trace, prediction set, evidence and cited report; review, time travel, Ask ARIA, evals, memory, settings, a guide with one-click samples, and search with keyboard shortcuts |
 | REST and SSE | `/api/v1/*`, [docs/openapi.json](docs/openapi.json) | Runs, live event stream, report (JSON and Markdown), postmortem draft, review, resending a failed message, history, fork |
 | Alert webhooks | `/api/v1/alerts/alertmanager`, `/grafana`, `/alerts` | Turn alert storms into one grouped run |
 | Log scan | `ARIA_SCAN_SOURCES`, `ARIA_SCAN_INTERVAL_S` | Open a run on an error burst no alert caught |
@@ -228,7 +229,9 @@ path rather than failing it.
 | NVIDIA NIM, second model (`nim-fallback`) | chat `minimaxai/minimax-m3.1-flash` | Verified with live calls on 2026-10-29 |
 | NVIDIA NIM, self-hosted (`nim-local`) | Whatever your NIM container serves | Not verified (needs a GPU) |
 | Azure OpenAI (`azure`) | Deployments `gpt-5.1` and `text-embedding-3-small`; Entra ID or key | Not verified against a live resource |
-| OpenAI-compatible (`openai_compat`) | Your choice: OpenAI, vLLM, Ollama, LM Studio | Not verified |
+| Anthropic Claude (`claude`) | chat `claude-opus-5-5`, effort low, through Anthropic's own SDK | Not verified with a live call |
+| OpenAI (`openai`) | chat `gpt-6.1-sol`, reasoning low | Not verified with a live call |
+| Other OpenAI-compatible endpoints (`openai_compat`) | Your choice: vLLM, Ollama, LM Studio (`OPENAI_COMPAT_*`) | Not verified |
 | Offline (`fake`, `local`) | Deterministic text; TF-IDF + SVD embeddings | Used by tests, evals and the demo |
 
 Reranking with NIM is off until `NVIDIA_NIM_RERANK_MODEL` and `NVIDIA_NIM_RERANK_URL` are set. The
@@ -279,20 +282,24 @@ The full analysis, with the code and test for each control, is in the
 
 ## Measured results
 
-![The landing page's Real logs section: four headline results on the real Hadoop log, how ARIA catches a failure nobody logged, and bars comparing the precision and recall of ARIA, its severity engine and a keyword rule.](docs/images/real.webp)
+![The Hadoop cluster test on the console's Test results page: ARIA's result against the label experts gave each storage block, its precision, recall and false alarms, and a table comparing ARIA with four standard detectors, its severity engine and a keyword rule.](docs/images/real.webp)
 
-*The landing page's proof on real logs. Every number on it comes from `docs/eval-results.json`.*
+*The Hadoop cluster test on the console's Test results page. Every number on it comes from `docs/eval-results.json`.*
 
 <!-- generated:results -->
-Generated by `make eval` at commit `e7bfb7b`; do not edit by hand. Apart from the real-data results, the data is **semi-synthetic**: real lines from the public Loghub samples, composed into incidents by ARIA's scenario builder, on held-out seeds 41, 42. These numbers show how ARIA behaves on that distribution, not its accuracy on production incidents.
+Generated by `make eval` at commit `c6d459d`; do not edit by hand. Apart from the real-data results, the data is **semi-synthetic**: real lines from the public Loghub samples, composed into incidents by ARIA's scenario builder, on held-out seeds 41, 42. These numbers show how ARIA behaves on that distribution, not its accuracy on production incidents.
 
 **Real logs, expert labels**: on a real Hadoop cluster's log (more than 200 nodes, every storage block labelled by Hadoop experts), ARIA's lifecycle check flagged 151 of the 5,435 blocks it judged, 98.0% of them real failures (3 false alarms among 5,186 healthy blocks): 59.4% of the 249 failures it judged, 47.3% of all 313 in the sample. It matches or beats each standard detector on the same blocks, though they see the whole sample at once: PCA (Xu et al. 2009) finds 37.0% with 2 false alarms, an isolation forest finds 56.2% with 14 false alarms, and a rule that flags rare step counts ties it. An offline replay of the check, not of the deployed log scan.
 
 **Real severity**: on all 7,346 20-minute windows of a supercomputer's 214.7-day log, labelled by its administrators' alert tags, ARIA rated 64 of the 680 SEV1-2 windows as SEV3-4 and paged on 512 of 6,533 quiet windows (ARIA's rules alone: 26 and 251; the highest log level: 0 and 505); accuracy 87.2% (86.5–87.9%), macro-F1 0.581.
 
+**Real severity**: on all 3,114 20-minute windows of a second supercomputer's 47.5-day log, labelled by its administrators' alert tags, no window was labelled SEV1-2, and ARIA paged on 2,329 of 2,979 quiet windows (ARIA's rules alone: 2,186; the highest log level: 2,912); accuracy 1.5% (1.1–2.0%), macro-F1 0.010.
+
 **Real failed jobs**: of 44 Hadoop jobs with a failure injected, ARIA flagged 30 (52.4–81.4%), and 5 of 11 healthy jobs; a rule on ERROR lines flags 19 and 2.
 
 **Real injected bugs**: of 480 OpenStack runs that failed after a bug was injected into the code, ARIA flagged 479 (98.8–100.0%), including all 84 that no API error reported, and all 431 runs that did not fail: it was unsure of 865 of the 911 runs and sent them to a reviewer. Paging only at SEV1-2, it caught 444 failed and 133 healthy runs, where a rule on ERROR lines flags 439 and 113; ranking failed above healthy runs, it scores AUROC 0.777 (0.746–0.806), against 0.829 for counting ERROR lines.
+
+**Build failures**: on 756 failed CI builds, a kind of log ARIA was never tuned on, the lines it kept as evidence held the lines a person marked as the cause in 41.5% of builds (38.0–45.1%); the same number of the log's last error-looking lines held them in 44.2%.
 
 **Real tickets**: on the newest 3,737 of 24,918 tickets from a ServiceNow service desk, ARIA's priority matched the final priority for 98.5% (98.1–98.9%), the same as the impact x urgency matrix it learns, and its SLA model ranks breaches at AUROC 0.769 (0.751–0.785), against 0.737 for the best single field.
 
@@ -313,7 +320,7 @@ Generated by `make eval` at commit `e7bfb7b`; do not edit by hand. Apart from th
 - Calibration: ECE 0.027. Conformal prediction sets hold the true severity in 91.2% of windows (target 90.0%), with 1.021 labels on average.
 - Automation: 83.0% of windows are decided without review, at 96.0% accuracy; the rest go to a reviewer.
 
-**End to end**, 60 offline runs through the whole graph: 100.0% of reports pass validation and 100.0% cite existing evidence for every claim; similar incidents Recall@3 100.0%; time to review p50 0.64 s, p95 1.40 s.
+**End to end**, 60 offline runs through the whole graph: 100.0% of reports pass validation and 100.0% cite existing evidence for every claim; similar incidents Recall@3 100.0%; time to review p50 0.55 s, p95 1.14 s.
 
 **With a live LLM** (Google Gemini, 3 runs at commit `53522c7`): the LLM wrote 3 of the 3 reports, and 100.0% cite evidence for every claim; time to review p50 47.2 s, mostly waiting on the provider (LLM call p50 3.0 s).
 

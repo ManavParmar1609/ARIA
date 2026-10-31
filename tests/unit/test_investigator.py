@@ -373,6 +373,23 @@ def test_work_that_stops_partway_is_the_first_cause_to_test() -> None:
     assert {"tool": "get_runbook", "arguments": {"slug": "hdfs-unfinished-writes"}} in plan
 
 
+def test_the_similar_incident_search_stays_within_the_tools_limits() -> None:
+    # Lines made of one endless "word" once gave a query the search tool refused.
+    lines = [
+        f"081109 2036{i:02d} 148 WARN dfs.DataNode: failed {'x' * 2_000} {i}" for i in range(40)
+    ]
+    out = parse_lines(lines, system="hdfs", guard=GuardrailConfig(), evidence=EvidenceStore())
+    severity = cast("Any", SimpleNamespace(severity="SEV3"))
+    inputs = InvestigationInputs("run-long", "hdfs", out.batch, severity, [], [])
+    queries = [
+        step["arguments"]["query"]
+        for step in suggested_plan(inputs)
+        if step["tool"] == "search_incidents"
+    ]
+    assert queries
+    assert all(2 <= len(q) <= 300 for q in queries)
+
+
 def test_a_units_own_lines_support_it_and_a_quiet_timeline_does_not_refute_it() -> None:
     hypothesis = Hypothesis(
         id="H1",

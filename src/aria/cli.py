@@ -303,6 +303,12 @@ def seed(
 
     templates = asyncio.run(seed_known_templates(SqlStore(engine), builder))
     console.print(f"template memory: {templates} routine-traffic templates")
+    from aria.config import get_app_config
+    from aria.severity.samples import rate_and_save
+
+    # Last: the sizes are rated against the routine templates just stored.
+    path, sized = rate_and_save(builder, settings, get_app_config(), _loghub_dir())
+    console.print(f"sample sizes: {sized} samples offer a size that changes their rating ({path})")
 
 
 @app.command()

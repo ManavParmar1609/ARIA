@@ -17,7 +17,9 @@ export function ThemeToggle({ className }: { className?: string }) {
   // The stored theme is only known in the browser; show a neutral icon until hydrated.
   const Icon = !resolvedTheme ? MonitorIcon : resolvedTheme === "light" ? SunIcon : MoonIcon;
   return (
-    <DropdownMenu>
+    // Not modal: a modal menu hides the rest of the page from screen readers while its links can
+    // still take focus, which axe reports (aria-hidden-focus). Escape and a click outside close it.
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon-sm" className={className} aria-label="Change theme">
           <Icon aria-hidden />

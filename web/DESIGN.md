@@ -96,19 +96,29 @@ The floor is 12 px; the reference's 10 and 11 px labels are raised to it.
 - Medium buttons have 10 px corners, and small controls and nav items 7 px.
 - Tags have 4 px corners, and badges and status pills are full pills.
 
+## Space and measure
+
+- Spacing keeps to a scale of 8, 16, 24 and 32 px: 8 px inside a group, 16 px between groups,
+  24 px between panels and 32 px between a page's sections. Landing sections take more room.
+- Running text stops at about 65 characters a line (`max-w-prose`), at every size.
+- A view shows at most four badges. Long lists say a level with a dot and its name instead.
+- Anything clickable is at least 24 px tall, links set in small text included.
+
 ## Components
 
 - **Navigation.** The name on the left, the sections in charcoal, and "Open the console" as the
-  forest button on the right. A keylime pill marks the section being read (the sliding nav
-  pill). The menu holds the sections, GitHub and the theme.
-- **Hero.** A sage panel holds the serif headline and the summary; beneath it sits a full-width
-  forest button with a trailing arrow. To the right, a slate panel holds three cream cards from
-  the recorded run (the alert, its severity and the report), each named below it and joined by
-  a thin line.
-- **Problem and answer.** A cream statement whose lines lie apart, then a sage statement whose
-  lines run together into one.
-- **Real data.** A keylime panel lists the datasets in the serif, drifting slowly upward (it has
-  a pause button and stops on hover or focus). Beside it are two stats from the evaluation data.
+  cream button with a hairline on the right (the hero holds the page's one forest action). A keylime pill marks the section being read (the sliding nav
+  pill). On a wide screen the theme button sits beside the console button; below that, one menu
+  holds the sections, GitHub and the theme.
+- **Hero.** A sage panel holds the serif headline, which names the outcome, and the summary, which
+  names who it is for; beneath it sits a full-width forest button, "Try it on real logs". To the right, a slate panel
+  holds one cream card from the recorded run: the level, one claim with its citation open on the
+  log line it cites, and a status that is plainly not a button. Below, three bordered tiles each
+  link to the proof of one claim (the test results, the example, the review step).
+- **Sections.** Eight, each a tag, a heading, a sentence or two and one picture: the hero, what
+  ARIA does (four cards and the explainer video), the example incident, how it works in four
+  steps, the results (one row of four findings, each linked to its test), try it, questions and
+  the footer. Nothing loops: the results are a still row, not a ticker.
 - **Cards.** Cream with a hairline, a keylime icon tile holding a forest line icon, a serif
   title and muted body text.
 - **FAQ.** Rows with the question in the serif on the left and the answer in the sans on the
@@ -125,14 +135,12 @@ to stop it (WCAG 2.2.2).
 
 - **Line art.** Each drawing's strokes draw in once as it comes into view.
 - **The six chosen animations:**
-  - the hero entrance: the three product cards rise into place one after another and the thread
-    joining them draws across;
+  - the hero entrance: the report card rises into place once;
   - the sliding nav pill;
   - numbers that roll into view;
   - the severity stamp and the prediction-set bracket;
   - the highlight that sweeps across cited evidence;
   - the dot bloom on ghost buttons.
-- **The datasets ticker.** It pauses on hover, on focus or with its button.
 
 ## Icons and illustration
 

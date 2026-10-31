@@ -17,6 +17,7 @@ from aria.config import GuardrailConfig, get_app_config
 from aria.contracts.parsing import WindowFeatures
 from aria.contracts.run import EventKind, RunEvent
 from aria.data import real as real_data
+from aria.data.loghub import format_raw_line, iter_structured_csv
 from aria.data.scenarios import LinePools, ScenarioBuilder
 from aria.evals import edge as ed
 from aria.evals import metrics as m
@@ -181,6 +182,48 @@ def test_parsing_also_scores_loghub2_corrected_labels(tmp_path: Path) -> None:
     corrected = ps.summarize(FIXTURES, corrected_dir=tmp_path)["corrected"]
     assert (corrected["n_systems"], corrected["changed_systems"]) == (1, ["hdfs"])
     assert ps.summarize(FIXTURES, corrected_dir=tmp_path / "missing")["corrected"] is None
+
+
+def test_group_f1_weighs_every_event_equally() -> None:
+    truth = ["E1", "E1", "E1", "E2"]
+    assert ps.group_f1(["a", "a", "a", "b"], truth) == 1.0
+    # E1 split in two: one line in four sits in an exact group, but one event in two does.
+    assert ps.grouping_accuracy(["a", "a", "b", "c"], truth) == 0.25
+    assert ps.group_f1(["a", "a", "b", "c"], truth) == pytest.approx(0.4)
+    assert ps.group_f1([ps.QUARANTINED] * 4, truth) == 0.0
+
+
+def test_parsing_scores_loghub2_whole_logs_from_their_raw_lines(tmp_path: Path) -> None:
+    sample_csv = FIXTURES / "HDFS" / "HDFS_2k.log_structured.csv"
+    records = list(iter_structured_csv("hdfs", sample_csv))
+    whole = tmp_path / "HDFS"
+    whole.mkdir()
+    (whole / "HDFS_full.log").write_text("\n".join(format_raw_line(r) for r in records) + "\n")
+    with (whole / "HDFS_full.log_structured.csv").open("w", newline="") as out:
+        writer = csv.writer(out)
+        writer.writerow(["LineId", "EventId"])
+        writer.writerows((r.line_no, r.gt_event_id) for r in records)
+    (tmp_path / "Unlabelled").mkdir()  # not a Loghub system, so not scored
+
+    full = ps.summarize_loghub2(tmp_path)
+    hdfs = full["systems"]["HDFS"]
+    assert (full["n_systems"], full["lines"], hdfs["aria_system"]) == (1, len(records), "hdfs")
+    sample = ps.system_accuracy(FIXTURES / "HDFS", "hdfs")
+    assert sample is not None
+    assert hdfs["grouping_accuracy"] == sample["grouping_accuracy"]  # the same lines, parsed alike
+    assert 0.0 < hdfs["group_f1"] <= 1.0
+    assert full["real_lines_flagged_as_injection"] == 0
+    text = "\n".join(report._loghub2(full, {"hdfs": sample}))
+    assert f"| HDFS | {len(records):,} |" in text
+
+    (whole / "HDFS_full.log").write_text("one line\n")  # a log and labels that disagree
+    broken = ps.summarize_loghub2(tmp_path)
+    assert broken["n_systems"] == 0
+    assert "error" in broken["systems"]["HDFS"]
+    assert "differ in length: HDFS" in "\n".join(report._loghub2(broken, {}))
+    assert ps.summarize_loghub2(tmp_path / "missing") == {
+        "missing": "download it with: aria data download --source loghub2-full"
+    }
 
 
 def test_parsing_scores_gaia_logs_and_marks_the_systems_new_to_aria(tmp_path: Path) -> None:
@@ -464,8 +507,9 @@ def test_the_data_paragraph_names_only_the_real_sources_measured() -> None:
     assert "Every other number comes from semi-synthetic" in text
     [unmeasured] = report._unmeasured(results["real"])
     assert unmeasured.startswith(
-        "- No results on contiguous BGL windows, the Hadoop jobs, the OpenStack fault-injection "
-        "runs, the UCI incident log or the cloud post-mortems are "
+        "- No results on contiguous BGL windows, contiguous Thunderbird windows, the Hadoop jobs, "
+        "the OpenStack fault-injection runs, LogChunks' failed CI builds, the UCI incident log or "
+        "the cloud post-mortems are "
     )
 
 
@@ -599,9 +643,9 @@ def test_the_full_bgl_benchmark_labels_windows_by_tags_it_never_shows_the_parser
     seen: list[str] = []
     real_features = bgl._features
 
-    def spy(window_lines: Any, known: Any) -> WindowFeatures:
+    def spy(system: str, window_lines: Any, known: Any) -> WindowFeatures:
         seen.extend(window_lines)
-        return real_features(window_lines, known)
+        return real_features(system, window_lines, known)
 
     monkeypatch.setattr(bgl, "_features", spy)
     result = bgl.summarize(
@@ -627,6 +671,9 @@ def test_the_full_bgl_benchmark_labels_windows_by_tags_it_never_shows_the_parser
     assert result["methods"]["majority_class"]["severe_missed"] == 1
     assert result["methods"]["highest_level"]["severe_missed"] == 0
     assert result["overlap_with_training_sample"]["lines"] == 30
+    assert all(
+        isinstance(rule, str) and n >= 1 for rule, n in result["rules_on_paged_quiet_windows"]
+    )
     text = "\n".join(report._bgl(result))
     assert "## Real logs, a supercomputer's alert tags" in text
     assert "| The commonest label |" in text
@@ -637,6 +684,150 @@ def test_the_full_bgl_benchmark_labels_windows_by_tags_it_never_shows_the_parser
         pool=set(),
         bgl_dir=tmp_path / "nothing",
     )
+
+
+def test_thunderbird_windows_stream_from_its_zip_and_use_their_own_rubric(
+    tmp_path: Path, builder: ScenarioBuilder
+) -> None:
+    import zipfile
+
+    from aria.evals import bgl
+    from aria.severity.training import known_templates
+
+    def line(tag: str, ts: datetime, node: str, component: str, message: str) -> str:
+        return (
+            f"{tag} {int(ts.timestamp())} {ts:%Y.%m.%d} {node} {ts:%b} {ts.day} {ts:%H:%M:%S} "
+            f"{node}/{node} {component}: {message}"
+        )
+
+    start = datetime(2005, 11, 10, 0, 0, tzinfo=UTC)
+    lines = [
+        line(
+            "-",
+            start + timedelta(seconds=30 * i),
+            "tbird-admin1",
+            "postfix/postdrop[10896]",
+            "warning: unable to look up public/pickup: No such file or directory",
+        )
+        for i in range(20)
+    ]
+    later = start + timedelta(minutes=40)
+    lines += [
+        line(
+            "EXT_FS",
+            later + timedelta(seconds=5 * i),
+            f"an{300 + i % 3}",
+            "kernel",
+            "EXT3-fs error (device sda5) in start_transaction: Journal has aborted",
+        )
+        for i in range(12)
+    ]
+    lines.append(
+        line("CPU", later + timedelta(minutes=1), "bn257", "kernel", "Losing some ticks...")
+    )
+    with zipfile.ZipFile(tmp_path / "Thunderbird.zip", "w") as archive:
+        archive.writestr("Thunderbird/Thunderbird_full.log", "\n".join(lines) + "\n")
+
+    engine = SeverityEngine.load(get_app_config().severity)
+    result = bgl.summarize(
+        engine=engine,
+        known=known_templates(builder, "thunderbird"),
+        pool=set(),
+        bgl_dir=tmp_path,
+        log=bgl.THUNDERBIRD,
+    )
+    assert (result["system"], result["windows"], result["alert_lines"]) == ("thunderbird", 2, 13)
+    # Twelve journal aborts on three nodes are major alerts, and one lost tick is minor: SEV3.
+    assert result["labels"] == {"SEV3": 1, "SEV4": 1}
+    text = "\n".join(report._bgl(result, "thunderbird"))
+    assert "## Real logs, a second supercomputer's alert tags" in text
+    # No window was labelled SEV1-2, so the summary says so instead of "0 of the 0".
+    summary = "\n".join(report._bgl_summary(result, "a second supercomputer"))
+    assert "no window was labelled SEV1-2" in summary
+    assert "0 of the 0" not in summary
+    paged = {
+        **result,
+        "rules_on_paged_quiet_windows": [["errors_spread", 3], ["storage_failures", 2]],
+    }
+    assert "`errors_spread` (3 windows) and `storage_failures` (2 windows)" in "\n".join(
+        report._bgl(paged, "thunderbird")
+    )
+    assert "Loghub's 2,000-line Thunderbird sample" in text
+    missing = bgl.summarize(
+        engine=engine, known=(), pool=set(), bgl_dir=tmp_path / "none", log=bgl.THUNDERBIRD
+    )
+    assert missing == {
+        "missing": "download it with: aria data download --source loghub2-thunderbird"
+    }
+
+
+def test_logchunks_cleans_build_logs_as_a_terminal_shows_them_and_finds_the_chunk() -> None:
+    from aria.evals import logchunks as lc
+
+    assert lc.clean("\x1b[31;1mERROR:\x1b[0m  build   failed\r") == "ERROR: build failed"
+    assert lc.clean("Downloading 10%\rDownloading 100%") == "Downloading 100%"
+    lines = ["make test", "ERROR: t1 failed", "ok t2", "ERROR: t1 failed", "Done. exit 1"]
+    # The labels lost the escape byte of their colour codes; the last match is the one kept.
+    assert lc.locate(lines, "[31mERROR: t1 failed[0m\n") == (3, 3)
+    assert lc.locate(lines, "make test\nERROR: t1 failed") == (0, 1)
+    assert lc.locate(lines, "never printed") is None
+    assert lc.locate(lines, "  \n") is None
+    picks = lc.baselines(lines, 2, seed=1)
+    assert picks["last_lines"] == [3, 4]
+    assert picks["last_error_lines"] == [1, 3]
+    assert len(picks["random_lines"]) == 2
+    assert lc.baselines(lines, 0, seed=1)["last_error_lines"] == []
+
+
+async def test_logchunks_builds_are_triaged_offline_against_their_marked_chunks(
+    tmp_path: Path, builder: ScenarioBuilder
+) -> None:
+    import tempfile
+
+    from aria.evals import logchunks as lc
+
+    root = tmp_path / "LogChunks"
+    labels = root / "build-failure-reason" / "Python"
+    labels.mkdir(parents=True)
+    logs = root / "logs" / "Python" / "o@r" / "failed"
+    logs.mkdir(parents=True)
+    body = [f"Collecting package-{i} (from -r requirements.txt)" for i in range(40)]
+    body += ["tests/test_app.py::test_login FAILED", "E   AssertionError: 401 != 200"]
+    body += ['The command "pytest" exited with 1.', "Done. Your build exited with 1."]
+    (logs / "1.log").write_text("\x1b[0K" + "\n".join(body) + "\n")
+    (logs / "2.log").write_text("\n".join(body) + "\n")
+    (labels / "o@r.xml").write_text(
+        "<Examples>"
+        "<Example><Log>Python/o@r/failed/1.log</Log><Keywords>FAILED</Keywords>"
+        "<Category>1</Category><Chunk>tests/test_app.py::test_login FAILED\n"
+        "E   AssertionError: 401 != 200</Chunk></Example>"
+        "<Example><Log>Python/o@r/failed/2.log</Log><Keywords>x</Keywords>"
+        "<Category>0</Category><Chunk>a line this log never printed</Chunk></Example>"
+        "<Example><Log>Python/o@r/failed/3.log</Log><Chunk>no such log</Chunk></Example>"
+        "</Examples>"
+    )
+    builds = lc.read_builds(tmp_path)
+    assert [b.chunk for b in builds] == [(40, 41), None]  # the third names no log on disk
+    assert builds[0].lines[0] == "Collecting package-0 (from -r requirements.txt)"
+    with tempfile.TemporaryDirectory() as tmp:
+        env = await pl.EvalEnvironment.create(builder, db_path=Path(tmp) / "e.db")
+        try:
+            rows = await lc.triage(env, builds)
+        finally:
+            await env.aclose()
+    assert len(rows) == 1  # a chunk that cannot be found is not triaged
+    row = rows[0]
+    assert row["chunk"] == [40, 41]
+    assert all(0 <= i < row["lines"] for i in row["kept"])
+    assert row["found"] == any(40 <= i <= 41 for i in row["kept"])
+    assert set(row["baselines"]) == {"last_lines", "last_error_lines", "random_lines"}
+    summary = lc.summarize(rows, builds=len(builds), located=1)
+    assert (summary["builds"], summary["located"], summary["triaged"]) == (2, 1, 1)
+    text = "\n".join(report._logchunks(summary))
+    assert "## Real failures, CI builds and the lines that explain them" in text
+    assert "| The last lines that look like an error |" in text
+    assert "Build failures" in "\n".join(report._logchunks_summary(summary))
+    assert lc.read_builds(tmp_path / "none") == []
 
 
 async def test_hadoop_jobs_are_merged_in_time_order_and_triaged_against_their_labels(

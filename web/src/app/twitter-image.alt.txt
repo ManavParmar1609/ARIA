@@ -1,1 +1,1 @@
-ARIA's landing page: the headline "Incident triage that shows its work." on a sage-green panel beside three cards from a recorded run (the alert, its severity and the report waiting for approval) on a slate-blue panel.
+ARIA's home page: the headline "Turn a wall of logs into a report you can check." on a sage-green panel, and beside it, on a slate-blue panel, a report card from a recorded run: the level SEV3, a claim with its citation open on the log line it cites, and a note that it is waiting for a person to approve.

@@ -1,10 +1,10 @@
 "use client";
 
-import { FileTextIcon } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useId, useMemo, useState, type FormEvent } from "react";
-import { toast } from "sonner";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 
+import { SampleGallery } from "@/components/console/sample-gallery";
 import { PageHeader } from "@/components/console/states";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
@@ -17,13 +17,26 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import samples from "@/data/samples.json";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError } from "@/lib/api/client";
-import { useCreateRun, useSettingsView } from "@/lib/api/hooks";
+import { useCreateRun, useModelKey, useSettingsView } from "@/lib/api/hooks";
+import { modelKeyLabel } from "@/lib/api/model-key";
 import { MAX_BODY_BYTES } from "@/lib/limits";
 import { SYSTEM_NAMES } from "@/lib/systems";
+import {
+  accessSentence,
+  modelAccess,
+  type ModelAccess,
+  type SharedModel,
+} from "@/lib/model-access";
 
 const MAX_LINES = 20_000;
+
+/** A size in megabytes, to one decimal place: "3.7 MB". A paste's size rounds up, so one just
+ * over a limit never reads as the limit itself. */
+export function megabytes(bytes: number, round: (x: number) => number = Math.round): string {
+  return `${round((bytes / 1024 / 1024) * 10) / 10} MB`;
+}
 
 function Toggle({
   id,
@@ -59,46 +72,196 @@ function Toggle({
   );
 }
 
-const SNIPPETS = [
-  {
-    title: "From Alertmanager",
-    body: "Add a webhook receiver; firing alerts that share a group key become one run.",
-    code: "receivers:\n  - name: aria\n    webhook_configs:\n      - url: https://aria.example.com/api/v1/alerts/alertmanager\n        http_config:\n          authorization: { credentials: <api key> }",
-  },
-  {
-    title: "From the command line",
-    body: "Triage a log file end to end and print the report.",
-    code: "aria triage /var/log/app.log --system hdfs",
-  },
-  {
-    title: "From another agent",
-    body: "ARIA is an A2A agent and an AG-UI agent; its MCP tools are read-only.",
-    code: "GET /.well-known/agent-card.json\nPOST /a2a   (JSON-RPC)\nPOST /agui  (AG-UI events)\nPOST /mcp   (MCP, streamable HTTP)",
-  },
-];
-
-/** The hint under the log box: what is wrong with the lines, else what happens to them. */
-export function logsHint(problem: string | null, publicDemo: boolean): string {
+/** The hint under the log box: what is wrong with the lines, else what happens to them, including
+ * which model they go to with the model switch on. A key of the visitor's own is mentioned only
+ * where this server accepts one. */
+export function logsHint(
+  problem: string | null,
+  publicDemo: boolean,
+  keys = false,
+  answers: ModelAccess["kind"] | "off" = "offline",
+): string {
   if (problem) return problem;
+  const model =
+    answers === "own"
+      ? " They are also sent to your own key's model."
+      : answers === "shared"
+        ? ` They are also sent to the site's model${keys ? ", or to your own key's once you add one" : ""}.`
+        : answers === "offline" && keys
+          ? " If you add a model key, they are sent to that model too."
+          : "";
   return publicDemo
-    ? "One event per line. This is a public demo: anyone can open the runs on it, so load a sample or paste only logs you can share."
-    : "One event per line. IP and e-mail addresses are pseudonymised and secrets redacted before analysis or any model call; the lines you paste stay with the run until you delete it.";
+    ? `One event per line. Your logs stay with your incident, and only you see it, but this public demo runs on a shared server: paste only logs you could share.${model}`
+    : `One event per line. Your logs stay with your incident until you delete it, with IP and e-mail addresses pseudonymised and secrets redacted.${model}`;
 }
 
+/** What the model switch does here, as it is set: whose model answers while it is on, and what
+ * writes the triage while it is off. */
+export function modelHint(
+  kinds: string[],
+  savedProvider: string | null,
+  shared?: SharedModel | null,
+  on = true,
+): string {
+  if (!on) {
+    return "Off: rules, the calibrated model and the grounded template write this triage. Faster, and nothing leaves the server.";
+  }
+  const access = modelAccess(savedProvider, kinds, shared);
+  if (access.kind === "own") {
+    return `On: your own ${modelKeyLabel(savedProvider ?? "")} key answers first.`;
+  }
+  if (access.kind === "shared") {
+    return access.left == null
+      ? "On: the site's key answers."
+      : `On: the site's key answers (shared, limited: ${access.left} left today).`;
+  }
+  if (access.usedUp) return accessSentence(access, kinds.length > 0);
+  if (kinds.length > 0) {
+    return "No model answers here yet, so this triage runs offline. To use a model, add your own key in Settings.";
+  }
+  return "No model is set up on this server, so this triage runs offline. Faster, and nothing leaves the server.";
+}
+
+/** New triage: pick a sample, or paste your own logs. The open tab stays in the address. */
 export function NewRun({ publicDemo = false }: { publicDemo?: boolean }) {
+  const params = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const tab = params.get("tab") === "own" ? "own" : "samples";
+  const setTab = (value: string) => {
+    const next = new URLSearchParams(params.toString());
+    if (value === "own") next.set("tab", "own");
+    else next.delete("tab");
+    const qs = next.toString();
+    // Like a source filter, a tab is a step Back can undo.
+    router.push((qs ? `${pathname}?${qs}` : pathname) as never, { scroll: false });
+  };
+  return (
+    <div className="grid gap-8">
+      <PageHeader
+        title="New triage"
+        description="Pick a sample to triage, or paste your own logs. ARIA reads them, rates how serious the incident is and drafts a report with its sources, and nothing is sent until you approve it."
+      />
+      <Tabs value={tab} onValueChange={setTab} className="grid gap-8">
+        <TabsList aria-label="What to triage">
+          <TabsTrigger value="samples">Samples</TabsTrigger>
+          <TabsTrigger value="own">Your own logs</TabsTrigger>
+        </TabsList>
+        {/* Each panel starts with controls of its own, so the panel itself is no extra Tab stop. */}
+        <TabsContent value="samples" tabIndex={-1}>
+          <SampleGallery />
+        </TabsContent>
+        <TabsContent value="own" tabIndex={-1}>
+          <OwnLogs publicDemo={publicDemo} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+// What a visitor pasted outlives a look at the Samples tab, Back, a trip to another page and a
+// reload (FL-03): kept for this browser tab only, and cleared once the triage starts.
+const DRAFT_KEY = "aria:own-logs";
+
+interface Draft {
+  title: string;
+  system: string;
+  text: string;
+  useLlm: boolean;
+  investigate: boolean;
+  approval: boolean;
+}
+
+const BLANK: Draft = {
+  title: "",
+  system: "generic",
+  text: "",
+  useLlm: true,
+  investigate: true,
+  approval: true,
+};
+
+export function loadDraft(storage: Pick<Storage, "getItem"> | undefined): Draft {
+  try {
+    const raw: unknown = JSON.parse(storage?.getItem(DRAFT_KEY) ?? "null");
+    if (!raw || typeof raw !== "object") return BLANK;
+    const d = raw as Partial<Record<keyof Draft, unknown>>;
+    return {
+      title: typeof d.title === "string" ? d.title : "",
+      system: typeof d.system === "string" ? d.system : "generic",
+      text: typeof d.text === "string" ? d.text : "",
+      useLlm: d.useLlm !== false,
+      investigate: d.investigate !== false,
+      approval: d.approval !== false,
+    };
+  } catch {
+    return BLANK;
+  }
+}
+
+function saveDraft(draft: Draft) {
+  try {
+    const blank = (Object.keys(BLANK) as (keyof Draft)[]).every((k) => draft[k] === BLANK[k]);
+    if (blank) window.sessionStorage.removeItem(DRAFT_KEY);
+    else window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+  } catch {
+    // Too big for storage, or storage is blocked: the form still works, it is just not kept.
+  }
+}
+
+function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
   const id = useId();
   const router = useRouter();
   const create = useCreateRun();
-  const [title, setTitle] = useState("");
-  const [system, setSystem] = useState("generic");
-  const [text, setText] = useState("");
-  const [sample, setSample] = useState<string | null>(null);
-  const [useLlm, setUseLlm] = useState(true);
-  const [investigate, setInvestigate] = useState(true);
-  const [approval, setApproval] = useState(true);
+  // This page renders in the browser only (it reads the address), so storage is there to read.
+  const [draft] = useState(() =>
+    loadDraft(typeof window === "undefined" ? undefined : window.sessionStorage),
+  );
+  const [title, setTitle] = useState(draft.title);
+  const [system, setSystem] = useState(draft.system);
+  const [text, setText] = useState(draft.text);
+  const [useLlm, setUseLlm] = useState(draft.useLlm);
+  const [investigate, setInvestigate] = useState(draft.investigate);
+  const [approval, setApproval] = useState(draft.approval);
   const [touched, setTouched] = useState(false);
+  // Once the triage has started, the draft is spent: nothing saves it again on the way out.
+  const sent = useRef(false);
+  useEffect(() => {
+    const later = window.setTimeout(() => {
+      if (!sent.current) saveDraft({ title, system, text, useLlm, investigate, approval });
+    }, 300);
+    return () => window.clearTimeout(later);
+  }, [title, system, text, useLlm, investigate, approval]);
+  // Leaving the tab or the page within that delay keeps the draft too (SL-p3).
+  const latest = useRef(draft);
+  useEffect(() => {
+    latest.current = { title, system, text, useLlm, investigate, approval };
+  });
+  useEffect(() => {
+    const keep = () => {
+      if (!sent.current) saveDraft(latest.current);
+    };
+    window.addEventListener("pagehide", keep);
+    return () => {
+      window.removeEventListener("pagehide", keep);
+      keep();
+    };
+  }, []);
   // The server's rule wins: where it requires approval, every run waits for a person.
-  const approvalRequired = useSettingsView().data?.require_approval ?? true;
+  const settings = useSettingsView().data;
+  const approvalRequired = settings?.require_approval ?? true;
+  const savedKey = useModelKey().data;
+  const answers = modelAccess(
+    savedKey?.provider ?? null,
+    settings?.visitor_keys ?? [],
+    settings?.shared_model,
+  ).kind;
+  const llmHint = modelHint(
+    settings?.visitor_keys ?? [],
+    savedKey?.provider ?? null,
+    settings?.shared_model,
+    useLlm,
+  );
 
   const lines = useMemo(() => text.split(/\r?\n/).filter((l) => l.trim()), [text]);
   // The lines' size as sent (UTF-8 JSON, with room for the other fields), so a paste the
@@ -107,40 +270,41 @@ export function NewRun({ publicDemo = false }: { publicDemo?: boolean }) {
     () => new TextEncoder().encode(JSON.stringify(lines)).length + 2048,
     [lines],
   );
+  // The smaller of the console's own limit and the server's, so a paste is refused once,
+  // here, rather than by the server after it was sent.
+  const most = Math.min(MAX_BODY_BYTES, settings?.max_body_bytes ?? MAX_BODY_BYTES);
   const problem =
     lines.length === 0
-      ? "Paste at least one log line, or load a sample."
+      ? "Paste at least one log line, or pick a sample on the Samples tab."
       : lines.length > MAX_LINES
-        ? `ARIA reads at most ${MAX_LINES.toLocaleString("en")} lines per run; this has ${lines.length.toLocaleString("en")}.`
-        : bytes > MAX_BODY_BYTES
-          ? `These lines come to ${(bytes / 1024 / 1024).toFixed(1)} MB; the console sends at most ${MAX_BODY_BYTES / 1024 / 1024} MB per run. Send fewer lines, or use the API or the CLI.`
+        ? `ARIA reads at most ${MAX_LINES.toLocaleString("en")} lines in one triage; this has ${lines.length.toLocaleString("en")}.`
+        : bytes > most
+          ? // Just over reads as such: rounded up, it would claim "1.1 MB, more than the 1 MB".
+            `These lines come to ${bytes < most * 1.1 ? "just over" : `${megabytes(bytes, Math.ceil)}, more than`} the ${megabytes(most)} this server takes in one triage. Send fewer lines, or split them over several triages.`
           : null;
   const apiError = create.error instanceof ApiError ? create.error.detail : create.error?.message;
 
-  const loadSample = (sampleId: string) => {
-    const found = samples.find((s) => s.id === sampleId);
-    if (!found) return;
-    setSample(found.id);
-    setSystem(found.system);
-    setText(found.lines.join("\n"));
-    setTitle("");
-  };
-
+  const logsBox = useRef<HTMLTextAreaElement>(null);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     setTouched(true);
-    if (problem) return;
+    if (problem) {
+      // To the box, whose hint now says what is wrong: a screen reader reads it with the box.
+      logsBox.current?.focus();
+      return;
+    }
     create.mutate(
       {
         title: title.trim() || undefined,
         system,
         logs: lines,
-        synthetic: sample !== null,
         options: { use_llm: useLlm, investigate, require_approval: approvalRequired || approval },
       },
       {
         onSuccess: (accepted) => {
-          toast.success("Triage started", { description: "Following the run live." });
+          sent.current = true;
+          saveDraft(BLANK);
+          // The incident page shows the run starting; no toast needs to say so (item 34).
           router.push(`/console/runs/${encodeURIComponent(accepted.run_id)}` as never);
         },
       },
@@ -148,45 +312,76 @@ export function NewRun({ publicDemo = false }: { publicDemo?: boolean }) {
   };
 
   return (
-    <div className="grid gap-8">
-      <PageHeader
-        title="New triage"
-        description="Paste the logs around an incident. ARIA groups them into templates, rates severity, looks for similar past incidents, investigates and writes a cited report for you to review."
-      />
-      <div className="grid gap-10 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <form
-          onSubmit={submit}
-          className="grid gap-6"
-          noValidate
-          aria-describedby={apiError ? `${id}-api-error` : undefined}
-        >
-          <fieldset className="grid gap-2">
-            <legend className="mb-2 text-sm font-medium">Start from a sample</legend>
-            <div className="flex flex-wrap gap-2">
-              {samples.map((s) => (
-                <Button
-                  key={s.id}
-                  size="sm"
-                  aria-pressed={sample === s.id}
-                  className={
-                    sample === s.id
-                      ? "border-primary bg-highlight text-highlight-foreground"
-                      : undefined
-                  }
-                  onClick={() => loadSample(s.id)}
-                >
-                  <FileTextIcon aria-hidden />
-                  {s.label}
-                </Button>
-              ))}
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Samples are real Loghub lines arranged into a synthetic incident; runs from them are
-              labelled synthetic.
-            </p>
-          </fieldset>
+    <div className="grid max-w-4xl gap-10">
+      <form
+        onSubmit={submit}
+        className="grid gap-6"
+        noValidate
+        aria-describedby={apiError ? `${id}-api-error` : undefined}
+      >
+        <div className="grid gap-2">
+          <div className="flex items-baseline justify-between gap-4">
+            <Label htmlFor={`${id}-logs`}>Log lines</Label>
+            <span className="tabular text-xs text-muted-foreground" aria-live="polite">
+              {lines.length.toLocaleString("en")} {lines.length === 1 ? "line" : "lines"}
+            </span>
+          </div>
+          <Textarea
+            ref={logsBox}
+            id={`${id}-logs`}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            spellCheck={false}
+            wrap="off"
+            rows={8}
+            className="font-mono text-xs leading-5"
+            placeholder={
+              "Paste log lines here, one per line, such as:\n2026-10-31 10:00:01 ERROR api.gateway: upstream timed out"
+            }
+            aria-invalid={touched && problem ? true : undefined}
+            aria-describedby={`${id}-logs-hint`}
+          />
+          <p
+            id={`${id}-logs-hint`}
+            className={
+              touched && problem
+                ? "max-w-prose text-sm text-danger"
+                : "max-w-prose text-sm text-muted-foreground"
+            }
+          >
+            {logsHint(
+              touched ? problem : null,
+              publicDemo,
+              (settings?.visitor_keys ?? []).length > 0,
+              useLlm ? answers : "off",
+            )}
+          </p>
+        </div>
 
-          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_14rem]">
+        <div className="grid max-w-sm gap-2">
+          <Label htmlFor={`${id}-system`}>What wrote these logs?</Label>
+          <Select value={system} onValueChange={setSystem}>
+            <SelectTrigger id={`${id}-system`} aria-describedby={`${id}-system-hint`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(SYSTEM_NAMES).map(([value, name]) => (
+                <SelectItem key={value} value={value}>
+                  {value === "generic" ? "Not sure" : name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {/* The named formats are the public datasets ARIA was tested on (J-m7). */}
+          <p id={`${id}-system-hint`} className="text-sm text-muted-foreground">
+            The named systems are the public logs ARIA was tested on. For anything else, such as a
+            database, a web server or Kubernetes, choose Not sure: ARIA reads common formats.
+          </p>
+        </div>
+
+        <details className="group rounded-lg bg-raised px-5 py-3">
+          <summary className="cursor-pointer py-1 text-sm font-medium">Options</summary>
+          <div className="grid gap-4 pt-3">
             <div className="grid gap-2">
               <Label htmlFor={`${id}-title`}>
                 Title <span className="font-normal text-muted-foreground">(optional)</span>
@@ -199,121 +394,58 @@ export function NewRun({ publicDemo = false }: { publicDemo?: boolean }) {
                 placeholder="ARIA writes one from the evidence if you leave this empty"
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor={`${id}-system`}>Log format</Label>
-              <Select value={system} onValueChange={setSystem}>
-                <SelectTrigger id={`${id}-system`}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(SYSTEM_NAMES).map(([value, name]) => (
-                    <SelectItem key={value} value={value}>
-                      {name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid">
+              {/* With no model to answer, the switch shows off rather than on but unused (J-m8). */}
+              <Toggle
+                id={`${id}-llm`}
+                label="Use a language model if one is set up"
+                hint={llmHint}
+                checked={useLlm && answers !== "offline"}
+                onChange={setUseLlm}
+                disabled={answers === "offline"}
+              />
+              <Toggle
+                id={`${id}-investigate`}
+                label="Investigate with tools"
+                hint="Test likely causes with ARIA's read-only tools before writing the report."
+                checked={investigate}
+                onChange={setInvestigate}
+              />
+              <Toggle
+                id={`${id}-approval`}
+                label="Wait for my approval"
+                hint={
+                  approvalRequired
+                    ? "This server always waits for a person before a report is published."
+                    : "Off: the report publishes on its own, and no message is sent anywhere."
+                }
+                checked={approvalRequired || approval}
+                onChange={setApproval}
+                disabled={approvalRequired}
+              />
             </div>
           </div>
+        </details>
 
-          <div className="grid gap-2">
-            <div className="flex items-baseline justify-between gap-4">
-              <Label htmlFor={`${id}-logs`}>Log lines</Label>
-              <span className="tabular text-xs text-muted-foreground" aria-live="polite">
-                {lines.length.toLocaleString("en")} {lines.length === 1 ? "line" : "lines"}
-              </span>
-            </div>
-            <Textarea
-              id={`${id}-logs`}
-              value={text}
-              onChange={(e) => {
-                setText(e.target.value);
-                setSample(null);
-              }}
-              spellCheck={false}
-              wrap="off"
-              rows={16}
-              className="min-h-72 font-mono text-xs leading-5"
-              placeholder={
-                "081109 203615 148 INFO dfs.DataNode$PacketResponder: ...\n081109 203807 222 WARN dfs.DataNode$DataXceiver: ..."
-              }
-              aria-invalid={touched && problem ? true : undefined}
-              aria-describedby={`${id}-logs-hint`}
-            />
-            <p
-              id={`${id}-logs-hint`}
-              className={
-                touched && problem ? "text-sm text-danger" : "text-sm text-muted-foreground"
-              }
-            >
-              {logsHint(touched ? problem : null, publicDemo)}
-            </p>
-          </div>
-
-          <div className="grid">
-            <Toggle
-              id={`${id}-llm`}
-              label="Use an LLM if one is configured"
-              hint="Off: rules, the calibrated model and the grounded template only. Faster, and nothing leaves the server."
-              checked={useLlm}
-              onChange={setUseLlm}
-            />
-            <Toggle
-              id={`${id}-investigate`}
-              label="Investigate with tools"
-              hint="Test hypotheses with ARIA's read-only MCP tools before writing the report."
-              checked={investigate}
-              onChange={setInvestigate}
-            />
-            <Toggle
-              id={`${id}-approval`}
-              label="Wait for my approval"
-              hint={
-                approvalRequired
-                  ? "This server always waits for a person before a report is published."
-                  : "Off: the report publishes on its own, and no message is sent anywhere."
-              }
-              checked={approvalRequired || approval}
-              onChange={setApproval}
-              disabled={approvalRequired}
-            />
-          </div>
-
-          {apiError ? (
-            <p id={`${id}-api-error`} role="alert" className="text-sm text-danger">
-              {apiError}
-            </p>
-          ) : null}
-          <div className="flex flex-wrap items-center gap-3">
-            <Button type="submit" variant="primary" size="lg" disabled={create.isPending}>
-              {create.isPending ? "Starting" : "Start triage"}
-            </Button>
-            <p className="text-sm text-muted-foreground">
-              You can follow the run live as it works.
-            </p>
-          </div>
-        </form>
-
-        <aside aria-labelledby={`${id}-other`} className="grid content-start gap-4">
-          <h2 id={`${id}-other`} className="font-sans text-base font-semibold">
-            Other ways to start a run
-          </h2>
-          {SNIPPETS.map((s) => (
-            <div key={s.title} className="grid gap-2 border-t border-rule pt-4">
-              <h3 className="font-sans text-sm font-semibold">{s.title}</h3>
-              <p className="text-sm text-muted-foreground">{s.body}</p>
-              <pre
-                tabIndex={0}
-                role="region"
-                aria-label={s.title}
-                className="overflow-x-auto rounded-lg bg-sunken p-4 text-xs leading-5"
-              >
-                <code>{s.code}</code>
-              </pre>
-            </div>
-          ))}
-        </aside>
-      </div>
+        {apiError ? (
+          <p id={`${id}-api-error`} role="alert" className="text-sm text-danger">
+            {apiError}
+          </p>
+        ) : null}
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="submit" variant="primary" size="lg" disabled={create.isPending}>
+            {create.isPending ? "Starting" : "Start a triage"}
+          </Button>
+          <p className="text-sm text-muted-foreground">You can follow it live as it works.</p>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Want alerts to start triages on their own?{" "}
+          <Link href="/console/guide/connect" className="underline underline-offset-4">
+            Connect ARIA to your systems
+          </Link>
+          .
+        </p>
+      </form>
     </div>
   );
 }

@@ -67,7 +67,7 @@ curl -fsS "${web}/api/healthz" >/dev/null
 # Fetch the whole page before searching it: `curl | grep -q` fails under pipefail whenever grep
 # stops reading at its match while curl is still writing a page larger than the pipe buffer.
 landing=$(curl -fsS "${web}/")
-grep -q "Incident triage that shows its work" <<<"${landing}" \
+grep -q "Turn a wall of logs into a report you can check" <<<"${landing}" \
   || { echo "the landing page did not render" >&2; exit 1; }
 seen=$(curl -fsS "${web}/api/v1/runs/${run_id}" | json '["status"]')
 [[ "${seen}" == "published" ]] || { echo "the console proxy saw '${seen}'" >&2; exit 1; }

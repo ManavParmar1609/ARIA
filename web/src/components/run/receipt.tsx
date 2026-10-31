@@ -1,0 +1,172 @@
+"use client";
+
+import { CircleCheckIcon, CircleXIcon, DownloadIcon } from "lucide-react";
+import { useEffect, useRef } from "react";
+
+import { Button } from "@/components/ui/button";
+import type { Delivery, OutboundAction } from "@/lib/api/types";
+import { absoluteTime, reviewerName, shortTime } from "@/lib/format";
+
+import { ActionChoice } from "./review-panel";
+
+// After the review, the panel that asked for it becomes a receipt in the same place: who decided
+// and when, and what happened to each message, with the report to download (item 18).
+
+export interface ReceiptFacts {
+  status: string;
+  decision: string;
+  reviewer: string;
+  /** The reviewer is the person reading this page. */
+  you: boolean;
+  /** When the decision was saved. */
+  at: string;
+  /** The messages ARIA drafted, and the ones the reviewer approved with what became of them. */
+  actions: OutboundAction[];
+  deliveries: Delivery[];
+  /** Whether a message's channel is connected on this server. */
+  connected: (kind: string) => boolean;
+  /** A shared demo, where a visitor's published incidents stay theirs and join no library. */
+  shared?: boolean;
+}
+
+/** What publishing did, beyond the messages (J-m5). */
+export function publishedMeaning(f: Pick<ReceiptFacts, "status" | "shared">): string | null {
+  if (f.status !== "published") return null;
+  return f.shared
+    ? "The report is final. On this shared demo it stays with your incidents."
+    : "The report is final, and ARIA will compare new incidents with this one.";
+}
+
+const AUTO = "aria:auto";
+
+function who(reviewer: string, you: boolean): string {
+  return you ? "you" : reviewerName(reviewer);
+}
+
+const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** The receipt in words: who decided and when, then what happened to the messages. */
+export function receiptText(f: ReceiptFacts): { decision: string; messages: string | null } {
+  const time = shortTime(f.at);
+  const by = who(f.reviewer, f.you);
+  const decision =
+    f.reviewer === AUTO
+      ? `Published at ${time} without review: approval was off for this incident.`
+      : f.status === "rejected"
+        ? `Drafted by ARIA, discarded by ${by} at ${time}.`
+        : f.decision === "edit"
+          ? `Drafted by ARIA, edited and approved by ${by} at ${time}.`
+          : `Drafted by ARIA, approved by ${by} at ${time}.`;
+  if (f.status === "rejected") return { decision, messages: "Nothing was sent." };
+  if (!f.actions.length) return { decision, messages: null };
+  const approved = new Set(f.deliveries.map((d) => d.action_id));
+  const sent = f.deliveries.filter((d) => d.status === "sent").length;
+  const failed = f.deliveries.filter((d) => d.status === "failed").length;
+  const sending = f.deliveries.filter((d) => d.status === "approved").length;
+  const kept = [
+    ...f.actions.filter((a) => !approved.has(a.action_id)),
+    ...f.deliveries.filter((d) => d.status === "skipped"),
+  ];
+  const parts: string[] = [];
+  if (sent) parts.push(`${count(sent, "message", "messages")} sent`);
+  if (sending) parts.push(`${count(sending, "message", "messages")} still sending`);
+  if (failed) parts.push(`${count(failed, "message", "messages")} not delivered (see below)`);
+  if (kept.length) {
+    const unconnected = kept.filter((k) => !f.connected(k.kind)).length;
+    const why =
+      unconnected === kept.length
+        ? " (no channel is connected)"
+        : unconnected === 0
+          ? " (not chosen)"
+          : "";
+    parts.push(`${count(kept.length, "draft message", "draft messages")} kept here, unsent${why}`);
+  }
+  const text = parts.join(", ");
+  return { decision, messages: `${text.charAt(0).toUpperCase()}${text.slice(1)}.` };
+}
+
+/** The drafted messages no channel sent: kept with the incident, unsent. */
+function keptMessages(f: Pick<ReceiptFacts, "actions" | "deliveries">): OutboundAction[] {
+  const delivered = new Set(
+    f.deliveries.filter((d) => d.status !== "skipped").map((d) => d.action_id),
+  );
+  return f.actions.filter((a) => !delivered.has(a.action_id));
+}
+
+export function Receipt({
+  runId,
+  facts,
+  comment,
+  focusOnMount = false,
+}: {
+  runId: string;
+  facts: ReceiptFacts;
+  comment?: string | null;
+  /** Take focus when it replaces the review panel the reader just used. */
+  focusOnMount?: boolean;
+}) {
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (focusOnMount) heading.current?.focus();
+  }, [focusOnMount]);
+  const text = receiptText(facts);
+  const rejected = facts.status === "rejected";
+  const base = `/api/v1/runs/${encodeURIComponent(runId)}`;
+  return (
+    <section aria-labelledby="receipt-title" className="grid gap-3 rounded-lg bg-raised p-5">
+      <h2
+        id="receipt-title"
+        ref={heading}
+        tabIndex={-1}
+        className="flex items-center gap-2 font-sans text-base font-semibold focus:outline-none"
+      >
+        {rejected ? (
+          <CircleXIcon aria-hidden className="size-4 text-muted-foreground" />
+        ) : (
+          <CircleCheckIcon aria-hidden className="size-4 text-ok" />
+        )}
+        {rejected ? "Draft discarded" : "Published"}
+      </h2>
+      <p className="text-sm" title={absoluteTime(facts.at)}>
+        {text.decision} {text.messages}
+      </p>
+      {publishedMeaning(facts) ? (
+        <p className="text-sm text-muted-foreground">{publishedMeaning(facts)}</p>
+      ) : null}
+      {comment ? (
+        <p className="text-sm text-muted-foreground">
+          Comment: <q>{comment}</q>
+        </p>
+      ) : null}
+      {/* The messages the receipt says are kept here: to read and copy (NV-M3). */}
+      {!rejected && keptMessages(facts).length ? (
+        <details className="text-sm">
+          <summary className="w-fit cursor-pointer py-0.5 font-medium">
+            Show the {keptMessages(facts).length === 1 ? "message" : "messages"} kept here
+          </summary>
+          <ul className="mt-2 grid gap-2">
+            {keptMessages(facts).map((action) => (
+              <ActionChoice key={action.action_id} action={action} />
+            ))}
+          </ul>
+        </details>
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        <Button asChild size="sm">
+          <a href={`${base}/report.md`} download={`${runId}-report.md`}>
+            <DownloadIcon aria-hidden />
+            Report (Markdown)
+          </a>
+        </Button>
+        {rejected ? null : (
+          <Button asChild size="sm" variant="ghost">
+            <a href={`${base}/postmortem.md`} download={`${runId}-postmortem.md`}>
+              <DownloadIcon aria-hidden />
+              Postmortem draft (Markdown)
+            </a>
+          </Button>
+        )}
+      </div>
+    </section>
+  );
+}

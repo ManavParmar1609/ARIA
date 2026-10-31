@@ -4,7 +4,6 @@ import {
   BookOpenIcon,
   CompassIcon,
   FlaskConicalIcon,
-  GaugeIcon,
   InboxIcon,
   LibraryIcon,
   LogOutIcon,
@@ -13,6 +12,7 @@ import {
   PlusIcon,
   SearchIcon,
   SettingsIcon,
+  SparklesIcon,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -34,7 +34,15 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogTitle, DialogTrigger, SheetContent } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useHealth, useRuns, useSession, useSignOut } from "@/lib/api/hooks";
+import {
+  useHealth,
+  useModelKey,
+  useRuns,
+  useSession,
+  useSettingsView,
+  useSignOut,
+} from "@/lib/api/hooks";
+import { accessShort, modelAccess } from "@/lib/model-access";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -44,28 +52,32 @@ interface NavItem {
   exact?: boolean;
 }
 
+// Three groups with a rule between them: the main tasks, the library, and about ARIA. Each group
+// is named for screen readers only, so the menu reads as one short list.
 const NAV: { label: string; items: NavItem[] }[] = [
   {
     label: "Triage",
     items: [
-      { href: "/console", label: "Overview", icon: GaugeIcon, exact: true },
-      { href: "/console/runs", label: "Incidents", icon: InboxIcon },
       { href: "/console/runs/new", label: "New triage", icon: PlusIcon, exact: true },
+      { href: "/console/runs", label: "Incidents", icon: InboxIcon },
       { href: "/console/ask", label: "Ask ARIA", icon: MessageSquareTextIcon },
     ],
   },
   {
-    label: "Knowledge",
+    label: "Library",
     items: [
-      { href: "/console/memory", label: "Incident memory", icon: LibraryIcon },
+      { href: "/console/memory", label: "Incident library", icon: LibraryIcon },
       { href: "/console/runbooks", label: "Runbooks", icon: BookOpenIcon },
-      { href: "/console/evals", label: "Evaluation", icon: FlaskConicalIcon },
-      { href: "/console/guide", label: "How to use ARIA", icon: CompassIcon },
     ],
   },
   {
-    label: "System",
-    items: [{ href: "/console/settings", label: "Settings", icon: SettingsIcon }],
+    label: "About ARIA",
+    items: [
+      { href: "/console/how-it-works", label: "How ARIA works", icon: SparklesIcon },
+      { href: "/console/evals", label: "Test results", icon: FlaskConicalIcon },
+      { href: "/console/guide", label: "Guide", icon: CompassIcon },
+      { href: "/console/settings", label: "Settings", icon: SettingsIcon },
+    ],
   },
 ];
 
@@ -101,7 +113,7 @@ function PaletteButton() {
     >
       <SearchIcon aria-hidden className="size-4" />
       <span className="flex-1 text-left">Search</span>
-      <kbd className="rounded-md border border-control/50 px-1.5 text-xs">
+      <kbd className="rounded-md border border-control/50 px-1.5 text-xs [@media(pointer:coarse)]:hidden">
         {mac ? "⌘ K" : "Ctrl K"}
       </kbd>
     </button>
@@ -111,15 +123,16 @@ function PaletteButton() {
 function PaletteIconButton() {
   const { openPalette } = useCommands();
   return (
-    <Button variant="ghost" size="icon-sm" aria-label="Search or jump to" onClick={openPalette}>
+    <Button variant="ghost" size="icon-sm" aria-label="Search" onClick={openPalette}>
       <SearchIcon aria-hidden />
     </Button>
   );
 }
 
 function ReviewCount() {
-  const { data } = useRuns("awaiting_review", 50);
-  const n = data?.runs.length ?? 0;
+  const { data } = useRuns("awaiting_review", 50, 30_000);
+  // A shared demo's examples wait too, but nobody reviews them: only one's own incidents count.
+  const n = data?.runs.filter((run) => !run.example).length ?? 0;
   if (n === 0) return null;
   return (
     <span className="tabular ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-medium text-primary-foreground">
@@ -172,11 +185,13 @@ function Nav({ onNavigate }: { onNavigate?: () => void }) {
         aria-hidden
         className="absolute top-0 left-0 rounded-sm bg-panel-keylime opacity-0 transition-[transform,opacity] duration-(--duration-moderate) ease-(--ease-out) dark:bg-highlight"
       />
-      {NAV.map((group) => (
-        <div key={group.label} role="group" aria-labelledby={`nav-${group.label}`}>
-          <p id={`nav-${group.label}`} className="eyebrow mb-1.5 px-3 text-muted-foreground">
-            {group.label}
-          </p>
+      {NAV.map((group, i) => (
+        <div
+          key={group.label}
+          role="group"
+          aria-label={group.label}
+          className={cn(i > 0 && "border-t border-rule pt-4")}
+        >
           <div className="grid gap-0.5">
             {group.items.map((item) => {
               const active = isActive(pathname, item);
@@ -222,11 +237,13 @@ function ApiStatus() {
       : data.status === "ok" || offline
         ? "ok"
         : "degraded";
+  // A server that is not answering is usually waking or restarting: a wait, not an alarm.
   const label = {
-    ok: offline ? "API ready, offline mode" : "API ready",
-    degraded: "API degraded",
-    down: "API not reachable",
-    unknown: "Checking the API",
+    // The line below says whether a model answers, so this one does not repeat "offline".
+    ok: "ARIA is ready",
+    degraded: "Some of ARIA is not working",
+    down: "Waiting for ARIA's server",
+    unknown: "Checking ARIA's server",
   }[state];
   return (
     <p className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
@@ -235,35 +252,61 @@ function ApiStatus() {
         className={cn(
           "block size-2 shrink-0 rounded-full",
           state === "ok" && "bg-ok",
-          state === "degraded" && "bg-sev3",
-          state === "down" && "bg-danger",
+          (state === "degraded" || state === "down") && "bg-sev3",
           state === "unknown" && "bg-control",
         )}
       />
-      <span>
-        {label}
-        {data ? <span className="text-faint"> (v{data.version})</span> : null}
-      </span>
+      <span>{label}</span>
     </p>
   );
 }
 
-function SessionFooter() {
+/** On a phone the server's status sits in the closed menu, so the page itself says when the server
+ * is not answering (FL-07). */
+function PhoneServerNotice() {
+  const { isError } = useHealth();
+  if (!isError) return null;
+  return (
+    <p className="mb-6 flex items-center gap-2 rounded-card border border-rule bg-raised px-4 py-3 text-sm text-muted-foreground lg:hidden">
+      <span aria-hidden className="block size-2 shrink-0 rounded-full bg-sev3" />
+      Waiting for ARIA&apos;s server. This page carries on when it answers.
+    </p>
+  );
+}
+
+/** Who answers this visitor's runs and questions, as a link to the key form on Settings. */
+function ModelLine({ onNavigate }: { onNavigate?: () => void }) {
+  const view = useSettingsView();
+  const saved = useModelKey();
+  if (!view.data) return null;
+  const kinds = view.data.visitor_keys ?? [];
+  const access = modelAccess(saved.data?.provider ?? null, kinds, view.data.shared_model);
+  return (
+    <Link
+      href="/console/settings#set-model-key"
+      onClick={onNavigate}
+      className="inline-flex min-h-6 w-fit items-center text-xs text-muted-foreground underline decoration-control underline-offset-2 hover:text-foreground hover:decoration-foreground"
+    >
+      {accessShort(access, kinds.length > 0)}
+    </Link>
+  );
+}
+
+function SessionFooter({ onNavigate }: { onNavigate?: () => void }) {
   const { data: session } = useSession();
   const signOut = useSignOut();
   return (
     <div className="grid gap-3 border-t border-rule pt-4">
       <ApiStatus />
+      <ModelLine onNavigate={onNavigate} />
       <div className="flex items-center justify-between gap-2">
-        <p className="min-w-0 truncate text-xs text-muted-foreground">
-          {session?.signedIn ? (
-            <>
-              Signed in as <span className="font-medium text-foreground">{session.name}</span>
-            </>
-          ) : session?.authRequired === false ? (
-            "No key needed: this API is open"
-          ) : null}
-        </p>
+        {session?.signedIn ? (
+          <p className="min-w-0 truncate text-xs text-muted-foreground">
+            Signed in as <span className="font-medium text-foreground">{session.name}</span>
+          </p>
+        ) : (
+          <span aria-hidden />
+        )}
         <div className="flex items-center">
           <ThemeToggle />
           {session?.signedIn ? (
@@ -282,9 +325,11 @@ function SessionFooter() {
   );
 }
 
-// Pages that need no live API: the evaluation reads the committed results, and the guide is
-// mostly words. They stay readable while the API is down, and before anyone signs in.
+// Pages that need no live API: How ARIA works and the evaluation read recorded files, and the
+// guide is mostly words. They stay readable while the API is down, and before anyone signs in.
 const WITHOUT_API = new Set(["/console/evals", "/console/guide"]);
+const needsNoApi = (pathname: string) =>
+  WITHOUT_API.has(pathname) || /^\/console\/how-it-works(\/|$)/.test(pathname);
 
 /** Once the page's content is in, scroll to the link's #section: it was not there on load. */
 function useHashOnArrival(ready: boolean) {
@@ -307,63 +352,116 @@ function useAfter(ms: number): boolean {
   return passed;
 }
 
-function Gate({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
-  const session = useSession();
-  // A free host puts an idle API to sleep, and the first answer after that takes about a minute.
+/** What the console shows until ARIA's API answers. A free host puts an idle API to sleep, and
+ * the first answer after that takes about a minute, so a failed check reads as "waking up" for a
+ * minute and a half before it reads as down. The session check keeps asking meanwhile, so the page
+ * carries on by itself once the API answers. */
+function Connecting({
+  busy,
+  failed,
+  onRetry,
+}: {
+  busy: boolean;
+  failed: boolean;
+  onRetry: () => void;
+}) {
   const slow = useAfter(4000);
-  const open = WITHOUT_API.has(pathname);
-  const reachable = !session.isError && Boolean(session.data?.reachable);
-  const signedOut = Boolean(session.data?.authRequired && !session.data.signedIn);
-  useHashOnArrival(open || (reachable && !signedOut));
-  if (open) return <>{children}</>;
-  if (session.isPending) {
-    return (
-      <div role="status" className="grid gap-4">
-        {slow ? (
-          <p className="text-sm text-muted-foreground">
-            Still connecting to ARIA&apos;s API. A server waking from sleep can take up to a minute.
-          </p>
-        ) : (
-          <span className="sr-only">Connecting to ARIA</span>
-        )}
-        <Skeleton className="h-10 w-64" />
-        <Skeleton className="h-40 w-full" />
-      </div>
-    );
-  }
-  if (session.isError || !session.data?.reachable) {
+  const gaveUp = useAfter(90_000);
+  if (failed && gaveUp) {
     return (
       <div className="grid gap-4">
         <ErrorState
           title="ARIA's API is not answering"
           error={
             new Error(
-              "Runs, reviews and incident memory need it. A server that was asleep wakes within a minute, so try again shortly. If you run ARIA yourself, start it with make dev or docker compose up, and check that this web server's ARIA_API_URL points at it.",
+              "Incidents, reviews and the incident library need it. This page keeps checking, and carries on by itself once it answers.",
             )
           }
-          onRetry={() => void session.refetch()}
+          onRetry={onRetry}
         />
+        <SelfHosting />
         <p className="text-sm text-muted-foreground">
           These work without it:{" "}
           <Link href="/console/evals" className="underline decoration-control underline-offset-4">
-            the evaluation
+            the test results
           </Link>{" "}
           and{" "}
           <Link href="/console/guide" className="underline decoration-control underline-offset-4">
-            how to use ARIA
+            the guide
           </Link>
           .
         </p>
       </div>
     );
   }
-  if (session.data.authRequired && !session.data.signedIn) return <SignIn />;
+  return (
+    <div className="grid gap-4">
+      <div role="status">
+        {busy ? (
+          <p className="max-w-prose text-sm text-muted-foreground">
+            ARIA is busy right now. This page carries on by itself in a few seconds.
+          </p>
+        ) : slow || failed ? (
+          <p className="max-w-prose text-sm text-muted-foreground">
+            ARIA&apos;s server is waking up. After a quiet spell this takes up to a minute, and this
+            page carries on by itself.
+          </p>
+        ) : (
+          <span className="sr-only">Connecting to ARIA</span>
+        )}
+      </div>
+      {failed && !busy ? <SelfHosting /> : null}
+      <Skeleton className="h-10 w-64" />
+      <Skeleton className="h-40 w-full" />
+    </div>
+  );
+}
+
+/** For whoever runs ARIA: folded away, so a visitor reads only what applies to them. */
+function SelfHosting() {
+  return (
+    <details className="text-sm text-muted-foreground">
+      <summary className="min-h-6 w-fit cursor-pointer underline decoration-control underline-offset-4">
+        Running ARIA yourself?
+      </summary>
+      <p className="mt-2 max-w-prose">
+        Start the API with <code>make dev</code> or <code>docker compose up</code>, and check that
+        this web server&apos;s <code>ARIA_API_URL</code> points at it.
+      </p>
+    </details>
+  );
+}
+
+function Gate({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const session = useSession();
+  const open = needsNoApi(pathname);
+  const reachable = !session.isError && Boolean(session.data?.reachable);
+  const busy = Boolean(session.data?.busy);
+  const signedOut = Boolean(session.data?.authRequired && !session.data.signedIn);
+  useHashOnArrival(open || (reachable && !busy && !signedOut));
+  if (open) return <>{children}</>;
+  if (session.isPending || !reachable || busy) {
+    return (
+      <Connecting
+        busy={busy}
+        failed={!session.isPending && !reachable}
+        onRetry={() => void session.refetch()}
+      />
+    );
+  }
+  if (signedOut) return <SignIn />;
   return <>{children}</>;
 }
 
 export function ConsoleShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  // Set when the menu closes because a page was chosen in it.
+  const chose = useRef(false);
+  const leave = () => {
+    chose.current = true;
+    setOpen(false);
+  };
   return (
     <ConsoleCommands>
       <a
@@ -396,18 +494,44 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
                     <MenuIcon aria-hidden />
                   </Button>
                 </DialogTrigger>
-                <SheetContent side="left" closeLabel="Close navigation">
+                <SheetContent
+                  side="left"
+                  closeLabel="Close navigation"
+                  // After choosing a page, focus goes to the page, as it does after Search; closed
+                  // any other way, it goes back to the menu button.
+                  onCloseAutoFocus={(event) => {
+                    if (!chose.current) return;
+                    chose.current = false;
+                    event.preventDefault();
+                    document.getElementById("console-main")?.focus({ preventScroll: true });
+                  }}
+                  // Open on the page being read, so the next Tab or arrow goes somewhere useful.
+                  onOpenAutoFocus={(event) => {
+                    const sheet = event.currentTarget as HTMLElement | null;
+                    const here = sheet?.querySelector<HTMLElement>("nav [aria-current='page']");
+                    if (here) {
+                      event.preventDefault();
+                      here.focus();
+                    }
+                  }}
+                >
                   <DialogTitle className="sr-only">Navigation</DialogTitle>
-                  <Link href="/" className="rounded-sm px-1.5" onClick={() => setOpen(false)}>
+                  <Link
+                    href="/"
+                    className="rounded-sm px-1.5"
+                    aria-label="ARIA home"
+                    onClick={() => setOpen(false)}
+                  >
                     <Wordmark />
                   </Link>
-                  <div className="flex-1 overflow-y-auto">
-                    <Nav onNavigate={() => setOpen(false)} />
+                  <div className="-mx-1 flex-1 overflow-y-auto px-1 py-1">
+                    <Nav onNavigate={leave} />
                   </div>
-                  <SessionFooter />
+                  <SessionFooter onNavigate={leave} />
                 </SheetContent>
               </Dialog>
-              <Link href="/console" className="rounded-sm" aria-label="ARIA console overview">
+              {/* Every logo goes to the same place: the home page. */}
+              <Link href="/" className="rounded-sm" aria-label="ARIA home">
                 <Wordmark />
               </Link>
               <div className="flex items-center">
@@ -416,10 +540,13 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
               </div>
             </div>
           </header>
+          {/* Focusable, so the skip link and a closed command palette can hand it focus. */}
           <main
             id="console-main"
-            className="mx-auto w-full max-w-[90rem] flex-1 px-4 py-8 sm:px-6 lg:px-8 lg:py-12"
+            tabIndex={-1}
+            className="mx-auto w-full max-w-[90rem] flex-1 px-4 py-8 outline-none sm:px-6 lg:px-8 lg:py-12"
           >
+            <PhoneServerNotice />
             <Gate>{children}</Gate>
           </main>
         </div>

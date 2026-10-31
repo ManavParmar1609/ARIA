@@ -64,6 +64,36 @@ describe("session", () => {
     expect(out.headers.get("set-cookie")).toContain("Max-Age=0");
   });
 
+  it("gives a new browser its private session id, and keeps the one it has", async () => {
+    const fetch = api({ open: true });
+    vi.stubGlobal("fetch", fetch);
+    const first = await GET(req("GET"));
+    const cookie = first.headers.get("set-cookie") ?? "";
+    const id = /aria_visitor=([^;]+)/.exec(cookie)?.[1] ?? "";
+    expect(id).toMatch(/^[A-Za-z0-9_-]{16,64}$/);
+    expect(cookie).toContain("HttpOnly");
+    const sent = (fetch.mock.calls[0] as unknown as [URL, RequestInit])[1].headers as Headers;
+    expect(sent.get("x-visitor-id")).toBe(id);
+
+    const again = await GET(req("GET", { cookie: `aria_visitor=${id}` }));
+    expect(again.headers.get("set-cookie")).toBeNull();
+    const resent = (fetch.mock.calls[1] as unknown as [URL, RequestInit])[1].headers as Headers;
+    expect(resent.get("x-visitor-id")).toBe(id);
+  });
+
+  it("reports a busy API as reachable, so the console waits instead of calling it down", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ detail: "rate limit exceeded" }, { status: 429 })),
+    );
+    const session = (await (await GET(req("GET"))).json()) as {
+      reachable: boolean;
+      busy?: boolean;
+    };
+    expect(session.reachable).toBe(true);
+    expect(session.busy).toBe(true);
+  });
+
   it("reports an unreachable API instead of asking to sign in", async () => {
     vi.stubGlobal(
       "fetch",

@@ -12,6 +12,11 @@ The severity model was trained on semi-synthetic windows composed from Loghub's 
 sample, which was drawn from this log, so the share of lines whose message also appears in the
 sample is reported. Baselines on the same windows: the rules alone, the model alone, a keyword
 rule, the highest log level in the window, and the commonest label.
+
+Thunderbird, a Linux cluster at Sandia studied in the same paper, is scored the same way on the
+stretch of its log that Loghub-2.0 publishes, read from the zip as it streams. Its tags are
+labelled by a rubric written from what each tag's messages say, with BGL's window rules
+(``config/labeling/thunderbird_alert_impact.yaml``); no training scenario was labelled with it.
 """
 
 from __future__ import annotations
@@ -28,7 +33,7 @@ from typing import Any
 from aria.config import GuardrailConfig
 from aria.contracts.base import Severity
 from aria.contracts.parsing import WindowFeatures
-from aria.data.labels import label_window, load_rubric, tag_stats
+from aria.data.labels import AlertRubric, label_window, load_rubric, tag_stats
 from aria.data.loghub import LogRecord, format_raw_line, iter_raw_log
 from aria.evals import metrics as m
 from aria.evals.severity import keyword_severity
@@ -40,6 +45,47 @@ from aria.severity.training import features_for
 BGL_DIR = Path("data/raw/loghub-bgl")
 BGL_CITATION = (
     "A. J. Oliner, J. Stearley. What Supercomputers Say: A Study of Five System Logs. DSN 2007."
+)
+
+
+@dataclasses.dataclass(frozen=True)
+class TaggedLog:
+    """A whole log whose lines carry administrators' alert tags, and how to read and label it."""
+
+    system: str
+    directory: Path
+    name: str  # the log's file name, or the name of the zip that holds it
+    member: str | None  # the log's path inside that zip
+    rubric: Path
+    source: str
+    citation: str
+    download: str  # the manifest source that fetches it
+
+    def find(self, directory: Path | None = None) -> Path | None:
+        return next(
+            (p for p in (directory or self.directory).rglob(self.name) if p.is_file()), None
+        )
+
+
+BGL = TaggedLog(
+    system="bgl",
+    directory=BGL_DIR,
+    name="BGL.log",
+    member=None,
+    rubric=Path("config/labeling/bgl_alert_impact.yaml"),
+    source="Loghub BGL.log, the full BlueGene/L log with alert tags",
+    citation=BGL_CITATION,
+    download="loghub-bgl",
+)
+THUNDERBIRD = TaggedLog(
+    system="thunderbird",
+    directory=Path("data/raw/loghub2-thunderbird"),
+    name="Thunderbird.zip",
+    member="Thunderbird/Thunderbird_full.log",
+    rubric=Path("config/labeling/thunderbird_alert_impact.yaml"),
+    source="Loghub-2.0's Thunderbird log, with alert tags",
+    citation=BGL_CITATION + " The log as Loghub-2.0 publishes it: Jiang et al., ISSTA 2024.",
+    download="loghub2-thunderbird",
 )
 WINDOW_MIN = 20
 SEVERE = {"SEV1", "SEV2"}
@@ -66,7 +112,7 @@ class _Tally:
 
 
 def find_bgl(bgl_dir: Path = BGL_DIR) -> Path | None:
-    return next((p for p in bgl_dir.rglob("BGL.log") if p.is_file()), None)
+    return BGL.find(bgl_dir)
 
 
 def _start(ts: datetime) -> datetime:
@@ -91,13 +137,15 @@ def _window(start: datetime, group: Sequence[LogRecord], rubric: Any, pool: set[
     )
 
 
-def stream_windows(records: Iterable[LogRecord], pool: set[str], tally: _Tally) -> Iterator[Window]:
+def stream_windows(
+    records: Iterable[LogRecord], pool: set[str], tally: _Tally, rubric: AlertRubric | None = None
+) -> Iterator[Window]:
     """Contiguous windows, built as the log is read; lines without a timestamp are skipped.
 
     The log is in time order, but not strictly: a window stays open until the log is a full
     window past its end.
     """
-    rubric = load_rubric()
+    rubric = rubric or load_rubric()
     open_windows: dict[datetime, list[LogRecord]] = defaultdict(list)
     latest: datetime | None = None
     for record in records:
@@ -120,8 +168,8 @@ def stream_windows(records: Iterable[LogRecord], pool: set[str], tally: _Tally) 
         yield _window(done, open_windows.pop(done), rubric, pool)
 
 
-def _features(lines: Sequence[str], known: Sequence[str]) -> WindowFeatures:
-    return features_for("bgl", lines, known)
+def _features(system: str, lines: Sequence[str], known: Sequence[str]) -> WindowFeatures:
+    return features_for(system, lines, known)
 
 
 def _batches(items: Iterable[Window], size: int) -> Iterator[list[Window]]:
@@ -168,6 +216,7 @@ class _Judged:
     needs_review: bool
     lines: int
     pool_lines: int
+    fired: tuple[str, ...]  # the rules that fired, to explain the misses
 
 
 def _judge(engine: SeverityEngine, window: Window, feats: WindowFeatures) -> _Judged:
@@ -185,6 +234,7 @@ def _judge(engine: SeverityEngine, window: Window, feats: WindowFeatures) -> _Ju
         needs_review=decision.needs_review,
         lines=len(window.lines),
         pool_lines=window.pool_lines,
+        fired=tuple(hit.rule_id for hit in pre.rule_hits),
     )
 
 
@@ -197,10 +247,12 @@ def evaluate(
     workers: int = 1,
     batch: int = 256,
     progress: Callable[[str], None] | None = None,
+    log: TaggedLog = BGL,
 ) -> dict[str, Any]:
     tally = _Tally()
     judged: list[_Judged] = []
-    stream = stream_windows(iter_raw_log("bgl", path), pool, tally)
+    records = iter_raw_log(log.system, path, member=log.member)
+    stream = stream_windows(records, pool, tally, load_rubric(log.rubric))
     executor = (
         ProcessPoolExecutor(max_workers=workers, mp_context=get_context("spawn"))
         if workers > 1
@@ -211,11 +263,15 @@ def evaluate(
             if executor is not None:
                 features = list(
                     executor.map(
-                        _features, [w.lines for w in chunk], [known] * len(chunk), chunksize=8
+                        _features,
+                        [log.system] * len(chunk),
+                        [w.lines for w in chunk],
+                        [known] * len(chunk),
+                        chunksize=8,
                     )
                 )
             else:
-                features = [_features(w.lines, known) for w in chunk]
+                features = [_features(log.system, w.lines, known) for w in chunk]
             judged += [_judge(engine, w, f) for w, f in zip(chunk, features, strict=True)]
             if progress and len(judged) % (batch * 8) < batch:
                 progress(f"{len(judged):,} windows, {tally.lines:,} lines read")
@@ -234,13 +290,17 @@ def evaluate(
     }
     cap = GuardrailConfig().max_lines
     auto = [j for j in judged if not j.needs_review]
+    # What made ARIA page on windows the tags call quiet: the rules that fired there most often.
+    paged_quiet = [j for j in judged if j.label == str(Severity.SEV4) and j.aria in SEVERE]
+    quiet_rules = Counter(rule for j in paged_quiet for rule in set(j.fired)).most_common(5)
     placed = tally.lines - tally.without_time
     days = (
         (tally.last - tally.first).total_seconds() / 86_400 if tally.first and tally.last else 0.0
     )
     return {
-        "source": "Loghub BGL.log, the full BlueGene/L log with alert tags",
-        "citation": BGL_CITATION,
+        "system": log.system,
+        "source": log.source,
+        "citation": log.citation,
         "lines": tally.lines,
         "lines_without_time": tally.without_time,
         "alert_lines": tally.alerts,
@@ -267,6 +327,7 @@ def evaluate(
             else None,
         },
         "confusion": {"classes": m.CLASSES, "matrix": m.confusion(truth, methods["aria_policy"])},
+        "rules_on_paged_quiet_windows": [[rule, n] for rule, n in quiet_rules],
         "overlap_with_training_sample": {
             "lines": sum(j.pool_lines for j in judged),
             "share": round(sum(j.pool_lines for j in judged) / max(1, placed), 4),
@@ -280,11 +341,14 @@ def summarize(
     engine: SeverityEngine,
     known: Sequence[str],
     pool: set[str],
-    bgl_dir: Path = BGL_DIR,
+    bgl_dir: Path | None = None,
     workers: int = 1,
     progress: Callable[[str], None] | None = None,
+    log: TaggedLog = BGL,
 ) -> dict[str, Any]:
-    path = find_bgl(bgl_dir)
+    path = log.find(bgl_dir)
     if path is None:
-        return {"missing": "download it with: aria data download --source loghub-bgl"}
-    return evaluate(path, engine=engine, known=known, pool=pool, workers=workers, progress=progress)
+        return {"missing": f"download it with: aria data download --source {log.download}"}
+    return evaluate(
+        path, engine=engine, known=known, pool=pool, workers=workers, progress=progress, log=log
+    )

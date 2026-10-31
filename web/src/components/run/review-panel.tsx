@@ -1,10 +1,10 @@
 "use client";
 
-import { ChevronDownIcon, TriangleAlertIcon } from "lucide-react";
+import { ChevronDownIcon, CircleCheckIcon, TriangleAlertIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { CopyButton } from "@/components/ui/copy-button";
 import {
   Dialog,
   DialogContent,
@@ -33,6 +33,7 @@ import {
   type Severity,
 } from "@/lib/api/types";
 import { stripSeverity } from "@/lib/format";
+import { LEVEL_WORD, orList } from "@/lib/levels";
 import { cn } from "@/lib/utils";
 
 const KIND: Record<string, string> = {
@@ -43,41 +44,52 @@ const KIND: Record<string, string> = {
   ticket_draft: "Ticket draft",
 };
 
-function ActionChoice({
+/** One message ARIA drafted. With a connected channel it has a box to tick; without one it is a
+ * preview to read, with nothing to tick. The receipt lists the ones kept unsent the same way. */
+export function ActionChoice({
   action,
   checked,
   onChange,
-  ready,
 }: {
   action: OutboundAction;
-  checked: boolean;
-  onChange: (value: boolean) => void;
-  /** Whether the channel's webhook is set; unknown until the settings load. */
-  ready: boolean | undefined;
+  checked?: boolean;
+  onChange?: (value: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const id = useId();
+  const name = (
+    <>
+      <span className="font-medium">
+        {KIND[action.kind] ?? action.kind} to {action.audience}
+      </span>
+      <span className="truncate text-muted-foreground">{action.title}</span>
+    </>
+  );
   return (
     <li className="grid gap-2 rounded-md bg-sunken p-3">
       <div className="flex items-start gap-3">
-        <input
-          id={id}
-          type="checkbox"
-          checked={checked}
-          onChange={(e) => onChange(e.target.checked)}
-          className="mt-1 size-4 shrink-0 accent-(--primary)"
-        />
-        <label htmlFor={id} className="grid min-w-0 flex-1 gap-0.5 text-sm">
-          <span className="font-medium">
-            {KIND[action.kind] ?? action.kind} to {action.audience}
+        {onChange ? (
+          <>
+            <input
+              id={id}
+              type="checkbox"
+              checked={checked ?? false}
+              onChange={(e) => onChange(e.target.checked)}
+              className="mt-1 size-4 shrink-0 accent-(--primary)"
+            />
+            <label htmlFor={id} className="grid min-w-0 flex-1 gap-0.5 text-sm">
+              {name}
+            </label>
+          </>
+        ) : (
+          <p className="grid min-w-0 flex-1 gap-0.5 text-sm">{name}</p>
+        )}
+        {/* No channel to send it to: it stays a preview, and says so. */}
+        {onChange ? null : (
+          <span className="mt-0.5 shrink-0 rounded-full border border-rule px-2 text-xs leading-5 text-muted-foreground">
+            Preview
           </span>
-          <span className="truncate text-muted-foreground">{action.title}</span>
-          {ready === false ? (
-            <span className="text-xs text-muted-foreground">
-              This channel has no webhook set, so the message would be skipped.
-            </span>
-          ) : null}
-        </label>
+        )}
         <Button
           size="icon-sm"
           variant="ghost"
@@ -92,14 +104,31 @@ function ActionChoice({
         </Button>
       </div>
       {open ? (
-        <pre
+        // As it would arrive in a chat: who it is from and to, then the text.
+        <div
           tabIndex={0}
           role="region"
           aria-label="Message"
-          className="max-h-56 overflow-auto rounded-sm bg-sunken p-2.5 font-sans text-xs leading-5 whitespace-pre-wrap"
+          className="max-h-64 overflow-auto rounded-md bg-raised p-3 ring-1 ring-rule"
         >
-          {action.body}
-        </pre>
+          <p className="flex items-center gap-2 text-xs">
+            <span
+              aria-hidden
+              className="grid size-5 place-items-center rounded-sm bg-primary text-xs font-medium text-primary-foreground"
+            >
+              A
+            </span>
+            <span className="font-medium">ARIA</span>
+            <span className="text-muted-foreground">to {action.audience}</span>
+          </p>
+          <p className="mt-2 text-sm leading-6 whitespace-pre-wrap">{action.body}</p>
+          {/* No channel sends it, so a person may want to post it by hand. */}
+          <CopyButton
+            text={action.body}
+            label={`${KIND[action.kind] ?? action.kind} message to ${action.audience}`}
+            className="mt-2"
+          />
+        </div>
       ) : null}
     </li>
   );
@@ -149,17 +178,30 @@ export function hasChanges(edits: ReportEdits): boolean {
   );
 }
 
-/** The decision ARIA is waiting for: approve, edit or reject, and which messages may go out. */
+/** What approving does, in the button's words: a message goes out only when one is ticked and
+ * its channel is connected. */
+export function approveLabel(sending: number, pending: boolean): string {
+  if (pending) return "Saving";
+  return sending > 0 ? "Approve and send" : "Approve and publish";
+}
+
+/** The decision ARIA is waiting for. The buttons come first and say what each one does; ARIA's
+ * own check sits beside them as advice, because only a person's approval sends anything. */
 export function ReviewPanel({
   runId,
   prompt,
   actions,
   report,
+  onDecided,
+  className,
 }: {
   runId: string;
   prompt: ReviewPrompt;
   actions: OutboundAction[];
   report: IncidentReport | undefined;
+  /** Called once the decision is saved; the page then shows its receipt in this place. */
+  onDecided?: () => void;
+  className?: string;
 }) {
   const id = useId();
   const review = useReview(runId);
@@ -168,7 +210,7 @@ export function ReviewPanel({
   const [comment, setComment] = useState("");
   const [editing, setEditing] = useState(false);
   const [unchanged, setUnchanged] = useState(false);
-  const [rejecting, setRejecting] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
   const original = {
     title: stripSeverity(report?.title ?? prompt.title),
     severity: prompt.severity,
@@ -189,101 +231,154 @@ export function ReviewPanel({
     if (hasChanges(changedEdits(edit, original))) void decide("edit");
     else setUnchanged(true);
   };
-  const error = review.error instanceof ApiError ? review.error.detail : review.error?.message;
+  // The server's "run run-... not found" read as what it means for this person (FL-08).
+  const error =
+    review.error instanceof ApiError && review.error.status === 404
+      ? "This incident was deleted, so there is nothing left to review."
+      : review.error instanceof ApiError
+        ? review.error.detail
+        : review.error?.message;
   const proposed = actions.filter((a) => a.status === "proposed" || a.status === undefined);
+  // A message can go out only through a connected channel; the others stay previews, with
+  // nothing to tick. Until the settings load, every message reads as a preview.
+  const channels = settings.data?.channels ?? {};
+  const sendable = proposed.filter((a) => channels[a.kind]);
+  const previews = proposed.filter((a) => !channels[a.kind]);
+  const sending = sendable.filter((a) => send.has(a.action_id)).length;
+  const validation = report?.validation;
 
-  const sending = useRef(false);
+  // The dialogs open from these buttons, not from triggers of their own, so closing one puts
+  // focus back by hand: otherwise it falls to the page and the next key press is a shortcut.
+  const editButton = useRef<HTMLButtonElement>(null);
+  const discardButton = useRef<HTMLButtonElement>(null);
+  const backTo = (event: Event, button: HTMLButtonElement | null) => {
+    if (!button?.isConnected) return; // decided: the receipt has taken the panel's place
+    event.preventDefault();
+    button.focus();
+  };
+
+  const saving = useRef(false);
   const decide = async (decision: "approve" | "edit" | "reject") => {
-    if (sending.current) return;
-    sending.current = true;
+    if (saving.current) return;
+    saving.current = true;
     const edits = decision === "edit" ? changedEdits(edit, original) : undefined;
-    let detail: Awaited<ReturnType<typeof review.mutateAsync>>;
     try {
-      detail = await review.mutateAsync({
+      await review.mutateAsync({
         decision,
         comment: comment.trim() || undefined,
         edits,
-        approve_actions: decision === "reject" ? [] : [...send],
+        approve_actions:
+          decision === "reject"
+            ? []
+            : sendable.filter((a) => send.has(a.action_id)).map((a) => a.action_id),
       });
     } catch {
       return; // the panel shows the error
     } finally {
-      sending.current = false;
+      saving.current = false;
     }
+    // No toast: the receipt that takes this panel's place says what happened.
     setEditing(false);
-    setRejecting(false);
-    const label =
-      detail.status === "published"
-        ? "Published"
-        : detail.status === "rejected"
-          ? "Rejected"
-          : "Saved";
-    // The outcome, not the button pressed: it names what actually happened to the run.
-    if (detail.status === "rejected") {
-      toast.success(label, { description: "The report was rejected; nothing was sent." });
-      return;
-    }
-    // What was delivered, not what was ticked: a receiver can be down or not configured.
-    const deliveries = detail.deliveries ?? [];
-    const sent = deliveries.filter((d) => d.status === "sent").length;
-    const missed = deliveries.length - sent;
-    const said = sent
-      ? `${sent} ${sent === 1 ? "message was" : "messages were"} sent.`
-      : "No messages were sent.";
-    if (missed) {
-      toast.warning(label, {
-        description: `${said} ${missed} could not be delivered: see Messages on this page.`,
-      });
-    } else {
-      toast.success(label, { description: said });
-    }
+    setDiscarding(false);
+    onDecided?.();
   };
 
   return (
     <section
       aria-labelledby={`${id}-title`}
-      className="grid gap-4 rounded-lg bg-raised p-5 ring-1 ring-primary/50"
+      className={cn("grid gap-4 rounded-lg bg-raised p-5 ring-1 ring-primary/50", className)}
     >
       <div className="grid gap-1">
         <h2
           id={`${id}-title`}
           className="flex items-center gap-2 font-sans text-base font-semibold"
         >
-          <span
-            aria-hidden
-            className="block size-2 animate-pulse-dot-thrice rounded-full bg-primary"
-          />
+          {/* A still dot: the severity stamp is this page's one entrance animation. */}
+          <span aria-hidden className="block size-2 rounded-full bg-primary" />
           Waiting for your review
         </h2>
         <p className="text-sm text-muted-foreground">
-          Nothing has been sent. Approve to publish the report; tick the messages you want sent with
-          it.
+          Nothing has been sent. Approving publishes the report
+          {sendable.length ? " and sends the messages you tick" : ""}.{" "}
+          {report ? (
+            // The report sits below the panels it rests on: a way down before deciding.
+            <a
+              href="#report-title"
+              className="text-foreground underline decoration-control underline-offset-2 hover:decoration-foreground"
+            >
+              Read the report first
+            </a>
+          ) : null}
         </p>
       </div>
+      <div className="grid gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="primary"
+            onClick={() => void decide("approve")}
+            disabled={review.isPending}
+          >
+            {approveLabel(sending, review.isPending)}
+          </Button>
+          <Button
+            ref={editButton}
+            onClick={() => {
+              // Start from the report as it is now: it may have arrived after this panel did, and
+              // an empty summary box would read as "no summary" (lines kept keep their sources).
+              setEdit({ ...edit, title: original.title, summary: original.summary.join("\n") });
+              setEditing(true);
+            }}
+            disabled={review.isPending}
+          >
+            Edit before sending
+          </Button>
+          <Button
+            ref={discardButton}
+            variant="danger"
+            onClick={() => setDiscarding(true)}
+            disabled={review.isPending}
+          >
+            Discard draft
+          </Button>
+        </div>
+        {validation?.ok ? (
+          <p className="flex gap-1.5 text-xs text-muted-foreground">
+            <CircleCheckIcon aria-hidden className="mt-px size-3.5 shrink-0 text-ok" />
+            ARIA&rsquo;s own check: all {validation.checked_claims} claims cite their evidence. It
+            is advice; your approval decides.
+          </p>
+        ) : null}
+      </div>
+      {error ? (
+        <p role="alert" className="text-sm text-danger">
+          {error}
+        </p>
+      ) : null}
       {prompt.needs_review ? (
         <p className="flex gap-2 rounded-md bg-sev3/12 p-2.5 text-sm">
           <TriangleAlertIcon aria-hidden className="mt-0.5 size-4 shrink-0 text-sev3-fg" />
           <span>
-            ARIA was unsure about the severity ({prompt.prediction_set.join(" or ")}). Check it
-            before approving, or edit it.
+            {prompt.prediction_set.length > 1
+              ? `ARIA isn't sure whether this is ${orList(prompt.prediction_set)}.`
+              : `ARIA isn't sure enough of ${prompt.severity} to decide alone.`}{" "}
+            Check the severity before approving, or change it with Edit before sending.
           </span>
         </p>
       ) : null}
       {!prompt.valid ? (
         <p className="flex gap-2 rounded-md bg-danger/10 p-2.5 text-sm text-danger">
           <TriangleAlertIcon aria-hidden className="mt-0.5 size-4 shrink-0" />
-          The report failed validation. Edit or reject it.
+          ARIA&rsquo;s own check failed on this report. Edit it before sending, or discard it.
         </p>
       ) : null}
-      {proposed.length > 0 ? (
+      {sendable.length > 0 ? (
         <fieldset className="grid gap-2">
-          <legend className="mb-1 text-sm font-medium">Messages to send on approval</legend>
+          <legend className="mb-1 text-sm font-medium">Messages to send when you approve</legend>
           <ul className="grid gap-2">
-            {proposed.map((action) => (
+            {sendable.map((action) => (
               <ActionChoice
                 key={action.action_id}
                 action={action}
-                ready={settings.data?.channels?.[action.kind]}
                 checked={send.has(action.action_id)}
                 onChange={(on) =>
                   setSend((current) => {
@@ -298,52 +393,59 @@ export function ReviewPanel({
           </ul>
         </fieldset>
       ) : null}
-      <div className="grid gap-1.5">
-        <Label htmlFor={`${id}-comment`}>
-          Comment{" "}
-          <span className="font-normal text-muted-foreground">
-            (optional, kept with the report)
-          </span>
-        </Label>
-        <Textarea
-          id={`${id}-comment`}
-          value={comment}
-          maxLength={2000}
-          rows={2}
-          onChange={(e) => setComment(e.target.value)}
-        />
-      </div>
-      {error ? (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
+      {previews.length > 0 ? (
+        <details className="group text-sm">
+          <summary className="w-fit cursor-pointer py-0.5 font-medium">
+            {previews.length} message {previews.length === 1 ? "preview" : "previews"}
+            <span className="font-normal text-muted-foreground">
+              {" "}
+              (no channel is connected for {previews.length === 1 ? "it" : "them"} on this server)
+            </span>
+          </summary>
+          <ul className="mt-2 grid gap-2">
+            {previews.map((action) => (
+              <ActionChoice key={action.action_id} action={action} />
+            ))}
+          </ul>
+        </details>
       ) : null}
-      <div className="flex flex-wrap gap-2">
-        <Button
-          variant="primary"
-          onClick={() => void decide("approve")}
-          disabled={review.isPending}
-        >
-          {review.isPending
-            ? "Saving"
-            : send.size > 0
-              ? `Approve and send ${send.size}`
-              : "Approve and publish"}
-        </Button>
-        <Button onClick={() => setEditing(true)} disabled={review.isPending}>
-          Edit first
-        </Button>
-        <Button variant="danger" onClick={() => setRejecting(true)} disabled={review.isPending}>
-          Reject
-        </Button>
-      </div>
+      <details className="text-sm" open={comment ? true : undefined}>
+        <summary className="w-fit cursor-pointer py-0.5 text-muted-foreground hover:text-heading">
+          Add a comment
+        </summary>
+        <div className="grid gap-1.5 pt-2">
+          <Label htmlFor={`${id}-comment`}>
+            Comment{" "}
+            <span className="font-normal text-muted-foreground">
+              (optional, kept with the report)
+            </span>
+          </Label>
+          <Textarea
+            id={`${id}-comment`}
+            value={comment}
+            maxLength={2000}
+            rows={2}
+            onChange={(e) => setComment(e.target.value)}
+          />
+        </div>
+      </details>
 
       <Dialog open={editing} onOpenChange={setEditing}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent
+          className="max-w-2xl"
+          // The dialog itself takes focus, so its title is read first and the report's title is
+          // not selected for the first key press to replace (nor a phone's keyboard opened).
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            (event.currentTarget as HTMLElement | null)?.focus();
+          }}
+          onCloseAutoFocus={(event) => backTo(event, editButton.current)}
+        >
           <DialogHeader>
-            <DialogTitle>Edit the report, then publish</DialogTitle>
+            <DialogTitle>Edit the report before sending</DialogTitle>
             <DialogDescription>
-              Your changes are recorded as review evidence, and the report is validated again.
+              Your changes are kept with the review and ARIA checks the report again. Saving them
+              approves the edited report.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
@@ -369,7 +471,7 @@ export function ReviewPanel({
                   <SelectContent>
                     {SEVERITIES.map((s) => (
                       <SelectItem key={s} value={s}>
-                        {s}
+                        {s} · {LEVEL_WORD[s]}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -382,8 +484,13 @@ export function ReviewPanel({
                 id={`${id}-edit-summary`}
                 rows={5}
                 value={edit.summary}
+                aria-describedby={`${id}-edit-summary-hint`}
                 onChange={(e) => change({ summary: e.target.value })}
               />
+              <p id={`${id}-edit-summary-hint`} className="text-xs text-muted-foreground">
+                A line you leave as it is keeps its sources; a line you change or add cites your
+                review.
+              </p>
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor={`${id}-edit-actions`}>Add next steps, one per line</Label>
@@ -417,38 +524,50 @@ export function ReviewPanel({
           <DialogFooter>
             <Button onClick={() => setEditing(false)}>Keep reviewing</Button>
             <Button variant="primary" onClick={publishEdits} disabled={review.isPending}>
-              {review.isPending ? "Publishing" : "Publish with my edits"}
+              {review.isPending
+                ? "Saving"
+                : sending > 0
+                  ? "Approve and send with my edits"
+                  : "Approve with my edits"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={rejecting} onOpenChange={setRejecting}>
-        <DialogContent>
+      <Dialog open={discarding} onOpenChange={setDiscarding}>
+        <DialogContent onCloseAutoFocus={(event) => backTo(event, discardButton.current)}>
           <DialogHeader>
-            <DialogTitle>Reject this report?</DialogTitle>
+            <DialogTitle>Discard this draft?</DialogTitle>
             <DialogDescription>
-              Nothing will be sent, and the run ends. Say why, so the next run learns from it.
+              Nothing is sent, and the incident is closed. A reason, if you give one, is kept with
+              this incident&rsquo;s review.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-1.5">
-            <Label htmlFor={`${id}-reject-reason`}>Reason</Label>
+            <Label htmlFor={`${id}-discard-reason`}>
+              Reason <span className="font-normal text-muted-foreground">(optional)</span>
+            </Label>
             <Textarea
-              id={`${id}-reject-reason`}
+              id={`${id}-discard-reason`}
               rows={3}
               value={comment}
               maxLength={2000}
               onChange={(e) => setComment(e.target.value)}
             />
           </div>
+          {error ? (
+            <p role="alert" className="text-sm text-danger">
+              {error}
+            </p>
+          ) : null}
           <DialogFooter>
-            <Button onClick={() => setRejecting(false)}>Keep reviewing</Button>
+            <Button onClick={() => setDiscarding(false)}>Keep reviewing</Button>
             <Button
               variant="danger"
               onClick={() => void decide("reject")}
               disabled={review.isPending}
             >
-              {review.isPending ? "Rejecting" : "Reject the report"}
+              {review.isPending ? "Discarding" : "Discard the draft"}
             </Button>
           </DialogFooter>
         </DialogContent>

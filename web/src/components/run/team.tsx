@@ -15,7 +15,7 @@ import {
 import { useMemo, type ReactNode } from "react";
 
 import type { Hypothesis, RunEvent, RunStateValues, SeverityAssessment } from "@/lib/api/types";
-import { duration, listed, writtenOffline } from "@/lib/format";
+import { capitalise, decisionWords, listed, reviewerName, writtenOffline } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import { Citations } from "./evidence";
@@ -59,31 +59,26 @@ const pct = (p: number | undefined) => `${Math.round(100 * (p ?? 0))}%`;
 function progress(events: RunEvent[], nodes: string[]) {
   let started = false;
   let paused = false;
-  let took = 0;
   const running: Record<string, number> = {};
-  const since: Record<string, number> = {};
-  const settle = (node: string, t: number) => {
+  const settle = (node: string) => {
     running[node] = Math.max(0, (running[node] ?? 0) - 1);
-    if (running[node] === 0) took += t - (since[node] ?? t);
   };
   for (const e of events) {
     const node = e.node ?? "";
     if (!nodes.includes(node)) continue;
-    const t = new Date(e.ts ?? 0).getTime();
     if (e.kind === "node_started") {
       started = true;
       paused = false; // a review resumes by starting its node again
-      if (!running[node]) since[node] = t;
       running[node] = (running[node] ?? 0) + 1;
     } else if (e.kind === "node_finished") {
-      settle(node, t);
+      settle(node);
     } else if (e.kind === "interrupt") {
       paused = true; // the node stops here until a person answers
-      settle(node, t);
+      settle(node);
     }
   }
   const working = Object.values(running).some((count) => count > 0);
-  return { started, working, paused, took };
+  return { started, working, paused };
 }
 
 function severityLine(sev: SeverityAssessment): ReactNode[] {
@@ -94,13 +89,13 @@ function severityLine(sev: SeverityAssessment): ReactNode[] {
   if (sev.decided_by === "rules" && floorHit) {
     lines.push(
       <>
-        Rated it {sev.severity}. A safety floor holds it at {sev.floor} or above: &ldquo;
+        Rated it {sev.severity}. A safety rule holds it at {sev.floor} or worse: &ldquo;
         {floorHit.title}&rdquo;. <Citations ids={floorHit.evidence_ids} />
       </>,
     );
     if (top && top[0] !== sev.severity) {
       lines.push(
-        `On its own, the calibrated model put ${pct(top[1])} on ${top[0]}: the floor is there for exactly this.`,
+        `On its own, the calibrated model put ${pct(top[1])} on ${top[0]}: the safety rule is there for exactly this.`,
       );
     }
   } else if (sev.decided_by === "model") {
@@ -109,7 +104,7 @@ function severityLine(sev: SeverityAssessment): ReactNode[] {
     );
   } else if (sev.decided_by === "llm") {
     lines.push(
-      `Rated it ${sev.severity}: a model chose it from the prediction set {${sev.prediction_set.join(", ")}}.`,
+      `Rated it ${sev.severity}: a language model chose it from the short list (${sev.prediction_set.join(" or ")}).`,
     );
   } else if (sev.decided_by === "fallback") {
     lines.push(
@@ -119,14 +114,29 @@ function severityLine(sev: SeverityAssessment): ReactNode[] {
           ? `Rated it ${sev.severity}: only ${sev.severity} remained, but not with enough confidence to decide alone, so it flagged it for you.`
           : `Rated it ${sev.severity}: unsure between ${listed(sev.prediction_set)}, so it took the most severe and flagged it for you.`,
     );
+  } else if (sev.decided_by === "rules") {
+    lines.push(
+      `Rated it ${sev.severity}: the rules and the calibrated model agreed (${pct(probs[sev.severity])}).`,
+    );
+  } else if (sev.decided_by === "human") {
+    lines.push(`A reviewer set the level to ${sev.severity}.`);
   } else {
-    lines.push(`Rated it ${sev.severity} by its rules (${sev.decided_by}).`);
+    lines.push(`Rated it ${sev.severity}.`);
   }
   return lines;
 }
 
 /** The run told as its agents' turns: who did what, what they concluded, and why. */
-export function AgentTeam({ values, events }: { values: RunStateValues; events: RunEvent[] }) {
+export function AgentTeam({
+  values,
+  events,
+  example = false,
+}: {
+  values: RunStateValues;
+  events: RunEvent[];
+  /** An example every visitor sees, which nobody reviews here. */
+  example?: boolean;
+}) {
   const turns = useMemo<Turn[]>(() => {
     const batch = values.batch;
     const flows = batch?.flows;
@@ -143,14 +153,24 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
       parser.push(
         `Read ${n(batch.n_raw_lines)} lines${batch.shards > 1 ? `, split across ${batch.shards} parsers working at once,` : ""} and found ${n(f.n_templates)} message patterns.`,
       );
-      const redacted = Object.values(batch.guard.redactions?.counts ?? {}).reduce(
-        (a, b) => a + b,
-        0,
-      );
-      if (redacted) parser.push(`Redacted or pseudonymised ${n(redacted)} secrets and addresses.`);
+      // Addresses get stand-in names (routine in any log); secrets are hidden outright. Said
+      // apart, a count of thousands of "secrets and addresses" no longer reads as a leak.
+      let addresses = 0;
+      let secrets = 0;
+      for (const [kind, k] of Object.entries(batch.guard.redactions?.counts ?? {})) {
+        if (kind === "ip" || kind === "email") addresses += k;
+        else secrets += k;
+      }
+      const hid = [
+        addresses
+          ? `gave ${n(addresses)} IP and e-mail ${addresses === 1 ? "address a stand-in name" : "addresses stand-in names"}`
+          : "",
+        secrets ? `hid ${n(secrets)} ${secrets === 1 ? "secret" : "secrets"}` : "",
+      ].filter(Boolean);
+      if (hid.length) parser.push(`${capitalise(hid.join(" and "))}.`);
       if (batch.guard.injections?.length) {
         parser.push(
-          `Quarantined ${n(batch.guard.injections.length)} lines that read like prompt injection.`,
+          `Quarantined ${n(batch.guard.injections.length)} ${batch.guard.injections.length === 1 ? "line that reads" : "lines that read"} like prompt injection.`,
         );
       }
       const kind = flows?.examples[0]?.kind ?? Object.keys(flows?.checked ?? {})[0];
@@ -167,7 +187,9 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
         parser.push(`Followed ${n(checked)} ${kind}s from start to finish: each one finished.`);
       }
       if (f.error_events) {
-        parser.push(`${n(f.error_events)} error lines, on ${n(f.error_nodes)} nodes.`);
+        parser.push(
+          `${n(f.error_events)} error ${f.error_events === 1 ? "line" : "lines"}${f.error_nodes ? `, on ${n(f.error_nodes)} ${f.error_nodes === 1 ? "server" : "servers"}` : ""}.`,
+        );
       }
     }
 
@@ -186,7 +208,9 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
         memory.push("Found no similar past incident in memory.");
       }
       if (retrieval.runbooks.length) {
-        memory.push(`Pulled runbooks: ${retrieval.runbooks.map((r) => r.slug).join(", ")}.`);
+        memory.push(
+          `Picked the ${retrieval.runbooks.length === 1 ? "runbook" : "runbooks"} to follow: ${listed(retrieval.runbooks.map((r) => `“${r.title}”`))}.`,
+        );
       }
     }
 
@@ -212,6 +236,8 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
                   {STATUS_WORD[h.status]}
                   {h.status === "supported" ? `, ${pct(h.confidence)}` : ""}
                 </span>
+                {/* Said apart from the label for a screen reader, which ignores the margin. */}
+                <span className="sr-only">: </span>
                 {h.statement} <Citations ids={[...h.supporting, ...h.refuting].slice(0, 4)} />
               </span>
             </span>,
@@ -225,7 +251,7 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
       const replans = values.plan?.replans ?? 0;
       if (replans) {
         investigator.push(
-          `The evidence looked thin, so the planner sent the run back for ${replans === 1 ? "another round" : `${replans} more rounds`}.`,
+          `The evidence looked thin, so the planner sent the investigation back for ${replans === 1 ? "another round" : `${replans} more rounds`}.`,
         );
       }
     }
@@ -250,11 +276,14 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
 
     const you: ReactNode[] = [];
     if (review) {
-      you.push(
-        `${review.decision === "approve" ? "Approved" : review.decision === "reject" ? "Rejected" : "Edited"} by ${review.reviewer && review.reviewer !== "anonymous" ? review.reviewer : "a reviewer"}.`,
-      );
+      const did = decisionWords(review.decision);
+      you.push(`${capitalise(did)} by ${reviewerName(review.reviewer)}.`);
     } else if (report) {
-      you.push("Waiting for you: approve, edit first, or reject. Nothing has been sent.");
+      you.push(
+        example
+          ? "An example stays as it is for every visitor: nothing has been sent, and nobody reviews it here. Make your own copy to review it."
+          : "Waiting for you: approve, edit before sending, or discard the draft. Nothing has been sent.",
+      );
     }
 
     return [
@@ -270,7 +299,7 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
       {
         id: "severity",
         name: "Severity",
-        job: "Rules, a calibrated model and a prediction set",
+        job: "Rules, a calibrated model and a short list",
         icon: GaugeIcon,
         tone: "keylime",
         nodes: ["severity"],
@@ -313,20 +342,25 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
         said: you,
       },
     ];
-  }, [values]);
+  }, [values, example]);
 
   return (
     // Lines quote names from the logs (Java classes, block IDs) that can be wider than a phone.
     <ol aria-label="How the agents worked" className="grid wrap-anywhere">
       {turns.map((turn, i) => {
         const p = progress(events, turn.nodes);
+        // A copy of an incident never runs the steps before it began; their results came with it.
+        // The person's turn is never done by a copy: it is theirs to take.
+        const carried = turn.id !== "you" && turn.said.length > 0;
         const state: TurnState = p.paused
           ? "yours"
           : p.started && !p.working
             ? "done"
             : p.started
               ? "working"
-              : "waiting";
+              : carried
+                ? "done"
+                : "waiting";
         const Icon = turn.icon;
         return (
           <li key={turn.id} className="grid grid-cols-[2.75rem_1fr] gap-x-4">
@@ -347,6 +381,7 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
               <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                 <h3 className="font-sans text-base font-semibold">
                   {turn.name}
+                  <span className="sr-only">: </span>
                   <span className="ml-2 text-sm font-normal text-muted-foreground">{turn.job}</span>
                 </h3>
                 <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -363,16 +398,18 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
                     <CircleIcon aria-hidden className="size-3.5" />
                   )}
                   {state === "done"
-                    ? `Done${p.took > 0 ? ` in ${duration(p.took)}` : ""}`
+                    ? "Done"
                     : state === "working"
                       ? "Working"
                       : state === "yours"
-                        ? "Your turn"
+                        ? example
+                          ? "Left as it is"
+                          : "Your turn"
                         : "Not yet"}
                 </span>
               </div>
               {turn.said.length ? (
-                <ul className="grid gap-1.5 text-sm">
+                <ul className="grid max-w-prose gap-1.5 text-sm">
                   {turn.said.map((line, j) => (
                     <li key={j} className="text-pretty">
                       {line}

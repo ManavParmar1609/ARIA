@@ -54,6 +54,50 @@ sources:
     citation: "A. J. Oliner, J. Stearley. What Supercomputers Say: A Study of Five System Logs. DSN 2007."
     description: Full BlueGene/L log (4,747,963 lines over 215 days) with the sysadmins' alert tags. The real-log evaluation labels contiguous windows of it with the BGL alert-tag rubric and scores ARIA's severity on them.
 
+  loghub2-full:
+    kind: zenodo
+    record: "8275861"
+    files:
+      - Apache.zip
+      - Hadoop.zip
+      - HealthApp.zip
+      - HPC.zip
+      - Linux.zip
+      - Mac.zip
+      - OpenSSH.zip
+      - OpenStack.zip
+      - Proxifier.zip
+      - Zookeeper.zip
+    license: CC BY 4.0 (the Zenodo record's licence)
+    citation: "Z. Jiang, J. Liu, J. Huang, Y. Li, Y. Huo, J. Gu, Z. Chen, J. Zhu, M. R. Lyu. A Large-scale Evaluation for Log Parsing Techniques: How Far are We? ISSTA 2024."
+    description: Loghub-2.0's whole logs for ten systems, with a ground-truth template for every line. The parsing evaluation scores ARIA's parser on all of them, beside the 2,000-line samples.
+
+  hdfs-v1:
+    kind: zenodo
+    record: "8196385"
+    files: [HDFS_v1.zip]
+    extract: false
+    license: CC BY 4.0 (the Zenodo record's licence)
+    citation: "W. Xu, L. Huang, A. Fox, D. Patterson, M. I. Jordan. Detecting Large-Scale System Problems by Mining Console Logs. SOSP 2009."
+    description: The whole HDFS_v1 log with the experts' label for every block. Kept zipped; the real-log evaluation reads it from the zip and checks units of work that stop partway on all of it, not one sample.
+
+  loghub2-thunderbird:
+    kind: zenodo
+    record: "8275861"
+    files: [Thunderbird.zip]
+    extract: false
+    license: CC BY 4.0 (the Zenodo record's licence)
+    citation: "A. J. Oliner, J. Stearley. What Supercomputers Say: A Study of Five System Logs. DSN 2007."
+    description: Loghub-2.0's copy of the Thunderbird supercomputer log, with the system administrators' alert tags. Kept zipped; the real-log evaluation reads it from the zip and scores ARIA's severity on contiguous windows of it, as for BGL.
+
+  logchunks:
+    kind: zenodo
+    record: "3632351"
+    files: [LogChunks.zip]
+    license: CC BY 4.0 (the Zenodo record's licence)
+    citation: "C. Brandt, A. Panichella, A. Zaidman, M. Beller. LogChunks: A Data Set for Build Log Analysis. MSR 2020."
+    description: Failed Travis CI build logs, each with the chunk of lines that explains why the build failed, chosen by hand. The evaluation checks whether ARIA's report cites lines from that chunk.
+
   loghub-hadoop:
     kind: zenodo
     record: "8196385"

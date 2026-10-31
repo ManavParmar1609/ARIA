@@ -108,8 +108,28 @@
           "system"
         ],
         "summary": "Settings View",
-        "description": "Budgets, guardrails, severity, retrieval and routing settings in force. No secrets.",
+        "description": "Budgets, guardrails, severity, retrieval and routing settings in force, and the caller's\nshare today of the server's own model. No secrets.",
         "operationId": "settings_view_api_v1_settings_get",
+        "parameters": [
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -117,6 +137,86 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SettingsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/model-key/check": {
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Check Model Key",
+        "description": "Check a visitor's own key before it is used, and keep nothing.\n\nThe provider lists its models for the key, which costs nothing. Where that list answers\nanyone (NVIDIA's), one tiny request checks the key instead.",
+        "operationId": "check_model_key_api_v1_model_key_check_post",
+        "parameters": [
+          {
+            "name": "X-Model-Provider",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia.",
+              "title": "X-Model-Provider"
+            },
+            "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia."
+          },
+          {
+            "name": "X-Model-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true.",
+              "title": "X-Model-Key"
+            },
+            "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelKeyCheck"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -132,6 +232,62 @@
         "summary": "Create Run",
         "description": "Start triage. The run continues in the background; follow it on ``links.stream``.",
         "operationId": "create_run_api_v1_runs_post",
+        "parameters": [
+          {
+            "name": "X-Model-Provider",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia.",
+              "title": "X-Model-Provider"
+            },
+            "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia."
+          },
+          {
+            "name": "X-Model-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true.",
+              "title": "X-Model-Key"
+            },
+            "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true."
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -216,6 +372,24 @@
               ],
               "title": "Before"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "responses": {
@@ -259,6 +433,24 @@
               "pattern": "^[A-Za-z0-9._:-]{1,64}$",
               "title": "Run Id"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "responses": {
@@ -301,6 +493,24 @@
               "pattern": "^[A-Za-z0-9._:-]{1,64}$",
               "title": "Run Id"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "responses": {
@@ -354,6 +564,24 @@
               ],
               "title": "Checkpoint Id"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "responses": {
@@ -423,6 +651,24 @@
               "default": 1000,
               "title": "Limit"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "responses": {
@@ -513,6 +759,24 @@
               ],
               "title": "Last-Event-Id"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "responses": {
@@ -554,6 +818,24 @@
               "pattern": "^[A-Za-z0-9._:-]{1,64}$",
               "title": "Run Id"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "responses": {
@@ -597,6 +879,24 @@
               "pattern": "^[A-Za-z0-9._:-]{1,64}$",
               "title": "Run Id"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "responses": {
@@ -640,6 +940,24 @@
               "pattern": "^[A-Za-z0-9._:-]{1,64}$",
               "title": "Run Id"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "responses": {
@@ -684,6 +1002,24 @@
               "pattern": "^[A-Za-z0-9._:-]{1,64}$",
               "title": "Run Id"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "requestBody": {
@@ -748,6 +1084,24 @@
               "pattern": "^[A-Za-z0-9._:-]{1,64}$",
               "title": "Action Id"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "responses": {
@@ -804,6 +1158,24 @@
               "default": 100,
               "title": "Limit"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "responses": {
@@ -840,7 +1212,7 @@
           "runs"
         ],
         "summary": "Fork",
-        "description": "Branch a new run from a checkpoint, optionally with different run options.",
+        "description": "Branch a new run from a checkpoint, optionally with different run options. The new run is\nthe caller's own, so forking an example is how a visitor gets a copy to change.",
         "operationId": "fork_api_v1_runs__run_id__fork_post",
         "parameters": [
           {
@@ -852,6 +1224,60 @@
               "pattern": "^[A-Za-z0-9._:-]{1,64}$",
               "title": "Run Id"
             }
+          },
+          {
+            "name": "X-Model-Provider",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia.",
+              "title": "X-Model-Provider"
+            },
+            "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia."
+          },
+          {
+            "name": "X-Model-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true.",
+              "title": "X-Model-Key"
+            },
+            "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true."
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "requestBody": {
@@ -860,6 +1286,146 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ForkRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunAccepted"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scenarios": {
+      "get": {
+        "tags": [
+          "samples"
+        ],
+        "summary": "List Scenarios",
+        "description": "The samples this server can build, by where their logs come from. Each is made of real\nLoghub lines arranged into an incident, and offers a size only where the size changes how\nserious the incident is.",
+        "operationId": "list_scenarios_api_v1_scenarios_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ScenarioOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Scenarios Api V1 Scenarios Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scenarios/{scenario_id}/runs": {
+      "post": {
+        "tags": [
+          "samples"
+        ],
+        "summary": "Run Scenario",
+        "description": "Build a sample on this server and triage it as a run; follow it on ``links.stream``.",
+        "operationId": "run_scenario_api_v1_scenarios__scenario_id__runs_post",
+        "parameters": [
+          {
+            "name": "scenario_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scenario Id"
+            }
+          },
+          {
+            "name": "X-Model-Provider",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia.",
+              "title": "X-Model-Provider"
+            },
+            "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia."
+          },
+          {
+            "name": "X-Model-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true.",
+              "title": "X-Model-Key"
+            },
+            "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true."
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SampleRunRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
               }
             }
           }
@@ -1160,17 +1726,37 @@
         "summary": "Alertmanager",
         "description": "A Prometheus Alertmanager webhook (``webhook_configs``).",
         "operationId": "alertmanager_api_v1_alerts_alertmanager_post",
+        "parameters": [
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
                 "type": "object",
+                "additionalProperties": true,
                 "title": "Payload"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "202": {
@@ -1204,17 +1790,37 @@
         "summary": "Grafana",
         "description": "A Grafana alerting webhook contact point (same alert shape as Alertmanager).",
         "operationId": "grafana_api_v1_alerts_grafana_post",
+        "parameters": [
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
                 "type": "object",
+                "additionalProperties": true,
                 "title": "Payload"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "202": {
@@ -1248,19 +1854,39 @@
         "summary": "Alerts",
         "description": "ARIA's own alert format, for sources without an Alertmanager-style webhook.",
         "operationId": "alerts_api_v1_alerts_post",
+        "parameters": [
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
+                "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/AlertSignal"
                 },
-                "type": "array",
                 "title": "Signals"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "202": {
@@ -1294,15 +1920,71 @@
         "summary": "Ask",
         "description": "Ask about a run (its evidence) or about incident history (memory search).",
         "operationId": "ask_api_v1_ask_post",
+        "parameters": [
+          {
+            "name": "X-Model-Provider",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia.",
+              "title": "X-Model-Provider"
+            },
+            "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia."
+          },
+          {
+            "name": "X-Model-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true.",
+              "title": "X-Model-Key"
+            },
+            "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true."
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/AskRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -1483,6 +2165,60 @@
               "type": "string",
               "title": "Incident Id"
             }
+          },
+          {
+            "name": "X-Model-Provider",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia.",
+              "title": "X-Model-Provider"
+            },
+            "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia."
+          },
+          {
+            "name": "X-Model-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true.",
+              "title": "X-Model-Key"
+            },
+            "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true."
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "requestBody": {
@@ -1544,6 +2280,24 @@
               "pattern": "^[A-Za-z0-9._:-]{1,64}$",
               "title": "Run Id"
             }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
           }
         ],
         "responses": {
@@ -1578,12 +2332,78 @@
         "summary": "Agui",
         "description": "Run (or resume) ARIA as an AG-UI agent.",
         "operationId": "agui_agui_post",
+        "parameters": [
+          {
+            "name": "X-Model-Provider",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia.",
+              "title": "X-Model-Provider"
+            },
+            "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia."
+          },
+          {
+            "name": "X-Model-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true.",
+              "title": "X-Model-Key"
+            },
+            "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true."
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -1871,6 +2691,13 @@
             },
             "type": "array",
             "title": "Follow Ups"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notes"
           },
           "evidence": {
             "items": {
@@ -2823,6 +3650,35 @@
         "title": "Me",
         "description": "Who is calling. With no API keys configured the API is open and nobody signs in."
       },
+      "ModelKeyCheck": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "accepted": {
+            "type": "boolean",
+            "title": "Accepted"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "accepted",
+          "model",
+          "detail"
+        ],
+        "title": "ModelKeyCheck",
+        "description": "What a provider said about a visitor's own key. The key itself is not kept."
+      },
       "ProviderOut": {
         "properties": {
           "name": {
@@ -3382,8 +4238,24 @@
             "format": "date-time",
             "title": "Updated At"
           },
+          "example": {
+            "type": "boolean",
+            "title": "Example",
+            "default": false
+          },
           "links": {
             "$ref": "#/components/schemas/Links"
+          },
+          "ahead": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ahead"
           },
           "deliveries": {
             "items": {
@@ -3791,6 +4663,11 @@
             "type": "string",
             "format": "date-time",
             "title": "Updated At"
+          },
+          "example": {
+            "type": "boolean",
+            "title": "Example",
+            "default": false
           }
         },
         "type": "object",
@@ -3895,6 +4772,172 @@
         ],
         "title": "RunbookStep"
       },
+      "SampleRef": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Id"
+          },
+          "servers": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 64.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Servers"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1000.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "SampleRef",
+        "description": "The console sample a run's logs were built from, at the sizes chosen (None: no choice)."
+      },
+      "SampleRunRequest": {
+        "properties": {
+          "servers": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 64.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Servers"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1000.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate"
+          },
+          "options": {
+            "$ref": "#/components/schemas/RunOptions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SampleRunRequest",
+        "description": "How to build a sample: a size it offers (or its default), and the run's options."
+      },
+      "ScenarioOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "technology": {
+            "type": "string",
+            "title": "Technology"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "source_name": {
+            "type": "string",
+            "title": "Source Name"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "system": {
+            "type": "string",
+            "title": "System"
+          },
+          "benign": {
+            "type": "boolean",
+            "title": "Benign"
+          },
+          "headline": {
+            "type": "boolean",
+            "title": "Headline"
+          },
+          "tricky": {
+            "type": "boolean",
+            "title": "Tricky",
+            "default": false
+          },
+          "preview": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Preview"
+          },
+          "servers": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SizeChoiceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SizeChoiceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "technology",
+          "source",
+          "source_name",
+          "summary",
+          "system",
+          "benign",
+          "headline"
+        ],
+        "title": "ScenarioOut",
+        "description": "A sample the console can build: real Loghub lines arranged into an incident."
+      },
       "SettingsOut": {
         "properties": {
           "environment": {
@@ -3968,6 +5011,39 @@
             },
             "type": "object",
             "title": "Channels"
+          },
+          "visitor_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Visitor Keys"
+          },
+          "visitor_scope": {
+            "type": "boolean",
+            "title": "Visitor Scope",
+            "default": false
+          },
+          "shared_model": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SharedModelOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "max_body_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Body Bytes"
           }
         },
         "type": "object",
@@ -3998,6 +5074,46 @@
         ],
         "title": "Severity",
         "description": "Incident severity. SEV1 is the most severe."
+      },
+      "SharedModelOut": {
+        "properties": {
+          "left": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Left"
+          },
+          "per_visitor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Per Visitor"
+          },
+          "per_day": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Per Day"
+          }
+        },
+        "type": "object",
+        "title": "SharedModelOut",
+        "description": "This visitor's share today of the server's own model keys (``llm.shared``). None means\nno limit; ``left`` 0 means this visitor's work runs offline until tomorrow (UTC)."
       },
       "SimilarIncident": {
         "properties": {
@@ -4148,6 +5264,60 @@
           "source"
         ],
         "title": "SimilarIncident"
+      },
+      "SizeChoiceOut": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "servers",
+              "per_minute"
+            ],
+            "title": "Unit"
+          },
+          "default": {
+            "type": "integer",
+            "title": "Default"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/SizeOptionOut"
+            },
+            "type": "array",
+            "title": "Options"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question",
+          "unit",
+          "default",
+          "options"
+        ],
+        "title": "SizeChoiceOut",
+        "description": "A size a visitor may choose for a sample, offered only where it changes the severity."
+      },
+      "SizeOptionOut": {
+        "properties": {
+          "value": {
+            "type": "integer",
+            "title": "Value"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "SizeOptionOut"
       },
       "TicketAssessment": {
         "properties": {
@@ -4615,6 +5785,16 @@
               }
             ],
             "title": "Replay Of"
+          },
+          "sample": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SampleRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,

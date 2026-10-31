@@ -158,8 +158,10 @@ class Retriever:
         *,
         budget: BudgetGuard | None,
         use_llm: bool,
+        router: LLMRouter | None = None,
     ) -> tuple[str, str | None]:
-        if not (use_llm and self.router is not None):
+        router = router or self.router
+        if not (use_llm and router is not None):
             return deterministic_rewrite(query), None
         facts = {"system": query.system, "failure_mode_hints": query.failure_mode_hints}
         # The query, its terms and earlier attempts come from log text: fenced, not context.
@@ -171,7 +173,7 @@ class Retriever:
             "previous_attempts": [a.model_dump(include={"query", "grade"}) for a in attempts],
         }
         try:
-            result = await self.router.structured(
+            result = await router.structured(
                 "retriever",
                 "query_rewrite",
                 build_messages("query_rewrite", facts, untrusted_data=quoted),
@@ -204,6 +206,7 @@ class Retriever:
         widen_level: int = 0,
         budget: BudgetGuard | None = None,
         use_llm: bool = True,
+        router: LLMRouter | None = None,
     ) -> tuple[list[tuple[MemoryIncident, Hit]], list[RetrievalAttempt], bool]:
         attempts: list[RetrievalAttempt] = []
         best: list[tuple[MemoryIncident, Hit]] = []
@@ -231,7 +234,9 @@ class Retriever:
                 break
             if attempt == 1:  # widen the pool and rewrite the query
                 pool = max(pool, self.config.widen_candidates)
-                text, _ = await self._rewrite(query, attempts, budget=budget, use_llm=use_llm)
+                text, _ = await self._rewrite(
+                    query, attempts, budget=budget, use_llm=use_llm, router=router
+                )
             else:  # look for analogues on other systems
                 system = None
         return best[:k], attempts, reranked_best
@@ -262,7 +267,10 @@ class Retriever:
         widen_level: int = 0,
         budget: BudgetGuard | None = None,
         use_llm: bool = True,
+        router: LLMRouter | None = None,
     ) -> RetrievalResult:
+        """Similar past incidents and runbooks for ``query``. ``router``, when given, answers
+        the query rewrite instead of the retriever's own (a run started with a visitor's key)."""
         k = k or self.config.k
         pairs, attempts, reranked = await self.search_memory(
             query,
@@ -271,6 +279,7 @@ class Retriever:
             widen_level=widen_level,
             budget=budget,
             use_llm=use_llm,
+            router=router,
         )
         incidents: list[SimilarIncident] = []
         for incident, hit in pairs:

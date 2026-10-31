@@ -60,7 +60,7 @@ must never need a network call or a real key. Contract tests mock HTTP.
 | `docs/eval-live.json` | `uv run aria eval run --suite pipeline --llm` (makes paid or rate-limited provider calls; ask first) |
 | `web/src/data/eval-results.json`, `web/src/data/eval-live.json`, `web/src/data/llms.json` | `pnpm --dir web sync:data` |
 | `web/src/data/samples.json` | `uv run python -I scripts/export_web_samples.py` |
-| `web/src/data/demo-run.json` | `uv run python -I scripts/record_demo_run.py` (the landing page and `video/` both read it) |
+| `web/src/data/demo-run.json` | `uv run python -I scripts/record_demo_run.py --llm` (paid or rate-limited provider calls; ask first; without `--llm` it records offline). The home page, the console's How ARIA works and `video/` read it |
 | `docs/openapi.json`, `web/src/lib/api/schema.ts` | `make openapi` |
 | `models/*.json`, `models/*.npz` | `make train` and `aria seed` |
 | `uv.lock`, `web/pnpm-lock.yaml` | `uv add` / `uv lock`, `pnpm add` |
@@ -73,6 +73,8 @@ falls out of date.
 
 - **Secrets.** Never put secrets in code, logs, fixtures or git. Config comes from environment
   variables (see `.env.example`) and Key Vault. `.env` is git-ignored. Don't print its values.
+  A visitor's own model key (`X-Model-Key`) lives in memory for the work it came with: never
+  store, log or echo it.
 - **Raw data.** Keep raw datasets out of git. Add a source to `data/manifest.yaml` with a pinned
   commit or checksum, and commit only small fixtures under `tests/fixtures/`.
 - **Untrusted log text.** Log lines, alert labels and annotations are untrusted input. They reach

@@ -7,11 +7,15 @@ full datasets and from users parse into the same fields as the structured 2k sam
 from __future__ import annotations
 
 import csv
+import io
 import re
-from collections.abc import Iterator
+import zipfile
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TextIO
 
 CANONICAL_LEVELS = ("DEBUG", "INFO", "WARN", "ERROR", "FATAL")
 _LEVEL_MAP = {
@@ -389,25 +393,66 @@ def parse_raw_line(system: str, line: str, line_no: int = 0) -> LogRecord:
     return parse_generic_line(system, line, line_no)
 
 
+# A line in no format ARIA knows: a timestamp it can read, if one leads the line; then a level,
+# perhaps after a process or thread id ("148 INFO" in Hadoop's style, "[main] WARN"); then a
+# component ending in a colon, perhaps after a thread ("[main] org.app.Server:") or with syslog's
+# process id ("orders-svc[884]:"); then the message.
+_LEVELS = "TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|ERR|SEVERE|CRITICAL|FATAL"
 _GENERIC = re.compile(
-    r"^(?:(?P<ts>\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?)\s+)?"
-    r"(?:\[?(?P<level>TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|ERR|SEVERE|CRITICAL|FATAL)\]?\s+)?"
-    r"(?:\[?(?P<component>[\w.$/-]{2,80})\]?:\s+)?(?P<message>.*)$",
+    rf"^(?:(?:(?:\d+|\[[^\]]{{1,40}}\])\s+)?\[?(?P<level>{_LEVELS})\]?:?\s+)?"
+    r"(?:(?:\[[^\]]{1,40}\]\s+)?\[?(?P<component>[\w.$/-]{2,80})(?:\[\d{1,10}\])?\]?:\s+)?"
+    r"(?P<message>.*)$",
     re.IGNORECASE,
 )
 
 
+def _iso(text: str) -> datetime:
+    return datetime.fromisoformat(text.replace(",", ".").replace("/", "-").replace(" ", "T"))
+
+
+def _syslog(text: str) -> datetime:
+    # Syslog leaves out the year; this year keeps durations and order, which is what counts.
+    year = datetime.now(UTC).year
+    stamp = f"{year} {' '.join(text.split())}"
+    return datetime.strptime(stamp, "%Y %b %d %H:%M:%S").replace(tzinfo=UTC)
+
+
+def _compact(text: str) -> datetime:
+    return datetime.strptime(text, "%y%m%d %H%M%S").replace(tzinfo=UTC)
+
+
+# Timestamps a line may start with, tried in turn: ISO 8601 (a space or a T, a dot or a comma
+# before fractions, an optional zone, dashes or slashes), syslog's "Oct 31 10:00:01", and the
+# compact "081109 203615" of Hadoop's logs.
+_TIMESTAMPS: tuple[tuple[re.Pattern[str], Callable[[str], datetime]], ...] = (
+    (
+        re.compile(
+            r"^\[?(\d{4}[-/]\d{2}[-/]\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?"
+            r"(?:Z|[+-]\d{2}:?\d{2})?)\]?\s+"
+        ),
+        _iso,
+    ),
+    (re.compile(r"^([A-Z][a-z]{2} +\d{1,2} \d{2}:\d{2}:\d{2})\s+"), _syslog),
+    (re.compile(r"^(\d{6} \d{6})\s+"), _compact),
+)
+
+
 def parse_generic_line(system: str, line: str, line_no: int = 0) -> LogRecord:
-    match = _GENERIC.match(line.strip())
-    groups = match.groupdict() if match else {}
+    rest = line.strip()
     ts: datetime | None = None
-    if groups.get("ts"):
-        try:
-            ts = datetime.fromisoformat(groups["ts"].replace(",", ".").replace(" ", "T"))
+    for pattern, read in _TIMESTAMPS:
+        found = pattern.match(rest)
+        if found:
+            try:
+                ts = read(found.group(1))
+            except ValueError:
+                break
             ts = ts.replace(tzinfo=UTC) if ts.tzinfo is None else ts.astimezone(UTC)
-        except ValueError:
-            ts = None
-    message = (groups.get("message") or line).strip()
+            rest = rest[found.end() :]
+            break
+    match = _GENERIC.match(rest)
+    groups = match.groupdict() if match else {}
+    message = (groups.get("message") or rest or line).strip()
     level = normalize_level(groups.get("level")) or _derive_level(system, {}, message)
     return LogRecord(
         system=system,
@@ -430,8 +475,22 @@ def iter_structured_csv(system: str, path: Path, limit: int | None = None) -> It
             yield record_from_fields(system, line_no, row)
 
 
-def iter_raw_log(system: str, path: Path, limit: int | None = None) -> Iterator[LogRecord]:
-    with path.open(encoding="utf-8", errors="replace") as handle:
+@contextmanager
+def _open_text(path: Path, member: str | None) -> Iterator[TextIO]:
+    if member is None:
+        with path.open(encoding="utf-8", errors="replace") as handle:
+            yield handle
+        return
+    with zipfile.ZipFile(path) as archive, archive.open(member) as raw:
+        yield io.TextIOWrapper(raw, encoding="utf-8", errors="replace")
+
+
+def iter_raw_log(
+    system: str, path: Path, limit: int | None = None, *, member: str | None = None
+) -> Iterator[LogRecord]:
+    """Read a raw Loghub log; ``member`` reads one file inside the zip at ``path`` as it streams,
+    so a log larger than the disk's free space never has to be extracted."""
+    with _open_text(path, member) as handle:
         for i, line in enumerate(handle):
             if limit is not None and i >= limit:
                 return

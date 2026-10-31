@@ -140,6 +140,7 @@ RUN groupadd --system --gid 10001 aria \
 WORKDIR /app
 COPY --from=web-build --chown=aria:aria /web/.next/standalone ./
 COPY --from=web-build --chown=aria:aria /web/.next/static ./.next/static
+COPY --from=web-build --chown=aria:aria /web/public ./public
 USER aria
 EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=6 \
