@@ -252,10 +252,13 @@ def test_a_model_knows_the_range_it_was_trained_on(tmp_path: Path) -> None:
     model = fit_linear_model(
         "m", x, list(y), classes=["SEV1", "SEV2", "SEV3", "SEV4"], feature_names=["a", "b", "c"]
     )
-    assert model.low is not None and model.high is not None
-    assert np.allclose(model.low, x.min(axis=0)) and np.allclose(model.high, x.max(axis=0))
+    assert model.low is not None
+    assert model.high is not None
+    assert np.allclose(model.low, x.min(axis=0))
+    assert np.allclose(model.high, x.max(axis=0))
     loaded = LinearModel.from_dict(model.to_dict())
-    assert loaded.low is not None and np.allclose(loaded.low, model.low)
+    assert loaded.low is not None
+    assert np.allclose(loaded.low, model.low)
 
     inside = np.array([0.5, 0.5, 0.0])
     assert loaded.outside_training(inside, 6.0, 0.25) == []
