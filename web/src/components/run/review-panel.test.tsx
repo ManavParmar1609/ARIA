@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { changedEdits, hasChanges, type EditForm } from "./review-panel";
+import { approveLabel, changedEdits, hasChanges, type EditForm } from "./review-panel";
 
 const original = {
   title: "Block serve exceptions in HDFS",
@@ -74,5 +74,13 @@ describe("hasChanges", () => {
     expect(hasChanges(changedEdits(form({ severity: "SEV2" }), original))).toBe(true);
     expect(hasChanges(changedEdits(form({ note: "Checked" }), original))).toBe(true);
     expect(hasChanges(changedEdits(form({ addActions: "Page storage" }), original))).toBe(true);
+  });
+});
+
+describe("approveLabel", () => {
+  it("says send only when a message will go out", () => {
+    expect(approveLabel(0, false)).toBe("Approve and publish");
+    expect(approveLabel(2, false)).toBe("Approve and send");
+    expect(approveLabel(2, true)).toBe("Saving");
   });
 });

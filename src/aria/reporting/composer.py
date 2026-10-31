@@ -23,6 +23,10 @@ from aria.parsing.signals import signal_components, signal_templates
 from aria.retrieval.runbooks import Runbook
 from aria.text import clip, headline
 
+# The next step that asks a person to settle a severity ARIA was unsure of; a review that
+# approves the report takes it (``reporting.review``).
+CONFIRM_SEVERITY = "Confirm the severity"
+
 # How the severity was settled, in the words the console uses for the same five cases.
 DECIDED_BY_TEXT = {
     "rules": "A rule set it",
@@ -423,7 +427,7 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
         actions.insert(
             0,
             ActionOut(
-                text=f"Confirm the severity: {doubt}.",
+                text=f"{CONFIRM_SEVERITY}: {doubt}.",
                 risk="low",
                 evidence_ids=[model_ev.id],
             ),
@@ -532,6 +536,7 @@ def severity_rank_text(severity: Severity) -> str:
 
 
 __all__ = [
+    "CONFIRM_SEVERITY",
     "DECIDED_BY_TEXT",
     "ReportContext",
     "compose_draft",

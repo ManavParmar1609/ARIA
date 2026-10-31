@@ -10,7 +10,7 @@ from hypothesis import strategies as st
 
 from aria.config import get_app_config
 from aria.contracts.base import Claim, EvidenceKind, Severity
-from aria.contracts.report import IncidentReport, ReviewDecision
+from aria.contracts.report import ActionItem, IncidentReport, ReviewDecision
 from aria.contracts.run import BudgetUsage, RunStatus
 from aria.contracts.severity import SeverityAssessment
 from aria.db import repository as repo
@@ -19,6 +19,7 @@ from aria.evidence import EvidenceStore
 from aria.graph.state import add_usage, merge_evidence, usage_delta
 from aria.graph.store import SqlStore
 from aria.llm.router import LLMRouter
+from aria.reporting.grounding import validate_report
 from aria.reporting.review import apply_review
 
 
@@ -136,6 +137,63 @@ def test_approval_keeps_the_report_and_records_the_review() -> None:
     assert sev is assessment
     assert out.evidence[-1].kind is EvidenceKind.REVIEW
     assert "comment: ok" in out.evidence[-1].detail
+
+
+def test_approving_a_severity_aria_was_unsure_of_says_a_person_confirmed_it() -> None:
+    store = EvidenceStore()
+    report, assessment = _report_and_assessment(store)
+    model = store.add(EvidenceKind.MODEL, "Model: SEV2 or SEV3", source="severity.model")
+    report = report.model_copy(
+        update={
+            "actions": [
+                ActionItem(
+                    text="Confirm the severity: the model could not rule out SEV2 or SEV3.",
+                    evidence_ids=[model],
+                ),
+                ActionItem(text="Restart the DataNodes.", evidence_ids=[model]),
+            ],
+            "evidence": store.all(),
+        }
+    )
+    unsure = assessment.model_copy(
+        update={
+            "decided_by": "fallback",
+            "needs_review": True,
+            "prediction_set": [Severity.SEV2, Severity.SEV3],
+        }
+    )
+    out, _ = apply_review(report, unsure, ReviewDecision(decision="approve", reviewer="ana"), store)
+    assert [c.text for c in out.summary] == [
+        "40 errors in the window.",
+        "A reviewer confirmed SEV2.",
+    ]
+    assert out.summary[1].evidence_ids == [out.evidence[-1].id]
+    assert "severity: SEV2 kept" in out.evidence[-1].detail
+    assert [a.text for a in out.actions] == ["Restart the DataNodes."]  # the asked-for step is done
+    assert validate_report(out, evidence=store.all(), expected_severity=Severity.SEV2).ok
+    # Edited but the level kept: confirmed too, and an added step does not bring the old one back.
+    edited, _ = apply_review(
+        report,
+        unsure,
+        ReviewDecision.model_validate(
+            {"decision": "edit", "reviewer": "ana", "edits": {"add_actions": ["Page storage."]}}
+        ),
+        store,
+    )
+    assert "A reviewer confirmed SEV2." in [c.text for c in edited.summary]
+    assert [a.text for a in edited.actions] == ["Restart the DataNodes.", "Page storage."]
+    # No person confirmed anything: approval was off for the run, or the draft was rejected.
+    for decision in (
+        ReviewDecision(decision="approve", reviewer="aria:auto"),
+        ReviewDecision(decision="reject", reviewer="ana"),
+    ):
+        same, _ = apply_review(report, unsure, decision, store)
+        assert (same.summary, same.actions) == (report.summary, report.actions)
+    # A level ARIA settled on its own needs no confirming.
+    sure, _ = apply_review(
+        report, assessment, ReviewDecision(decision="approve", reviewer="ana"), store
+    )
+    assert sure.summary == report.summary
 
 
 def test_reviewer_may_go_below_the_floor_as_an_accountable_human_decision() -> None:

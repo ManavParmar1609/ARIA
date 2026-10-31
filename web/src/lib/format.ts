@@ -44,6 +44,12 @@ export function clockTime(iso: string | null | undefined): string {
   });
 }
 
+/** "00:42": the time of day to the minute, for a sentence ("approved by you at 00:42"). */
+export function shortTime(iso: string | null | undefined): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
 /** 734 -> "734 ms", 12_400 -> "12.4 s", 193_000 -> "3 min 13 s", 7_260_000 -> "2 h 1 min". */
 export function duration(ms: number | null | undefined): string {
   if (ms == null) return "";

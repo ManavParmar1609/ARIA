@@ -60,9 +60,8 @@ test.describe("public demo", () => {
     await page.getByRole("button", { name: "Make my own copy" }).click();
     await expect(page).not.toHaveURL(new RegExp(`${example}$`));
     await expect(page.getByRole("heading", { name: "Waiting for your review" })).toBeVisible();
-    await page.getByRole("checkbox").first().check();
-    await page.getByRole("button", { name: "Approve and send 1" }).click();
-    await expect(page.getByText("Published", { exact: true }).first()).toBeVisible();
+    await page.getByRole("button", { name: "Approve and publish" }).click();
+    await expect(page.getByRole("heading", { name: "Published", exact: true })).toBeVisible();
 
     // The example still waits for the next visitor.
     await page.goto(example);

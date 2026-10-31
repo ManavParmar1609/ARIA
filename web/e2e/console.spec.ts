@@ -37,9 +37,23 @@ test.describe("console", () => {
     await expect(page.locator("#evidence-panel")).toContainText("Log template");
     await expectAccessible(page, "run view, awaiting review");
 
-    await page.getByRole("checkbox").first().check();
-    await page.getByRole("button", { name: "Approve and send 1" }).click();
-    await expect(page.getByText("Published", { exact: true }).first()).toBeVisible();
+    // No channel is connected on the test server: the drafted messages are previews to read,
+    // with nothing to tick, and approving publishes the report alone.
+    await page.getByText(/^\d+ message previews?/).click();
+    await expect(page.getByRole("checkbox")).toHaveCount(0);
+    await expect(
+      page.getByText(/^ARIA’s own check: all \d+ claims cite their evidence/),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Approve and publish" }).click();
+    // The panel becomes a receipt in place, and takes focus.
+    const receipt = page.getByRole("heading", { name: "Published", exact: true });
+    await expect(receipt).toBeFocused();
+    await expect(
+      page.getByText(
+        /^Drafted by ARIA, approved by you at \d\d:\d\d\. \d+ previews? kept \(no channel connected\)\.$/,
+      ),
+    ).toBeVisible();
+    await expect(page.getByRole("link", { name: "Download the postmortem draft" })).toBeVisible();
     // A sample's page then offers ways to keep exploring.
     const next = page.locator("section", {
       has: page.getByRole("heading", { name: "What next?" }),
@@ -93,20 +107,20 @@ test.describe("console", () => {
 
     await expect(page).toHaveURL(/\/console\/runs\/run-/);
     const first = new URL(page.url()).pathname;
-    // Rejected, not approved: an approved incident's templates join the server's history and
+    // Discarded, not approved: an approved incident's templates join the server's history and
     // would change how the next run rates.
-    const reject = async () => {
-      await page.getByRole("button", { name: "Reject", exact: true }).click();
-      await page.getByRole("button", { name: "Reject the report" }).click();
-      await expect(page.getByText("Rejected", { exact: true }).first()).toBeVisible();
+    const discard = async () => {
+      await page.getByRole("button", { name: "Discard draft" }).click();
+      await page.getByRole("button", { name: "Discard the draft" }).click();
+      await expect(page.getByRole("heading", { name: "Draft discarded" })).toBeVisible();
     };
-    await reject();
+    await discard();
     const bigger = page.getByRole("button", { name: /^Run it on \d+ servers$/ });
     const next = (await bigger.textContent())?.match(/\d+/)?.[0] ?? "";
     await bigger.click();
 
     await expect(page).toHaveURL(/\/console\/runs\/run-[^?]+\?compare=run-/);
-    await reject();
+    await discard();
     const compared = page.getByText("The same sample at two sizes").locator("..");
     const before = compared.getByRole("link", {
       name: new RegExp(`The first run, on ${smallest} servers`),

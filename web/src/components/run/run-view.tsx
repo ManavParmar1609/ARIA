@@ -25,7 +25,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError } from "@/lib/api/client";
-import { useDeleteRun, useRun, useRunState, useSettingsView } from "@/lib/api/hooks";
+import { useDeleteRun, useRun, useRunState, useSession, useSettingsView } from "@/lib/api/hooks";
 import { useRunTimeline } from "@/lib/api/stream";
 import { isSeverity, type ReviewPrompt, type RunDetail } from "@/lib/api/types";
 import { absoluteTime, duration, relativeTime, stripSeverity, writtenOffline } from "@/lib/format";
@@ -38,6 +38,7 @@ import { ExpertCheck } from "./expert-check";
 import { History } from "./history";
 import { LiveDraft, ReportView } from "./report-view";
 import { ExampleNote } from "./example-note";
+import { Receipt, type ReceiptFacts } from "./receipt";
 import { ReviewPanel } from "./review-panel";
 import { SampleNext, sampleOf } from "./sample-next";
 import { EvidenceTable, Similar, Templates } from "./run-tabs";
@@ -200,7 +201,11 @@ function RunSkeleton() {
 
 export function RunView({ runId }: { runId: string }) {
   const run = useRun(runId);
-  const shared = useSettingsView().data?.visitor_scope ?? false;
+  const settings = useSettingsView().data;
+  const shared = settings?.visitor_scope ?? false;
+  const session = useSession().data;
+  // Set when this page saved the review, so the receipt that replaces the panel takes focus.
+  const [decided, setDecided] = useState(false);
   useDocumentTitle(run.data ? runTitle(run.data) : null);
   const [checkpoint, setCheckpoint] = useState<string | null>(null);
   const [tab, setTab] = useState("team");
@@ -267,6 +272,22 @@ export function RunView({ runId }: { runId: string }) {
   const viewing = checkpoint ? state.data : null;
   const terminal = !ACTIVE.has(detail.status);
   const sample = detail.trigger === "sample" ? sampleOf(values?.request) : null;
+  const review = values?.review;
+  const receipt: ReceiptFacts | null =
+    review && !viewing && !detail.example && ["published", "rejected"].includes(detail.status)
+      ? {
+          status: detail.status,
+          decision: review.decision,
+          reviewer: review.reviewer,
+          you: session?.signedIn
+            ? session.name === review.reviewer
+            : review.reviewer === "anonymous",
+          at: detail.updated_at,
+          actions: values?.actions ?? [],
+          deliveries: detail.deliveries ?? [],
+          connected: (kind) => settings?.channels?.[kind] ?? false,
+        }
+      : null;
 
   return (
     <EvidenceProvider evidence={evidence} events={events}>
@@ -280,7 +301,7 @@ export function RunView({ runId }: { runId: string }) {
                 How to read this
               </Link>
             </Button>
-            {detail.report_id ? (
+            {detail.report_id && !receipt ? (
               <>
                 <Button asChild size="sm" variant="ghost">
                   <a
@@ -345,6 +366,14 @@ export function RunView({ runId }: { runId: string }) {
                 prompt={prompt}
                 actions={values?.actions ?? []}
                 report={report}
+                onDecided={() => setDecided(true)}
+              />
+            ) : receipt ? (
+              <Receipt
+                runId={detail.id}
+                facts={receipt}
+                comment={review?.comment}
+                focusOnMount={decided}
               />
             ) : null}
             {detail.deliveries?.length && !viewing ? (
