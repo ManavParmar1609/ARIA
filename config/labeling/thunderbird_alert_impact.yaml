@@ -1,0 +1,47 @@
+# Ground-truth labelling rubric for Thunderbird log windows.
+#
+# Thunderbird was a Linux cluster at Sandia National Laboratories. Its log lines carry alert tags
+# assigned by the system administrators (Oliner & Stearley, "What Supercomputers Say", DSN 2007);
+# ARIA's severity rules never read them. This file maps each tag found in Loghub-2.0's Thunderbird
+# log to an impact class, using the same window rules as BlueGene/L
+# (`bgl_alert_impact.yaml`), so the two logs are labelled alike.
+#
+# Impact classes follow what each message says happened. None of these tags stops a node
+# outright, as a kernel panic would, so none is critical: a journal abort, an offline disk, a
+# critical memory device, a failed drive in an array and an unexplained hardware interrupt each
+# take a node's storage or memory out of service or leave it running on faulty hardware (major);
+# lost timer ticks and a SCSI controller aborting one task are recovered by the kernel (minor).
+# Tags not listed default to `default_class`.
+
+default_class: major
+
+classes:
+  critical: {}
+  major:
+    EXT_FS: "EXT3-fs error: the file system's journal has aborted"
+    SCSI: "SCSI: rejecting I/O to an offline device"
+    ECC: "Server Administrator: memory device status is critical (a DIMM)"
+    CHK_DSK: "check-disks: fault status asserted on a drive in an array"
+    NMI: "kernel: NMI received (an unexplained hardware interrupt)"
+  minor:
+    CPU: "kernel: losing some timer ticks, checking if the CPU frequency changed"
+    MPT: "mptscsih: the SCSI controller is attempting a task abort"
+
+window_rules:
+  - severity: SEV1
+    any_of:
+      - {critical_nodes_at_least: 4}
+      - {critical_alerts_at_least: 50}
+      - {major_nodes_at_least: 64}
+  - severity: SEV2
+    any_of:
+      - {critical_alerts_at_least: 1}
+      - {major_nodes_at_least: 8}
+      - {major_alerts_at_least: 100}
+  - severity: SEV3
+    any_of:
+      - {major_alerts_at_least: 1}
+      - {minor_alerts_at_least: 5}
+  - severity: SEV4
+    any_of:
+      - {always: true}

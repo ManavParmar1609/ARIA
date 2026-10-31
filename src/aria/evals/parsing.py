@@ -12,6 +12,11 @@ ISSTA 2024) re-labelled 14 of the samples and fixed templates that merged or spl
 When it is downloaded, the same parse is also scored against those corrected event ids, joined
 by line id (only the ids are read; the lines themselves come from the original samples).
 
+Loghub-2.0 also publishes whole logs with a ground-truth template for every line. Ten of them (Apache,
+Hadoop, HealthApp, HPC, Linux, Mac, OpenSSH, OpenStack, Proxifier and Zookeeper) are scored the same
+way, raw line by raw line, with grouping accuracy and the F1 grouping score Jiang et al. report
+beside it, which counts every event the same however many lines it has.
+
 GAIA (CloudWise's Generic AIOps Atlas) labels 10,000 lines from each of 14 systems with their
 template. Nine are Loghub systems, parsed with the same settings; the other five (ArangoDB,
 ClickHouse, Kafka, Redis, Tengine) have no format or Drain settings in ARIA, so they are parsed as
@@ -21,8 +26,11 @@ any system ARIA has never seen would be. Its lines are messages without their he
 from __future__ import annotations
 
 import csv
+import time
 from collections import Counter, defaultdict
 from collections.abc import Sequence
+from concurrent.futures import ProcessPoolExecutor
+from multiprocessing import get_context
 from pathlib import Path
 from typing import Any
 
@@ -51,6 +59,11 @@ GAIA_SYSTEMS = {
 }
 SALT = b"aria-eval-parsing"
 CORRECTED_DIR = Path("data/raw/loghub2-corrected/2k_dataset")
+LOGHUB2_DIR = Path("data/raw/loghub2-full")
+LOGHUB2_CITATION = (
+    "Z. Jiang, J. Liu, J. Huang, Y. Li, Y. Huo, J. Gu, Z. Chen, J. Zhu, M. R. Lyu. A Large-scale "
+    "Evaluation for Log Parsing Techniques: How Far are We? ISSTA 2024."
+)
 
 
 def grouping_accuracy(predicted: Sequence[str], truth: Sequence[str]) -> float:
@@ -68,6 +81,23 @@ def grouping_accuracy(predicted: Sequence[str], truth: Sequence[str]) -> float:
         if group != QUARANTINED and len(labels) == 1 and events[labels.pop()] == members:
             correct += len(members)
     return correct / len(truth)
+
+
+def group_f1(predicted: Sequence[str], truth: Sequence[str]) -> float:
+    """F1 of grouping (Jiang et al., ISSTA 2024): a group counts when it holds exactly the lines of
+    one ground-truth event. Precision is over ARIA's groups, recall over the events, so a rare
+    event weighs as much as a common one."""
+    groups: dict[str, set[int]] = defaultdict(set)
+    events: dict[str, set[int]] = defaultdict(set)
+    for i, (group, event) in enumerate(zip(predicted, truth, strict=True)):
+        groups[group].add(i)
+        events[event].add(i)
+    exact = {frozenset(members) for members in events.values()}
+    found = [g for g in groups if g != QUARANTINED]
+    correct = sum(1 for g in found if frozenset(groups[g]) in exact)
+    precision = correct / len(found) if found else 0.0
+    recall = correct / len(events) if events else 0.0
+    return 0.0 if precision + recall == 0 else 2 * precision * recall / (precision + recall)
 
 
 def corrected_events(directory: Path) -> dict[int, str]:
@@ -233,4 +263,86 @@ def summarize_gaia(gaia_dir: Path = GAIA_DIR) -> dict[str, Any]:
             "systems": sorted(name for name, r in systems.items() if not r["aria_system"]),
         },
         "real_lines_flagged_as_injection": sum(r["flagged_as_injection"] for r in systems.values()),
+    }
+
+
+def loghub2_dirs(root: Path = LOGHUB2_DIR) -> list[Path]:
+    """The Loghub-2.0 systems downloaded under ``root`` that ARIA has a log format for."""
+    if not root.exists():
+        return []
+    return [
+        d
+        for d in sorted(root.iterdir())
+        if d.is_dir()
+        and d.name in LOGHUB_DIRS
+        and (d / f"{d.name}_full.log").exists()
+        and (d / f"{d.name}_full.log_structured.csv").exists()
+    ]
+
+
+def loghub2_accuracy(directory: Path) -> dict[str, Any]:
+    """Parse one system's whole Loghub-2.0 log, raw line by raw line, and score the groups."""
+    started = time.perf_counter()
+    name = directory.name
+    with (directory / f"{name}_full.log_structured.csv").open(newline="", encoding="utf-8") as fh:
+        truth = [str(row["EventId"]) for row in csv.DictReader(fh)]
+    with (directory / f"{name}_full.log").open(encoding="utf-8", errors="replace") as handle:
+        raw = [line.rstrip("\r\n") for line in handle]
+    if len(raw) != len(truth):  # a log and its labels that disagree are not scored
+        return {"lines": len(raw), "labels": len(truth), "error": "lines and labels differ"}
+    out = parse_lines(
+        raw,
+        system=LOGHUB_DIRS[name],
+        guard=GuardrailConfig(max_lines=len(raw) + 1),
+        evidence=EvidenceStore(),
+        salt=SALT,
+    )
+    predicted = [QUARANTINED] * len(raw)
+    for line in out.lines:
+        predicted[line.idx] = line.template_id
+    return {
+        "lines": len(raw),
+        "events": len(set(truth)),
+        "templates": len({p for p in predicted if p != QUARANTINED}),
+        "grouping_accuracy": round(grouping_accuracy(predicted, truth), 4),
+        "group_f1": round(group_f1(predicted, truth), 4),
+        "flagged_as_injection": len(out.quarantined),
+        "seconds": round(time.perf_counter() - started, 1),
+    }
+
+
+def summarize_loghub2(root: Path = LOGHUB2_DIR, *, workers: int = 1) -> dict[str, Any]:
+    dirs = loghub2_dirs(root)
+    if not dirs:
+        return {"missing": "download it with: aria data download --source loghub2-full"}
+    if workers > 1:
+        with ProcessPoolExecutor(
+            max_workers=min(workers, len(dirs)), mp_context=get_context("spawn")
+        ) as executor:
+            results = list(executor.map(loghub2_accuracy, dirs))
+    else:
+        results = [loghub2_accuracy(d) for d in dirs]
+    systems = {
+        d.name: {**r, "aria_system": LOGHUB_DIRS[d.name]}
+        for d, r in zip(dirs, results, strict=True)
+    }
+    scored = [r for r in systems.values() if "error" not in r]
+    lines = sum(r["lines"] for r in scored)
+    return {
+        "source": "Loghub-2.0 whole logs",
+        "citation": LOGHUB2_CITATION,
+        "systems": systems,
+        "n_systems": len(scored),
+        "lines": lines,
+        "mean_grouping_accuracy": _mean(scored),
+        "mean_group_f1": round(sum(r["group_f1"] for r in scored) / len(scored), 4)
+        if scored
+        else 0.0,
+        # Weighted by lines, as a reader of the whole collection would meet them.
+        "pooled_grouping_accuracy": round(
+            sum(r["grouping_accuracy"] * r["lines"] for r in scored) / lines, 4
+        )
+        if lines
+        else 0.0,
+        "real_lines_flagged_as_injection": sum(r["flagged_as_injection"] for r in scored),
     }

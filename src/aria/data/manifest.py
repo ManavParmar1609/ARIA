@@ -46,6 +46,9 @@ class DataSource(BaseModel):
     compress: list[str] = Field(default_factory=list)
     record: str | None = None
     files: list[str] = Field(default_factory=list)
+    # Unpack downloaded archives. Off for an archive too large to keep unpacked beside itself:
+    # the evaluation reads it from inside the zip.
+    extract: bool = True
     dataset_id: int | None = None
     fallback_url: str | None = None
     # Query parameters for an API source (kind "gitlab"): fixed, so the set of records is.

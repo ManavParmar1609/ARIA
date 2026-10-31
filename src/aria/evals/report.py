@@ -370,8 +370,30 @@ _BGL_METHODS = {
 }
 
 
-def _bgl(section: Mapping[str, Any]) -> list[str]:
-    lines = ["## Real logs, a supercomputer's alert tags", ""]
+# Each log with alert tags: its section title, what the log is, where its window labels come
+# from, and the name of Loghub's 2,000-line sample of it.
+_TAGGED = {
+    "bgl": (
+        "Real logs, a supercomputer's alert tags",
+        "The whole log of LLNL's BlueGene/L supercomputer",
+        "the rubric that also labels the BGL training scenarios",
+        "BGL",
+    ),
+    "thunderbird": (
+        "Real logs, a second supercomputer's alert tags",
+        "A stretch of the log of Sandia's Thunderbird cluster, as Loghub-2.0 publishes it",
+        (
+            "a rubric written for this log from what its tags' messages say, with BGL's window "
+            "rules (no training scenario was labelled with it)"
+        ),
+        "Thunderbird",
+    ),
+}
+
+
+def _bgl(section: Mapping[str, Any], system: str = "bgl") -> list[str]:
+    title, whole, rubric, sample = _TAGGED[system]
+    lines = [f"## {title}", ""]
     if "missing" in section:
         return [*lines, f"No results: {section['missing']}.", ""]
     labels, methods = section["labels"], section["methods"]
@@ -383,15 +405,13 @@ def _bgl(section: Mapping[str, Any]) -> list[str]:
     return [
         *lines,
         (
-            f"The whole log of LLNL's BlueGene/L supercomputer: {section['lines']:,} lines over "
+            f"{whole}: {section['lines']:,} lines over "
             f"{section['days']:g} days, {section['alert_lines']:,} of them tagged as alerts by "
             f"the machine's administrators. Source: {section['source']}; {section['citation']} "
             f"ARIA rated every {section['window_min']}-minute window that holds lines "
             f"({section['windows']:,} windows) from the lines alone: the tags are removed before "
             "parsing, and nothing was tuned on this log. Each window's label comes from its tags "
-            "through the rubric that also labels the BGL training scenarios: "
-            + ", ".join(f"{n:,} × {c}" for c, n in labels.items())
-            + "."
+            f"through {rubric}: " + ", ".join(f"{n:,} × {c}" for c, n in labels.items()) + "."
         ),
         "",
         (
@@ -421,7 +441,7 @@ def _bgl(section: Mapping[str, Any]) -> list[str]:
         ),
         (
             f"- **Overlap with training data**: {_pct(overlap['share'])} of these lines carry a "
-            "message that also appears in Loghub's 2,000-line BGL sample, which the training "
+            f"message that also appears in Loghub's 2,000-line {sample} sample, which the training "
             "scenarios are composed from. The scenarios re-time and recombine those lines; no "
             "window here was seen in training."
         ),
@@ -439,6 +459,66 @@ def _bgl(section: Mapping[str, Any]) -> list[str]:
         *(
             f"| {c} | " + " | ".join(f"{n:,}" for n in row) + " |"
             for c, row in zip(classes, section["confusion"]["matrix"], strict=True)
+        ),
+        "",
+    ]
+
+
+_LOGCHUNKS_PICKS = {
+    "last_lines": "The last lines of the log",
+    "last_error_lines": "The last lines that look like an error",
+    "random_lines": "Lines picked at random",
+}
+
+
+def _logchunks(section: Mapping[str, Any]) -> list[str]:
+    lines = ["## Real failures, CI builds and the lines that explain them", ""]
+    if "missing" in section:
+        return [*lines, f"No results: {section['missing']}.", ""]
+    aria, picks = section["aria"], section["baselines"]
+    return [
+        *lines,
+        (
+            f"{section['triaged']:,} failed Travis CI builds in {section['languages']} languages, "
+            "each with the chunk of its log that a person marked as the reason it failed "
+            f"({section['located']:,} of {section['builds']:,} chunks could be found in their "
+            "logs; the others were trimmed or reworded when they were labelled). Build logs are "
+            "not what ARIA was built for: they have no timestamps, no nodes and few log levels, "
+            "and nothing was tuned on them. ARIA triaged each log end to end offline and kept "
+            f"{section['mean_kept']:g} raw lines on average as evidence. A build counts as found "
+            "when one of those lines lies inside the marked chunk; each baseline keeps the same "
+            f"number of lines from the same log. Source: {section['citation']}"
+        ),
+        "",
+        "| Lines kept | Builds whose marked chunk they hold (95% CI) |",
+        "|---|---|",
+        f"| ARIA's evidence | {_pct(aria['rate'])} ({_ci(aria['ci95'])}) |",
+        *(
+            f"| {label} | {_pct(picks[key]['rate'])} ({_ci(picks[key]['ci95'])}) |"
+            for key, label in _LOGCHUNKS_PICKS.items()
+            if key in picks
+        ),
+        "",
+        (
+            f"ARIA kept no raw line for {section['nothing_kept']:,} builds. "
+            f"{section['over_line_cap']:,} logs are longer than the per-run line cap of "
+            f"{section['line_cap']:,}; ARIA reads their first lines up to the cap, as a "
+            "deployment would."
+        ),
+        "",
+    ]
+
+
+def _logchunks_summary(section: Mapping[str, Any]) -> list[str]:
+    if "aria" not in section:
+        return []
+    aria, best = section["aria"], section["baselines"]["last_error_lines"]
+    return [
+        (
+            f"**Build failures**: on {section['triaged']:,} failed CI builds, a kind of log ARIA "
+            "was never tuned on, the lines it kept as evidence held the lines a person marked as "
+            f"the cause in {_pct(aria['rate'])} of builds ({_ci(aria['ci95'])}); the same number "
+            f"of the log's last error-looking lines held them in {_pct(best['rate'])}."
         ),
         "",
     ]
@@ -1051,6 +1131,7 @@ def _parsing(section: Mapping[str, Any]) -> list[str]:
         *rows,
         "",
         *_gaia(section.get("gaia") or {}, section["systems"]),
+        *_loghub2(section.get("loghub2") or {}, section["systems"]),
     ]
 
 
@@ -1070,6 +1151,53 @@ _GAIA_NAMES = {
     "tengine": "Tengine",
     "zookeeper": "ZooKeeper",
 }
+
+
+def _loghub2(full: Mapping[str, Any], sample: Mapping[str, Any]) -> list[str]:
+    if "systems" not in full:
+        return [f"No results on Loghub-2.0's whole logs: {full['missing']}.", ""] if full else []
+
+    def name(directory: str) -> str:
+        return "ZooKeeper" if directory == "Zookeeper" else directory
+
+    def on_sample(r: Mapping[str, Any]) -> str:
+        on = sample.get(r["aria_system"])
+        return f"{on['grouping_accuracy']:.3f}" if on else "not downloaded"
+
+    scored = sorted((n, r) for n, r in full["systems"].items() if "error" not in r)
+    unscored = sorted(name(n) for n, r in full["systems"].items() if "error" in r)
+    return [
+        "### Loghub-2.0's whole logs",
+        "",
+        (
+            f"{full['lines']:,} lines: the whole logs of {full['n_systems']} systems in "
+            f"{full['source']}, each line labelled with its template and parsed with the same "
+            "settings as the samples above. Grouping accuracy weighs every line equally, so the "
+            "commonest events decide it; the F1 grouping score weighs every event equally, so a "
+            f"rare event counts as much as a common one. Mean grouping accuracy "
+            f"{full['mean_grouping_accuracy']:.3f}, or {full['pooled_grouping_accuracy']:.3f} "
+            f"with every line counted once; mean F1 grouping score {full['mean_group_f1']:.3f}. "
+            f"Real log lines flagged as injection: {full['real_lines_flagged_as_injection']}. "
+            f"Source: {full['citation']}"
+        ),
+        "",
+        (
+            "| System | Lines | True events | Templates found | Grouping accuracy "
+            "| F1 grouping score | On Loghub's sample |"
+        ),
+        "|---|---|---|---|---|---|---|",
+        *(
+            f"| {name(n)} | {r['lines']:,} | {r['events']} | {r['templates']} | "
+            f"{r['grouping_accuracy']:.3f} | {r['group_f1']:.3f} | {on_sample(r)} |"
+            for n, r in scored
+        ),
+        "",
+        *(
+            [f"Not scored, because the log and its labels differ in length: {_and(unscored)}.", ""]
+            if unscored
+            else []
+        ),
+    ]
 
 
 def _gaia(gaia: Mapping[str, Any], loghub: Mapping[str, Any]) -> list[str]:
@@ -1181,8 +1309,10 @@ def _robustness(section: Mapping[str, Any]) -> list[str]:
 _REAL_SOURCES = {
     "hdfs": "a Hadoop cluster's log, with its experts' label for each storage block",
     "bgl": "the whole BlueGene/L log, with its administrators' alert tags",
+    "thunderbird": "seven weeks of the Thunderbird cluster's log, with its administrators' alert tags",
     "hadoop": "Hadoop jobs, with the failure injected into each",
     "openstack": "OpenStack runs, with a bug injected into each and the outcome it had",
+    "logchunks": "failed CI builds, with the lines a person marked as the reason each failed",
     "uci_tickets": "a ServiceNow service desk's tickets, with their outcomes",
     "gitlab": "GitLab.com's production incidents, with their responders' labels",
     "postmortems": (
@@ -1247,12 +1377,15 @@ def render(results: Mapping[str, Any], live: Mapping[str, Any] | None = None) ->
         ]
     if "real" in results:
         lines += _real(results["real"])
-        if "bgl" in results["real"]:
-            lines += _bgl(results["real"]["bgl"])
+        for system in _TAGGED:
+            if system in results["real"]:
+                lines += _bgl(results["real"][system], system)
         if "hadoop" in results["real"]:
             lines += _hadoop(results["real"]["hadoop"])
         if "openstack" in results["real"]:
             lines += _openstack(results["real"]["openstack"])
+        if "logchunks" in results["real"]:
+            lines += _logchunks(results["real"]["logchunks"])
         if "uci_tickets" in results["real"]:
             lines += _tickets(results["real"]["uci_tickets"])
         if "gitlab" in results["real"]:
@@ -1332,8 +1465,10 @@ def _unmeasured(real: Mapping[str, Any]) -> list[str]:
     """A limitation line for each real source that produced no results this time."""
     names = {
         "bgl": "contiguous BGL windows",
+        "thunderbird": "contiguous Thunderbird windows",
         "hadoop": "the Hadoop jobs",
         "openstack": "the OpenStack fault-injection runs",
+        "logchunks": "LogChunks' failed CI builds",
         "uci_tickets": "the UCI incident log",
         "gitlab": "GitLab.com's incidents",
         "postmortems": "the cloud post-mortems",
@@ -1402,7 +1537,7 @@ def _real_summary(section: Mapping[str, Any]) -> list[str]:
     ]
 
 
-def _bgl_summary(section: Mapping[str, Any]) -> list[str]:
+def _bgl_summary(section: Mapping[str, Any], machine: str = "a supercomputer") -> list[str]:
     if "methods" not in section:
         return []
     methods = section["methods"]
@@ -1420,7 +1555,7 @@ def _bgl_summary(section: Mapping[str, Any]) -> list[str]:
     return [
         (
             f"**Real severity**: on all {section['windows']:,} {section['window_min']}-minute "
-            f"windows of a supercomputer's {section['days']:g}-day log, labelled by its "
+            f"windows of {machine}'s {section['days']:g}-day log, labelled by its "
             f"administrators' alert tags, ARIA rated {aria['severe_missed']:,} of the "
             f"{severe:,} SEV1-2 windows as SEV3-4 and paged on {aria['quiet_paged']:,} of "
             f"{section['labels'].get('SEV4', 0):,} quiet windows"
@@ -1574,8 +1709,10 @@ def _results(results: Mapping[str, Any], live: Mapping[str, Any] | None) -> list
     if "real" in results:
         lines += _real_summary(results["real"])
         lines += _bgl_summary(results["real"].get("bgl") or {})
+        lines += _bgl_summary(results["real"].get("thunderbird") or {}, "a second supercomputer")
         lines += _hadoop_summary(results["real"].get("hadoop") or {})
         lines += _openstack_summary(results["real"].get("openstack") or {})
+        lines += _logchunks_summary(results["real"].get("logchunks") or {})
         lines += _tickets_summary(results["real"].get("uci_tickets") or {})
         lines += _gitlab_summary(results["real"].get("gitlab") or {})
         lines += _postmortems_summary(results["real"].get("postmortems") or {})

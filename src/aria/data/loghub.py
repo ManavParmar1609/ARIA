@@ -7,11 +7,15 @@ full datasets and from users parse into the same fields as the structured 2k sam
 from __future__ import annotations
 
 import csv
+import io
 import re
+import zipfile
 from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TextIO
 
 CANONICAL_LEVELS = ("DEBUG", "INFO", "WARN", "ERROR", "FATAL")
 _LEVEL_MAP = {
@@ -430,8 +434,22 @@ def iter_structured_csv(system: str, path: Path, limit: int | None = None) -> It
             yield record_from_fields(system, line_no, row)
 
 
-def iter_raw_log(system: str, path: Path, limit: int | None = None) -> Iterator[LogRecord]:
-    with path.open(encoding="utf-8", errors="replace") as handle:
+@contextmanager
+def _open_text(path: Path, member: str | None) -> Iterator[TextIO]:
+    if member is None:
+        with path.open(encoding="utf-8", errors="replace") as handle:
+            yield handle
+        return
+    with zipfile.ZipFile(path) as archive, archive.open(member) as raw:
+        yield io.TextIOWrapper(raw, encoding="utf-8", errors="replace")
+
+
+def iter_raw_log(
+    system: str, path: Path, limit: int | None = None, *, member: str | None = None
+) -> Iterator[LogRecord]:
+    """Read a raw Loghub log; ``member`` reads one file inside the zip at ``path`` as it streams,
+    so a log larger than the disk's free space never has to be extracted."""
+    with _open_text(path, member) as handle:
         for i, line in enumerate(handle):
             if limit is not None and i >= limit:
                 return
