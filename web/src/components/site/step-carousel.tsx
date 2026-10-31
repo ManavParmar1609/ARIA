@@ -85,11 +85,18 @@ function LogLine({ line }: { line: ShowcaseLine }) {
     <p
       className={cn(
         "flex items-center gap-3 px-3 py-1",
-        line.warn && "bg-sev3/30",
+        line.warn && "bg-sev3/30 dark:bg-sev3/12",
         line.quarantined && "bg-danger/8",
       )}
     >
-      <span className="tabular w-7 shrink-0 text-right text-faint">{line.lineNo}</span>
+      <span
+        className={cn(
+          "tabular w-7 shrink-0 text-right",
+          line.warn ? "text-muted-foreground" : "text-faint",
+        )}
+      >
+        {line.lineNo}
+      </span>
       <span
         className={cn(
           "min-w-0 flex-1 truncate",
