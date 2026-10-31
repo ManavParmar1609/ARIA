@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useId, useMemo, useState, type FormEvent } from "react";
-import { toast } from "sonner";
 
 import { SampleGallery } from "@/components/console/sample-gallery";
 import { PageHeader } from "@/components/console/states";
@@ -179,7 +178,7 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
       },
       {
         onSuccess: (accepted) => {
-          toast.success("Triage started", { description: "Following it live." });
+          // The incident page shows the run starting; no toast needs to say so (item 34).
           router.push(`/console/runs/${encodeURIComponent(accepted.run_id)}` as never);
         },
       },

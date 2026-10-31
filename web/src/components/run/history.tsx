@@ -92,7 +92,9 @@ export function History({
       {
         onSuccess: (accepted) => {
           setForking(null);
-          toast.success("Fork started", { description: `New run ${accepted.run_id}` });
+          toast.success("Your copy is starting", {
+            description: "It replays from the step you chose, as a new incident.",
+          });
           router.push(`/console/runs/${encodeURIComponent(accepted.run_id)}` as never);
         },
         onSettled: () => {

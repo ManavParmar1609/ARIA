@@ -1,12 +1,23 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 
 import type { Evidence, GuardReport, ParsedBatch } from "@/lib/api/types";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useDensity } from "@/lib/density";
 import { percent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+import { DensityToggle } from "./density-toggle";
 import { Citations, EvidenceChip, KIND_LABEL, sourceLabel, useEvidence } from "./evidence";
+
+const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** All evidence the run collected, filterable by kind. */
 export function EvidenceTable({ evidence, cited }: { evidence: Evidence[]; cited: Set<string> }) {
@@ -18,32 +29,38 @@ export function EvidenceTable({ evidence, cited }: { evidence: Evidence[]; cited
     return [...counts.entries()].sort((a, b) => b[1] - a[1]);
   }, [evidence]);
   const shown = kind === "all" ? evidence : evidence.filter((e) => e.kind === kind);
+  const compact = useDensity() === "compact";
+  const id = useId();
   return (
     <div className="grid gap-4">
-      <div role="group" aria-label="Filter evidence by kind" className="flex flex-wrap gap-1.5">
-        {[["all", evidence.length] as const, ...kinds].map(([k, n]) => (
-          <button
-            key={k}
-            type="button"
-            aria-pressed={kind === k}
-            onClick={() => setKind(k)}
-            className={cn(
-              "h-7 rounded-md border px-2.5 text-xs",
-              kind === k
-                ? "border-primary bg-highlight text-highlight-foreground"
-                : "border-rule text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {k === "all" ? "All" : (KIND_LABEL[k] ?? k)} <span className="tabular">{n}</span>
-          </button>
-        ))}
+      {/* One quiet control instead of a chip per kind: the calm budget allows four badges. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-sm">
+          <label htmlFor={`${id}-kind`} className="text-muted-foreground">
+            Show
+          </label>
+          <Select value={kind} onValueChange={setKind}>
+            <SelectTrigger id={`${id}-kind`} className="h-8 w-auto min-w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[["all", evidence.length] as const, ...kinds].map(([k, n]) => (
+                <SelectItem key={k} value={k}>
+                  {k === "all" ? "All evidence" : capitalise(KIND_LABEL[k] ?? k)} ({n})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <DensityToggle />
       </div>
-      <ul className="grid gap-1.5">
+      <ul className={cn("grid", compact ? "gap-0.5" : "gap-1.5")}>
         {shown.map((e) => (
           <li
             key={e.id}
             className={cn(
-              "grid grid-cols-[3.75rem_1fr] items-baseline gap-3 rounded-sm px-2 py-1.5 text-sm",
+              "grid grid-cols-[3.75rem_1fr] items-baseline gap-3 rounded-sm px-2 text-sm",
+              compact ? "py-0.5" : "py-1.5",
               active === e.id && "bg-highlight",
             )}
           >
@@ -140,6 +157,7 @@ function Guard({ guard, raw }: { guard: GuardReport; raw: number }) {
 /** What the parser made of the logs: templates by weight, and what the guard caught. */
 export function Templates({ batch }: { batch: ParsedBatch }) {
   const f = batch.features;
+  const compact = useDensity() === "compact";
   return (
     <div className="grid gap-5">
       <p className="text-sm text-muted-foreground">
@@ -154,9 +172,13 @@ export function Templates({ batch }: { batch: ParsedBatch }) {
         {batch.template_history ? `, judged against ${batch.template_history} known templates` : ""}
         .
       </p>
-      <ul className="grid gap-2">
+      <DensityToggle className="justify-self-end" />
+      <ul className={cn("grid", compact ? "gap-1" : "gap-2")}>
         {batch.templates.map((t) => (
-          <li key={t.template_id} className="grid gap-1.5 rounded-lg bg-raised p-4">
+          <li
+            key={t.template_id}
+            className={cn("grid rounded-lg bg-raised", compact ? "gap-1 px-3 py-2" : "gap-1.5 p-4")}
+          >
             <p className="font-mono text-xs leading-5 break-all">{t.template}</p>
             <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span className="tabular font-medium text-foreground">
@@ -177,7 +199,11 @@ export function Templates({ batch }: { batch: ParsedBatch }) {
                   {levels.length > 1 ? `${level} ${n.toLocaleString("en")}` : level}
                 </span>
               ))}
-              {t.nodes ? <span>{t.nodes} nodes</span> : null}
+              {t.nodes ? (
+                <span>
+                  {t.nodes} {t.nodes === 1 ? "server" : "servers"}
+                </span>
+              ) : null}
               {t.components.length ? <span>{t.components.join(", ")}</span> : null}
               {t.novel ? (
                 <span className="rounded-xs border border-primary/70 px-1 text-primary">new</span>

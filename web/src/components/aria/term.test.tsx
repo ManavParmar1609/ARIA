@@ -27,7 +27,7 @@ describe("term", () => {
       </>,
     );
     const targets = screen
-      .getAllByRole("button", { name: "fork" })
+      .getAllByRole("button", { name: /\(fork\)/ })
       .map((b) => b.getAttribute("popovertarget"));
     expect(targets).toEqual(["term-fork", "term-fork-intro"]);
   });

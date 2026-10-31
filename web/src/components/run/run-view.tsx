@@ -3,7 +3,7 @@
 import { CircleHelpIcon, DownloadIcon, HistoryIcon, Trash2Icon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Suspense, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { LevelChip } from "@/components/aria/severity";
@@ -67,15 +67,25 @@ function Header({
   assessment: SeverityAssessment | undefined;
 }) {
   const level = assessment?.severity ?? run.severity;
+  // Arriving here, from New triage or a link, puts focus on the incident's title (item 35).
+  const title = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    title.current?.focus({ preventScroll: true });
+  }, []);
   return (
     <header className="grid gap-2">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <LevelChip severity={isSeverity(level) ? level : null} />
         <RunStatus status={run.status} />
       </div>
-      <h1 className="text-2xl leading-tight tracking-heading wrap-anywhere sm:text-3xl">
+      <h1
+        ref={title}
+        tabIndex={-1}
+        className="text-2xl leading-tight tracking-heading wrap-anywhere outline-none sm:text-3xl"
+      >
         {runTitle(run)}
       </h1>
+      <StatusAnnouncer status={run.status} />
       {assessment ? <p className="text-base">{shortListText(assessment, run.status)}</p> : null}
       <p className="text-sm text-muted-foreground">
         {/* A fork says so once, with a link to the run it came from (below). */}
@@ -85,17 +95,38 @@ function Header({
         </time>
         {run.parent_run_id ? (
           <>
-            , forked from{" "}
+            , copied from{" "}
             <Link
               href={`/console/runs/${encodeURIComponent(run.parent_run_id)}` as never}
               className="underline decoration-control underline-offset-2"
             >
-              {run.parent_run_id}
+              the original incident
             </Link>
           </>
         ) : null}
       </p>
     </header>
+  );
+}
+
+// What a screen reader hears as a triage moves on while its page is open (item 35).
+const ANNOUNCE: Record<string, string> = {
+  queued: "Triage started. It is waiting for a free place.",
+  running: "ARIA is working on this incident.",
+  awaiting_review: "ARIA has finished, and the incident waits for your review.",
+  published: "Published.",
+  rejected: "Discarded.",
+  failed: "The triage failed.",
+};
+
+/** Announces the run's progress, but only for a run that was still going when the page opened:
+ * opening a finished incident announces nothing. */
+function StatusAnnouncer({ status }: { status: string }) {
+  const [watching] = useState(() => ACTIVE.has(status));
+  return (
+    <p className="sr-only" aria-live="polite">
+      {watching ? (ANNOUNCE[status] ?? "") : ""}
+    </p>
   );
 }
 
@@ -149,7 +180,7 @@ function DeleteRun({ runId }: { runId: string }) {
               deleting.current = true;
               remove.mutate(runId, {
                 onSuccess: () => {
-                  toast.success("Run deleted");
+                  toast.success("Incident deleted");
                   router.push("/console/runs");
                 },
                 onError: () => {
@@ -350,7 +381,7 @@ export function RunView({
           >
             <span className="flex items-center gap-2">
               <HistoryIcon aria-hidden className="size-4" />
-              You are looking at the run as it was at a past checkpoint
+              You are looking at this incident as it was earlier
               {viewing.next.length ? `, before ${viewing.next.join(" and ")}` : ""}.
             </span>
             <Button size="sm" onClick={() => setCheckpoint(null)}>

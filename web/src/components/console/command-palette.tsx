@@ -238,7 +238,7 @@ function Palette({ onClose, onHelp }: { onClose: () => void; onHelp: () => void 
             },
             {
               onSuccess: (accepted) => {
-                toast.success("Triage started", { description: "Following the run live." });
+                // The incident page shows the run starting; no toast needs to say so (item 34).
                 router.push(`/console/runs/${encodeURIComponent(accepted.run_id)}` as never);
               },
               onError: (error) =>

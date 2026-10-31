@@ -85,12 +85,12 @@ test.describe("console", () => {
       .locator("li", { hasText: "Paused at “Your review”" })
       .getByRole("button", { name: "View" })
       .click();
-    await expect(page.getByText(/as it was at a past checkpoint/)).toBeVisible();
+    await expect(page.getByText(/as it was earlier/)).toBeVisible();
     await expect(
       page.getByText("Draft: nothing has been sent. A reviewer must approve it first."),
     ).toBeVisible();
     await page.getByRole("button", { name: "Back to now" }).click();
-    await expect(page.getByText(/as it was at a past checkpoint/)).toBeHidden();
+    await expect(page.getByText(/as it was earlier/)).toBeHidden();
   });
 
   test("runs a sample at a bigger size and shows both ratings", async ({ page }) => {

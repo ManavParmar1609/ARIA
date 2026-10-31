@@ -34,7 +34,7 @@ const TRIGGERS: Record<string, string> = {
   eval: "from an evaluation",
   demo: "a recorded demo",
   scan: "from a log scan",
-  fork: "forked from another run",
+  fork: "copied from another incident",
   replay: "a real incident, replayed",
   sample: "a sample, built from real lines",
 };

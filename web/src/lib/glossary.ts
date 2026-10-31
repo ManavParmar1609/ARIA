@@ -63,9 +63,9 @@ export const GLOSSARY = {
       "A saved snapshot of the run after every step. It lets a run pause for review, carry on after a restart, or be rewound to any step.",
   },
   fork: {
-    term: "Fork",
+    term: "Copy from an earlier step (fork)",
     definition:
-      "A new run started from a past checkpoint of another run, with different options, so you can see what would have changed.",
+      "A new incident that starts again from one of another incident's saved steps, with different options, so you can see what would have changed.",
   },
 } satisfies Record<string, GlossaryEntry>;
 
