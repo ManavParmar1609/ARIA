@@ -79,7 +79,7 @@ sources:
     extract: false
     license: CC BY 4.0 (the Zenodo record's licence)
     citation: "W. Xu, L. Huang, A. Fox, D. Patterson, M. I. Jordan. Detecting Large-Scale System Problems by Mining Console Logs. SOSP 2009."
-    description: The whole HDFS_v1 log with the experts' label for every block. Kept zipped; the real-log evaluation reads it from the zip and checks units of work that stop partway on all of it, not one sample.
+    description: The whole HDFS_v1 log with the experts' label for every block. Kept zipped for a later round; the real-log evaluation reads the loglizer HDFS_100k sample (hdfs-100k) today.
 
   logchunks:
     kind: zenodo

@@ -19,7 +19,7 @@ It follows the spirit of [Model Cards for Model Reporting](https://arxiv.org/abs
 | Task | Rate one window of log lines, plus any firing alerts, from SEV1 to SEV4 |
 | Type | Multinomial logistic regression on standardised features, with temperature scaling and split-conformal prediction sets |
 | Output | A calibrated probability for each of the four classes, and a prediction set that targets 90% coverage (alpha 0.1) |
-| Rules version | `2026.10.2` ([`config/severity_rules.yaml`](../config/severity_rules.yaml)), recorded in the model's metadata |
+| Rules version | The `version` in [`config/severity_rules.yaml`](../config/severity_rules.yaml), recorded in the model's metadata |
 | Format | JSON (`aria.linear_model.v1`): coefficients, scaler statistics, temperature, conformal threshold and metadata. Inference is plain numpy, and loading a model file cannot run code. |
 | Code | [`src/aria/severity/`](../src/aria/severity/): `model.py`, `training.py`, `policy.py`, `engine.py` and `recalibration.py` |
 | Training data | **Semi-synthetic** windows built from real Loghub lines ([data card](data-card.md)) |
