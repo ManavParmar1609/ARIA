@@ -147,7 +147,7 @@ export function TriageReplay({ data }: { data: Replay }) {
           </span>
         </div>
         <ol
-          className="py-3 font-mono text-[0.75rem] leading-6"
+          className="py-3 font-mono text-[0.8125rem] leading-6"
           aria-label="Log lines from the recorded run"
         >
           {/* the evidence thread sweeps the highlight onto each cited line in order */}

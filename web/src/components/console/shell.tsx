@@ -109,7 +109,7 @@ function PaletteButton() {
       type="button"
       onClick={openPalette}
       aria-keyshortcuts="Control+K Meta+K"
-      className="flex h-10 w-full items-center gap-2.5 rounded-md bg-foreground/6 px-3 text-[0.9375rem] text-muted-foreground transition-colors duration-(--duration-quick) hover:bg-foreground/10 hover:text-foreground"
+      className="flex h-10 w-full items-center gap-2.5 rounded-md bg-foreground/6 px-3 text-sm text-muted-foreground transition-colors duration-(--duration-quick) hover:bg-foreground/10 hover:text-foreground"
     >
       <SearchIcon aria-hidden className="size-4" />
       <span className="flex-1 text-left">Search</span>

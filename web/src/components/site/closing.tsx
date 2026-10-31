@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { Converge } from "@/components/site/line-art";
 import { ArrowCircle, Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import { REPO_URL } from "@/lib/site-data";
@@ -13,7 +14,7 @@ const QUICKSTART = [
   "make dev",
 ];
 
-/** The last panel: one action, and the commands to run it yourself. */
+/** The last panel: one action, the commands to run it yourself, and the lines running on. */
 export function Closing() {
   return (
     <section
@@ -67,6 +68,8 @@ export function Closing() {
             </pre>
           </div>
         </div>
+        {/* The lines that ran together on the answer carry on into the way in. */}
+        <Converge className="mt-12 -mr-12 h-32 w-[calc(100%+3rem)] text-heading sm:mt-14 sm:h-auto" />
       </div>
     </section>
   );

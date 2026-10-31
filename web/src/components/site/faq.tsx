@@ -102,7 +102,7 @@ export function Faq() {
             key={q}
             className="grid gap-2 border-b border-rule py-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-12"
           >
-            <dt className="font-display text-[1.375rem] leading-snug font-light tracking-[-0.01em] text-balance text-heading sm:text-[1.625rem]">
+            <dt className="font-display text-[1.5rem] leading-snug font-light tracking-[-0.01em] text-balance text-heading sm:text-[1.75rem]">
               {q}
             </dt>
             <dd className="text-base leading-relaxed text-foreground lg:pt-1">{a}</dd>

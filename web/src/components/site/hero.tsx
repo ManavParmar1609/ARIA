@@ -106,54 +106,8 @@ function ReportCard({ data }: { data: Replay }) {
   );
 }
 
-const PROOF: { title: string; body: string; href: string; link: string }[] = [
-  {
-    title: "Tested on public, labelled logs",
-    body: "Each test pits ARIA against a simpler method, and says where the simpler one wins.",
-    href: "/console/evals",
-    link: "See the test results",
-  },
-  {
-    title: "Every claim cites a log line",
-    body: "A check rejects any sentence whose source is missing or whose numbers disagree with it.",
-    href: "/console/how-it-works/example",
-    link: "See an example",
-  },
-  {
-    title: "Nothing is sent without you",
-    body: "Messages for chat or a status page wait as drafts until a person approves them.",
-    href: "/console/how-it-works/steps#how-4",
-    link: "See the review step",
-  },
-];
-
-/** Three claims a visitor can check, each linking to its proof. */
-function ProofTiles() {
-  return (
-    <ul className="grid gap-3 md:grid-cols-3">
-      {PROOF.map((tile) => (
-        <li
-          key={tile.title}
-          className="grid content-start gap-2 rounded-card border border-rule bg-raised p-6"
-        >
-          <h2 className="text-lg font-medium text-heading">{tile.title}</h2>
-          <p className="text-base leading-relaxed text-muted-foreground">{tile.body}</p>
-          <Link
-            href={tile.href as never}
-            prefetch={false}
-            className="mt-1 inline-flex w-fit items-center gap-1.5 text-base font-medium text-heading underline decoration-control underline-offset-4 hover:decoration-heading"
-          >
-            {tile.link}
-            <ArrowRightIcon aria-hidden className="size-4" />
-          </Link>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/** The first screen: the outcome on sage, the way in beneath it, the report on slate, and the
- * three claims a visitor can check. */
+/** The first screen: the outcome on sage, the way in beneath it, and the report on slate. The
+ * sections below the fold carry the proof. */
 export function Hero({ data }: { data: Replay }) {
   return (
     <section
@@ -200,7 +154,6 @@ export function Hero({ data }: { data: Replay }) {
           <ReportCard data={data} />
         </div>
       </div>
-      <ProofTiles />
     </section>
   );
 }

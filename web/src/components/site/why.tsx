@@ -42,7 +42,7 @@ export function Why() {
           <span className="grid size-11 place-items-center rounded-[10px] bg-panel-keylime text-heading">
             <Icon aria-hidden className="size-5" strokeWidth={1.5} />
           </span>
-          <h3 className="text-[1.4375rem] leading-snug">{title}</h3>
+          <h3 className="text-2xl leading-snug">{title}</h3>
           <p className="text-sm leading-relaxed text-muted-foreground">{body}</p>
         </li>
       ))}
