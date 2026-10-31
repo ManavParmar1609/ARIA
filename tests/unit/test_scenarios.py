@@ -63,3 +63,70 @@ def test_suite_lines_parse_back_and_cover_all_severities(builder: ScenarioBuilde
         for line, rec in zip(scenario.lines, scenario.records, strict=True):
             assert parse_raw_line(scenario.system, line).message == rec.message
     assert all(s.synthetic for s in suite)
+
+
+# --- console samples ------------------------------------------------------------------------------
+
+
+def test_every_sample_has_a_plain_card_under_a_known_source(builder: ScenarioBuilder) -> None:
+    cards = {key: mode.card for key, mode in builder.pools.modes.items()}
+    assert all(cards.values()), [key for key, card in cards.items() if card is None]
+    by_source = Counter(card.source for card in cards.values() if card)
+    assert by_source == {"security": 2, "web": 3, "bigdata": 4, "hpc": 9, "noise": 3}
+    headlines = [key for key, card in cards.items() if card and card.headline]
+    assert 3 <= len(headlines) <= 4
+    for card in cards.values():
+        assert card
+        assert card.title[0].isupper()
+        assert not card.title.endswith(".")
+        assert card.summary.endswith(".")
+
+
+def test_a_sample_shows_its_failure_on_every_server_it_names(builder: ScenarioBuilder) -> None:
+    for servers in (2, 6, 24):
+        scenario = builder.sample("openssh.bruteforce", servers=servers)
+        assert len(scenario.nodes) == servers
+    # The evaluation's windows leave spread to chance, as before.
+    sparse = builder.build("openssh.bruteforce", seed=3, nodes=24, incident_per_min=2)
+    assert len(sparse.nodes) < 24
+
+
+def test_a_size_is_offered_only_where_it_changes_the_severity(builder: ScenarioBuilder) -> None:
+    ssh = builder.sample_sizes("openssh.bruteforce")
+    assert ssh.servers is not None
+    assert ssh.rate is None  # brute force escalates by spread, never by rate
+    labels = [builder.sample("openssh.bruteforce", servers=n).severity for n in ssh.servers.values]
+    assert len(set(labels)) == len(labels)  # each choice leads somewhere new
+    assert [s.rank for s in labels] == sorted((s.rank for s in labels), reverse=True)
+    # HDFS logs name no servers, so only the rate can matter; ZooKeeper's "peers" are threads.
+    assert builder.sample_sizes("hdfs.block_serve_exceptions").servers is None
+    assert builder.sample_sizes("zookeeper.quorum_connection_loss").servers is None
+    for noise in ("mac.cocoa_scripting_noise", "android.permission_noise"):
+        sizes = builder.sample_sizes(noise)
+        assert (sizes.servers, sizes.rate) == (None, None)
+        assert builder.sample(noise).severity == Severity.SEV4
+
+
+def test_a_sample_reads_the_same_every_time(builder: ScenarioBuilder) -> None:
+    first = builder.sample("bgl.kernel_panic", servers=4)
+    again = builder.sample("bgl.kernel_panic", servers=4)
+    assert first.lines == again.lines
+    assert builder.sample("bgl.kernel_panic").lines != first.lines
+
+
+def test_the_tricky_sample_carries_a_line_the_guard_catches(builder: ScenarioBuilder) -> None:
+    from aria.security.injection import scan
+
+    scenario = builder.sample("openssh.bruteforce")
+    findings = scan(scenario.lines)
+    assert len(findings) == 1
+    assert "ignore previous instructions" in scenario.lines[findings[0].line_idx]
+    assert parse_raw_line("openssh", scenario.lines[findings[0].line_idx]) is not None
+    assert not scan(builder.sample("linux.auth_failures").lines)
+
+
+def test_a_preview_shows_real_lines_from_the_sample(builder: ScenarioBuilder) -> None:
+    preview = builder.preview("hdfs.block_serve_exceptions")
+    assert len(preview) == 3
+    assert len(set(preview)) == 3
+    assert all("Got exception while serving" in line for line in preview)

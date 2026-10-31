@@ -103,6 +103,47 @@ class RunDetail(RunSummary):
     errors: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class SizeOptionOut(BaseModel):
+    value: int
+    label: str
+
+
+class SizeChoiceOut(BaseModel):
+    """A size a visitor may choose for a sample, offered only where it changes the severity."""
+
+    question: str
+    unit: Literal["servers", "per_minute"]
+    default: int
+    options: list[SizeOptionOut]
+
+
+class ScenarioOut(BaseModel):
+    """A sample the console can build: real Loghub lines arranged into an incident."""
+
+    id: str
+    title: str
+    technology: str
+    source: str
+    source_name: str
+    summary: str
+    system: str
+    benign: bool
+    headline: bool
+    # One of its lines tries to talk ARIA out of the incident, for the injection guard to catch.
+    tricky: bool = False
+    preview: list[str] = Field(default_factory=list)
+    servers: SizeChoiceOut | None = None
+    rate: SizeChoiceOut | None = None
+
+
+class SampleRunRequest(Body):
+    """How to build a sample: a size it offers (or its default), and the run's options."""
+
+    servers: Annotated[int, Field(ge=1, le=64)] | None = None
+    rate: Annotated[int, Field(ge=1, le=1_000)] | None = None
+    options: RunOptions = Field(default_factory=RunOptions)
+
+
 class RunPage(BaseModel):
     runs: list[RunSummary]
     next_before: datetime | None = None

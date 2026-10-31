@@ -36,6 +36,7 @@ const TRIGGERS: Record<string, string> = {
   scan: "from a log scan",
   fork: "forked from another run",
   replay: "a real incident, replayed",
+  sample: "a sample, built from real lines",
 };
 
 export const triggerLabel = (trigger: string | null | undefined): string =>

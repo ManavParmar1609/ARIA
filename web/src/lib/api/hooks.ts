@@ -20,6 +20,8 @@ import type {
   RunState,
   RunStatus,
   RunbookOut,
+  SampleRunRequest,
+  Scenario,
   TriageRequest,
 } from "./types";
 import type { components } from "./schema";
@@ -48,6 +50,7 @@ export const keys = {
   settings: ["settings"] as const,
   feedback: ["feedback"] as const,
   realIncidents: ["real-incidents"] as const,
+  scenarios: ["scenarios"] as const,
 };
 
 const v1 = (path: string) => `/api/v1${path}`;
@@ -209,6 +212,25 @@ export function useFeedback(limit = 8) {
     queryKey: [...keys.feedback, limit],
     queryFn: () => apiFetch<FeedbackView>(v1(`/feedback?limit=${limit}`)),
     staleTime: 30_000,
+  });
+}
+
+/** The samples this server can build, by where their logs come from. */
+export function useScenarios() {
+  return useQuery({
+    queryKey: keys.scenarios,
+    queryFn: () => apiFetch<Scenario[]>(v1("/scenarios")),
+    staleTime: 10 * 60_000,
+  });
+}
+
+/** Build a sample on the server, at a size it offers, and start its triage. */
+export function useStartSample() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: SampleRunRequest }) =>
+      postJson<RunAccepted>(v1(`/scenarios/${encodeURIComponent(id)}/runs`), body),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["runs"] }),
   });
 }
 

@@ -1284,6 +1284,146 @@
         }
       }
     },
+    "/api/v1/scenarios": {
+      "get": {
+        "tags": [
+          "samples"
+        ],
+        "summary": "List Scenarios",
+        "description": "The samples this server can build, by where their logs come from. Each is made of real\nLoghub lines arranged into an incident, and offers a size only where the size changes how\nserious the incident is.",
+        "operationId": "list_scenarios_api_v1_scenarios_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ScenarioOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Scenarios Api V1 Scenarios Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scenarios/{scenario_id}/runs": {
+      "post": {
+        "tags": [
+          "samples"
+        ],
+        "summary": "Run Scenario",
+        "description": "Build a sample on this server and triage it as a run; follow it on ``links.stream``.",
+        "operationId": "run_scenario_api_v1_scenarios__scenario_id__runs_post",
+        "parameters": [
+          {
+            "name": "scenario_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scenario Id"
+            }
+          },
+          {
+            "name": "X-Model-Provider",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia.",
+              "title": "X-Model-Provider"
+            },
+            "description": "The kind of key in X-Model-Key: claude, gemini, openai or nvidia."
+          },
+          {
+            "name": "X-Model-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true.",
+              "title": "X-Model-Key"
+            },
+            "description": "Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true."
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SampleRunRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunAccepted"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/incidents": {
       "get": {
         "tags": [
@@ -4584,6 +4724,129 @@
         ],
         "title": "RunbookStep"
       },
+      "SampleRunRequest": {
+        "properties": {
+          "servers": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 64.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Servers"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1000.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate"
+          },
+          "options": {
+            "$ref": "#/components/schemas/RunOptions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SampleRunRequest",
+        "description": "How to build a sample: a size it offers (or its default), and the run's options."
+      },
+      "ScenarioOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "technology": {
+            "type": "string",
+            "title": "Technology"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "source_name": {
+            "type": "string",
+            "title": "Source Name"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "system": {
+            "type": "string",
+            "title": "System"
+          },
+          "benign": {
+            "type": "boolean",
+            "title": "Benign"
+          },
+          "headline": {
+            "type": "boolean",
+            "title": "Headline"
+          },
+          "tricky": {
+            "type": "boolean",
+            "title": "Tricky",
+            "default": false
+          },
+          "preview": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Preview"
+          },
+          "servers": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SizeChoiceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SizeChoiceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "technology",
+          "source",
+          "source_name",
+          "summary",
+          "system",
+          "benign",
+          "headline"
+        ],
+        "title": "ScenarioOut",
+        "description": "A sample the console can build: real Loghub lines arranged into an incident."
+      },
       "SettingsOut": {
         "properties": {
           "environment": {
@@ -4849,6 +5112,60 @@
           "source"
         ],
         "title": "SimilarIncident"
+      },
+      "SizeChoiceOut": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "servers",
+              "per_minute"
+            ],
+            "title": "Unit"
+          },
+          "default": {
+            "type": "integer",
+            "title": "Default"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/SizeOptionOut"
+            },
+            "type": "array",
+            "title": "Options"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question",
+          "unit",
+          "default",
+          "options"
+        ],
+        "title": "SizeChoiceOut",
+        "description": "A size a visitor may choose for a sample, offered only where it changes the severity."
+      },
+      "SizeOptionOut": {
+        "properties": {
+          "value": {
+            "type": "integer",
+            "title": "Value"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "SizeOptionOut"
       },
       "TicketAssessment": {
         "properties": {

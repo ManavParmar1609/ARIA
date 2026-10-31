@@ -451,7 +451,24 @@ Two more properties hold for every window:
   samples always give the same windows.
 
 Every scenario is marked `synthetic=True`. Seeded memory incidents are marked synthetic with
-`source="curated"`. Their time to resolve is left empty, because the scenarios do not record
+`source="curated"`.
+
+### The console's samples
+
+The console offers every failure mode as a sample, built on the server by
+`ScenarioBuilder.sample` (`GET /api/v1/scenarios`, `POST /api/v1/scenarios/{id}/runs`):
+
+- **One fixed window.** Each sample uses one seed and an 8-minute window, so it reads the same
+  every time.
+- **Every chosen server shows the failure.** The sample spreads its first lines over each node it
+  names, so the spread its label rests on is the spread the visitor chose. The evaluation's
+  windows leave spread to chance, as before.
+- **Sizes only where they matter.** The builder tries each sample at several server counts and
+  rates and offers a choice only where the label changes, smallest first. Formats that name no
+  host, ZooKeeper's thread names and false alarms get no server choice.
+- **Plain cards.** Each failure mode's `card` in `config/scenarios.yaml` gives the console a plain
+  title, the technology and a one-line summary. One sample, the SSH brute force, carries a line
+  that tries to talk ARIA out of the incident, which the injection guard quarantines. Their time to resolve is left empty, because the scenarios do not record
 how long a fix took.
 
 ### Seeds and splits

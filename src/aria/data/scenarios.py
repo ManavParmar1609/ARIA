@@ -26,6 +26,31 @@ from aria.data.loghub import LOGHUB_DIRS, LogRecord, format_raw_line, iter_struc
 
 CATALOG_PATH = Path("config/scenarios.yaml")
 SCENARIO_EPOCH = datetime(2026, 3, 2, tzinfo=UTC)
+FIXTURE_LINES = Path("tests/fixtures/loghub")  # the small Loghub copies that ship with ARIA
+
+# Where a sample's logs come from, in the order the console lists them.
+SOURCES: dict[str, str] = {
+    "security": "Security and sign-ins",
+    "web": "Web and cloud",
+    "bigdata": "Big-data clusters",
+    "hpc": "Supercomputers",
+    "noise": "False alarms",
+}
+
+# Console samples: one fixed window per sample and size, so a sample reads the same every time.
+SAMPLE_SEED = 7
+SAMPLE_MINUTES = 8
+SAMPLE_BACKGROUND_PER_MIN = 8.0
+SAMPLE_SERVERS = 3  # for a sample whose severity does not depend on how many servers it hits
+SAMPLE_RATE = 12  # incident lines a minute at the burst's peak, unless the visitor picks a rate
+SERVER_STEPS = (2, 3, 4, 6, 8, 12, 16, 24, 32)
+RATE_STEPS = (SAMPLE_RATE, 30, 60, 120, 160)
+
+
+def loghub_dir(data_dir: Path) -> Path:
+    """The Loghub samples when they have been downloaded, else the copies that ship with ARIA."""
+    full = data_dir / "raw" / "loghub-2k"
+    return full if full.is_dir() else FIXTURE_LINES
 
 
 _PLURAL_AFTER_ONE = re.compile(r"\b1 ((?:[\w/-]+ )*?)(node|host|peer)s\b")
@@ -39,6 +64,23 @@ def _counted(template: str, nodes: int) -> str:
 
 
 @dataclass(frozen=True)
+class Card:
+    """How the console offers a failure mode as a sample: what happened, in plain words, with the
+    technology underneath, grouped by where its logs come from."""
+
+    title: str
+    technology: str
+    source: str
+    summary: str
+    headline: bool = False
+    # A line that tries to talk ARIA out of the incident, which the injection guard should catch.
+    trick: str | None = None
+    # False where the logs' node field names something other than a server (ZooKeeper's threads),
+    # so a choice of "how many servers" would not mean what it says.
+    servers: bool = True
+
+
+@dataclass(frozen=True)
 class FailureMode:
     key: str
     system: str
@@ -49,6 +91,7 @@ class FailureMode:
     benign: bool = False
     base: Severity = Severity.SEV3
     escalate: tuple[dict[str, Any], ...] = ()
+    card: Card | None = None
 
     @property
     def name(self) -> str:
@@ -75,6 +118,33 @@ class Scenario:
     synthetic: bool = True
 
 
+@dataclass(frozen=True)
+class SizeChoice:
+    """Sizes at which a sample's severity changes, smallest first; the first is the default."""
+
+    values: tuple[int, ...]
+
+    @property
+    def default(self) -> int:
+        return self.values[0]
+
+
+@dataclass(frozen=True)
+class SampleSizes:
+    servers: SizeChoice | None = None
+    rate: SizeChoice | None = None
+
+
+def _card(key: str, spec: dict[str, Any] | None) -> Card | None:
+    if spec is None:
+        return None
+    card = Card(**spec)
+    if card.source not in SOURCES:
+        msg = f"{key}: card source {card.source!r} is not one of {', '.join(SOURCES)}"
+        raise ValueError(msg)
+    return card
+
+
 @lru_cache(maxsize=2)
 def load_catalog(path: Path = CATALOG_PATH) -> dict[str, FailureMode]:
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))["failure_modes"]
@@ -91,6 +161,7 @@ def load_catalog(path: Path = CATALOG_PATH) -> dict[str, FailureMode]:
             benign=bool(spec.get("benign", False)),
             base=Severity(severity.get("base", "SEV3")),
             escalate=tuple(severity.get("escalate", ())),
+            card=_card(key, spec.get("card")),
         )
     return modes
 
@@ -183,6 +254,7 @@ class ScenarioBuilder:
     def __init__(self, pools: LinePools, rubric: AlertRubric | None = None) -> None:
         self.pools = pools
         self.rubric = rubric or load_rubric()
+        self._sizes: dict[str, SampleSizes] = {}
 
     def _node_names(self, system: str, count: int, rng: random.Random) -> list[str]:
         known = self.pools.nodes.get(system) or []
@@ -201,7 +273,14 @@ class ScenarioBuilder:
         background_per_min: float = 30.0,
         incident_per_min: float = 12.0,
         start: datetime | None = None,
+        cover_nodes: bool = False,
     ) -> Scenario:
+        """A window of background traffic with the failure mode's lines bursting through it.
+
+        ``cover_nodes`` makes every one of the ``nodes`` show the failure at least once, so the
+        spread the label rests on is the spread asked for (the console's samples; the
+        evaluation leaves spread to chance).
+        """
         mode = self.pools.modes[mode_key]
         rng = random.Random(f"{mode_key}:{seed}")
         start = start or SCENARIO_EPOCH + timedelta(hours=seed % 5000)
@@ -230,6 +309,14 @@ class ScenarioBuilder:
                 base = rng.choice(incident_pool)
                 ts = start + timedelta(minutes=minute, seconds=rng.uniform(0, 60))
                 injected.append(replace(base, ts=ts, node=rng.choice(node_names)))
+        if cover_nodes and per_minute:
+            for _ in range(len(node_names) - len(injected)):
+                minute = rng.choice(list(per_minute))
+                ts = start + timedelta(minutes=minute, seconds=rng.uniform(0, 60))
+                injected.append(replace(rng.choice(incident_pool), ts=ts))
+            picked = rng.sample(range(len(injected)), len(node_names))
+            for node, index in zip(node_names, picked, strict=True):
+                injected[index] = replace(injected[index], node=node)
         records.extend(injected)
         records.sort(key=lambda r: r.ts or start)
         for i, rec in enumerate(records, 1):
@@ -262,6 +349,68 @@ class ScenarioBuilder:
             label_source=label_source,
             label_detail=detail,
         )
+
+    # --- console samples ---------------------------------------------------------------------
+
+    def sample(
+        self, mode_key: str, *, servers: int | None = None, rate: int | None = None
+    ) -> Scenario:
+        """The console's sample of a failure mode, at the sizes asked for (or its defaults)."""
+        sizes = self.sample_sizes(mode_key)
+        if servers is None:
+            servers = sizes.servers.default if sizes.servers else SAMPLE_SERVERS
+        if rate is None:
+            rate = sizes.rate.default if sizes.rate else SAMPLE_RATE
+        return self._sample(mode_key, servers, rate)
+
+    def _sample(self, mode_key: str, servers: int, rate: int) -> Scenario:
+        scenario = self.build(
+            mode_key,
+            seed=SAMPLE_SEED,
+            nodes=servers,
+            duration_min=SAMPLE_MINUTES,
+            background_per_min=SAMPLE_BACKGROUND_PER_MIN,
+            incident_per_min=float(rate),
+            cover_nodes=True,
+        )
+        card = self.pools.modes[mode_key].card
+        return _with_trick(scenario, card.trick) if card and card.trick else scenario
+
+    def sample_sizes(self, mode_key: str) -> SampleSizes:
+        """The sizes a visitor may choose for a sample: how many servers, where the logs name
+        servers and the count changes the severity, and how fast, where the rate does. A false
+        alarm has neither: it needs no action at any size."""
+        if mode_key not in self._sizes:
+            mode = self.pools.modes[mode_key]
+            servers: SizeChoice | None = None
+            rate: SizeChoice | None = None
+            if not mode.benign:
+                named = mode.card is None or mode.card.servers
+                if named and (mode.tags or node_visible(mode.system)):
+                    servers = self._steps(mode_key, SERVER_STEPS, lambda n: (n, SAMPLE_RATE))
+                at = servers.default if servers else SAMPLE_SERVERS
+                rate = self._steps(mode_key, RATE_STEPS, lambda n: (at, n))
+            self._sizes[mode_key] = SampleSizes(servers, rate)
+        return self._sizes[mode_key]
+
+    def _steps(self, mode_key: str, steps: tuple[int, ...], size: Any) -> SizeChoice | None:
+        """The first of ``steps`` at each severity the sample reaches, or None when one severity
+        covers them all (a choice that changes nothing teaches nothing)."""
+        first: dict[Severity, int] = {}
+        for n in steps:
+            first.setdefault(self._sample(mode_key, *size(n)).severity, n)
+        return SizeChoice(tuple(sorted(first.values()))) if len(first) > 1 else None
+
+    def preview(self, mode_key: str, count: int = 3) -> list[str]:
+        """A few of the real lines the sample is made of, as the log shows them."""
+        seen: list[str] = []
+        for rec in self.pools.incident[mode_key]:
+            line = format_raw_line(rec)
+            if line not in seen:
+                seen.append(line)
+            if len(seen) == count:
+                break
+        return seen
 
     def build_quiet(
         self, system: str, *, seed: int, duration_min: int = 20, background_per_min: float = 30.0
@@ -322,6 +471,19 @@ class ScenarioBuilder:
             for j in range(quiet_per_system):
                 scenarios.append(self.build_quiet(system, seed=seed * 1000 + 500 + j))
         return scenarios
+
+
+def _with_trick(scenario: Scenario, message: str) -> Scenario:
+    """The scenario with one more line in the middle of the burst, carrying ``message`` in the
+    shape of the failure's own lines (an attacker's text in a field the log records)."""
+    burst = [r for r in scenario.records if r.node in scenario.nodes and r.ts is not None]
+    if not burst:
+        return scenario
+    model = burst[len(burst) // 2]
+    trick = replace(model, message=message, label=None)
+    records = sorted([*scenario.records, trick], key=lambda r: r.ts or scenario.start)
+    records = [replace(r, line_no=i) for i, r in enumerate(records, 1)]
+    return replace(scenario, records=records, lines=[format_raw_line(r) for r in records])
 
 
 def _poisson(rng: random.Random, lam: float) -> int:

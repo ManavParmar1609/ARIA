@@ -645,6 +645,48 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/scenarios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Scenarios
+         * @description The samples this server can build, by where their logs come from. Each is made of real
+         *     Loghub lines arranged into an incident, and offers a size only where the size changes how
+         *     serious the incident is.
+         */
+        get: operations["list_scenarios_api_v1_scenarios_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scenarios/{scenario_id}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Scenario
+         * @description Build a sample on this server and triage it as a run; follow it on ``links.stream``.
+         */
+        post: operations["run_scenario_api_v1_scenarios__scenario_id__runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings": {
         parameters: {
             query?: never;
@@ -1643,6 +1685,50 @@ export type components = {
              */
             updated_at: string;
         };
+        /**
+         * SampleRunRequest
+         * @description How to build a sample: a size it offers (or its default), and the run's options.
+         */
+        SampleRunRequest: {
+            options?: components["schemas"]["RunOptions"];
+            /** Rate */
+            rate?: number | null;
+            /** Servers */
+            servers?: number | null;
+        };
+        /**
+         * ScenarioOut
+         * @description A sample the console can build: real Loghub lines arranged into an incident.
+         */
+        ScenarioOut: {
+            /** Benign */
+            benign: boolean;
+            /** Headline */
+            headline: boolean;
+            /** Id */
+            id: string;
+            /** Preview */
+            preview?: string[];
+            rate?: components["schemas"]["SizeChoiceOut"] | null;
+            servers?: components["schemas"]["SizeChoiceOut"] | null;
+            /** Source */
+            source: string;
+            /** Source Name */
+            source_name: string;
+            /** Summary */
+            summary: string;
+            /** System */
+            system: string;
+            /** Technology */
+            technology: string;
+            /** Title */
+            title: string;
+            /**
+             * Tricky
+             * @default false
+             */
+            tricky?: boolean;
+        };
         SendMessageConfiguration: {
             /**
              * @example [
@@ -1764,6 +1850,30 @@ export type components = {
             system: string;
             /** Title */
             title: string;
+        };
+        /**
+         * SizeChoiceOut
+         * @description A size a visitor may choose for a sample, offered only where it changes the severity.
+         */
+        SizeChoiceOut: {
+            /** Default */
+            default: number;
+            /** Options */
+            options: components["schemas"]["SizeOptionOut"][];
+            /** Question */
+            question: string;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "servers" | "per_minute";
+        };
+        /** SizeOptionOut */
+        SizeOptionOut: {
+            /** Label */
+            label: string;
+            /** Value */
+            value: number;
         };
         SubscribeToTaskRequest: {
             /** @example id */
@@ -3077,6 +3187,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_scenarios_api_v1_scenarios_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScenarioOut"][];
+                };
+            };
+        };
+    };
+    run_scenario_api_v1_scenarios__scenario_id__runs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Your own model key, used for this request's run or question only and never stored. Accepted when the server sets ARIA_VISITOR_KEYS=true. */
+                "X-Model-Key"?: string | null;
+                /** @description The kind of key in X-Model-Key: claude, gemini, openai or nvidia. */
+                "X-Model-Provider"?: string | null;
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
+            path: {
+                scenario_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SampleRunRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunAccepted"];
                 };
             };
             /** @description Validation Error */

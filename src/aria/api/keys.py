@@ -68,3 +68,23 @@ async def visitor_key(
 
 
 VisitorKeyDep = Annotated[VisitorKey | None, Depends(visitor_key)]
+
+
+def check_provider(state: AppState, wanted: str | None, visitor: VisitorKey | None) -> None:
+    """Refuse (422, saying why) a run that names a provider this server cannot use for it: one
+    it does not know, one with no chat model, or one that is not set up, unless the visitor's own
+    key fills it."""
+    llm = state.services.router
+    keyed = visitor is not None and wanted in llm.config.visitor_keys.providers[visitor.provider]
+    if wanted is None or keyed or llm.can_chat(wanted):
+        return
+    known = llm.config.providers
+    if wanted not in known:
+        detail = f"unknown provider {wanted!r}; this server knows {', '.join(known)}"
+    elif llm.is_set_up(wanted):
+        detail = f"provider {wanted!r} has no chat model, so it cannot run triage steps"
+    else:
+        detail = (
+            f"provider {wanted!r} is not set up on this server: `aria providers check` says why"
+        )
+    raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail)

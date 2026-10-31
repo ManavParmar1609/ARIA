@@ -176,6 +176,7 @@ describe("a visitor's own model key", () => {
     for (const path of [
       "/api/v1/runs",
       "/api/v1/runs/run-1/fork",
+      "/api/v1/scenarios/openssh.bruteforce/runs",
       "/api/v1/real-incidents/hdfs-1/replay",
       "/api/v1/ask",
       "/agui",

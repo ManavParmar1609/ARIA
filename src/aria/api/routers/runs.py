@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from fastapi.responses import PlainTextResponse
 from sse_starlette.sse import EventSourceResponse
 
-from aria.api.keys import VisitorKeyDep
+from aria.api.keys import VisitorKeyDep, check_provider
 from aria.api.schemas import (
     Checkpoint,
     Delivery,
@@ -67,19 +67,7 @@ async def create_run(
     request: TriageRequest, state: State, caller: Caller, visitor: VisitorKeyDep, viewer: ViewerDep
 ) -> RunAccepted:
     """Start triage. The run continues in the background; follow it on ``links.stream``."""
-    wanted, llm = request.options.provider, state.services.router
-    keyed = visitor is not None and wanted in llm.config.visitor_keys.providers[visitor.provider]
-    if wanted is not None and not keyed and not llm.can_chat(wanted):
-        known = llm.config.providers
-        if wanted not in known:
-            detail = f"unknown provider {wanted!r}; this server knows {', '.join(known)}"
-        elif llm.is_set_up(wanted):
-            detail = f"provider {wanted!r} has no chat model, so it cannot run triage steps"
-        else:
-            detail = (
-                f"provider {wanted!r} is not set up on this server: `aria providers check` says why"
-            )
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail)
+    check_provider(state, request.options.provider, visitor)
     if request.window_id and not request.logs:
         engine = state.services.engine
         if not await asyncio.to_thread(window_exists, engine, request.window_id):

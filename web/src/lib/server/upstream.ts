@@ -65,6 +65,7 @@ export function visitorCookie(request: NextRequest, id: string): string {
 const MODEL_KEY_ROUTES = [
   /^\/api\/v1\/runs$/,
   /^\/api\/v1\/runs\/[^/]+\/fork$/,
+  /^\/api\/v1\/scenarios\/[^/]+\/runs$/,
   /^\/api\/v1\/real-incidents\/[^/]+\/replay$/,
   /^\/api\/v1\/ask$/,
   /^\/agui$/,
