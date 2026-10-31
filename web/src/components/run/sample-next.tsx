@@ -185,7 +185,7 @@ export function SampleNext({
 
   return (
     <section aria-labelledby="next-title" className="grid gap-4 rounded-lg bg-raised p-5">
-      <h2 id="next-title" className="text-base font-medium">
+      <h2 id="next-title" className="text-xl">
         What next?
       </h2>
       {compare && compare !== runId ? (

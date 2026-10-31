@@ -143,10 +143,10 @@ test.describe("how ARIA works", () => {
     // Still frames, so axe never measures text mid-fade.
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/console/how-it-works/steps");
-    await page.getByRole("button", { name: "safety floors" }).click();
-    const card = page.locator("#term-safety-floor");
+    await page.getByRole("button", { name: "short list" }).click();
+    const card = page.locator("#term-prediction-set");
     await expect(card).toBeVisible();
-    await expect(card).toContainText("lowest severity a dangerous pattern can get");
+    await expect(card).toContainText("The levels ARIA cannot rule out");
     await expectAccessible(page, "how it works, definition open");
     await page.keyboard.press("Escape");
     await expect(card).toBeHidden();

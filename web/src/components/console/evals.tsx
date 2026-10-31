@@ -1,7 +1,9 @@
+import { ChevronRightIcon } from "lucide-react";
 import Link from "next/link";
 
 import { RollingNumber } from "@/components/aria/rolling-number";
-import { PageHeader } from "@/components/console/states";
+import { OnThisPage, type TocItem } from "@/components/console/on-this-page";
+import { PageHeader, SectionHeader } from "@/components/console/states";
 import { BaselineChart, RiskCoverageChart } from "@/components/site/charts";
 import { Button } from "@/components/ui/button";
 import {
@@ -63,23 +65,35 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section aria-labelledby={id} className="grid gap-3 rounded-lg bg-raised p-5 sm:p-6">
-      <div className="grid max-w-3xl gap-1">
+    <section
+      aria-labelledby={id}
+      className="grid gap-4 rounded-card border border-rule bg-raised p-5 sm:p-6"
+    >
+      <div className="grid max-w-3xl gap-1.5">
         {/* Clear of the sticky phone header when a link jumps here. */}
-        <h3 id={id} className="scroll-mt-24 text-lg tracking-heading lg:scroll-mt-8">
+        <h3 id={id} className="scroll-mt-24 text-xl leading-snug lg:scroll-mt-8">
           {title}
         </h3>
-        <p className="text-sm text-muted-foreground">{what}</p>
+        <p className="text-base text-muted-foreground">{what}</p>
       </div>
-      {headline ? <p className="max-w-prose leading-relaxed">{headline}</p> : null}
+      {headline ? (
+        <div className="grid max-w-3xl gap-1 rounded-md bg-panel-keylime px-4 py-3">
+          <p className="text-sm font-semibold text-heading">Result</p>
+          <p className="text-base leading-relaxed text-foreground">{headline}</p>
+        </div>
+      ) : null}
       <details className="group">
-        <summary className="flex min-h-6 w-fit cursor-pointer items-center text-sm font-medium text-muted-foreground hover:text-heading">
+        <summary className="inline-flex min-h-9 w-fit cursor-pointer items-center gap-1.5 rounded-sm text-sm font-medium text-heading underline decoration-control underline-offset-4 hover:decoration-heading [&::-webkit-details-marker]:hidden">
+          <ChevronRightIcon
+            aria-hidden
+            className="size-4 transition-transform duration-(--duration-quick) group-open:rotate-90 motion-reduce:transition-none"
+          />
           {/* Named for its test, so a list of the page's controls tells them apart (RQ-p2). */}
           <span className="group-open:hidden">
-            Show details<span className="sr-only">: {title}</span>
+            Show how it was measured<span className="sr-only">: {title}</span>
           </span>
           <span className="hidden group-open:inline">
-            Hide details<span className="sr-only">: {title}</span>
+            Hide how it was measured<span className="sr-only">: {title}</span>
           </span>
         </summary>
         <div className="grid gap-5 pt-5">
@@ -928,15 +942,16 @@ export function Evals({
   const stages = Object.entries(p.stageP50)
     .map(([step, ms]) => [NODE_LABEL[step] ?? step, ms] as [string, number])
     .sort((a, b) => b[1] - a[1]);
+  const toc = contents(Boolean(real), Boolean(more));
   return (
-    <div className="grid gap-12">
+    <div className="grid gap-8">
       <PageHeader
         title="Test results"
         description={
           <>
-            How ARIA was tested, in four plain questions, with the simplest methods it should beat
-            beside it, including where they win. Measured on {data.createdAt.slice(0, 10)}, and
-            anyone can measure them again from the source code.{" "}
+            How ARIA was tested on public, labelled data, beside simpler methods it should beat,
+            including where they win. Measured on {data.createdAt.slice(0, 10)}; anyone can run the
+            tests again from the source code.{" "}
             <a
               href={EVAL_DOC_URL}
               className="text-foreground underline decoration-control underline-offset-4"
@@ -948,323 +963,393 @@ export function Evals({
         }
       />
 
-      {more ? <TestQuestions data={data} real={real} more={more} /> : null}
+      <OnThisPage items={toc} variant="chips" />
+      <div className="grid gap-12 xl:grid-cols-[minmax(0,1fr)_14rem]">
+        <div className="grid min-w-0 gap-16">
+          {more ? (
+            <section aria-labelledby="ev-questions" className="grid gap-6">
+              <SectionHeader
+                id="ev-questions"
+                title="The four questions"
+                description="The short answer to each, with the evidence under it."
+              />
+              <TestQuestions data={data} real={real} more={more} />
+            </section>
+          ) : null}
 
-      <section aria-labelledby="ev-real-data" className="grid gap-4">
-        <div className="grid max-w-3xl gap-2 border-t border-rule pt-6">
-          <h2 id="ev-real-data" className="text-xl tracking-heading">
-            Each test on real data
-          </h2>
-          <p className="text-muted-foreground">
-            Logs, jobs, tickets, incidents and attacks, with the labels their owners gave them. Open
-            a card for its tables, intervals, method and source.
-          </p>
-        </div>
-        {real ? <RealSection real={real} /> : null}
-        {more ? <MoreRealSections more={more} data={data} /> : null}
-      </section>
-
-      <section aria-labelledby="ev-built" className="grid gap-4">
-        <div className="grid max-w-3xl gap-2 border-t border-rule pt-6">
-          <h2 id="ev-built" className="text-xl tracking-heading">
-            Each test on built samples
-          </h2>
-          <p className="max-w-prose text-muted-foreground">
-            Each sample is real Loghub log lines arranged into an incident, so these results are not
-            accuracy on production incidents.
-          </p>
-        </div>
-        <Section
-          id="ev-severity"
-          title="Severity on built samples"
-          what="Real log lines composed into incidents, each given a level by a written policy."
-          headline={severityResult(data)}
-          intro={`${s.n} labelled windows. ARIA's policy against simpler methods on the same windows.`}
-        >
-          <Facts
-            items={[
-              ["Right level (accuracy)", pct(s.accuracy)],
-              ["95% interval", `${pct(s.ci[0] ?? 0)} to ${pct(s.ci[1] ?? 0)}`],
-              ["Balance across levels (macro-F1)", s.macroF1.toFixed(3)],
-              ["Agreement, near misses counting half (weighted kappa)", s.kappa.toFixed(3)],
-              ["Serious rated minor (SEV1-2 as SEV3-4)", pct(s.severeUnderTriage)],
-              ["Rated too high", pct(s.overTriage)],
-            ]}
-          />
-          <div className="grid gap-8 xl:grid-cols-2">
-            <BaselineChart methods={s.methods} />
-            <Confusion matrix={s.confusion} />
-          </div>
-          <Table aria-label="Precision and recall by severity">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Severity</TableHead>
-                <TableHead className="text-right">Right flags (precision)</TableHead>
-                <TableHead className="text-right">Caught (recall)</TableHead>
-                <TableHead className="text-right">Balance (F1)</TableHead>
-                <TableHead className="text-right">Windows</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {SEVERITIES.map((sev) => {
-                const c = s.perClass[sev];
-                return (
-                  <TableRow key={sev}>
-                    <TableHead scope="row">{sev}</TableHead>
-                    <TableCell className="tabular text-right">{pct(c?.precision)}</TableCell>
-                    <TableCell className="tabular text-right">{pct(c?.recall)}</TableCell>
-                    <TableCell className="tabular text-right">{c?.f1.toFixed(3)}</TableCell>
-                    <TableCell className="tabular text-right">{c?.support}</TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </Section>
-
-        <Section
-          id="ev-calibration"
-          title="Knowing when not to decide"
-          what="Does ARIA's confidence mean what it says, and does it pass the hard ones to a person?"
-          headline={decidingResult(data)}
-          intro="A confident wrong answer is worse than a flagged one. These measure whether ARIA's confidence means what it says."
-        >
-          <Facts
-            items={[
-              ["Gap between confidence and hit rate (calibration error)", s.ece.toFixed(3)],
-              ["Probability error (Brier score; 0 is perfect)", s.brier.toFixed(3)],
-              [
-                `Short list held the right level (coverage; promised ${Math.round(s.targetCoverage * 100)}%)`,
-                pct(s.coverage),
-              ],
-              ["Short list held the right level, with safety floors", pct(s.coverageWithFloors)],
-              ["Levels on the short list, on average", s.setSize.toFixed(3)],
-              ["Error as ARIA decides more alone (area under risk-coverage)", s.aurc.toFixed(3)],
-            ]}
-          />
-          <div className="grid gap-8 xl:grid-cols-2">
-            <RiskCoverageChart
-              points={s.riskCoverage}
-              operating={{ coverage: s.autoDecided, accuracy: s.accuracyWhenAuto }}
+          <section aria-labelledby="ev-real-data" className="grid gap-6">
+            <SectionHeader
+              id="ev-real-data"
+              title="Tests on real data"
+              description="Logs, jobs, tickets, incidents and attacks, judged against the labels their owners gave them."
             />
-            <div className="grid content-start gap-3 text-sm">
-              <p>
-                ARIA decided{" "}
-                <span className="font-medium text-foreground">{pct(s.autoDecided)}</span> of windows
-                alone, at {pct(s.accuracyWhenAuto)} accuracy. Of the rest, which it sent to review,
-                its own guess was right {pct(s.accuracyWhenFlagged)} of the time.
-              </p>
-              <Bars
-                label="Who decided"
-                rows={Object.entries(s.decidedBy).map(
-                  ([k, v]) => [decidedByLabel(k), v] as [string, number],
-                )}
-                max={s.n}
-                format={(v) => `${v}`}
-              />
+            <div className="grid gap-4">
+              {real ? <RealSection real={real} /> : null}
+              {more ? <MoreRealSections more={more} data={data} /> : null}
             </div>
-          </div>
-        </Section>
+          </section>
 
-        <Section
-          id="ev-systems"
-          title="By log format"
-          what="The same severity test, split by the system each log came from."
-          intro="Labels come from the scenario policy, except BlueGene/L, which uses its real alert tags."
-        >
-          <Table aria-label="Severity accuracy by system">
-            <TableHeader>
-              <TableRow>
-                <TableHead>System</TableHead>
-                <TableHead className="text-right">Windows</TableHead>
-                <TableHead className="text-right">Right level (accuracy)</TableHead>
-                <TableHead className="text-right">Serious rated minor</TableHead>
-                <TableHead>Labels from</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {Object.entries(s.bySystem).map(([system, v]) => (
-                <TableRow key={system}>
-                  <TableHead scope="row">{systemName(system)}</TableHead>
-                  <TableCell className="tabular text-right">{v.n}</TableCell>
-                  <TableCell className="tabular text-right">{pct(v.accuracy)}</TableCell>
-                  <TableCell
-                    className={cn("tabular text-right", v.severe_under_triage > 0 && "text-danger")}
-                  >
-                    {pct(v.severe_under_triage)}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {v.label_source.replaceAll("_", " ")}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Section>
-
-        <Section
-          id="ev-pipeline"
-          title="End to end on built samples"
-          what="Each run goes through every step, offline, up to the review."
-          headline={endToEndResult(data)}
-          intro={`${p.n} runs through the whole graph, offline, to the review pause.`}
-        >
-          <Facts
-            items={[
-              ["Reports that passed the citation check", pct(p.valid, 0)],
-              ["Every claim cited", pct(p.cited, 0)],
-              ["Right past incident in the top three", pct(p.recallAt3, 0)],
-              ["Leading cause right", pct(p.leadingCorrect, 0)],
-              [
-                "False alarms on quiet windows",
-                `${Math.round(p.falseAlarms * p.quietRuns)} of ${p.quietRuns}`,
-              ],
-              [
-                "Ready for review, median / slowest 5%",
-                `${p.p50s.toFixed(2)} / ${p.p95s.toFixed(2)} s`,
-              ],
-            ]}
-          />
-          <div className="grid gap-3">
-            <h4 className="font-sans text-sm font-semibold">Median time per step</h4>
-            <Bars
-              label="Median milliseconds per graph step"
-              rows={stages}
-              max={stages[0]?.[1] ?? 1}
-              format={(v) => `${Math.round(v)} ms`}
+          <section aria-labelledby="ev-built" className="grid gap-6">
+            <SectionHeader
+              id="ev-built"
+              title="Tests on built samples"
+              description="Real log lines from public collections, arranged into incidents. They show how ARIA behaves, not its accuracy on production incidents."
             />
-          </div>
-        </Section>
+            <div className="grid gap-4">
+              <Section
+                id="ev-severity"
+                title="Severity on built samples"
+                what="Real log lines composed into incidents, each given a level by a written policy."
+                headline={severityResult(data)}
+                intro={`${s.n} labelled windows. ARIA's policy against simpler methods on the same windows.`}
+              >
+                <Facts
+                  items={[
+                    ["Right level (accuracy)", pct(s.accuracy)],
+                    ["95% interval", `${pct(s.ci[0] ?? 0)} to ${pct(s.ci[1] ?? 0)}`],
+                    ["Balance across levels (macro-F1)", s.macroF1.toFixed(3)],
+                    ["Agreement, near misses counting half (weighted kappa)", s.kappa.toFixed(3)],
+                    ["Serious rated minor (SEV1-2 as SEV3-4)", pct(s.severeUnderTriage)],
+                    ["Rated too high", pct(s.overTriage)],
+                  ]}
+                />
+                <div className="grid gap-8 xl:grid-cols-2">
+                  <BaselineChart methods={s.methods} />
+                  <Confusion matrix={s.confusion} />
+                </div>
+                <Table aria-label="Precision and recall by severity">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Severity</TableHead>
+                      <TableHead className="text-right">Right flags (precision)</TableHead>
+                      <TableHead className="text-right">Caught (recall)</TableHead>
+                      <TableHead className="text-right">Balance (F1)</TableHead>
+                      <TableHead className="text-right">Windows</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {SEVERITIES.map((sev) => {
+                      const c = s.perClass[sev];
+                      return (
+                        <TableRow key={sev}>
+                          <TableHead scope="row">{sev}</TableHead>
+                          <TableCell className="tabular text-right">{pct(c?.precision)}</TableCell>
+                          <TableCell className="tabular text-right">{pct(c?.recall)}</TableCell>
+                          <TableCell className="tabular text-right">{c?.f1.toFixed(3)}</TableCell>
+                          <TableCell className="tabular text-right">{c?.support}</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </Section>
 
-        <Section
-          id="ev-robustness"
-          title="Reading logs, and hostile input"
-          what="Does ARIA group log lines the way people did, and stay standing on broken or hostile lines?"
-          headline={readingResult(data)}
-          intro={`Template grouping against Loghub's and GAIA's hand labels, and ${r.edgeN.toLocaleString("en")} hostile or broken inputs.`}
-        >
-          <div className="grid gap-8 xl:grid-cols-2">
-            <div className="grid content-start gap-3">
-              <h4 className="font-sans text-sm font-semibold">
-                Grouping accuracy by system (mean {data.parsing.meanAccuracy.toFixed(3)})
-              </h4>
-              <Bars
-                label="Grouping accuracy by system"
-                rows={Object.entries(data.parsing.bySystem)
-                  .map(([k, v]) => [systemName(k), v.grouping_accuracy] as [string, number])
-                  .sort((a, b) => b[1] - a[1])}
-                format={(v) => v.toFixed(3)}
-              />
-              <p className="text-sm text-muted-foreground">
-                On GAIA&apos;s {data.parsing.gaia.lines.toLocaleString("en")} labelled lines from{" "}
-                {data.parsing.gaia.systems} systems, the mean is{" "}
-                {data.parsing.gaia.meanAccuracy.toFixed(3)}:{" "}
-                {data.parsing.gaia.knownAccuracy.toFixed(3)} on the Loghub systems and{" "}
-                {data.parsing.gaia.newAccuracy.toFixed(3)} on{" "}
-                {data.parsing.gaia.newSystems.map((k) => GAIA_NAMES[k] ?? k).join(", ")}, which ARIA
-                has no format or settings for.
-              </p>
+              <Section
+                id="ev-calibration"
+                title="Knowing when not to decide"
+                what="Does ARIA's confidence mean what it says, and does it pass the hard ones to a person?"
+                headline={decidingResult(data)}
+                intro="A confident wrong answer is worse than a flagged one. These measure whether ARIA's confidence means what it says."
+              >
+                <Facts
+                  items={[
+                    ["Gap between confidence and hit rate (calibration error)", s.ece.toFixed(3)],
+                    ["Probability error (Brier score; 0 is perfect)", s.brier.toFixed(3)],
+                    [
+                      `Short list held the right level (coverage; promised ${Math.round(s.targetCoverage * 100)}%)`,
+                      pct(s.coverage),
+                    ],
+                    [
+                      "Short list held the right level, with safety floors",
+                      pct(s.coverageWithFloors),
+                    ],
+                    ["Levels on the short list, on average", s.setSize.toFixed(3)],
+                    [
+                      "Error as ARIA decides more alone (area under risk-coverage)",
+                      s.aurc.toFixed(3),
+                    ],
+                  ]}
+                />
+                <div className="grid gap-8 xl:grid-cols-2">
+                  <RiskCoverageChart
+                    points={s.riskCoverage}
+                    operating={{ coverage: s.autoDecided, accuracy: s.accuracyWhenAuto }}
+                  />
+                  <div className="grid content-start gap-3 text-sm">
+                    <p>
+                      ARIA decided{" "}
+                      <span className="font-medium text-foreground">{pct(s.autoDecided)}</span> of
+                      windows alone, at {pct(s.accuracyWhenAuto)} accuracy. Of the rest, which it
+                      sent to review, its own guess was right {pct(s.accuracyWhenFlagged)} of the
+                      time.
+                    </p>
+                    <Bars
+                      label="Who decided"
+                      rows={Object.entries(s.decidedBy).map(
+                        ([k, v]) => [decidedByLabel(k), v] as [string, number],
+                      )}
+                      max={s.n}
+                      format={(v) => `${v}`}
+                    />
+                  </div>
+                </div>
+              </Section>
+
+              <Section
+                id="ev-systems"
+                title="By log format"
+                what="The same severity test, split by the system each log came from."
+                intro="Labels come from the scenario policy, except BlueGene/L, which uses its real alert tags."
+              >
+                <Table aria-label="Severity accuracy by system">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>System</TableHead>
+                      <TableHead className="text-right">Windows</TableHead>
+                      <TableHead className="text-right">Right level (accuracy)</TableHead>
+                      <TableHead className="text-right">Serious rated minor</TableHead>
+                      <TableHead>Labels from</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {Object.entries(s.bySystem).map(([system, v]) => (
+                      <TableRow key={system}>
+                        <TableHead scope="row">{systemName(system)}</TableHead>
+                        <TableCell className="tabular text-right">{v.n}</TableCell>
+                        <TableCell className="tabular text-right">{pct(v.accuracy)}</TableCell>
+                        <TableCell
+                          className={cn(
+                            "tabular text-right",
+                            v.severe_under_triage > 0 && "text-danger",
+                          )}
+                        >
+                          {pct(v.severe_under_triage)}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {v.label_source.replaceAll("_", " ")}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Section>
+
+              <Section
+                id="ev-pipeline"
+                title="End to end on built samples"
+                what="Each run goes through every step, offline, up to the review."
+                headline={endToEndResult(data)}
+                intro={`${p.n} runs through the whole graph, offline, to the review pause.`}
+              >
+                <Facts
+                  items={[
+                    ["Reports that passed the citation check", pct(p.valid, 0)],
+                    ["Every claim cited", pct(p.cited, 0)],
+                    ["Right past incident in the top three", pct(p.recallAt3, 0)],
+                    ["Leading cause right", pct(p.leadingCorrect, 0)],
+                    [
+                      "False alarms on quiet windows",
+                      `${Math.round(p.falseAlarms * p.quietRuns)} of ${p.quietRuns}`,
+                    ],
+                    [
+                      "Ready for review, median / slowest 5%",
+                      `${p.p50s.toFixed(2)} / ${p.p95s.toFixed(2)} s`,
+                    ],
+                  ]}
+                />
+                <div className="grid gap-3">
+                  <h4 className="font-sans text-sm font-semibold">Median time per step</h4>
+                  <Bars
+                    label="Median milliseconds per graph step"
+                    rows={stages}
+                    max={stages[0]?.[1] ?? 1}
+                    format={(v) => `${Math.round(v)} ms`}
+                  />
+                </div>
+              </Section>
+
+              <Section
+                id="ev-robustness"
+                title="Reading logs, and hostile input"
+                what="Does ARIA group log lines the way people did, and stay standing on broken or hostile lines?"
+                headline={readingResult(data)}
+                intro={`Template grouping against Loghub's and GAIA's hand labels, and ${r.edgeN.toLocaleString("en")} hostile or broken inputs.`}
+              >
+                <div className="grid gap-8 xl:grid-cols-2">
+                  <div className="grid content-start gap-3">
+                    <h4 className="font-sans text-sm font-semibold">
+                      Grouping accuracy by system (mean {data.parsing.meanAccuracy.toFixed(3)})
+                    </h4>
+                    <Bars
+                      label="Grouping accuracy by system"
+                      rows={Object.entries(data.parsing.bySystem)
+                        .map(([k, v]) => [systemName(k), v.grouping_accuracy] as [string, number])
+                        .sort((a, b) => b[1] - a[1])}
+                      format={(v) => v.toFixed(3)}
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      On GAIA&apos;s {data.parsing.gaia.lines.toLocaleString("en")} labelled lines
+                      from {data.parsing.gaia.systems} systems, the mean is{" "}
+                      {data.parsing.gaia.meanAccuracy.toFixed(3)}:{" "}
+                      {data.parsing.gaia.knownAccuracy.toFixed(3)} on the Loghub systems and{" "}
+                      {data.parsing.gaia.newAccuracy.toFixed(3)} on{" "}
+                      {data.parsing.gaia.newSystems.map((k) => GAIA_NAMES[k] ?? k).join(", ")},
+                      which ARIA has no format or settings for.
+                    </p>
+                  </div>
+                  <div className="grid content-start gap-3">
+                    <h4 className="font-sans text-sm font-semibold">
+                      Attacks quarantined, by family (overall {pct(r.attackRecall)})
+                    </h4>
+                    <Bars
+                      label="Attack recall by family"
+                      rows={Object.entries(r.byFamily)
+                        .map(([k, v]) => [k.replaceAll("_", " "), v] as [string, number])
+                        .sort((a, b) => a[1] - b[1])}
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Parser errors: {r.parserErrors}. Benign lines quarantined:{" "}
+                      {pct(r.benignFalsePositives)}. With planted instructions in {r.windows}{" "}
+                      incident windows, severity stayed the same in {pct(r.severityInvariant, 0)}{" "}
+                      and tool use in {pct(r.toolUseInvariant, 0)}; {r.reportsWithInjectedText}{" "}
+                      reports repeated injected text. The detector was tuned on this corpus, so read
+                      the recall as an upper bound.
+                    </p>
+                  </div>
+                </div>
+              </Section>
+
+              <Section
+                id="ev-live"
+                title="With a language model"
+                what={`The built-sample runs again, with ${live.answeredBy} writing the reports.`}
+                headline={liveResult(data)}
+                intro={`${live.n} runs through ${live.answeredBy}, ${live.createdAt.slice(0, 10)}.`}
+              >
+                <Facts
+                  items={[
+                    ["Reports that passed the citation check", pct(live.valid, 0)],
+                    ["Every claim cited", pct(live.cited, 0)],
+                    [
+                      "Leading hypothesis correct",
+                      `${Math.round(live.leadingCorrect * live.incidentRuns)} of ${live.incidentRuns}`,
+                    ],
+                    ["Ready for review, median", `${Math.round(live.p50s)} s`],
+                    ["Hit the latency budget", `${live.exhausted} of ${live.n}`],
+                    [
+                      "Most tokens in a run",
+                      `${live.maxTokens.toLocaleString("en")} of ${live.tokenLimit.toLocaleString("en")}`,
+                    ],
+                  ]}
+                />
+                <Table aria-label="Live provider calls">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Provider</TableHead>
+                      <TableHead>Model</TableHead>
+                      <TableHead className="text-right">Calls</TableHead>
+                      <TableHead className="text-right">Failed</TableHead>
+                      <TableHead className="text-right">p50</TableHead>
+                      <TableHead className="text-right">p95</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {live.providers.map((pr) => (
+                      <TableRow key={pr.name}>
+                        <TableHead scope="row">{pr.name}</TableHead>
+                        <TableCell className="font-mono text-xs">{pr.models.join(", ")}</TableCell>
+                        <TableCell className="tabular text-right">{pr.calls}</TableCell>
+                        <TableCell className="tabular text-right">{pr.failures}</TableCell>
+                        <TableCell className="tabular text-right">{pr.p50s.toFixed(1)} s</TableCell>
+                        <TableCell className="tabular text-right">{pr.p95s.toFixed(1)} s</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <p className="max-w-prose text-sm text-muted-foreground">
+                  Too few runs to generalise from. Latency depended on the hosted service&apos;s
+                  load that day.{" "}
+                  {live.exhausted > 0
+                    ? `${live.exhausted === 1 ? "One run" : `${live.exhausted} runs`} used up the ${live.latencyBudgetS} s budget after the model had written ${live.exhausted === 1 ? "its report" : "their reports"}, so only the steps after it fell back to the deterministic path. `
+                    : `No run used up the ${live.latencyBudgetS} s budget. `}
+                  {live.writtenByModel === live.n
+                    ? "Every report was written by the model"
+                    : `The model wrote ${live.writtenByModel} of ${live.n} reports`}
+                  {live.valid === 1 ? ", and every one validated." : "."}
+                </p>
+              </Section>
             </div>
-            <div className="grid content-start gap-3">
-              <h4 className="font-sans text-sm font-semibold">
-                Attacks quarantined, by family (overall {pct(r.attackRecall)})
-              </h4>
-              <Bars
-                label="Attack recall by family"
-                rows={Object.entries(r.byFamily)
-                  .map(([k, v]) => [k.replaceAll("_", " "), v] as [string, number])
-                  .sort((a, b) => a[1] - b[1])}
-              />
-              <p className="text-sm text-muted-foreground">
-                Parser errors: {r.parserErrors}. Benign lines quarantined:{" "}
-                {pct(r.benignFalsePositives)}. With planted instructions in {r.windows} incident
-                windows, severity stayed the same in {pct(r.severityInvariant, 0)} and tool use in{" "}
-                {pct(r.toolUseInvariant, 0)}; {r.reportsWithInjectedText} reports repeated injected
-                text. The detector was tuned on this corpus, so read the recall as an upper bound.
-              </p>
-            </div>
-          </div>
-        </Section>
+          </section>
 
-        <Section
-          id="ev-live"
-          title="With a language model"
-          what={`The built-sample runs again, with ${live.answeredBy} writing the reports.`}
-          headline={liveResult(data)}
-          intro={`${live.n} runs through ${live.answeredBy}, ${live.createdAt.slice(0, 10)}.`}
-        >
-          <Facts
-            items={[
-              ["Reports that passed the citation check", pct(live.valid, 0)],
-              ["Every claim cited", pct(live.cited, 0)],
-              [
-                "Leading hypothesis correct",
-                `${Math.round(live.leadingCorrect * live.incidentRuns)} of ${live.incidentRuns}`,
-              ],
-              ["Ready for review, median", `${Math.round(live.p50s)} s`],
-              ["Hit the latency budget", `${live.exhausted} of ${live.n}`],
-              [
-                "Most tokens in a run",
-                `${live.maxTokens.toLocaleString("en")} of ${live.tokenLimit.toLocaleString("en")}`,
-              ],
-            ]}
-          />
-          <Table aria-label="Live provider calls">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Provider</TableHead>
-                <TableHead>Model</TableHead>
-                <TableHead className="text-right">Calls</TableHead>
-                <TableHead className="text-right">Failed</TableHead>
-                <TableHead className="text-right">p50</TableHead>
-                <TableHead className="text-right">p95</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {live.providers.map((pr) => (
-                <TableRow key={pr.name}>
-                  <TableHead scope="row">{pr.name}</TableHead>
-                  <TableCell className="font-mono text-xs">{pr.models.join(", ")}</TableCell>
-                  <TableCell className="tabular text-right">{pr.calls}</TableCell>
-                  <TableCell className="tabular text-right">{pr.failures}</TableCell>
-                  <TableCell className="tabular text-right">{pr.p50s.toFixed(1)} s</TableCell>
-                  <TableCell className="tabular text-right">{pr.p95s.toFixed(1)} s</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <p className="max-w-prose text-sm text-muted-foreground">
-            Too few runs to generalise from. Latency depended on the hosted service&apos;s load that
-            day.{" "}
-            {live.exhausted > 0
-              ? `${live.exhausted === 1 ? "One run" : `${live.exhausted} runs`} used up the ${live.latencyBudgetS} s budget after the model had written ${live.exhausted === 1 ? "its report" : "their reports"}, so only the steps after it fell back to the deterministic path. `
-              : `No run used up the ${live.latencyBudgetS} s budget. `}
-            {live.writtenByModel === live.n
-              ? "Every report was written by the model"
-              : `The model wrote ${live.writtenByModel} of ${live.n} reports`}
-            {live.valid === 1 ? ", and every one validated." : "."}
-          </p>
-        </Section>
-      </section>
-
-      {/* The page's way on: put the numbers to a test of one's own, or learn to read a rating. */}
-      <section aria-labelledby="ev-next" className="grid max-w-3xl gap-3 border-t border-rule pt-6">
-        <h2 id="ev-next" className="text-xl tracking-heading">
-          What next?
-        </h2>
-        <ul className="flex flex-wrap gap-2">
-          <li>
-            <Button asChild variant="primary">
-              <Link href="/console/runs/new">Try it on real logs</Link>
-            </Button>
-          </li>
-          <li>
-            <Button asChild>
-              <Link href="/console/guide#read-a-run">Learn to read a rating</Link>
-            </Button>
-          </li>
-        </ul>
-      </section>
+          {/* The page's way on: put the numbers to a test of one's own, or learn to read a rating. */}
+          <section aria-labelledby="ev-next" className="grid gap-4">
+            <SectionHeader id="ev-next" title="What next?" />
+            <ul className="flex flex-wrap gap-2">
+              <li>
+                <Button asChild variant="primary">
+                  <Link href="/console/runs/new">Try it on real logs</Link>
+                </Button>
+              </li>
+              <li>
+                <Button asChild>
+                  <Link href="/console/guide#read-a-run">Learn to read a rating</Link>
+                </Button>
+              </li>
+            </ul>
+          </section>
+        </div>
+        <OnThisPage items={toc} variant="rail" />
+      </div>
     </div>
   );
+}
+
+/** The page's sections and the tests in each, for its "On this page" list. */
+function contents(real: boolean, more: boolean): TocItem[] {
+  const realTests = [
+    ...(real ? [{ id: "ev-real", label: "Hadoop file system blocks" }] : []),
+    ...(more
+      ? [
+          { id: "ev-bgl", label: "BlueGene/L alarm tags" },
+          { id: "ev-thunderbird", label: "Thunderbird alarm tags" },
+          { id: "ev-hadoop", label: "Hadoop jobs" },
+          { id: "ev-openstack", label: "OpenStack bugs" },
+          { id: "ev-builds", label: "Failed CI builds" },
+          { id: "ev-tickets", label: "Service desk tickets" },
+          { id: "ev-gitlab", label: "GitLab.com incidents" },
+          { id: "ev-postmortems", label: "Cloud post-mortems" },
+          { id: "ev-injection", label: "Prompt-injection attacks" },
+        ]
+      : []),
+  ];
+  return [
+    ...(more
+      ? [
+          {
+            id: "ev-questions",
+            label: "The four questions",
+            children: [
+              { id: "q-unsure", label: "Does it say when it isn't sure?" },
+              { id: "q-alarms", label: "Does it catch serious problems?" },
+              { id: "q-memory", label: "Does it find the right past incident?" },
+              { id: "q-limits", label: "Where does it fall short?" },
+            ],
+          },
+        ]
+      : []),
+    { id: "ev-real-data", label: "Tests on real data", children: realTests },
+    {
+      id: "ev-built",
+      label: "Tests on built samples",
+      children: [
+        { id: "ev-severity", label: "Severity" },
+        { id: "ev-calibration", label: "Knowing when not to decide" },
+        { id: "ev-systems", label: "By log format" },
+        { id: "ev-pipeline", label: "End to end" },
+        { id: "ev-robustness", label: "Reading logs, hostile input" },
+        { id: "ev-live", label: "With a language model" },
+      ],
+    },
+    { id: "ev-next", label: "What next?" },
+  ];
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { LoaderCircleIcon, PlayIcon } from "lucide-react";
+import { ArrowLeftIcon, ArrowRightIcon, LoaderCircleIcon, PlayIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
@@ -18,11 +18,13 @@ import {
   useStartSample,
 } from "@/lib/api/hooks";
 import type { Scenario, SizeChoice } from "@/lib/api/types";
+import { systemName } from "@/lib/systems";
 import { cn } from "@/lib/utils";
 
 // New triage's samples: real Loghub lines arranged into incidents, built on the server. Visitors
-// pick where the logs come from first (the choice stays in the address, so Back and sharing
-// work), then a sample, then run it. Each card offers a size only where it changes the result.
+// pick the log the incident comes from first (the choice stays in the address, so Back and sharing
+// work), then one of that log's issues, then run it. Each card offers a size only where it
+// changes the result. A group of logs (?source=security and so on) still lists its issues.
 
 export const SOURCES = [
   { key: "security", name: "Security and sign-ins" },
@@ -32,6 +34,50 @@ export const SOURCES = [
   { key: "noise", name: "False alarms" },
 ] as const;
 type Source = (typeof SOURCES)[number]["key"] | "all";
+
+// The groups the logs are shown in, and each log in a line someone new to it can read.
+const GROUPS = [
+  ...SOURCES.filter((s) => s.key !== "noise"),
+  { key: "desktop", name: "Phones and computers" },
+  { key: "other", name: "Other logs" },
+] as const;
+type Group = (typeof GROUPS)[number]["key"];
+
+interface DataSource {
+  system: string;
+  group: Group;
+  about: string;
+}
+
+const DATA_SOURCES: DataSource[] = [
+  { system: "openssh", group: "security", about: "Sign-in attempts on a server's remote login" },
+  { system: "linux", group: "security", about: "A Linux server's system and sign-in log" },
+  { system: "apache", group: "web", about: "A web server's error log" },
+  { system: "openstack", group: "web", about: "A private cloud's servers and disk images" },
+  { system: "proxifier", group: "web", about: "A desktop proxy's connection log" },
+  { system: "hdfs", group: "bigdata", about: "The storage servers of a Hadoop cluster" },
+  { system: "hadoop", group: "bigdata", about: "Jobs running on a Hadoop cluster" },
+  {
+    system: "zookeeper",
+    group: "bigdata",
+    about: "The service that keeps a cluster's servers in agreement",
+  },
+  { system: "bgl", group: "hpc", about: "A supercomputer at Lawrence Livermore" },
+  { system: "thunderbird", group: "hpc", about: "A supercomputer at Sandia" },
+  { system: "hpc", group: "hpc", about: "A computing cluster at Los Alamos" },
+  { system: "android", group: "desktop", about: "An Android phone's system log" },
+  { system: "mac", group: "desktop", about: "A Mac's system log" },
+];
+
+/** Every log a sample or a real incident comes from, known ones first, in their groups' order. */
+function dataSources(samples: Scenario[], reals: RealIncident[]): DataSource[] {
+  const used = new Set([...samples.map((s) => s.system), ...reals.map((r) => r.system)]);
+  const known = DATA_SOURCES.filter((d) => used.has(d.system));
+  const other = [...used]
+    .filter((system) => !DATA_SOURCES.some((d) => d.system === system))
+    .map((system): DataSource => ({ system, group: "other", about: "" }));
+  return [...known, ...other];
+}
 const isSource = (value: string | null): value is Source =>
   value === "all" || SOURCES.some((s) => s.key === value);
 
@@ -300,6 +346,134 @@ function SourceFilter({ current, counts }: { current: Source; counts: Record<Sou
   );
 }
 
+/** The address of New triage with another log chosen (`?log=`), or none. A log has its own
+ * parameter: "hpc" names both the supercomputers' group and one cluster's log. */
+function useLogHref() {
+  const params = useSearchParams();
+  const pathname = usePathname();
+  return (log: string | null) => {
+    const next = new URLSearchParams(params.toString());
+    next.delete("source");
+    if (log) next.set("log", log);
+    else next.delete("log");
+    const qs = next.toString();
+    return `${pathname}${qs ? `?${qs}` : ""}`;
+  };
+}
+
+/** Step one: every log an incident can come from, in groups, each with how many issues it has. */
+function SourceTiles({ samples, reals }: { samples: Scenario[]; reals: RealIncident[] }) {
+  const href = useLogHref();
+  const sources = dataSources(samples, reals);
+  const count = (system: string) =>
+    samples.filter((s) => s.system === system).length +
+    reals.filter((r) => r.system === system).length;
+  return (
+    <section aria-labelledby="sources-title" className="grid gap-6">
+      <div className="grid max-w-3xl gap-2">
+        <h2
+          id="sources-title"
+          className="font-display text-[1.75rem] leading-tight font-normal tracking-heading"
+        >
+          Or choose where the logs come from
+        </h2>
+        <p className="text-lg text-muted-foreground">
+          Each is a real, public log. Choose one to see the incidents ARIA can triage in it.
+        </p>
+      </div>
+      {GROUPS.map((group) => {
+        const inGroup = sources.filter((d) => d.group === group.key);
+        if (!inGroup.length) return null;
+        return (
+          <div key={group.key} className="grid gap-3">
+            <h3 className="text-base text-muted-foreground">{group.name}</h3>
+            <ul className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {inGroup.map((d) => {
+                const n = count(d.system);
+                return (
+                  <li key={d.system}>
+                    <Link
+                      href={href(d.system) as never}
+                      scroll={false}
+                      className="group/source grid h-full content-start gap-1.5 rounded-card border border-rule bg-raised p-5 transition-colors duration-(--duration-quick) hover:border-control"
+                    >
+                      <span className="flex items-baseline justify-between gap-3">
+                        <span className="text-lg font-semibold text-heading">
+                          {systemName(d.system)}
+                        </span>
+                        <span className="tabular shrink-0 text-sm text-muted-foreground">
+                          {n} {n === 1 ? "issue" : "issues"}
+                        </span>
+                      </span>
+                      {d.about ? (
+                        <span className="text-base text-muted-foreground">{d.about}</span>
+                      ) : null}
+                      <span className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-heading">
+                        See its issues
+                        <ArrowRightIcon
+                          aria-hidden
+                          className="size-4 transition-transform duration-(--duration-quick) motion-safe:group-hover/source:translate-x-0.5"
+                        />
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+/** Step two: one log's issues, each ready to run, and the way back to every log. */
+function SourceIssues({
+  source,
+  samples,
+  reals,
+}: {
+  source: DataSource;
+  samples: Scenario[];
+  reals: RealIncident[];
+}) {
+  const href = useLogHref();
+  const group = GROUPS.find((g) => g.key === source.group);
+  return (
+    <section aria-labelledby="issues-title" className="grid gap-6">
+      <Link
+        href={href(null) as never}
+        scroll={false}
+        className="inline-flex min-h-6 w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+      >
+        <ArrowLeftIcon aria-hidden className="size-4" />
+        All logs
+      </Link>
+      <div className="grid max-w-3xl gap-2">
+        {group ? <p className="text-sm font-medium text-muted-foreground">{group.name}</p> : null}
+        <h2
+          id="issues-title"
+          className="font-display text-[1.75rem] leading-tight font-normal tracking-heading"
+        >
+          {systemName(source.system)}
+        </h2>
+        <p className="text-lg text-muted-foreground">
+          {source.about ? `${source.about}. ` : ""}Choose an issue: ARIA builds it from real lines
+          of this log, works through it while you watch, and waits for your review.
+        </p>
+      </div>
+      <ul className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {reals.map((incident) => (
+          <RealIncidentCard key={incident.id} incident={incident} />
+        ))}
+        {samples.map((sample) => (
+          <SampleCard key={sample.id} sample={sample} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export function SampleGallery() {
   const scenarios = useScenarios();
   const real = useRealIncidents();
@@ -362,16 +536,53 @@ export function SampleGallery() {
         (s.key === "bigdata" ? reals.length : 0),
     ]),
   ]) as Record<Source, number>;
+  const log = params.get("log");
+  const chosen = dataSources(samples, reals).find((d) => d.system === log);
+  if (chosen) {
+    return (
+      <SourceIssues
+        source={chosen}
+        samples={samples.filter((s) => s.system === chosen.system)}
+        reals={reals.filter((r) => r.system === chosen.system)}
+      />
+    );
+  }
+  // Every log at once (the default): the quick start, then the logs to choose from.
   const headline = samples.filter((s) => s.headline);
-  // Under "All", the featured cards above are not repeated below. A chosen source shows only its
-  // own full cards, with their sizes, and hides the featured row, so no card appears twice.
-  const featured = new Set(headline.map((s) => s.id));
-  const listed =
-    source === "all"
-      ? samples.filter((s) => !featured.has(s.id))
-      : samples.filter((s) => s.source === source);
-  const listedReals =
-    source === "all" ? reals.slice(1) : source === "bigdata" ? reals : ([] as RealIncident[]);
+  if (source === "all") {
+    return (
+      <div className="grid gap-14">
+        {headline.length || reals.length ? (
+          <section aria-labelledby="start-title" className="grid gap-4">
+            <div className="grid max-w-3xl gap-2">
+              <h2
+                id="start-title"
+                className="font-display text-[1.75rem] leading-tight font-normal tracking-heading"
+              >
+                Start with one of these
+              </h2>
+              <p className="text-lg text-muted-foreground">
+                One click: a real incident, or a sample ARIA handles well.
+              </p>
+            </div>
+            <ul className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {reals.slice(0, 1).map((incident) => (
+                <RealIncidentCard key={incident.id} incident={incident} />
+              ))}
+              {headline.map((sample) => (
+                <SampleCard key={sample.id} sample={sample} compact />
+              ))}
+            </ul>
+          </section>
+        ) : null}
+        <SourceTiles samples={samples} reals={reals} />
+      </div>
+    );
+  }
+
+  // A group of logs: its issues, a few at first.
+  const listed = samples.filter((s) => s.source === source);
+  const listedReals = source === "bigdata" ? reals : ([] as RealIncident[]);
   const total = listed.length + listedReals.length;
   const expanded = showAll === source || total <= FIRST;
   const cards = expanded ? listed : listed.slice(0, Math.max(0, FIRST - listedReals.length));
@@ -379,22 +590,6 @@ export function SampleGallery() {
 
   return (
     <div className="grid gap-12">
-      {source === "all" && (headline.length || reals.length) ? (
-        <section aria-labelledby="start-title" className="grid gap-4">
-          <h2 id="start-title" className="text-xl tracking-heading">
-            Start with one of these
-          </h2>
-          <ul className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {reals.slice(0, 1).map((incident) => (
-              <RealIncidentCard key={incident.id} incident={incident} />
-            ))}
-            {headline.map((sample) => (
-              <SampleCard key={sample.id} sample={sample} compact />
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
       <section aria-labelledby="browse-title" className="grid gap-5">
         <div className="grid gap-2">
           <h2 id="browse-title" className="text-xl tracking-heading">

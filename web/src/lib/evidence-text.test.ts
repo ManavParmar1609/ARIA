@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { evidenceDetail, evidenceTitle, featureName } from "./evidence-text";
+import { evidenceDetail, evidenceTitle, featureName, rawResult } from "./evidence-text";
 
 describe("an evidence title", () => {
   it("reads a pattern as lines like it, with its changing parts as ellipses", () => {
@@ -77,6 +77,81 @@ describe("an evidence title", () => {
     expect(
       evidenceTitle({ kind: "feature", title: "2000 events, 1 errors (0.1%) over 12.0 min" }),
     ).toBe("2,000 lines, 1 error (0.1%), over 12.0 minutes");
+  });
+
+  it("says what a tool did and what came back, without record ids or a cut-off payload", () => {
+    const search = {
+      kind: "tool",
+      title:
+        "search_incidents: 3 similar incidents: syn-hdfs-block_serve_exceptions-51000 block_serve_exceptions (SEV3, 4x); syn-hdfs-block_",
+      data: { tool: "search_incidents", arguments: { query: "got exception while serving" } },
+    };
+    expect(evidenceTitle(search)).toBe(
+      "Searched past incidents for “got exception while serving”: 3 similar incidents",
+    );
+    expect(
+      evidenceTitle({
+        kind: "tool",
+        title: "get_runbook: runbook hdfs-block-serve: 2 mitigation steps (risk low)",
+        data: { tool: "get_runbook", arguments: { slug: "hdfs-block-serve" } },
+      }),
+    ).toBe("Read a runbook: 2 steps to fix it, low risk");
+    expect(
+      evidenceTitle({
+        kind: "tool",
+        title: "get_template_examples: 5 log lines; first: ip-d8315257:50010:Got exception",
+        data: { tool: "get_template_examples", arguments: {} },
+      }),
+    ).toBe("Looked up example lines: 5 lines");
+  });
+
+  it("reads a tool's result as lines, and keeps the raw result for whoever wants it", () => {
+    const detail = JSON.stringify({
+      query: "got exception",
+      incidents: [
+        {
+          incident_id: "syn-1",
+          title: "DataNodes failing to serve blocks",
+          severity: "SEV3",
+          occurrences: 4,
+        },
+      ],
+    });
+    expect(evidenceDetail({ kind: "tool", detail })).toBe(
+      "DataNodes failing to serve blocks (SEV3, seen 4 times)",
+    );
+    expect(rawResult({ kind: "tool", detail })).toContain('"incident_id": "syn-1"');
+    // A long result is stored cut short: no lines then, and the raw text as it is.
+    expect(evidenceDetail({ kind: "tool", detail: '{"lines": [{"line_no": 1' })).toBe("");
+    expect(rawResult({ kind: "tool", detail: '{"lines": [{"line_no": 1' })).toBe(
+      '{"lines": [{"line_no": 1',
+    );
+    expect(rawResult({ kind: "log", detail: "a line" })).toBeNull();
+  });
+
+  it("names a tested cause by what the investigation found, and a runbook by its title", () => {
+    expect(
+      evidenceTitle({
+        kind: "hypothesis",
+        title: "H1 supported: Block serve exceptions on DataNodes",
+        data: { confidence: 0.93 },
+      }),
+    ).toBe("Likely cause, 93% sure: Block serve exceptions on DataNodes");
+    expect(evidenceTitle({ kind: "hypothesis", title: "H2 refuted: A full disk" })).toBe(
+      "Ruled out: A full disk",
+    );
+    expect(
+      evidenceDetail({
+        kind: "hypothesis",
+        detail: "failure mode block_serve_exceptions; component dfs.DataNode$DataXceiver",
+      }),
+    ).toBe("Kind of failure: block serve exceptions. Component: dfs.DataNode$DataXceiver.");
+    expect(
+      evidenceTitle({ kind: "runbook", title: "Runbook hdfs-block-serve: DataNodes failing" }),
+    ).toBe("Runbook: DataNodes failing");
+    expect(evidenceDetail({ kind: "runbook", detail: "1. Decommission it. [risk: medium]" })).toBe(
+      "1. Decommission it. (medium risk)",
+    );
   });
 
   it("leaves every other kind as recorded", () => {

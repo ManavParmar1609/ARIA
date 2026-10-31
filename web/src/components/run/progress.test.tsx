@@ -8,6 +8,7 @@ import {
   progressSteps,
   reachedCount,
   type Step,
+  STEP_MS,
   Steps,
   usePacedSteps,
 } from "./progress";
@@ -142,7 +143,7 @@ describe("usePacedSteps", () => {
     // The carried-over steps show at once; only the review plays, then the strip holds and folds.
     expect(result.current.steps.slice(0, 6).every((s) => s.state === "done")).toBe(true);
     // Each step's timer is set once the one before it has rendered.
-    for (const ms of [400, 1_100]) {
+    for (const ms of [STEP_MS + 20, 1_100]) {
       act(() => {
         vi.advanceTimersByTime(ms);
       });

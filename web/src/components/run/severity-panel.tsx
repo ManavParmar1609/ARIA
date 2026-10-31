@@ -54,7 +54,7 @@ export function SeverityPanel({
       aria-labelledby="severity-title"
       className="grid min-w-0 gap-4 overflow-clip rounded-lg bg-raised p-5"
     >
-      <h2 id="severity-title" className="text-base font-medium">
+      <h2 id="severity-title" className="text-xl">
         How serious
       </h2>
       <div className="grid gap-2">

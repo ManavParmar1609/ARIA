@@ -1,8 +1,7 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
-import { useWideMotion } from "@/lib/motion";
 import { cx } from "@/lib/cx";
 
 export interface GraphStep {
@@ -65,107 +64,52 @@ function edgePath(from: NodeSpec, to: NodeSpec): string {
 const WIDEN = "M246,436 C318,436 318,356 250,356";
 
 /**
- * How a run moves through the graph. On wide screens the diagram stays in view while the steps
- * scroll past, and each step lights the nodes it covers. With reduced motion, or on small
- * screens, everything is drawn at once and the steps read as a list.
+ * How a run moves through the graph: four step cards beside the diagram. Pointing at a step, or
+ * moving focus into it, lights the part of the diagram it covers; otherwise the whole run is lit.
  */
 export function RunGraph({ steps }: { steps: GraphStep[] }) {
-  const root = useRef<HTMLDivElement>(null);
-  // Set while the scroll-driven version runs; until then every step is shown, as a list.
-  const [scrolling, setScrolling] = useState(false);
   const [picked, setPicked] = useState(-1);
-  const active = scrolling ? picked : steps.length - 1;
-  const lit = new Set(steps.slice(0, active + 1).flatMap((s) => s.nodes));
-  const current = new Set(active >= 0 ? (steps[active]?.nodes ?? []) : []);
-
-  useWideMotion(root, ({ gsap, ScrollTrigger }) => {
-    const items = gsap.utils.toArray<HTMLElement>("[data-step]");
-    // The active step is the last one whose top has passed 60% of the viewport, so the zones
-    // touch and a fast scroll cannot skip a step.
-    const pick = () => {
-      const line = window.innerHeight * 0.6;
-      let index = -1;
-      items.forEach((item, i) => {
-        if (item.getBoundingClientRect().top <= line) index = i;
-      });
-      setPicked(index);
-    };
-    ScrollTrigger.create({
-      trigger: "[data-steps]",
-      start: "top bottom",
-      end: "bottom top",
-      onUpdate: pick,
-      onRefresh: pick,
-    });
-    void document.fonts?.ready.then(() => ScrollTrigger.refresh());
-    setScrolling(true);
-    pick();
-    return () => {
-      setScrolling(false);
-      setPicked(-1);
-    };
-  });
+  const lit = new Set((picked >= 0 ? steps.slice(0, picked + 1) : steps).flatMap((s) => s.nodes));
+  const current = new Set(picked >= 0 ? (steps[picked]?.nodes ?? []) : []);
 
   return (
-    <div ref={root} className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:gap-16">
-      {/* The tall gaps are scroll room for the scroll-driven version (WIDE_MOTION); without it,
-          the steps sit as a plain list. CSS decides, so the server and browser agree. */}
-      <ol data-steps className="grid gap-6 lg:motion-safe:gap-[22vh] lg:motion-safe:py-[12vh]">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,20rem)] lg:gap-8">
+      <ol className="grid content-start gap-4">
         {steps.map((step, i) => (
           <li
             key={step.title}
             id={`how-${i + 1}`}
-            data-step
-            className="grid grid-cols-[2.5rem_1fr] gap-x-4"
-            aria-current={i === active ? "step" : undefined}
+            onMouseEnter={() => setPicked(i)}
+            onMouseLeave={() => setPicked(-1)}
+            onFocus={() => setPicked(i)}
+            onBlur={() => setPicked(-1)}
+            className={cx(
+              "grid scroll-mt-24 grid-cols-[2.75rem_minmax(0,1fr)] gap-x-4 rounded-card border bg-raised p-5 transition-colors duration-(--duration-quick) sm:p-6 lg:scroll-mt-8",
+              picked === i ? "border-control" : "border-rule",
+            )}
           >
             <span
-              className={cx(
-                "tabular flex size-10 items-center justify-center rounded-full border text-sm font-medium transition-colors duration-(--duration-moderate)",
-                i <= active
-                  ? "border-transparent bg-panel-keylime text-heading"
-                  : "border-control/60 text-muted-foreground",
-              )}
               aria-hidden
+              className="tabular grid size-11 place-items-center rounded-full bg-panel-keylime text-lg font-semibold text-heading"
             >
               {i + 1}
             </span>
-            {/* future steps are quieter while scrolling, but keep AA contrast */}
-            <div
-              className={cx(
-                "transition-colors duration-(--duration-slow)",
-                scrolling && i > active && "text-faint",
-              )}
-            >
-              <h3 className="text-xl leading-tight tracking-heading">{step.title}</h3>
-              <p
-                className={cx(
-                  "mt-2 max-w-prose text-base",
-                  scrolling && i > active ? "text-faint" : "text-muted-foreground",
-                )}
-              >
-                {step.body}
-              </p>
-              <p className="mt-4 inline-flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md bg-panel-keylime px-3.5 py-2 text-sm">
-                <span
-                  className={cx(
-                    "eyebrow inline-flex items-center gap-1.5",
-                    scrolling && i > active ? "text-faint" : "text-foreground",
-                  )}
-                >
-                  In the example
-                </span>
-                <span>{step.fact}</span>
+            <div className="grid content-start gap-3">
+              <h3 className="text-xl leading-snug">{step.title}</h3>
+              <p className="max-w-prose text-base leading-relaxed text-foreground">{step.body}</p>
+              <p className="rounded-md bg-panel-keylime px-4 py-3 text-sm leading-relaxed text-foreground">
+                <span className="font-semibold text-heading">In the example: </span>
+                {step.fact}
               </p>
             </div>
           </li>
         ))}
       </ol>
       <div className="order-first lg:order-none">
-        <div className="rounded-card bg-panel-slate/60 px-4 py-6 sm:px-8 lg:sticky lg:top-[14vh]">
+        <div className="rounded-card bg-panel-slate/60 px-4 py-6 sm:px-6 lg:sticky lg:top-6">
           <svg
             viewBox="0 0 360 790"
-            className="mx-auto h-auto w-full max-w-sm lg:max-h-[78vh]"
+            className="mx-auto h-auto w-full max-w-xs lg:max-h-[calc(100dvh-6rem)]"
             role="img"
             aria-labelledby="graph-title"
           >
@@ -181,16 +125,12 @@ export function RunGraph({ steps }: { steps: GraphStep[] }) {
                 const to = BY_ID[b];
                 if (!from || !to) return null;
                 return (
-                  // While scrolling, an edge draws itself when its target lights up.
                   <path
                     key={`${a}-${b}`}
                     d={edgePath(from, to)}
-                    pathLength={1}
-                    strokeDasharray={scrolling ? 1 : undefined}
                     className={cx(
-                      "transition-[stroke,stroke-dashoffset] duration-(--duration-deliberate) ease-(--ease-in-out)",
-                      lit.has(b) ? "stroke-foreground/70" : "stroke-control/60",
-                      scrolling && !lit.has(b) && "[stroke-dashoffset:1]",
+                      "transition-[stroke] duration-(--duration-moderate)",
+                      lit.has(b) ? "stroke-foreground/70" : "stroke-control/40",
                     )}
                   />
                 );

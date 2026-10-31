@@ -149,3 +149,27 @@ export function PageHeader({
     </header>
   );
 }
+
+/** A section of a long page: its title in the serif, between the page's title and its cards' in
+ * size, and a sentence on what the section holds. */
+export function SectionHeader({
+  id,
+  title,
+  description,
+}: {
+  id: string;
+  title: ReactNode;
+  description?: ReactNode;
+}) {
+  return (
+    <div className="grid max-w-3xl gap-2">
+      <h2
+        id={id}
+        className="scroll-mt-24 font-display text-[1.75rem] leading-tight font-normal tracking-heading lg:scroll-mt-8"
+      >
+        {title}
+      </h2>
+      {description ? <p className="text-lg text-muted-foreground">{description}</p> : null}
+    </div>
+  );
+}

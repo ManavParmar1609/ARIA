@@ -185,8 +185,8 @@
   --text-xs--line-height: 1.2rem;
   --text-sm: 0.9375rem;
   --text-sm--line-height: 1.45rem;
-  --text-base: 1rem;
-  --text-base--line-height: 1.6rem;
+  --text-base: 1.0625rem;
+  --text-base--line-height: 1.7rem;
   --text-lg: 1.125rem;
   --text-lg--line-height: 1.6rem;
   --text-xl: 1.25rem;
@@ -245,6 +245,18 @@
       opacity: 0.35;
     }
   }
+  /* The step a triage is on: a soft ring that grows and fades from its marker, while it works. */
+  --animate-halo: halo 1.8s var(--ease-out) infinite;
+  @keyframes halo {
+    from {
+      transform: scale(1);
+      opacity: 0.55;
+    }
+    to {
+      transform: scale(1.7);
+      opacity: 0;
+    }
+  }
 }
 
 @layer base {
@@ -296,14 +308,23 @@
     /* A shade smaller than the text around it, but never under 12 px. */
     font-size: max(0.875em, 0.75rem);
   }
-  h1,
-  h2,
-  h3 {
+  /* A page's title, in the serif. */
+  h1 {
     font-family: var(--font-display);
     font-optical-sizing: auto;
     text-wrap: balance;
-    font-weight: 300;
+    font-weight: 400;
     letter-spacing: var(--tracking-heading);
+    color: var(--heading);
+  }
+  /* Titles inside a page (sections, panels, cards, steps) in the sans, firm, so each stands
+     apart from the text under it at a glance. Landing sections keep the serif (.text-section). */
+  h2,
+  h3 {
+    font-family: var(--font-sans);
+    text-wrap: balance;
+    font-weight: 600;
+    letter-spacing: -0.011em;
     color: var(--heading);
   }
   h4 {
@@ -342,7 +363,7 @@
     font-size: clamp(2.75rem, 3vw + 1.4rem, 4.25rem);
     line-height: 1.04;
     letter-spacing: var(--tracking-display);
-    font-weight: 300;
+    font-weight: 350;
   }
   /* Section openers: 36 px on a phone, 56 px on a wide screen. */
   .text-display {
@@ -350,7 +371,7 @@
     font-size: clamp(2.25rem, 2.4vw + 1.35rem, 3.5rem);
     line-height: 1.12;
     letter-spacing: var(--tracking-display);
-    font-weight: 300;
+    font-weight: 400;
   }
   /* Section headings: 30 px on a phone, 40 px on a wide screen. */
   .text-section {
@@ -358,7 +379,7 @@
     font-size: clamp(1.875rem, 1vw + 1.5rem, 2.5rem);
     line-height: 1.2;
     letter-spacing: var(--tracking-heading);
-    font-weight: 300;
+    font-weight: 400;
   }
   /* Editorial statements: a serif paragraph, 23 to 28 px. */
   .text-statement {
@@ -366,7 +387,7 @@
     font-size: clamp(1.4375rem, 0.6vw + 1.25rem, 1.75rem);
     line-height: 1.32;
     letter-spacing: -0.005em;
-    font-weight: 300;
+    font-weight: 400;
     color: var(--heading);
   }
   /* The subhead under a heading: 15 to 18 px. */
@@ -385,7 +406,7 @@
   .stat {
     font-family: var(--font-display);
     color: var(--stat);
-    font-weight: 300;
+    font-weight: 400;
     line-height: 1;
     letter-spacing: -0.03em;
     font-variant-numeric: tabular-nums lining-nums;

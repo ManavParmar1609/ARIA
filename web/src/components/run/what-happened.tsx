@@ -99,10 +99,15 @@ export function WhatHappened({
   return (
     <section aria-labelledby="what-title" className="grid gap-5 rounded-lg bg-raised p-5">
       <div className="grid gap-1">
-        <h2 id="what-title" className="text-base font-medium">
-          What happened
+        <h2 id="what-title" className="text-xl">
+          What happened in the logs
         </h2>
-        <p className="text-sm">{scaleSentence(batch.features)}</p>
+        <p className="text-base">{scaleSentence(batch.features)}</p>
+        <p className="max-w-prose text-sm text-muted-foreground">
+          Lines that differ only in details, such as a server name or a number, count as one
+          pattern. These stand out: errors and warnings, patterns new to this system, and the ones
+          that repeat most.
+        </p>
       </div>
       {leading.length ? (
         <div className="grid gap-3">
@@ -120,7 +125,7 @@ export function WhatHappened({
           </ul>
           {rest > 0 ? (
             <p className="text-xs text-muted-foreground">
-              {plural(rest, "more pattern")} under Logs, below.
+              {plural(rest, "more pattern")} under Technical details, in Logs.
             </p>
           ) : null}
         </div>
