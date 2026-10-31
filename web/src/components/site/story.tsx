@@ -30,10 +30,9 @@ function steps(f: RunFacts, target: number): GraphStep[] {
       title: "Read the logs",
       body: (
         <>
-          ARIA groups the lines into <Term name="log-template">templates</Term>, swaps IP and e-mail
-          addresses for stand-ins (it <Term name="pseudonymise">pseudonymises</Term> them) and sets
-          aside lines that read like instructions to a model (they are{" "}
-          <Term name="quarantine">quarantined</Term>). A large input is split across workers.
+          ARIA groups similar lines into patterns (<Term name="log-template">templates</Term>),
+          hides IP and e-mail addresses behind stand-in names, and sets aside any line that tries to
+          give it orders (it is <Term name="quarantine">quarantined</Term>).
         </>
       ),
       fact: `${f.lines} lines became ${f.templates} templates; ${f.pseudonyms} addresses replaced; ${f.quarantined} planted line set aside.`,
@@ -43,11 +42,10 @@ function steps(f: RunFacts, target: number): GraphStep[] {
       title: "Rate how serious it is, and recall the past",
       body: (
         <>
-          Rules and a <Term name="calibrated">calibrated</Term> model score the logs and keep a{" "}
-          <Term name="prediction-set">short list</Term> of levels, built to hold the right one{" "}
-          {Math.round(target * 100)} times in 100. <Term name="safety-floor">Safety floors</Term>{" "}
-          stop a dangerous pattern being rated too low. Meanwhile, search finds similar past
-          incidents.
+          Rules and a trained model score the logs and keep a{" "}
+          <Term name="prediction-set">short list</Term> of likely levels, built to hold the right
+          one {Math.round(target * 100)} times in 100. A dangerous pattern is never rated too low.
+          At the same time, ARIA looks for similar past incidents.
         </>
       ),
       fact: `${f.severity} at ${Math.round(f.probability * 100)}% probability; ${f.similar} similar past incidents found.`,
@@ -57,16 +55,10 @@ function steps(f: RunFacts, target: number): GraphStep[] {
       title: "Investigate and write the report",
       body: (
         <>
-          An agent tests its ideas with read-only tools (ARIA&apos;s{" "}
-          <Term name="mcp">MCP server</Term>): example lines, a component&apos;s timeline, past
-          incidents and <Term name="runbook">runbooks</Term>. Each result becomes{" "}
-          <Term name="evidence">evidence</Term>. The report is written from evidence only, and a
-          check rejects any claim whose source is missing. When the evidence is thin, ARIA widens
-          the search and tries again (a{" "}
-          <span className="whitespace-nowrap">
-            <Term name="replan">replan</Term>),
-          </span>{" "}
-          at most twice.
+          ARIA tests its ideas about the cause with tools that can only read: example lines, a
+          part&apos;s timeline, past incidents and <Term name="runbook">runbooks</Term>. Each result
+          becomes <Term name="evidence">evidence</Term>, and the report may only say what the
+          evidence shows. If the evidence is thin, ARIA looks further, at most twice.
         </>
       ),
       fact: `${f.toolCalls} tool calls; ${f.claims} claims checked, ${Math.round(f.citationCoverage * 100)}% cited; ${f.actions} messages drafted.`,
@@ -76,9 +68,9 @@ function steps(f: RunFacts, target: number): GraphStep[] {
       title: "Wait for a person, then remember",
       body: (
         <>
-          The run pauses and keeps its <Term name="checkpoint">checkpoint</Term>. A reviewer
-          approves, edits or discards the messages, and only what they approve goes out. The
-          approved incident joins ARIA&apos;s memory, so the next similar alert finds it.
+          The run pauses for you. You approve, edit or discard the messages, and only what you
+          approve is sent. The approved incident joins ARIA&apos;s memory, so the next similar alert
+          finds it.
         </>
       ),
       fact: `Ready for review ${(f.timeToReviewMs / 1000).toFixed(1)} s after the logs arrived.`,
@@ -169,7 +161,7 @@ export function StepsPart() {
     <Part
       id="steps"
       title="Four steps, then a person decides"
-      intro="Each step saves its place, so a triage can stop for a person, carry on after a restart, or be rewound and tried another way. The figures come from the recorded example. Words with a dotted underline open a short definition."
+      intro="What ARIA does with an alert's logs, step by step. The figures come from the recorded example, and words with a dotted underline open a short definition."
     >
       <Suspense>
         <RunGraph steps={steps(runFacts(), evaluation().severity.targetCoverage)} />
