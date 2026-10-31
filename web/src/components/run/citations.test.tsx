@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import type { Evidence } from "@/lib/api/types";
 
@@ -20,6 +20,32 @@ describe("Citations", () => {
     fireEvent.click(screen.getByRole("button", { name: "Show 3 more sources" }));
     expect(screen.getAllByRole("button", { name: /^Evidence E\d/ })).toHaveLength(5);
     expect(screen.queryByRole("button", { name: /more sources?$/ })).toBeNull();
+  });
+
+  it("keeps a clicked citation's card shut while it has focus, even when the pointer leaves", async () => {
+    // A mouse that can hover, so each citation has a preview card.
+    vi.spyOn(window, "matchMedia").mockImplementation(
+      (query: string) =>
+        ({
+          matches: query.includes("hover: hover"),
+          media: query,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+        }) as unknown as MediaQueryList,
+    );
+    render(
+      <EvidenceProvider evidence={[evidence("E1")]} events={[]}>
+        <Citations ids={["E1"]} />
+      </EvidenceProvider>,
+    );
+    const chip = screen.getByRole("button", { name: /^Evidence E1/ });
+    // Pressing a citation focuses it, which asks for its card a moment later.
+    act(() => chip.focus());
+    fireEvent.click(chip);
+    // The page scrolls to the evidence, out from under the pointer.
+    fireEvent.mouseLeave(chip);
+    await act(() => new Promise((resolve) => setTimeout(resolve, 250)));
+    expect(screen.queryByText(/Click the citation to keep it/)).toBeNull();
   });
 });
 

@@ -305,9 +305,11 @@ export function EvidenceChip({ id, label }: { id: string; label?: string }) {
       }
       aria-controls={panelId}
       onMouseEnter={() => hover(id)}
-      onMouseLeave={() => {
+      onMouseLeave={(event) => {
         hover(null);
-        quiet.current = false;
+        // A clicked citation keeps focus, and its card stays shut while it does, even when the
+        // page scrolls to the evidence under a still pointer.
+        if (document.activeElement !== event.currentTarget) quiet.current = false;
       }}
       onFocus={(event) => {
         hover(id);

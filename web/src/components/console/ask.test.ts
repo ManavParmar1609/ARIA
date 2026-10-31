@@ -1,8 +1,37 @@
-import { describe, expect, it } from "vitest";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { createElement } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Evidence } from "@/lib/api/types";
+import { ApiError } from "@/lib/api/client";
+import type { AskResponse, Evidence } from "@/lib/api/types";
+import { UNREACHABLE } from "@/lib/unreachable";
 
-import { answerNews, loadTurns, sourceName, sourceNames, sourceNumbers, type Turn } from "./ask";
+import {
+  Ask,
+  answerNews,
+  answerText,
+  loadTurns,
+  resetChat,
+  sourceLink,
+  sourceName,
+  sourceNames,
+  sourceNumbers,
+  type Turn,
+} from "./ask";
+
+const route = vi.hoisted(() => ({ search: "" }));
+const api = vi.hoisted(() => ({
+  ask: { mutateAsync: vi.fn() },
+  run: { data: undefined as { title: string } | undefined, isError: false, error: null },
+}));
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(route.search),
+}));
+vi.mock("@/lib/api/hooks", () => ({
+  useAsk: () => api.ask,
+  useRuns: () => ({ data: { runs: [] } }),
+  useRun: () => ({ ...api.run, refetch: vi.fn() }),
+}));
 
 describe("Ask ARIA's sources", () => {
   it("numbers sources in the order the answer first cites them", () => {
@@ -28,6 +57,8 @@ describe("Ask ARIA's sources", () => {
       data: { title: "ZooKeeper quorum loss", synthetic: true },
     } as unknown as Evidence;
     expect(sourceName(incident)).toBe("ZooKeeper quorum loss (built from a sample)");
+    // A source card says "built from a sample" beside the kind instead.
+    expect(sourceName(incident, { sample: false })).toBe("ZooKeeper quorum loss");
     expect(sourceName({ ...incident, data: { title: "Disk full" } } as Evidence)).toBe("Disk full");
     const line = { ...incident, kind: "log", title: "line 4: oops", data: {} } as Evidence;
     expect(sourceName(line)).toBe("line 4: oops");
@@ -76,6 +107,95 @@ describe("Ask ARIA's sources", () => {
     expect(names.get("E2")).toBe("Quorum loss, last seen 12 Apr 2026");
     expect(names.get("E3")).toBe("Disk full");
   });
+
+  it("links each source to its record: a runbook, the library, or the incident it came from", () => {
+    const base = { source: "memory.search", ts: null, detail: "" };
+    const runbook = {
+      ...base,
+      id: "E5",
+      kind: "runbook",
+      title: "Runbook zookeeper-quorum-loss: ZooKeeper quorum loss",
+      data: { slug: "zookeeper-quorum-loss" },
+    } as unknown as Evidence;
+    expect(sourceLink(runbook, null)).toEqual({
+      href: "/console/runbooks/zookeeper-quorum-loss",
+      label: "Open the runbook",
+    });
+    const curated = {
+      ...base,
+      id: "E1",
+      kind: "incident",
+      title: "Past incident syn-zk-1: ZooKeeper quorum loss (SEV2, zookeeper)",
+      data: { incident_id: "syn-zk-1", title: "ZooKeeper quorum loss", synthetic: true },
+    } as unknown as Evidence;
+    expect(sourceLink(curated, null)).toEqual({
+      href: "/console/memory?q=ZooKeeper%20quorum%20loss",
+      label: "Find it in the incident library",
+    });
+    // An approved incident's entry is named after the run it came from.
+    const learned = { ...curated, data: { incident_id: "inc-20261031-ab12" } } as Evidence;
+    expect(sourceLink(learned, null)?.href).toBe("/console/runs/run-20261031-ab12");
+    // What a triage recorded opens on that incident's page; without one there is nowhere to go.
+    const cause = { ...base, id: "E9", kind: "hypothesis", title: "H1 supported: x", data: {} };
+    expect(sourceLink(cause as Evidence, "run-7")?.href).toBe("/console/runs/run-7");
+    expect(sourceLink(cause as Evidence, null)).toBeNull();
+  });
+});
+
+const SOURCES = [
+  {
+    id: "E1",
+    kind: "incident",
+    title: "Past incident syn-zk-1: ZooKeeper quorum loss (SEV2, zookeeper)",
+    source: "memory.search",
+    detail: "Resolution: Restore connectivity between peers first.",
+    data: { incident_id: "syn-zk-1", title: "ZooKeeper quorum loss", synthetic: true },
+    ts: null,
+  },
+  {
+    id: "E2",
+    kind: "runbook",
+    title: "Runbook zookeeper-quorum-loss: ZooKeeper quorum loss",
+    source: "runbooks",
+    detail: "1. Restore connectivity between peers first.",
+    data: { slug: "zookeeper-quorum-loss" },
+    ts: null,
+  },
+] as unknown as Evidence[];
+
+const ANSWER = {
+  answer: [
+    { text: "A past incident was fixed by restoring connectivity.", evidence_ids: ["E1"] },
+    { text: "The runbook starts the same way.", evidence_ids: ["E2", "E1"] },
+  ],
+  evidence: SOURCES,
+  insufficient_evidence: false,
+  answered_by: "retrieval",
+  follow_ups: [],
+  notes: [],
+  model: null,
+} as AskResponse;
+
+describe("an answer as text to paste elsewhere", () => {
+  it("keeps each point's source numbers and lists the sources after the points", () => {
+    const turn: Turn = { id: "t1", question: "How was it fixed?", runId: null, answer: ANSWER };
+    expect(answerText(turn)).toBe(
+      [
+        "A past incident was fixed by restoring connectivity. [1]",
+        "The runbook starts the same way. [2][1]",
+        "Sources:\n1. Past incident: ZooKeeper quorum loss (built from a sample)\n2. Runbook: ZooKeeper quorum loss",
+      ].join("\n\n"),
+    );
+  });
+
+  it("copies a word's meaning, and has nothing to copy when nothing answered", () => {
+    const definition = { term: "SEV1", text: "SEV1 means critical." };
+    expect(answerText({ id: "t2", question: "q", runId: null, definition })).toBe(
+      "SEV1: SEV1 means critical.",
+    );
+    const empty = { ...ANSWER, answer: [] };
+    expect(answerText({ id: "t3", question: "q", runId: null, answer: empty })).toBe("");
+  });
 });
 
 describe("what a screen reader hears about an answer", () => {
@@ -94,8 +214,8 @@ describe("what a screen reader hears about an answer", () => {
       follow_ups: [],
     }) as unknown as Turn["answer"];
 
-  it("says ARIA is searching, then how much it found", () => {
-    expect(answerNews(turn())).toBe("Searching ARIA's records");
+  it("says ARIA is thinking, then how much it found", () => {
+    expect(answerNews(turn())).toBe("ARIA is thinking…");
     expect(answerNews(turn({ answer: answer([["E1"], ["E1", "E2"]]) }))).toBe(
       "ARIA answered: 2 points, from 2 sources.",
     );
@@ -107,7 +227,7 @@ describe("what a screen reader hears about an answer", () => {
     );
   });
 
-  it("leaves an error to its own alert", () => {
+  it("leaves an error to say itself", () => {
     expect(answerNews(turn({ error: "ARIA is busy" }))).toBe("");
     expect(answerNews(undefined)).toBe("");
   });
@@ -161,5 +281,165 @@ describe("Ask ARIA's word answers", () => {
     const storage = { getItem: () => JSON.stringify([turn]) };
     expect(loadTurns(storage)).toEqual([turn]);
     expect(answerNews(turn)).toBe("ARIA answered from its word list: what SEV1 means.");
+  });
+});
+
+describe("chatting with ARIA", () => {
+  const ZOOKEEPER = "Have we seen ZooKeeper lose quorum before, and how was it fixed?";
+  const box = () => screen.getByLabelText<HTMLTextAreaElement>("Your question");
+  const log = () => screen.getByRole("log", { name: "Conversation" });
+  const type = (text: string) => fireEvent.change(box(), { target: { value: text } });
+
+  beforeEach(() => {
+    route.search = "";
+    api.run = { data: undefined, isError: false, error: null };
+    api.ask.mutateAsync.mockReset();
+    api.ask.mutateAsync.mockReturnValue(new Promise(() => {}));
+    resetChat();
+  });
+
+  it("opens on a greeting that says what ARIA answers from, with questions to try", () => {
+    render(createElement(Ask));
+    expect(screen.getByText("What would you like to know?")).toBeTruthy();
+    expect(screen.getByText(/answers from its incident library and runbooks/)).toBeTruthy();
+    const tries = screen.getByRole("heading", { name: "Try one of these" }).nextElementSibling;
+    expect(within(tries as HTMLElement).getAllByRole("button")).toHaveLength(4);
+    // Nothing to send yet, and no conversation to clear.
+    expect(screen.getByRole("button", { name: "Send question" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+    expect(screen.queryByRole("button", { name: "New chat" })).toBeNull();
+  });
+
+  it("sends with Enter, and keeps focus in the box for the next question", () => {
+    render(createElement(Ask));
+    act(() => box().focus());
+    type("How was ZooKeeper quorum loss fixed before?");
+    // Enter is taken for sending: no new line goes into the box.
+    expect(fireEvent.keyDown(box(), { key: "Enter" })).toBe(false);
+    expect(api.ask.mutateAsync).toHaveBeenCalledWith({
+      question: "How was ZooKeeper quorum loss fixed before?",
+      run_id: null,
+    });
+    expect(within(log()).getByRole("heading", { level: 2 }).textContent).toBe(
+      "You asked: How was ZooKeeper quorum loss fixed before?",
+    );
+    expect(within(log()).getByText("About: all past incidents and runbooks")).toBeTruthy();
+    expect(box().value).toBe("");
+    expect(document.activeElement).toBe(box());
+  });
+
+  it("starts a new line with Shift+Enter instead of sending", () => {
+    render(createElement(Ask));
+    type("Which errors appeared");
+    expect(fireEvent.keyDown(box(), { key: "Enter", shiftKey: true })).toBe(true);
+    expect(api.ask.mutateAsync).not.toHaveBeenCalled();
+    expect(box().value).toBe("Which errors appeared");
+    expect(within(log()).queryAllByRole("article")).toHaveLength(0);
+  });
+
+  it("sends a suggested question when it is pressed, and hands focus to the box", () => {
+    render(createElement(Ask));
+    fireEvent.click(screen.getByRole("button", { name: ZOOKEEPER }));
+    expect(api.ask.mutateAsync).toHaveBeenCalledWith({ question: ZOOKEEPER, run_id: null });
+    expect(within(log()).getAllByRole("article")).toHaveLength(1);
+    expect(document.activeElement).toBe(box());
+  });
+
+  it("shows ARIA thinking, then its answer with numbered sources that open their records", async () => {
+    let answer: (value: AskResponse) => void = () => {};
+    api.ask.mutateAsync.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    render(createElement(Ask));
+    fireEvent.click(screen.getByRole("button", { name: ZOOKEEPER }));
+    expect(await within(log()).findByText("ARIA is thinking…")).toBeTruthy();
+
+    await act(async () => answer(ANSWER));
+    const exchange = within(log()).getByRole("article");
+    expect(within(exchange).getByText("ARIA answered: 2 points, from 2 sources.")).toBeTruthy();
+    expect(within(exchange).queryByText("ARIA is thinking…")).toBeNull();
+    expect(within(exchange).getByRole("heading", { name: "Sources" })).toBeTruthy();
+    const runbook = within(exchange).getByRole("link", { name: /^2 Runbook ZooKeeper quorum/ });
+    expect(runbook.getAttribute("href")).toBe("/console/runbooks/zookeeper-quorum-loss");
+    expect(within(exchange).getByRole("button", { name: "Copy this answer" })).toBeTruthy();
+    // Other good questions stay in view under the latest answer.
+    const more = screen.getByRole("heading", { name: "You could also ask" }).nextElementSibling;
+    expect(within(more as HTMLElement).getAllByRole("button")).toHaveLength(3);
+
+    // A citation opens what its source says beneath the cards.
+    fireEvent.click(within(exchange).getAllByRole("button", { name: /^Source 1:/ })[0]!);
+    const detail = within(exchange).getByRole("region", { name: "Source 1" });
+    expect(detail.textContent).toContain("Resolution: Restore connectivity between peers first.");
+  });
+
+  it("answers what a word means from the word list, without asking the server", () => {
+    render(createElement(Ask));
+    type("What does SEV1 mean?");
+    fireEvent.keyDown(box(), { key: "Enter" });
+    expect(api.ask.mutateAsync).not.toHaveBeenCalled();
+    expect(within(log()).getByText("SEV1")).toBeTruthy();
+    expect(within(log()).getByRole("link", { name: "Words used in ARIA" })).toBeTruthy();
+  });
+
+  it("says when the server did not answer, and tries again when asked", async () => {
+    api.ask.mutateAsync.mockRejectedValueOnce(new ApiError(503, UNREACHABLE));
+    render(createElement(Ask));
+    type("Which past incidents involved SSH brute-force attempts?");
+    await act(async () => {
+      fireEvent.keyDown(box(), { key: "Enter" });
+    });
+    expect(within(log()).getByText(UNREACHABLE)).toBeTruthy();
+    api.ask.mutateAsync.mockResolvedValueOnce(ANSWER);
+    await act(async () => {
+      fireEvent.click(within(log()).getByRole("button", { name: "Try again" }));
+    });
+    expect(api.ask.mutateAsync).toHaveBeenCalledTimes(2);
+    expect(within(log()).queryByText(UNREACHABLE)).toBeNull();
+    expect(within(log()).getByRole("heading", { name: "Sources" })).toBeTruthy();
+  });
+
+  it("clears the conversation with New chat, and can bring it back", async () => {
+    api.ask.mutateAsync.mockResolvedValue(ANSWER);
+    render(createElement(Ask));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: ZOOKEEPER }));
+    });
+    expect(window.sessionStorage.getItem("aria:ask-chat")).toContain(ZOOKEEPER);
+
+    fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+    expect(within(log()).queryAllByRole("article")).toHaveLength(0);
+    expect(screen.getByText("What would you like to know?")).toBeTruthy();
+    expect(window.sessionStorage.getItem("aria:ask-chat")).toBeNull();
+    expect(document.activeElement).toBe(box());
+
+    fireEvent.click(screen.getByRole("button", { name: "Bring back the last one" }));
+    expect(within(log()).getAllByRole("article")).toHaveLength(1);
+  });
+
+  it("keeps the conversation while the reader visits other pages, answers included", async () => {
+    let answer: (value: AskResponse) => void = () => {};
+    api.ask.mutateAsync.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    const page = render(createElement(Ask));
+    fireEvent.click(screen.getByRole("button", { name: ZOOKEEPER }));
+    page.unmount();
+    // The answer arrives while the reader is on another page.
+    await act(async () => answer(ANSWER));
+
+    render(createElement(Ask));
+    const exchange = within(log()).getByRole("article");
+    expect(within(exchange).getByRole("heading", { name: "Sources" })).toBeTruthy();
+    expect(loadTurns(window.sessionStorage).map((t) => t.question)).toEqual([ZOOKEEPER]);
+  });
+
+  it("asks about the incident in the link, and says so under the question", () => {
+    route.search = "run=run-7";
+    api.run = { data: { title: "SEV2 · Quorum loss in ZooKeeper" }, isError: false, error: null };
+    render(createElement(Ask));
+    expect(screen.getByText(/answers from this incident's logs/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "What did the investigation find?" }));
+    expect(api.ask.mutateAsync).toHaveBeenCalledWith({
+      question: "What did the investigation find?",
+      run_id: "run-7",
+    });
+    expect(within(log()).getByText("About: Quorum loss in ZooKeeper")).toBeTruthy();
   });
 });
