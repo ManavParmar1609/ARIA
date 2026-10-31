@@ -198,7 +198,7 @@ lines. With `ARIA_ENV=prod`, every call needs an API key from `ARIA_API_KEYS`.
 
 | Surface | Where | What it is for |
 |---|---|---|
-| Console | `web/`, http://localhost:3000/console | Queue, live run view with rule trace, prediction set, evidence and cited report; review, time travel, Ask ARIA, evals, memory, settings, a guide with one-click samples, and search with keyboard shortcuts |
+| Console | `web/`, http://localhost:3000/console | Queue, live run view with rule trace, prediction set, evidence and cited report; review, time travel, Ask ARIA, evals, the incident library with its filters and charts, settings, a guide with one-click samples, and search with keyboard shortcuts |
 | REST and SSE | `/api/v1/*`, [docs/openapi.json](docs/openapi.json) | Runs, live event stream, report (JSON and Markdown), postmortem draft, review, resending a failed message, history, fork |
 | Alert webhooks | `/api/v1/alerts/alertmanager`, `/grafana`, `/alerts` | Turn alert storms into one grouped run |
 | Log scan | `ARIA_SCAN_SOURCES`, `ARIA_SCAN_INTERVAL_S` | Open a run on an error burst no alert caught |

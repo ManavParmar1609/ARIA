@@ -471,6 +471,27 @@
   }
 }
 
+/* Library charts (library-charts.tsx): the first time a chart comes into view its bars grow from
+   their baseline, each a little after the one before. Only the transform moves, so later changes
+   to a bar's length never animate; with reduced motion the bars are simply there. */
+.draw-x {
+  transform-origin: left center;
+}
+.draw-y {
+  transform-origin: center bottom;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .js [data-draw]:not([data-drawn]) .draw-x {
+    transform: scaleX(0);
+  }
+  .js [data-draw]:not([data-drawn]) .draw-y {
+    transform: scaleY(0);
+  }
+  .js [data-draw][data-drawn] :is(.draw-x, .draw-y) {
+    transition: transform 900ms var(--ease-out) calc(var(--i, 0) * 55ms);
+  }
+}
+
 /* RollingNumber (rolling-number.tsx): each digit is a strip of 0 to 9 behind a one-digit window,
    resting on its final digit. "ready" drops the strips to 0 out of sight; "go" rolls them up, a
    little later for each digit to the right; "done" leaves them at rest. */

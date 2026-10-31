@@ -1460,7 +1460,7 @@
           "catalog"
         ],
         "summary": "Incidents",
-        "description": "Past incidents: hybrid search when ``q`` is given, else the most recent.",
+        "description": "Past incidents: hybrid search when ``q`` is given, else the most recent.\n\n``offset`` skips that many, so a client can page through the whole library: a page shorter\nthan ``limit`` is the last one.",
         "operationId": "incidents_api_v1_incidents_get",
         "parameters": [
           {
@@ -1504,10 +1504,22 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "maximum": 100,
+              "maximum": 500,
               "minimum": 1,
               "default": 20,
               "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100000,
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
             }
           }
         ],

@@ -1126,6 +1126,23 @@ async def test_catalog_lists_incidents_and_runbooks(api: Api) -> None:
     assert (await api.client.get("/api/v1/runbooks/nope")).status_code == 404
 
 
+async def test_pages_through_the_whole_incident_library(api: Api) -> None:
+    async def page(**params: int | str) -> list[str]:
+        response = await api.client.get("/api/v1/incidents", params=params)
+        assert response.status_code == 200
+        return [i["incident_id"] for i in response.json()]
+
+    everything = await page(limit=500)
+    assert len(everything) == 3
+    # Pages follow one another without a gap or a repeat; a short page is the last one.
+    assert await page(limit=2) + await page(limit=2, offset=2) == everything
+    assert await page(limit=2, offset=3) == []
+    closest = await page(q="kernel panic", limit=500)
+    assert await page(q="kernel panic", limit=1, offset=1) == closest[1:2]
+    too_many = await api.client.get("/api/v1/incidents", params={"limit": 501})
+    assert too_many.status_code == 422
+
+
 async def test_reviews_calibration_evaluation_and_tickets(
     api: Api, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
