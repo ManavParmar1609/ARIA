@@ -62,7 +62,7 @@ test.describe("console", () => {
     await expect(receipt).toBeFocused();
     await expect(
       page.getByText(
-        /^Drafted by ARIA, approved by you at \d\d:\d\d\. \d+ previews? kept \(no channel connected\)\.$/,
+        /^Drafted by ARIA, approved by you at \d\d:\d\d\. \d+ draft messages? kept here, unsent \(no channel is connected\)\.$/,
       ),
     ).toBeVisible();
     await expect(page.getByRole("link", { name: "Postmortem draft (Markdown)" })).toBeVisible();
@@ -109,7 +109,7 @@ test.describe("console", () => {
     const card = browse
       .getByRole("listitem")
       .filter({ has: page.getByRole("heading", { name: "Someone keeps guessing passwords" }) });
-    await card.getByText(/^Show \d+ real lines$/).click();
+    await card.getByText(/^Show \d+ real lines/).click();
     await expect(card.locator("pre")).toBeVisible();
     // Only sizes that change the rating are offered (`aria seed` rated them); the smallest first.
     const sizes = card.getByRole("radio");
