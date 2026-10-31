@@ -837,7 +837,7 @@ def test_offline_answers_explain_a_rating_and_the_first_step_without_tool_record
     assert [claim.text for claim in output.answer] == [
         "A severity rule points to SEV3: retries, timeouts or degradation messages.",
         (
-            "The severity model finds SEV3 most likely (0.45); its short list of likely levels "
+            "The severity model finds SEV3 most likely (45%); its short list of likely levels "
             "is SEV2 or SEV3."
         ),
         (
