@@ -188,7 +188,7 @@ export function AgentTeam({
       }
       if (f.error_events) {
         parser.push(
-          `${n(f.error_events)} error ${f.error_events === 1 ? "line" : "lines"}, on ${n(f.error_nodes)} ${f.error_nodes === 1 ? "server" : "servers"}.`,
+          `${n(f.error_events)} error ${f.error_events === 1 ? "line" : "lines"}${f.error_nodes ? `, on ${n(f.error_nodes)} ${f.error_nodes === 1 ? "server" : "servers"}` : ""}.`,
         );
       }
     }

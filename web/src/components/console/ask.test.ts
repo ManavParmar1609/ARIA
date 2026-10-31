@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Evidence } from "@/lib/api/types";
 
-import { answerNews, sourceName, sourceNames, sourceNumbers, type Turn } from "./ask";
+import { answerNews, loadTurns, sourceName, sourceNames, sourceNumbers, type Turn } from "./ask";
 
 describe("Ask ARIA's sources", () => {
   it("numbers sources in the order the answer first cites them", () => {
@@ -110,5 +110,24 @@ describe("what a screen reader hears about an answer", () => {
   it("leaves an error to its own alert", () => {
     expect(answerNews(turn({ error: "ARIA is busy" }))).toBe("");
     expect(answerNews(undefined)).toBe("");
+  });
+});
+
+describe("loadTurns", () => {
+  const store = (value: string | null) => ({ getItem: () => value });
+
+  it("brings back answered questions and drops ones still waiting", () => {
+    const kept = [
+      { id: "a", question: "What failed first?", runId: null, error: "ARIA is busy." },
+      { id: "b", question: "Still asking?", runId: null },
+    ];
+    expect(loadTurns(store(JSON.stringify(kept))).map((t) => t.id)).toEqual(["a"]);
+  });
+
+  it("starts empty when nothing is kept, or what is kept is not a conversation", () => {
+    expect(loadTurns(undefined)).toEqual([]);
+    expect(loadTurns(store(null))).toEqual([]);
+    expect(loadTurns(store("{not json"))).toEqual([]);
+    expect(loadTurns(store('{"id": "a"}'))).toEqual([]);
   });
 });

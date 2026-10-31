@@ -121,7 +121,7 @@ function PaletteButton() {
 function PaletteIconButton() {
   const { openPalette } = useCommands();
   return (
-    <Button variant="ghost" size="icon-sm" aria-label="Search or jump to" onClick={openPalette}>
+    <Button variant="ghost" size="icon-sm" aria-label="Search" onClick={openPalette}>
       <SearchIcon aria-hidden />
     </Button>
   );
@@ -237,17 +237,14 @@ function ApiStatus() {
         : "degraded";
   // A server that is not answering is usually waking or restarting: a wait, not an alarm.
   const label = {
-    ok: offline ? "ARIA is ready, offline mode" : "ARIA is ready",
+    // The line below says whether a model answers, so this one does not repeat "offline".
+    ok: "ARIA is ready",
     degraded: "Some of ARIA is not working",
     down: "Waiting for ARIA's server",
     unknown: "Checking ARIA's server",
   }[state];
   return (
-    <p
-      className="flex items-center gap-2 text-xs text-muted-foreground"
-      role="status"
-      title={data ? `Version ${data.version}` : undefined}
-    >
+    <p className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
       <span
         aria-hidden
         className={cn(
@@ -288,13 +285,13 @@ function SessionFooter({ onNavigate }: { onNavigate?: () => void }) {
       <ApiStatus />
       <ModelLine onNavigate={onNavigate} />
       <div className="flex items-center justify-between gap-2">
-        <p className="min-w-0 truncate text-xs text-muted-foreground">
-          {session?.signedIn ? (
-            <>
-              Signed in as <span className="font-medium text-foreground">{session.name}</span>
-            </>
-          ) : null}
-        </p>
+        {session?.signedIn ? (
+          <p className="min-w-0 truncate text-xs text-muted-foreground">
+            Signed in as <span className="font-medium text-foreground">{session.name}</span>
+          </p>
+        ) : (
+          <span aria-hidden />
+        )}
         <div className="flex items-center">
           <ThemeToggle />
           {session?.signedIn ? (
@@ -442,6 +439,12 @@ function Gate({ children }: { children: ReactNode }) {
 
 export function ConsoleShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  // Set when the menu closes because a page was chosen in it.
+  const chose = useRef(false);
+  const leave = () => {
+    chose.current = true;
+    setOpen(false);
+  };
   return (
     <ConsoleCommands>
       <a
@@ -477,6 +480,14 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
                 <SheetContent
                   side="left"
                   closeLabel="Close navigation"
+                  // After choosing a page, focus goes to the page, as it does after Search; closed
+                  // any other way, it goes back to the menu button.
+                  onCloseAutoFocus={(event) => {
+                    if (!chose.current) return;
+                    chose.current = false;
+                    event.preventDefault();
+                    document.getElementById("console-main")?.focus({ preventScroll: true });
+                  }}
                   // Open on the page being read, so the next Tab or arrow goes somewhere useful.
                   onOpenAutoFocus={(event) => {
                     const sheet = event.currentTarget as HTMLElement | null;
@@ -488,16 +499,22 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
                   }}
                 >
                   <DialogTitle className="sr-only">Navigation</DialogTitle>
-                  <Link href="/" className="rounded-sm px-1.5" onClick={() => setOpen(false)}>
+                  <Link
+                    href="/"
+                    className="rounded-sm px-1.5"
+                    aria-label="ARIA home"
+                    onClick={() => setOpen(false)}
+                  >
                     <Wordmark />
                   </Link>
                   <div className="-mx-1 flex-1 overflow-y-auto px-1 py-1">
-                    <Nav onNavigate={() => setOpen(false)} />
+                    <Nav onNavigate={leave} />
                   </div>
-                  <SessionFooter onNavigate={() => setOpen(false)} />
+                  <SessionFooter onNavigate={leave} />
                 </SheetContent>
               </Dialog>
-              <Link href="/console" className="rounded-sm" aria-label="ARIA console">
+              {/* Every logo goes to the same place: the home page. */}
+              <Link href="/" className="rounded-sm" aria-label="ARIA home">
                 <Wordmark />
               </Link>
               <div className="flex items-center">

@@ -29,7 +29,7 @@ test.describe("console", () => {
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await expect(
       page.getByText(
-        /^(Only SEV\d is likely\.|Probably SEV\d\. ARIA isn't sure enough to decide alone, so please confirm\.|Could be SEV\d.*ARIA plans for SEV\d\.( Please confirm\.)?)$/,
+        /^(Only SEV\d is likely\.|Probably SEV\d(, \d+% likely)?\. (ARIA isn't sure enough to decide alone|Only ARIA's rules rated these logs), so please confirm\.|Could be SEV\d.*ARIA plans for SEV\d\.( Please confirm\.)?)$/,
       ),
     ).toBeVisible();
     // Four panels, one question each.
@@ -191,6 +191,15 @@ test.describe("console", () => {
     await expect(browse.getByRole("button", { name: /^Run it: / })).toHaveCount(3);
     await page.goBack();
     await expect(page).toHaveURL(/\/console\/runs\/new$/);
+    // A tab is a step Back can undo, like a filter.
+    await page.getByRole("tab", { name: "Your own logs" }).click();
+    await expect(page).toHaveURL(/\/console\/runs\/new\?tab=own$/);
+    await page.goBack();
+    await expect(page).toHaveURL(/\/console\/runs\/new$/);
+    await expect(page.getByRole("tab", { name: "Samples" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 
   test("triages pasted logs from the Your own logs tab", async ({ page }) => {
@@ -367,8 +376,8 @@ test.describe("console", () => {
     await page.getByRole("link", { name: "How to read this" }).click();
     await expect(page).toHaveURL(/\/console\/guide\?from=[^#]+#read-a-run$/);
     await expect(page.getByRole("heading", { name: "Read a severity rating" })).toBeVisible();
-    // The guide offers the way back to the incident it was opened from.
-    await page.getByRole("link", { name: "Back to the incident" }).click();
+    // The guide offers the way back to the incident it was opened from, where the reader lands.
+    await page.locator("#read-a-run").getByRole("link", { name: "Back to the incident" }).click();
     await expect(page).toHaveURL(incident);
   });
 

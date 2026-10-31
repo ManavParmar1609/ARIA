@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { AguiChat } from "@/components/console/agui-chat";
 import { PageHeader } from "@/components/console/states";
+import { CopyButton } from "@/components/ui/copy-button";
 
 // For people who run ARIA themselves: the ways alerts, logs and other tools reach it, and where
 // its messages go. Visitors to the public demo can read this but not set it up.
@@ -55,14 +56,20 @@ export function Connect() {
             {way.title}
           </h2>
           <p className="max-w-prose text-muted-foreground">{way.body}</p>
-          <pre
-            tabIndex={0}
-            role="region"
-            aria-label={way.label}
-            className="overflow-x-auto rounded-lg border border-rule bg-raised p-4 text-[0.8125rem] leading-6 max-sm:break-all max-sm:whitespace-pre-wrap"
-          >
-            <code>{way.code}</code>
-          </pre>
+          <div className="grid overflow-hidden rounded-lg border border-rule bg-raised">
+            <div className="flex items-center justify-between gap-3 border-b border-rule py-1 pr-1.5 pl-4">
+              <span className="text-xs text-muted-foreground">{way.label}</span>
+              <CopyButton text={way.code} label={`the ${way.label.toLowerCase()}`} />
+            </div>
+            <pre
+              tabIndex={0}
+              role="region"
+              aria-label={way.label}
+              className="overflow-x-auto p-4 text-[0.8125rem] leading-6 max-sm:break-all max-sm:whitespace-pre-wrap"
+            >
+              <code>{way.code}</code>
+            </pre>
+          </div>
         </section>
       ))}
       <section aria-labelledby="agui-title" className="grid gap-3">

@@ -32,7 +32,7 @@ const QUESTIONS: { q: string; a: ReactNode }[] = [
   },
   {
     q: "What happens to sensitive data in my logs?",
-    a: "Secrets and personal data are removed before analysis or any model call, so reports, messages and memory only quote cleaned text. IP and e-mail addresses become stable stand-ins within an incident, and lines that read like instructions to a model are set aside and shown to it only as fenced evidence. The lines you send stay with the incident, so it can be replayed, until you delete it.",
+    a: "Secrets and personal data are removed before analysis or any model call, so reports, messages and memory only quote cleaned text. IP and e-mail addresses become stable stand-ins within an incident, and lines that read like instructions to a model are kept out of the analysis; a model sees them only as quoted text it is told not to follow. The lines you send stay with the incident, so it can be replayed, until you delete it.",
   },
   {
     q: "Does it work with my tools?",

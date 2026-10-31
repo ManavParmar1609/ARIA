@@ -59,9 +59,10 @@ function steps(f: RunFacts, target: number): GraphStep[] {
         <>
           An agent tests its ideas with read-only tools (ARIA&apos;s{" "}
           <Term name="mcp">MCP server</Term>): example lines, a component&apos;s timeline, past
-          incidents and runbooks. Each result becomes <Term name="evidence">evidence</Term>. The
-          report is written from evidence only, and a check rejects any claim whose source is
-          missing. When the evidence is thin, ARIA widens the search and tries again (a{" "}
+          incidents and <Term name="runbook">runbooks</Term>. Each result becomes{" "}
+          <Term name="evidence">evidence</Term>. The report is written from evidence only, and a
+          check rejects any claim whose source is missing. When the evidence is thin, ARIA widens
+          the search and tries again (a{" "}
           <span className="whitespace-nowrap">
             <Term name="replan">replan</Term>),
           </span>{" "}

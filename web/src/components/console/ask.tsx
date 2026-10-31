@@ -55,6 +55,34 @@ export interface Turn {
   error?: string;
 }
 
+// The conversation outlives a visit to a runbook or another page: Back finds it as it was (N-03).
+// Kept for this tab only, and only for answered questions.
+const TURNS_KEY = "aria:ask-turns";
+const KEPT_TURNS = 10;
+
+export function loadTurns(storage: Pick<Storage, "getItem"> | undefined): Turn[] {
+  try {
+    const turns: unknown = JSON.parse(storage?.getItem(TURNS_KEY) ?? "[]");
+    return Array.isArray(turns)
+      ? (turns as Turn[]).filter(
+          (t) =>
+            typeof t?.id === "string" && typeof t.question === "string" && (t.answer || t.error),
+        )
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveTurns(turns: Turn[]) {
+  try {
+    const kept = turns.filter((t) => t.answer || t.error).slice(0, KEPT_TURNS);
+    window.sessionStorage.setItem(TURNS_KEY, JSON.stringify(kept));
+  } catch {
+    // Storage full or blocked: the conversation still works, it is just not kept.
+  }
+}
+
 /**
  * What a screen reader hears about the latest question: the answer replaces the "Searching"
  * line, and a region that appears with its content is not read out, so one region that is always
@@ -290,7 +318,11 @@ function Questions() {
   const [question, setQuestion] = useState("");
   const [chosen, setAbout] = useState<string>(linked ?? ABOUT_ALL);
   const about = missing && chosen === linked ? ABOUT_ALL : chosen;
-  const [turns, setTurns] = useState<Turn[]>([]);
+  // This page renders in the browser only (it reads the address), so storage is there to read.
+  const [turns, setTurns] = useState<Turn[]>(() =>
+    loadTurns(typeof window === "undefined" ? undefined : window.sessionStorage),
+  );
+  useEffect(() => saveTurns(turns), [turns]);
   const counter = useRef(0);
   const input = useRef<HTMLInputElement>(null);
   const suggestions = about === ABOUT_ALL ? LIBRARY_QUESTIONS : INCIDENT_QUESTIONS;
@@ -300,7 +332,8 @@ function Questions() {
     if (q.length < 3 || ask.isPending) return;
     counter.current += 1;
     const turn: Turn = {
-      id: `${id}-q${counter.current}`,
+      // Unique beyond this visit too: kept turns come back with their ids.
+      id: `${id}-${Date.now().toString(36)}-q${counter.current}`,
       question: q,
       runId: about === ABOUT_ALL ? null : about,
     };
@@ -343,7 +376,11 @@ function Questions() {
               value={question}
               maxLength={1000}
               onChange={(e) => setQuestion(e.target.value)}
-              placeholder="How was the last ZooKeeper quorum loss fixed?"
+              placeholder={
+                about === ABOUT_ALL
+                  ? "How was the last ZooKeeper quorum loss fixed?"
+                  : "What should I check first for this incident?"
+              }
             />
           </div>
           {/* minmax(0, 1fr): a long incident title truncates instead of widening the page. */}

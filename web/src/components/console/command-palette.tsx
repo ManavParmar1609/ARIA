@@ -42,7 +42,14 @@ import { runTitle } from "@/components/console/run-row";
 import { STATUS_LABEL } from "@/components/console/status";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { useRuns, useScenarios, useSession, useSignOut, useStartSample } from "@/lib/api/hooks";
+import {
+  useRunbooks,
+  useRuns,
+  useScenarios,
+  useSession,
+  useSignOut,
+  useStartSample,
+} from "@/lib/api/hooks";
 import { isSeverity } from "@/lib/api/types";
 import { GLOSSARY } from "@/lib/glossary";
 import { GO_KEYS, isTypingTarget, setShortcutsEnabled, useShortcutsEnabled } from "@/lib/shortcuts";
@@ -62,8 +69,8 @@ export function useCommands(): Commands {
   return useContext(CommandsContext);
 }
 
-type Group = "Pages" | "Incidents" | "Samples" | "Words" | "Actions";
-const GROUPS: Group[] = ["Pages", "Incidents", "Samples", "Words", "Actions"];
+type Group = "Pages" | "Incidents" | "Samples" | "Runbooks" | "Words" | "Actions";
+const GROUPS: Group[] = ["Pages", "Incidents", "Samples", "Runbooks", "Words", "Actions"];
 
 interface Item {
   id: string;
@@ -186,6 +193,7 @@ function Palette({
   const runs = useRuns("all", 30);
   // The samples the server offers, under the names New triage gives them.
   const scenarios = useScenarios();
+  const runbooks = useRunbooks();
   const start = useStartSample();
   const session = useSession();
   const signOut = useSignOut();
@@ -263,6 +271,17 @@ function Palette({
         },
       });
     }
+    for (const book of runbooks.data ?? []) {
+      all.push({
+        id: `runbook:${book.slug}`,
+        group: "Runbooks",
+        label: book.title,
+        hint: book.when_to_use,
+        keywords: `runbook playbook steps fix ${book.slug} ${book.systems.map(systemName).join(" ")}`,
+        icon: BookOpenIcon,
+        run: () => go(`/console/runbooks/${encodeURIComponent(book.slug)}`),
+      });
+    }
     for (const [key, entry] of Object.entries(GLOSSARY)) {
       all.push({
         id: `word:${key}`,
@@ -337,6 +356,7 @@ function Palette({
   }, [
     runs.data,
     scenarios.data,
+    runbooks.data,
     session.data,
     go,
     start,
@@ -354,7 +374,7 @@ function Palette({
       // Without a query: the pages, a few recent incidents, the samples and the actions.
       let incidents = 0;
       return items.filter((item) => {
-        if (item.group === "Words") return false;
+        if (item.group === "Words" || item.group === "Runbooks") return false;
         if (item.group === "Incidents") return ++incidents <= 5;
         return true;
       });
@@ -405,7 +425,7 @@ function Palette({
           aria-controls={listId}
           aria-autocomplete="list"
           aria-activedescendant={shown.length ? optionId(activeIndex) : undefined}
-          aria-label="Search pages, incidents, samples, words and actions"
+          aria-label="Search pages, incidents, samples, runbooks, words and actions"
           placeholder="Jump to a page, an incident, a sample…"
           value={query}
           onChange={(event) => {
@@ -532,11 +552,11 @@ function ShortcutsHelp() {
           <Key>⌘</Key>
           <Key>K</Key>
         </dt>
-        <dd className="self-center text-muted-foreground">Open the command palette</dd>
+        <dd className="self-center text-muted-foreground">Open search</dd>
         <dt>
           <Key>/</Key>
         </dt>
-        <dd className="self-center text-muted-foreground">Open the command palette</dd>
+        <dd className="self-center text-muted-foreground">Open search</dd>
         <dt>
           <Key>?</Key>
         </dt>
@@ -661,12 +681,12 @@ export function ConsoleCommands({ children }: { children: ReactNode }) {
         <DialogContent
           instant
           onCloseAutoFocus={giveFocusBack}
-          closeLabel="Close the command palette"
+          closeLabel="Close search"
           className="top-[12vh] max-w-2xl translate-y-0 gap-0 overflow-hidden p-0 [&>button:last-child]:hidden"
         >
-          <DialogTitle className="sr-only">Command palette</DialogTitle>
+          <DialogTitle className="sr-only">Search</DialogTitle>
           <DialogDescription className="sr-only">
-            Type to find a page, an incident, a sample or a word, then press Enter.
+            Type to find a page, an incident, a sample, a runbook or a word, then press Enter.
           </DialogDescription>
           {palette ? (
             <Palette onClose={closePalette} onLeave={leavePalette} onHelp={openHelp} />

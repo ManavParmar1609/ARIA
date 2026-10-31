@@ -111,8 +111,8 @@ Open http://localhost:3000 for the landing page, then **Open the console**. New 
 console's **Guide** page replays a real incident (ten minutes of a real Hadoop
 cluster's log) or starts a sample triage in one click, and explains how to read a run. A replayed
 run shows the blocks ARIA flagged next to the label Hadoop experts gave each one, and the run
-page's first tab tells the run as each agent's turn. In the console, Ctrl or ⌘ + K opens a
-command palette that jumps to any page, recent incident, sample or definition, and `?` lists the
+page's first tab tells the run as each agent's turn. In the console, Ctrl or ⌘ + K opens
+search, which jumps to any page, recent incident, sample, runbook or definition, and `?` lists the
 keyboard shortcuts. The API listens on
 http://127.0.0.1:8000 (OpenAPI docs at `/docs`). If those ports are taken,
 `make dev API_PORT=8010 WEB_PORT=3010` moves both.
@@ -198,7 +198,7 @@ lines. With `ARIA_ENV=prod`, every call needs an API key from `ARIA_API_KEYS`.
 
 | Surface | Where | What it is for |
 |---|---|---|
-| Console | `web/`, http://localhost:3000/console | Queue, live run view with rule trace, prediction set, evidence and cited report; review, time travel, Ask ARIA, evals, memory, settings, a guide with one-click samples, and a command palette with keyboard shortcuts |
+| Console | `web/`, http://localhost:3000/console | Queue, live run view with rule trace, prediction set, evidence and cited report; review, time travel, Ask ARIA, evals, memory, settings, a guide with one-click samples, and search with keyboard shortcuts |
 | REST and SSE | `/api/v1/*`, [docs/openapi.json](docs/openapi.json) | Runs, live event stream, report (JSON and Markdown), postmortem draft, review, resending a failed message, history, fork |
 | Alert webhooks | `/api/v1/alerts/alertmanager`, `/grafana`, `/alerts` | Turn alert storms into one grouped run |
 | Log scan | `ARIA_SCAN_SOURCES`, `ARIA_SCAN_INTERVAL_S` | Open a run on an error burst no alert caught |

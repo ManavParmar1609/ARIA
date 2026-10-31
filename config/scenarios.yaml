@@ -25,7 +25,7 @@ failure_modes:
     runbook: bgl-kernel-panic
     card:
       title: "Compute nodes crash"
-      technology: "Blue Gene/L"
+      technology: "BlueGene/L"
       source: "hpc"
       summary: "Kernel panics stop nodes outright and kill the jobs on them."
   bgl.memory_interrupts:
@@ -35,7 +35,7 @@ failure_modes:
     runbook: bgl-memory-interrupts
     card:
       title: "Memory faults interrupt compute nodes"
-      technology: "Blue Gene/L"
+      technology: "BlueGene/L"
       source: "hpc"
       summary: "Storage and address-translation interrupts kill jobs on the nodes they hit."
   bgl.lustre_mount_failure:
@@ -45,7 +45,7 @@ failure_modes:
     runbook: lustre-mount-failure
     card:
       title: "Nodes can't mount the shared file system"
-      technology: "Blue Gene/L and Lustre"
+      technology: "BlueGene/L and Lustre"
       source: "hpc"
       summary: "I/O nodes fail to mount Lustre, so jobs can't read or write their data."
   bgl.ciod_link_failure:
@@ -55,7 +55,7 @@ failure_modes:
     runbook: bgl-ciod-link
     card:
       title: "Nodes lose their control link"
-      technology: "Blue Gene/L"
+      technology: "BlueGene/L"
       source: "hpc"
       summary: "The daemon that runs jobs loses its connection to nodes; often recoverable."
   bgl.tree_network_errors:
@@ -65,7 +65,7 @@ failure_modes:
     runbook: bgl-tree-network
     card:
       title: "The internal network drops packets"
-      technology: "Blue Gene/L"
+      technology: "BlueGene/L"
       source: "hpc"
       summary: "Errors on the network that links nodes together, which can slow or kill jobs."
 

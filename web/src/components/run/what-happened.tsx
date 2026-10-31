@@ -3,9 +3,9 @@
 import { useMemo } from "react";
 
 import type { LogEvent, ParsedBatch, TemplateStat, TimelineEntry } from "@/lib/api/types";
-import { clockTime } from "@/lib/format";
+import { clockTime, minutesWords, plainTemplate } from "@/lib/format";
 
-import { Citations, LogLines } from "./evidence";
+import { Citations, LogLines, LongLine } from "./evidence";
 
 // "What happened": the facts the logs give, before any judgement. How much there was and over how
 // long, the few patterns that carry the incident (each with a real line, and the rest one click
@@ -18,7 +18,7 @@ const plural = (n: number, one: string, many = `${one}s`) =>
 
 /** "125 lines over 7.7 minutes: 60 errors, on 2 of 48 servers." */
 export function scaleSentence(f: ParsedBatch["features"]): string {
-  const span = `${plural(f.n_events, "line")} over ${(f.duration_s / 60).toFixed(1)} minutes`;
+  const span = `${plural(f.n_events, "line")} over ${minutesWords(f.duration_s)}`;
   const warnings = f.level_counts.WARN ?? 0;
   const what = f.error_events
     ? `${plural(f.error_events, "error")}${warnings ? ` and ${plural(warnings, "warning")}` : ""}`
@@ -50,7 +50,9 @@ function Pattern({ template, lines }: { template: TemplateStat; lines: LogEvent[
           label={`An example line of ${template.evidence_id}`}
         />
       ) : (
-        <p className="font-mono text-xs leading-5 break-all">{template.template}</p>
+        <p className="font-mono text-xs leading-5 wrap-anywhere">
+          <LongLine text={plainTemplate(template.template)} />
+        </p>
       )}
       <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
         <span className="tabular font-medium text-foreground">

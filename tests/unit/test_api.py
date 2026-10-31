@@ -269,8 +269,13 @@ async def test_a_visitor_waits_for_a_triage_before_queueing_more(
             assert [(await start(ana)).status_code for _ in range(2)] == [202, 202]
             third = await start(ana)
             assert third.status_code == 429
-            assert third.json()["detail"].startswith("You already have 2 triages waiting")
+            assert third.json()["detail"].startswith("You already have 2 triages queued")
             assert (await start(bo)).status_code == 202  # Ana's queue does not stop Bo
+            # Starts that arrive together, from several tabs, take turns: they cannot all pass
+            # the count before any of them is recorded.
+            cy = "visitor-cy-00000000003"
+            together = await asyncio.gather(*(start(cy) for _ in range(5)))
+            assert sorted(r.status_code for r in together) == [202, 202, 429, 429, 429]
 
 
 def test_the_rate_limiter_forgets_idle_callers_without_changing_an_answer() -> None:

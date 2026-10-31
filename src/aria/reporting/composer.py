@@ -21,7 +21,7 @@ from aria.contracts.severity import SeverityAssessment
 from aria.llm.schemas import ActionOut, ClaimOut, NarrativeOutput
 from aria.parsing.signals import signal_components, signal_templates
 from aria.retrieval.runbooks import Runbook
-from aria.text import clip, headline
+from aria.text import clip, headline, plain_template, sentence_start
 
 # The next step that asks a person to settle a severity ARIA was unsure of; a review that
 # approves the report takes it (``reporting.review``).
@@ -389,7 +389,8 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
         hyp_ev = next(
             (e for e in ctx.all_of(EvidenceKind.HYPOTHESIS) if e.data.get("id") == lead.id), None
         )
-        text = f"Suspected cause: {lead.statement.rstrip('.')}"
+        # The section is headed "Suspected cause", so the claim does not say it again.
+        text = sentence_start(lead.statement.rstrip("."))
         if hyp_ev is not None and "confidence" in hyp_ev.data:
             # Quote the confidence only from the evidence that records it.
             text += f" (the investigation is {float(hyp_ev.data['confidence']):.0%} sure)"
@@ -407,7 +408,15 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
         )
 
     actions: list[ActionOut] = []
-    for ref in ctx.retrieval.runbooks[:2]:
+    # A runbook for another system arrives with an analogue from that system; its steps would send
+    # the reader to the wrong machinery, so only this system's runbooks and the generic one do.
+    fitting = [
+        ref
+        for ref in ctx.retrieval.runbooks
+        if (book := ctx.runbooks.get(ref.slug)) is not None
+        and ("*" in book.systems or ctx.batch.system in book.systems)
+    ]
+    for ref in fitting[:2]:
         runbook = ctx.runbooks.get(ref.slug)
         if runbook is None or ref.evidence_id not in by_id:
             continue
@@ -429,12 +438,13 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
                 f"likely, at {p_top:.0%})"
             )
         elif len(sev.prediction_set) > 1:
-            doubt = f"the model could not rule out {' or '.join(sev.prediction_set)}"
+            # Where the calibrated model sat out, the rules set the choices, as the summary says.
+            judge = "the rules" if unlike else "the model"
+            doubt = f"{judge} could not rule out {' or '.join(sev.prediction_set)}"
         else:
             p_set = sev.probabilities.get(sev.severity, 0.0)
-            doubt = (
-                f"the model's confidence in {sev.severity} ({p_set:.0%}) is too low to decide alone"
-            )
+            score = "the rules' score for" if unlike else "the model's confidence in"
+            doubt = f"{score} {sev.severity} ({p_set:.0%}) is too low to decide alone"
         actions.insert(
             0,
             ActionOut(
@@ -489,12 +499,14 @@ def compose_timeline(ctx: ReportContext, *, limit: int = 12) -> list[TimelineEnt
             continue
         example = _example(ctx, t)
         if example is None:
-            events.append(
-                (t.first_ts, f'First "{clip(t.template, 100)}" ({t.count} lines)', [t.evidence_id])
-            )
+            pattern = clip(plain_template(t.template), 100)
+            events.append((t.first_ts, f'First "{pattern}" ({t.count} lines)', [t.evidence_id]))
             continue
         told.add(example.id)
-        text = f'First of {t.count} lines like "{clip(_quoted(example), 100)}"'
+        line = clip(_quoted(example), 100)
+        text = (
+            f'Logged once: "{line}"' if t.count == 1 else f'First of {t.count} lines like "{line}"'
+        )
         events.append((t.first_ts, text, [t.evidence_id, example.id]))
     events.extend(
         (

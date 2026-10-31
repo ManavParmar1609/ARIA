@@ -42,7 +42,7 @@ from aria.llm.schemas import (
 from aria.mcp.client import ToolBelt, ToolNotAllowedError
 from aria.parsing.flows import load_flow_settings
 from aria.parsing.signals import signal_components, signal_templates
-from aria.text import clip, failure_words, headline
+from aria.text import clip, failure_words, headline, plain_template
 
 INVESTIGATOR_TOOLS = (
     "search_logs",
@@ -197,7 +197,10 @@ def candidate_hypotheses(inputs: InvestigationInputs, *, limit: int = 3) -> list
         where = top.components[0] if top.components else component
         out.append(
             NewHypothesis(
-                statement=f'{where} is failing: "{clip(top.template, 80)}" repeats {top.count} times',
+                statement=(
+                    f'{where} is failing: "{clip(plain_template(top.template), 80)}" repeats '
+                    f"{top.count} times"
+                ),
                 failure_mode=GENERIC_CAUSE,
                 component=where,
             )

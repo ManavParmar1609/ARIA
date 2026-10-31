@@ -23,7 +23,12 @@ import { useCreateRun, useModelKey, useSettingsView } from "@/lib/api/hooks";
 import { modelKeyLabel } from "@/lib/api/model-key";
 import { MAX_BODY_BYTES } from "@/lib/limits";
 import { SYSTEM_NAMES } from "@/lib/systems";
-import { accessSentence, modelAccess, type SharedModel } from "@/lib/model-access";
+import {
+  accessSentence,
+  modelAccess,
+  type ModelAccess,
+  type SharedModel,
+} from "@/lib/model-access";
 
 const MAX_LINES = 20_000;
 
@@ -67,11 +72,24 @@ function Toggle({
   );
 }
 
-/** The hint under the log box: what is wrong with the lines, else what happens to them. A model
- * key is mentioned only where this server accepts visitors' own keys. */
-export function logsHint(problem: string | null, publicDemo: boolean, keys = false): string {
+/** The hint under the log box: what is wrong with the lines, else what happens to them, including
+ * which model they go to with the model switch on. A key of the visitor's own is mentioned only
+ * where this server accepts one. */
+export function logsHint(
+  problem: string | null,
+  publicDemo: boolean,
+  keys = false,
+  answers: ModelAccess["kind"] | "off" = "offline",
+): string {
   if (problem) return problem;
-  const model = keys ? " If you add a model key, they are sent to that model too." : "";
+  const model =
+    answers === "own"
+      ? " They are also sent to your own key's model."
+      : answers === "shared"
+        ? ` They are also sent to the site's model${keys ? ", or to your own key's once you add one" : ""}.`
+        : answers === "offline" && keys
+          ? " If you add a model key, they are sent to that model too."
+          : "";
   return publicDemo
     ? `One event per line. Your logs stay with your incident, and only you see it, but this public demo runs on a shared server: paste only logs you could share.${model}`
     : `One event per line. Your logs stay with your incident until you delete it, with IP and e-mail addresses pseudonymised and secrets redacted.${model}`;
@@ -115,7 +133,8 @@ export function NewRun({ publicDemo = false }: { publicDemo?: boolean }) {
     if (value === "own") next.set("tab", "own");
     else next.delete("tab");
     const qs = next.toString();
-    router.replace((qs ? `${pathname}?${qs}` : pathname) as never, { scroll: false });
+    // Like a source filter, a tab is a step Back can undo.
+    router.push((qs ? `${pathname}?${qs}` : pathname) as never, { scroll: false });
   };
   return (
     <div className="grid gap-8">
@@ -155,6 +174,11 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
   const settings = useSettingsView().data;
   const approvalRequired = settings?.require_approval ?? true;
   const savedKey = useModelKey().data;
+  const answers = modelAccess(
+    savedKey?.provider ?? null,
+    settings?.visitor_keys ?? [],
+    settings?.shared_model,
+  ).kind;
   const llmHint = modelHint(
     settings?.visitor_keys ?? [],
     savedKey?.provider ?? null,
@@ -249,6 +273,7 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
               touched ? problem : null,
               publicDemo,
               (settings?.visitor_keys ?? []).length > 0,
+              useLlm ? answers : "off",
             )}
           </p>
         </div>

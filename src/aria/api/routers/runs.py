@@ -68,7 +68,6 @@ async def create_run(
 ) -> RunAccepted:
     """Start triage. The run continues in the background; follow it on ``links.stream``."""
     check_provider(state, request.options.provider, visitor)
-    await make_room(state, viewer)
     if not may_use_model(state, visitor, viewer.tag, request.options.use_llm):
         request = request.model_copy(update={"options": offline(request.options)})
     if request.window_id and not request.logs:
@@ -80,9 +79,10 @@ async def create_run(
                 "or send the log lines",
             )
     trigger = "api" if caller.authenticated else "manual"
-    run_id = await asyncio.to_thread(
-        state.runner.submit, request, trigger=trigger, visitor=viewer.tag
-    )
+    async with make_room(state, viewer):
+        run_id = await asyncio.to_thread(
+            state.runner.submit, request, trigger=trigger, visitor=viewer.tag
+        )
     if visitor is not None:
         state.runner.keys.hold(run_id, visitor)
     if state.inprocess:
@@ -302,19 +302,19 @@ async def fork(
     """Branch a new run from a checkpoint, optionally with different run options. The new run is
     the caller's own, so forking an example is how a visitor gets a copy to change."""
     await _run_or_404(state, run_id, viewer)
-    await make_room(state, viewer)
     options = body.run_options()
     if not may_use_model(state, visitor, viewer.tag, bool((options or {}).get("use_llm", True))):
         options = {**(options or {}), "use_llm": False}
     try:
-        outcome = await state.runner.fork(
-            run_id,
-            body.checkpoint_id,
-            options=options,
-            title=body.title,
-            execute=False,
-            visitor=viewer.tag,
-        )
+        async with make_room(state, viewer):
+            outcome = await state.runner.fork(
+                run_id,
+                body.checkpoint_id,
+                options=options,
+                title=body.title,
+                execute=False,
+                visitor=viewer.tag,
+            )
     except RunNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "no such checkpoint") from exc
     except RunStateError as exc:

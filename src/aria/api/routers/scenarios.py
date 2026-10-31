@@ -142,32 +142,32 @@ async def run_scenario(
     """Build a sample on this server and triage it as a run; follow it on ``links.stream``."""
     body = body or SampleRunRequest()
     check_provider(state, body.options.provider, visitor)
-    await make_room(state, viewer)
-    options = body.options
-    if not may_use_model(state, visitor, viewer.tag, options.use_llm):
-        options = offline(options)
-    builder = _builder()
-    mode = builder.pools.modes.get(scenario_id)
-    if mode is None or mode.card is None or scenario_id not in builder.pools.available_modes():
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"no sample {scenario_id!r}")
-    sizes = await asyncio.to_thread(builder.sample_sizes, scenario_id)
-    servers = _size(sizes.servers, body.servers, "number of servers")
-    rate = _size(sizes.rate, body.rate, "rate")
-    scenario = await asyncio.to_thread(builder.sample, scenario_id, servers=servers, rate=rate)
-    request = TriageRequest(
-        system=scenario.system,
-        logs=scenario.lines,
-        synthetic=True,
-        options=options,
-        sample=SampleRef(
-            id=scenario_id,
-            servers=(servers or sizes.servers.default) if sizes.servers else None,
-            rate=(rate or sizes.rate.default) if sizes.rate else None,
-        ),
-    )
-    run_id = await asyncio.to_thread(
-        state.runner.submit, request, trigger="sample", visitor=viewer.tag
-    )
+    async with make_room(state, viewer):
+        options = body.options
+        if not may_use_model(state, visitor, viewer.tag, options.use_llm):
+            options = offline(options)
+        builder = _builder()
+        mode = builder.pools.modes.get(scenario_id)
+        if mode is None or mode.card is None or scenario_id not in builder.pools.available_modes():
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"no sample {scenario_id!r}")
+        sizes = await asyncio.to_thread(builder.sample_sizes, scenario_id)
+        servers = _size(sizes.servers, body.servers, "number of servers")
+        rate = _size(sizes.rate, body.rate, "rate")
+        scenario = await asyncio.to_thread(builder.sample, scenario_id, servers=servers, rate=rate)
+        request = TriageRequest(
+            system=scenario.system,
+            logs=scenario.lines,
+            synthetic=True,
+            options=options,
+            sample=SampleRef(
+                id=scenario_id,
+                servers=(servers or sizes.servers.default) if sizes.servers else None,
+                rate=(rate or sizes.rate.default) if sizes.rate else None,
+            ),
+        )
+        run_id = await asyncio.to_thread(
+            state.runner.submit, request, trigger="sample", visitor=viewer.tag
+        )
     if visitor is not None:
         state.runner.keys.hold(run_id, visitor)
     if state.inprocess:

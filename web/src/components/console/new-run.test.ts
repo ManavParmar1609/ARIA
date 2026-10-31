@@ -18,6 +18,16 @@ describe("logsHint", () => {
     expect(logsHint(null, true, true)).toContain("If you add a model key");
   });
 
+  it("says which model the lines go to while the model switch is on", () => {
+    expect(logsHint(null, true, true, "own")).toContain("your own key's model");
+    expect(logsHint(null, true, false, "shared")).toContain("the site's model.");
+    expect(logsHint(null, true, true, "shared")).toContain("or to your own key's once you add one");
+  });
+
+  it("names no model while the model switch is off", () => {
+    expect(logsHint(null, true, true, "off")).not.toMatch(/model/);
+  });
+
   it("names what is wrong with the lines first", () => {
     const problem = "Paste at least one log line, or pick a sample on the Samples tab.";
     expect(logsHint(problem, true)).toBe(problem);

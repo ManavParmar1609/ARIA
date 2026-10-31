@@ -80,7 +80,7 @@ export function AguiChat() {
   const [items, setItems] = useState<Item[]>([]);
   // While a review waits for an answer, its approve button is the one primary action.
   const awaiting = items.some((i) => i.kind === "review" && !i.answered);
-  const [system, setSystem] = useState("hdfs");
+  const [system, setSystem] = useState("generic");
   const [text, setText] = useState("");
   // A loaded sample is semi-synthetic, so its run never counts as a real incident in memory.
   const [sample, setSample] = useState<string | null>(null);
@@ -244,7 +244,7 @@ export function AguiChat() {
                     key={item.id}
                     className="justify-self-end rounded-md bg-sunken px-4 py-2.5 text-sm"
                   >
-                    {item.lines} {SYSTEM_NAMES[item.system] ?? item.system} log lines
+                    {`${item.lines} ${item.system === "generic" ? "" : `${SYSTEM_NAMES[item.system] ?? item.system} `}log ${item.lines === 1 ? "line" : "lines"}`}
                   </li>
                 );
               case "step":
@@ -383,7 +383,7 @@ export function AguiChat() {
       <form onSubmit={(e) => void start(e)} className="grid gap-3 rounded-lg bg-raised p-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="grid gap-1.5">
-            <Label htmlFor={`${id}-system`}>Log format</Label>
+            <Label htmlFor={`${id}-system`}>What wrote these logs?</Label>
             <Select value={system} onValueChange={setSystem}>
               <SelectTrigger id={`${id}-system`} className="w-48">
                 <SelectValue />
@@ -391,7 +391,7 @@ export function AguiChat() {
               <SelectContent>
                 {Object.entries(SYSTEM_NAMES).map(([value, name]) => (
                   <SelectItem key={value} value={value}>
-                    {name}
+                    {value === "generic" ? "Not sure" : name}
                   </SelectItem>
                 ))}
               </SelectContent>

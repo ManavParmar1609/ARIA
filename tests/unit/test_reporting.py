@@ -560,6 +560,16 @@ def test_cut_text_never_ends_on_part_of_a_number() -> None:
         assert {n.value for n in numbers_in(cut)} <= whole, cut
 
 
+def test_a_sentence_starting_with_a_name_keeps_the_name_as_written() -> None:
+    """The cause claim starts with the investigation's statement; capitalising it turned the
+    component "payments.Gateway" into "Payments.Gateway", a name the logs never use."""
+    from aria.text import sentence_start
+
+    assert sentence_start("the disk is full") == "The disk is full"
+    for named in ("payments.Gateway is failing", "eth0 is down", "blk_42 was lost", "x86 host"):
+        assert sentence_start(named) == named
+
+
 def test_failure_modes_read_as_words_and_keep_their_capitals() -> None:
     from aria.reporting.composer import _mode_words, _sentence
 

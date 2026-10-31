@@ -7,6 +7,9 @@ import re
 _SEVERITY_PREFIX = re.compile(r"^SEV[1-4]\s*·\s*")
 _LAST_WORD = re.compile(r"\S+$")
 _TRAILING_NUMBER = re.compile(r"[\d.,:]+$")
+_WILDCARD = re.compile(r"<\*>")
+# A first word that is plain lower-case letters, so capitalising it changes no name.
+_PLAIN_WORD = re.compile(r"[a-z]+(?=[\s,:;]|$)")
 
 
 def headline(title: str) -> str:
@@ -47,3 +50,14 @@ _FAILURE_WORDS = {
 def failure_words(mode: str) -> str:
     """A failure mode in words: "bruteforce" reads "brute-force attempts"."""
     return _FAILURE_WORDS.get(mode, mode.replace("_", " "))
+
+
+def plain_template(template: str) -> str:
+    """A log pattern as people read it: each part that varies (``<*>``) becomes "…"."""
+    return _WILDCARD.sub("…", template)
+
+
+def sentence_start(text: str) -> str:
+    """``text`` with its first letter capitalised when it opens with a plain word. A name such as
+    ``payments.Gateway`` or ``eth0`` keeps its exact spelling."""
+    return text[:1].upper() + text[1:] if _PLAIN_WORD.match(text) else text

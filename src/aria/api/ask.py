@@ -21,7 +21,7 @@ from aria.llm.router import LLMRouter
 from aria.llm.schemas import AnswerOutput, ClaimOut
 from aria.reporting.grounding import ungrounded_numbers
 from aria.services import Services
-from aria.text import failure_words, headline
+from aria.text import failure_words, headline, plain_template
 
 _WORD = re.compile(r"[a-z0-9]+")
 _STOP = frozenset(
@@ -284,7 +284,11 @@ def _claims(ranked: Sequence[Evidence], *, limit: int = 3) -> list[ClaimOut]:
             groups[key].append(item)
             placed.add(item.id)
     return [
-        ClaimOut(text=_clip(_plain_group(items), 400), evidence_ids=[item.id for item in items])
+        # Log patterns read as "…" where a value changes, in every kind of line that quotes one.
+        ClaimOut(
+            text=_clip(plain_template(_plain_group(items)), 400),
+            evidence_ids=[item.id for item in items],
+        )
         for items in groups.values()
     ]
 
@@ -414,7 +418,7 @@ def _plain(item: Evidence) -> str:
     if item.kind is EvidenceKind.LOG and (found := _LINE.match(item.title)):
         return f'Line {found["n"]} of the log reads: "{found["line"]}"'
     if item.kind is EvidenceKind.TEMPLATE and (found := _TEMPLATE.match(item.title)):
-        pattern = found["pattern"].replace("<*>", "…")
+        pattern = plain_template(found["pattern"])
         if found["count"] == "1":
             return f'One log line has a pattern of its own: "{pattern}"'
         return f'{found["count"]} log lines follow one pattern: "{pattern}"'

@@ -175,7 +175,10 @@ export function Queue() {
         </div>
       </PageHeader>
 
-      {status === "all" ? <Waiting onShow={() => setStatus("awaiting_review")} /> : null}
+      {/* Hidden while the list cannot load: a count from before would contradict the error. */}
+      {status === "all" && !runs.isError ? (
+        <Waiting onShow={() => setStatus("awaiting_review")} />
+      ) : null}
 
       {runs.isPending ? (
         <LoadingRows rows={6} label="Loading incidents" />
@@ -303,10 +306,10 @@ export function Queue() {
 /** The incidents waiting for a person, as one line above the list, with a way to show only them. */
 /** Marks an incident every visitor of a shared demo sees, which only a copy of one's own changes. */
 function Waiting({ onShow }: { onShow: () => void }) {
-  const { data } = useRuns("awaiting_review", 50, 30_000);
+  const { data, isError } = useRuns("awaiting_review", 50, 30_000);
   // Examples wait for review too, but only on a copy of one's own: they are not "your" review.
   const n = data?.runs.filter((run) => !run.example).length ?? 0;
-  if (n === 0) return null;
+  if (n === 0 || isError) return null;
   return (
     <p className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-panel-keylime px-4 py-3 text-sm text-heading dark:bg-highlight">
       <span>

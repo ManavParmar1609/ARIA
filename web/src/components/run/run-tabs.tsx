@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useDensity } from "@/lib/density";
-import { capitalise, percent } from "@/lib/format";
+import { capitalise, minutesWords, percent, plainTemplate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import { DensityToggle } from "./density-toggle";
@@ -20,6 +20,7 @@ import {
   EvidenceChip,
   evidenceTitle,
   KIND_LABEL,
+  LongLine,
   sourceLabel,
   useEvidence,
 } from "./evidence";
@@ -123,8 +124,12 @@ function Guard({ guard, raw }: { guard: GuardReport; raw: number }) {
         {redactions.length
           ? `Redacted or pseudonymised: ${redactions.map(([k, n]) => redacted(k, n)).join(", ")}.`
           : "Nothing needed redacting."}{" "}
-        {guard.truncated_lines ? `${guard.truncated_lines} over-long lines were truncated. ` : ""}
-        {guard.dropped_lines ? `${guard.dropped_lines} lines beyond the limit were dropped.` : ""}
+        {guard.truncated_lines
+          ? `${guard.truncated_lines.toLocaleString("en")} over-long ${guard.truncated_lines === 1 ? "line was" : "lines were"} shortened. `
+          : ""}
+        {guard.dropped_lines
+          ? `${guard.dropped_lines.toLocaleString("en")} ${guard.dropped_lines === 1 ? "line" : "lines"} beyond the limit ${guard.dropped_lines === 1 ? "was" : "were"} left out.`
+          : ""}
       </p>
       {guard.injections?.length ? (
         <div className="grid gap-2">
@@ -167,8 +172,9 @@ export function Templates({ batch }: { batch: ParsedBatch }) {
     <div className="grid gap-5">
       <p className="text-sm text-muted-foreground">
         {f.n_events.toLocaleString("en")} events in {f.n_templates} templates over{" "}
-        {Math.round(f.duration_s / 60)} minutes ({f.events_per_min.toFixed(1)} a minute).{" "}
-        {f.error_events} errors ({percent(f.error_ratio, 1)})
+        {minutesWords(f.duration_s)}
+        {f.duration_s >= 60 ? ` (${f.events_per_min.toFixed(1)} a minute)` : ""}. {f.error_events}{" "}
+        errors ({percent(f.error_ratio, 1)})
         {f.level_counts.WARN ? ` and ${f.level_counts.WARN} warnings` : ""}
         {f.distinct_nodes
           ? ` across ${f.distinct_nodes} ${f.distinct_nodes === 1 ? "server" : "servers"}`
@@ -184,7 +190,9 @@ export function Templates({ batch }: { batch: ParsedBatch }) {
             key={t.template_id}
             className={cn("grid rounded-lg bg-raised", compact ? "gap-1 px-3 py-2" : "gap-1.5 p-4")}
           >
-            <p className="font-mono text-xs leading-5 break-all">{t.template}</p>
+            <p className="font-mono text-xs leading-5 wrap-anywhere">
+              <LongLine text={plainTemplate(t.template)} />
+            </p>
             <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span className="tabular font-medium text-foreground">
                 {t.count.toLocaleString("en")}x

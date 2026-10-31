@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { type ReactNode } from "react";
 
+import { HashLinks } from "@/components/hash-links";
 import { THEME_SCRIPT } from "@/lib/theme-script";
 
 import { geistMono, inter, newsreader } from "./fonts";
@@ -49,7 +50,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           }}
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <HashLinks />
+      </body>
     </html>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpenIcon } from "lucide-react";
+import { ArrowLeftIcon, BookOpenIcon } from "lucide-react";
 import Link from "next/link";
 
 import { EmptyState, ErrorState, LoadingRows, PageHeader } from "@/components/console/states";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { CodeText } from "@/components/ui/code-text";
 import { useRunbook, useRunbooks } from "@/lib/api/hooks";
 import { ApiError } from "@/lib/api/client";
-import type { RunbookStep } from "@/lib/api/types";
+import type { RunbookOut, RunbookStep } from "@/lib/api/types";
 import { systemName } from "@/lib/systems";
 import { cn } from "@/lib/utils";
 import { useDocumentTitle } from "@/lib/document-title";
@@ -35,6 +35,16 @@ function Risk({ risk }: { risk: string }) {
   );
 }
 
+const RISK_ORDER = ["low", "medium", "high"];
+
+/** A runbook's risk is its riskiest step's, so a "low risk" runbook never holds a high-risk step. */
+export function highestRisk(rb: Pick<RunbookOut, "risk" | "diagnose" | "mitigate" | "verify">) {
+  const all = [rb.risk, ...[...rb.diagnose, ...rb.mitigate, ...rb.verify].map((s) => s.risk)];
+  return all.reduce((top, risk) =>
+    RISK_ORDER.indexOf(risk) > RISK_ORDER.indexOf(top) ? risk : top,
+  );
+}
+
 /** What a runbook covers, in words: "HDFS, for block serve exceptions" or "Any system". */
 function covers(rb: { systems: string[]; failure_modes: string[] }): string {
   const systems = rb.systems.includes("*") ? "Any system" : rb.systems.map(systemName).join(", ");
@@ -49,7 +59,7 @@ export function Runbooks() {
     <div className="grid gap-6">
       <PageHeader
         title="Runbooks"
-        description="ARIA proposes next steps only from these runbooks, and cites the one it used. A team adds its own as short text files kept with ARIA."
+        description="ARIA proposes next steps only from these runbooks, and cites the one it used. A team adds its own as short text files kept with ARIA. A runbook's risk is that of its riskiest step."
       />
       {runbooks.isPending ? (
         <LoadingRows rows={6} label="Loading runbooks" />
@@ -77,7 +87,7 @@ export function Runbooks() {
                 >
                   {rb.title}
                 </Link>
-                <Risk risk={rb.risk} />
+                <Risk risk={highestRisk(rb)} />
               </div>
               <p className="line-clamp-2 text-sm text-muted-foreground">
                 <CodeText>{rb.when_to_use}</CodeText>
@@ -167,9 +177,13 @@ export function RunbookDetail({ slug }: { slug: string }) {
       <PageHeader
         title={rb.title}
         description={<CodeText>{rb.when_to_use}</CodeText>}
-        actions={<Risk risk={rb.risk} />}
+        actions={<Risk risk={highestRisk(rb)} />}
       >
         <p className="text-sm text-muted-foreground">{covers(rb)}</p>
+        <p className="max-w-prose text-sm text-muted-foreground">
+          Steps marked medium or high risk could make things worse if done wrongly. ARIA flags them
+          in its reports, for a person to approve before anyone acts on them.
+        </p>
       </PageHeader>
       <Steps title="Diagnose" steps={rb.diagnose} />
       <Steps title="Mitigate" steps={rb.mitigate} />
@@ -182,6 +196,13 @@ export function RunbookDetail({ slug }: { slug: string }) {
           </p>
         </section>
       ) : null}
+      <Link
+        href="/console/runbooks"
+        className="inline-flex w-fit items-center gap-1.5 text-sm underline underline-offset-4"
+      >
+        <ArrowLeftIcon aria-hidden className="size-4" />
+        All runbooks
+      </Link>
     </article>
   );
 }

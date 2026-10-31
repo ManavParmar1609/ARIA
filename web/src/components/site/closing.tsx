@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { Converge } from "@/components/site/line-art";
 import { ArrowCircle, Button } from "@/components/ui/button";
+import { CopyButton } from "@/components/ui/copy-button";
 import { REPO_URL } from "@/lib/site-data";
 
 // The README's offline quick start, without keys.
@@ -39,18 +40,24 @@ export function Closing() {
           </div>
           {/* Long commands wrap (with a hanging indent) rather than scroll, so phones need no
               sideways scrolling inside the block. */}
-          <pre className="rounded-[12px] bg-raised px-5 py-4 text-left text-sm leading-relaxed whitespace-pre-wrap text-foreground">
-            <code>
-              {QUICKSTART.map((command) => (
-                <span key={command} className="block pl-[2ch] -indent-[2ch]">
-                  <span aria-hidden className="text-faint select-none">
-                    ${" "}
+          <div className="grid rounded-[12px] bg-raised">
+            <div className="flex items-center justify-between gap-3 pt-1.5 pr-1.5 pl-5">
+              <span className="text-xs text-muted-foreground">On your own machine</span>
+              <CopyButton text={QUICKSTART.join("\n")} label="the three commands" />
+            </div>
+            <pre className="px-5 pt-1 pb-4 text-left text-sm leading-relaxed whitespace-pre-wrap text-foreground">
+              <code>
+                {QUICKSTART.map((command) => (
+                  <span key={command} className="block pl-[2ch] -indent-[2ch]">
+                    <span aria-hidden className="text-faint select-none">
+                      ${" "}
+                    </span>
+                    {command}
                   </span>
-                  {command}
-                </span>
-              ))}
-            </code>
-          </pre>
+                ))}
+              </code>
+            </pre>
+          </div>
         </div>
         <Converge className="mt-12 -mr-12 w-full text-heading sm:mt-14" />
       </div>

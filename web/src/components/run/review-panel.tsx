@@ -524,7 +524,8 @@ export function ReviewPanel({
           <DialogHeader>
             <DialogTitle>Discard this draft?</DialogTitle>
             <DialogDescription>
-              Nothing is sent, and the incident is closed. Say why, so ARIA learns from it.
+              Nothing is sent, and the incident is closed. A reason, if you give one, is kept with
+              this incident&rsquo;s review.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-1.5">

@@ -27,22 +27,26 @@ import { cn } from "@/lib/utils";
 
 import { stepLabel } from "./progress";
 
-// The part that comes next, where one step of the progress strip has several, so two
-// checkpoints inside one step read differently.
+// What a later part of a step does, so a checkpoint inside a step does not read as one before
+// it: "During “Read the logs”: joining what was read".
 const PART: Record<string, string> = {
-  plan: "planning how to read them",
+  parse_shard: "reading the lines",
   merge: "joining what was read",
-  report: "the report itself",
-  comms: "the message drafts",
+  widen: "widening the search",
+  comms: "drafting the messages",
 };
 
 /** A checkpoint, named by the steps the progress strip shows: "Before “Rate severity”". */
 export function checkpointName(cp: Pick<Checkpoint, "next" | "interrupted">): string {
   if (cp.next.length === 0) return "The end of the triage";
   if (cp.next.includes("__start__")) return "The input, before anything ran";
-  const only = cp.next.length === 1 ? cp.next[0] : undefined;
-  if (only && PART[only] && !cp.interrupted) return `Before “${stepLabel(only)}”: ${PART[only]}`;
-  // Parallel parts repeat one step: "“Read the logs” (3 parts at once)", not the step three times.
+  const nodes = new Set(cp.next);
+  const only = nodes.size === 1 ? cp.next[0] : undefined;
+  if (only && PART[only] && !cp.interrupted) {
+    // Parallel parts run one node several times: "(3 parts at once)", not the step three times.
+    const k = cp.next.length;
+    return `During “${stepLabel(only)}”: ${PART[only]}${k > 1 ? ` (${k} parts at once)` : ""}`;
+  }
   const counts = new Map<string, number>();
   for (const n of cp.next) {
     const label = stepLabel(n);

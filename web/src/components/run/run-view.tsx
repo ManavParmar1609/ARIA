@@ -1,6 +1,12 @@
 "use client";
 
-import { CircleHelpIcon, DownloadIcon, HistoryIcon, Trash2Icon } from "lucide-react";
+import {
+  CircleHelpIcon,
+  DownloadIcon,
+  HistoryIcon,
+  MessageSquareTextIcon,
+  Trash2Icon,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -43,7 +49,7 @@ import { Deliveries } from "./deliveries";
 import { EvidencePanel, EvidenceProvider } from "./evidence";
 import { ExpertCheck } from "./expert-check";
 import { History, checkpointName } from "./history";
-import { RunProgress } from "./progress";
+import { RunProgress, usePacedSteps } from "./progress";
 import { LiveDraft, ReportView } from "./report-view";
 import { ExampleNote } from "./example-note";
 import { Receipt, type ReceiptFacts } from "./receipt";
@@ -56,6 +62,42 @@ import { AgentTeam } from "./team";
 import { WhatHappened } from "./what-happened";
 
 const ACTIVE = new Set(["queued", "running", "awaiting_review"]);
+
+const TABS_KEY = "aria:run-tabs";
+const TABS = new Set(["work", "evidence", "logs", "history"]);
+const KEPT_TABS = 20;
+
+/** The tab each recent incident was left on in this browser tab, so Back returns to it. */
+function storedTabs(): Record<string, string> {
+  try {
+    const raw = JSON.parse(window.sessionStorage.getItem(TABS_KEY) ?? "{}") as unknown;
+    return raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, string>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function storedTab(runId: string): string {
+  if (typeof window === "undefined") return "work";
+  const tab = storedTabs()[runId];
+  return typeof tab === "string" && TABS.has(tab) ? tab : "work";
+}
+
+function storeTab(runId: string, tab: string) {
+  // The newest last, and only the most recent few.
+  const kept = Object.entries(storedTabs()).filter(([id]) => id !== runId);
+  kept.push([runId, tab]);
+  try {
+    window.sessionStorage.setItem(
+      TABS_KEY,
+      JSON.stringify(Object.fromEntries(kept.slice(-KEPT_TABS))),
+    );
+  } catch {
+    // Private windows can refuse storage; the tab then simply opens on its first tab.
+  }
+}
 
 /** The answer first (item 14): the level and its word, the title, and the short list of levels
  * it could be; then where the incident came from. */
@@ -153,7 +195,7 @@ function workFacts(run: RunDetail, offline: boolean | null): string {
   return [model, toolText].filter(Boolean).join(", ");
 }
 
-function DeleteRun({ runId }: { runId: string }) {
+function DeleteRun({ runId, shared = false }: { runId: string; shared?: boolean }) {
   const router = useRouter();
   const remove = useDeleteRun();
   const deleting = useRef(false);
@@ -171,8 +213,9 @@ function DeleteRun({ runId }: { runId: string }) {
         <DialogHeader>
           <DialogTitle>Delete this incident?</DialogTitle>
           <DialogDescription>
-            The incident, its report, its steps and what it added to the incident library are
-            removed. This cannot be undone.
+            {shared
+              ? "The incident, its report and its steps are removed. This cannot be undone."
+              : "The incident, its report, its steps and what it added to the incident library are removed. This cannot be undone."}
           </DialogDescription>
         </DialogHeader>
         {error ? (
@@ -278,15 +321,26 @@ export function RunView({
   const session = useSession().data;
   // Set when this page saved the review, so the receipt that replaces the panel takes focus.
   const [decided, setDecided] = useState(false);
-  useDocumentTitle(run.data ? runTitle(run.data) : null);
+  // A link that names no incident (deleted, someone else's, or damaged in copying) opens the
+  // same "not here" page, with a title that says so.
+  const missing =
+    run.error instanceof ApiError && (run.error.status === 404 || run.error.status === 422);
+  useDocumentTitle(run.data ? runTitle(run.data) : missing ? "Incident not found" : null);
   const [checkpoint, setCheckpoint] = useState<string | null>(null);
-  const [tab, setTab] = useState("work");
+  const [tab, setTab] = useState(() => storedTab(runId));
+  const chooseTab = (next: string) => {
+    setTab(next);
+    storeTab(runId, next);
+  };
   const status = run.data?.status;
   const mode = !run.data ? "off" : ACTIVE.has(run.data.status) ? "live" : "stored";
   const timeline = useRunTimeline(runId, mode);
+  const progress = usePacedSteps(runId, timeline.events, status);
   // Fetched alongside the run, not after it; a queued run has no state yet.
   const state = useRunState(runId, checkpoint, status !== "queued");
-  const values = state.data?.values;
+  // While a run that finished in a blink plays its steps back, the page shows it still at work,
+  // so the results arrive with the last step instead of before the first (M1).
+  const values = progress.playing ? undefined : state.data?.values;
   const evidence = useMemo(() => values?.evidence ?? values?.report?.evidence ?? [], [values]);
   const events = useMemo(() => values?.batch?.events ?? [], [values]);
   const cited = useMemo(() => new Set((values?.report?.evidence ?? []).map((e) => e.id)), [values]);
@@ -301,7 +355,7 @@ export function RunView({
   if (run.isPending || (run.isSuccess && stateLoading)) return <RunSkeleton />;
   // A refresh that fails (a busy server, say) keeps what the page already shows.
   if (run.isError && !run.data) {
-    if (run.error instanceof ApiError && run.error.status === 404) {
+    if (missing) {
       return (
         <EmptyState
           heading="h1"
@@ -336,7 +390,9 @@ export function RunView({
     );
   }
 
-  const detail = run.data;
+  const detail: RunDetail = progress.playing
+    ? { ...run.data, status: "running", severity: null, report_id: null, latency_ms: null }
+    : run.data;
   const prompt =
     detail.status === "awaiting_review" ? (detail.review as ReviewPrompt | null) : null;
   const report = values?.report;
@@ -365,7 +421,7 @@ export function RunView({
       : null;
 
   return (
-    <EvidenceProvider evidence={evidence} events={events}>
+    <EvidenceProvider evidence={evidence} events={events} besidePanel="(min-width: 1280px)">
       <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
         <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-3 gap-y-1">
           <Crumbs title={detail.title ? runTitle(detail) : null} />
@@ -380,6 +436,15 @@ export function RunView({
                 How to read this
               </Link>
             </Button>
+            {/* A sample's page offers this under What next?; every other incident has it here. */}
+            {detail.trigger === "sample" ? null : (
+              <Button asChild size="sm" variant="ghost">
+                <Link href={`/console/ask?run=${encodeURIComponent(detail.id)}` as never}>
+                  <MessageSquareTextIcon aria-hidden />
+                  Ask about it
+                </Link>
+              </Button>
+            )}
             {detail.report_id && !receipt ? (
               <>
                 <Button asChild size="sm" variant="ghost">
@@ -404,7 +469,10 @@ export function RunView({
                 ) : null}
               </>
             ) : null}
-            {terminal && !detail.example ? <DeleteRun runId={detail.id} /> : null}
+            {/* Waiting for review counts as done enough: nothing more runs until a person acts. */}
+            {(terminal || detail.status === "awaiting_review") && !detail.example ? (
+              <DeleteRun runId={detail.id} shared={shared} />
+            ) : null}
           </div>
         </div>
 
@@ -413,7 +481,7 @@ export function RunView({
         {viewing ? (
           <div
             role="status"
-            className="sticky top-14 z-20 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-raised px-4 py-3 text-sm ring-1 ring-primary lg:top-3"
+            className="sticky top-[4.75rem] z-20 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-raised px-4 py-3 text-sm ring-1 ring-primary lg:top-3"
           >
             <span className="flex items-center gap-2">
               <HistoryIcon aria-hidden className="size-4" />
@@ -464,7 +532,7 @@ export function RunView({
         ) : null}
 
         <RunProgress
-          events={timeline.events}
+          steps={progress.steps}
           status={detail.status}
           latencyMs={detail.latency_ms}
           facts={workFacts(detail, offline)}
@@ -556,7 +624,7 @@ export function RunView({
           </Suspense>
         ) : null}
 
-        <Tabs value={tab} onValueChange={setTab} className="mt-2">
+        <Tabs value={tab} onValueChange={chooseTab} className="mt-2">
           <TabsList aria-label="Run details">
             <TabsTrigger value="work">What ARIA did</TabsTrigger>
             <TabsTrigger value="evidence">Evidence ({evidence.length})</TabsTrigger>

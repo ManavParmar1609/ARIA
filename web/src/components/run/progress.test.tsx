@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { RunEvent } from "@/lib/api/types";
 
-import { progressSteps, Steps } from "./progress";
+import { pacedSteps, progressSteps, reachedCount, type Step, Steps } from "./progress";
 
 const event = (seq: number, kind: string, node: string | null, ts: string): RunEvent =>
   ({ seq, kind, node, ts, payload: {} }) as RunEvent;
@@ -51,6 +51,40 @@ describe("progressSteps", () => {
   });
 });
 
+describe("pacedSteps", () => {
+  const finished: Step[] = [
+    { key: "read", label: "Read the logs", state: "done", took: 40 },
+    { key: "rate", label: "Rate severity", state: "done", took: 12 },
+    { key: "recall", label: "Find similar incidents", state: "done", took: 30 },
+    { key: "review", label: "Your review", state: "paused", took: null },
+    { key: "publish", label: "Publish", state: "pending", took: null },
+  ];
+
+  it("counts the steps reached in order, up to the one that waits for a person", () => {
+    expect(reachedCount(finished)).toBe(4);
+    expect(reachedCount(finished.map((s) => ({ ...s, state: "done" as const })))).toBe(5);
+  });
+
+  it("plays a finished run back one step at a time", () => {
+    expect(pacedSteps(finished, 0).map((s) => s.state)).toEqual([
+      "running",
+      "pending",
+      "pending",
+      "pending",
+      "pending",
+    ]);
+    expect(pacedSteps(finished, 2).map((s) => s.state)).toEqual([
+      "done",
+      "done",
+      "running",
+      "pending",
+      "pending",
+    ]);
+    // Once the playback has caught up, the steps are as they are.
+    expect(pacedSteps(finished, 4)).toEqual(finished);
+  });
+});
+
 describe("Steps", () => {
   it("says each step's state to a screen reader", () => {
     render(<Steps steps={progressSteps(reading, "running")} />);
@@ -71,18 +105,28 @@ describe("checkpoint names", () => {
       "Before “Rate severity” and “Find similar incidents”",
     );
     expect(name({ next: ["parse_shard", "parse_shard", "parse_shard"], interrupted: false })).toBe(
-      "Before “Read the logs” (3 parts at once)",
+      "During “Read the logs”: reading the lines (3 parts at once)",
     );
     expect(name({ next: ["review"], interrupted: true })).toBe("Paused at “Your review”");
   });
 
   it("tell apart two checkpoints inside one step", async () => {
     const { checkpointName: name } = await import("./history");
-    expect(name({ next: ["report"], interrupted: false })).toBe(
-      "Before “Write the report”: the report itself",
-    );
+    expect(name({ next: ["report"], interrupted: false })).toBe("Before “Write the report”");
     expect(name({ next: ["comms"], interrupted: false })).toBe(
-      "Before “Write the report”: the message drafts",
+      "During “Write the report”: drafting the messages",
     );
+  });
+
+  it("never call a checkpoint inside a step one before it", async () => {
+    const { checkpointName: name } = await import("./history");
+    const labels = [["plan"], ["parse_shard"], ["merge"]].map((next) =>
+      name({ next, interrupted: false }),
+    );
+    expect(labels).toEqual([
+      "Before “Read the logs”",
+      "During “Read the logs”: reading the lines",
+      "During “Read the logs”: joining what was read",
+    ]);
   });
 });

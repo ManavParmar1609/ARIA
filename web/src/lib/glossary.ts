@@ -10,7 +10,7 @@ export const GLOSSARY = {
   "log-template": {
     term: "Log template",
     definition:
-      "A log line with its changing parts (numbers, IDs, addresses) replaced by <*>, so thousands of lines collapse into a few patterns. ARIA mines them with the Drain algorithm.",
+      "A log line with its changing parts (numbers, IDs, addresses) replaced by “…”, so thousands of lines collapse into a few patterns. ARIA finds them by grouping lines that differ only in those parts.",
   },
   pseudonymise: {
     term: "Pseudonymised",
@@ -20,7 +20,7 @@ export const GLOSSARY = {
   quarantine: {
     term: "Quarantined line",
     definition:
-      "A log line that reads like an instruction to an AI model, such as 'ignore all previous instructions'. It stays visible to people but is never used as evidence or sent to a model.",
+      "A log line that reads like an instruction to an AI model, such as 'ignore all previous instructions'. It is kept out of the analysis and shown to the person who reviews the incident. A language model writing the report sees it only as quoted text it is told not to follow.",
   },
   calibrated: {
     term: "Calibrated probability",
@@ -51,6 +51,16 @@ export const GLOSSARY = {
     term: "Replan",
     definition:
       "When no hypothesis holds up or the past matches look weak, ARIA widens its search and investigates again, at most twice.",
+  },
+  runbook: {
+    term: "Runbook",
+    definition:
+      "A team's written steps for one kind of problem, such as a disk filling up or a password-guessing attack: how to check it, fix it, confirm the fix and whom to call. ARIA proposes next steps only from runbooks, and cites the one it used.",
+  },
+  "on-call": {
+    term: "On call",
+    definition:
+      "Taking a turn to answer alerts as they come in, often outside working hours. The person on call is who ARIA is for: it reads the logs so they do not have to read them line by line.",
   },
   review: {
     term: "Review",

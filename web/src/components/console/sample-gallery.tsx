@@ -180,7 +180,13 @@ function SampleCard({ sample, compact = false }: { sample: Scenario; compact?: b
           {busy ? "Starting" : "Run it"}
         </Button>
         {sample.id === RECORDED && !compact ? (
-          <Button asChild size="sm" variant="ghost">
+          // Long for a button on a narrow phone, so it wraps instead of widening the page.
+          <Button
+            asChild
+            size="sm"
+            variant="ghost"
+            className="h-auto min-h-8 py-1 whitespace-normal"
+          >
             <Link href="/#run">Watch its recorded run on the home page</Link>
           </Button>
         ) : null}

@@ -8,10 +8,11 @@ import {
   UserRoundIcon,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import type { RunEvent } from "@/lib/api/types";
 import { duration } from "@/lib/format";
+import { forgetStarted, wasStarted } from "@/lib/started";
 import { cn } from "@/lib/utils";
 
 import { stepStates } from "./activity";
@@ -19,8 +20,9 @@ import { stepStates } from "./activity";
 // Where a run is, in eight steps with plain names (item 17). A line traces through the finished
 // steps once, when the strip comes into view: a quick pass from the first step to the last, by
 // transform alone, and simply there under reduced motion (A). While a run works, each step that
-// finishes draws its own part of the line as it does. Once ARIA's part is over (the run waits for
-// a person, or has ended), the strip folds into one line saying how long ARIA took.
+// finishes draws its own part of the line as it does. A run this tab started, that finished faster
+// than a person can follow, plays its steps back one at a time. Once ARIA's part is over (the run
+// waits for a person, or has ended), the strip folds into one line saying how long ARIA took.
 
 export type StepState = "pending" | "running" | "done" | "paused" | "failed" | "skipped";
 
@@ -84,6 +86,77 @@ export function progressSteps(events: RunEvent[], status: string): Step[] {
   return ENDED.has(status)
     ? steps.map((s) => (s.state === "pending" ? { ...s, state: "skipped" } : s))
     : steps;
+}
+
+// A run that finished faster than a person can follow (an offline one takes under a second) is
+// played back at this pace, one step after another, then held whole before the strip folds.
+const STEP_MS = 380;
+const HOLD_MS = 1_000;
+const SETTLED = new Set<StepState>(["done", "paused", "failed", "skipped"]);
+
+/** How many steps, from the first, have finished or wait for a person. */
+export function reachedCount(steps: Step[]): number {
+  const next = steps.findIndex((step) => !SETTLED.has(step.state));
+  return next === -1 ? steps.length : next;
+}
+
+/** The steps as a playback shows them: the first ``shown`` as they are, the next one at work, and
+ * any later step that has already finished still to come. */
+export function pacedSteps(steps: Step[], shown: number): Step[] {
+  const reached = reachedCount(steps);
+  return steps.map((step, i) => {
+    if (i < shown) return step;
+    if (i === shown && shown < reached) return { ...step, state: "running", took: null };
+    return SETTLED.has(step.state) ? { ...step, state: "pending", took: null } : step;
+  });
+}
+
+const reducedMotion = () =>
+  typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/**
+ * The run's steps, played back at a pace a person can follow when this tab started the run or
+ * watched it start (M1). ``playing`` stays true until the whole trace has shown: until then the
+ * page presents the run as still at work, so its results arrive with the last step. A run opened
+ * later, or under reduced motion, shows as it is.
+ */
+export function usePacedSteps(
+  runId: string,
+  events: RunEvent[],
+  status: string | undefined,
+): { steps: Step[]; playing: boolean } {
+  const actual = useMemo(() => progressSteps(events, status ?? "queued"), [events, status]);
+  // Decided once, when the status is first known.
+  const [watched, setWatched] = useState<boolean | null>(null);
+  if (watched === null && status !== undefined) {
+    setWatched(
+      !reducedMotion() &&
+        status !== "failed" &&
+        (wasStarted(runId) || status === "queued" || status === "running"),
+    );
+  }
+  const [shown, setShown] = useState(0);
+  const [held, setHeld] = useState(false);
+  const reached = reachedCount(actual);
+  const over = status !== undefined && FOLDED.has(status);
+  const pacing = watched === true && status !== "failed";
+  useEffect(() => {
+    if (!pacing) return;
+    if (shown < reached) {
+      const next = setTimeout(() => setShown((n) => n + 1), STEP_MS);
+      return () => clearTimeout(next);
+    }
+    if (!over || held) return;
+    const fold = setTimeout(() => {
+      setHeld(true);
+      forgetStarted(runId);
+    }, HOLD_MS);
+    return () => clearTimeout(fold);
+  }, [pacing, shown, reached, over, held, runId]);
+  return {
+    steps: pacing && !held ? pacedSteps(actual, shown) : actual,
+    playing: pacing && over && !held,
+  };
 }
 
 const ICON: Partial<Record<StepState, LucideIcon>> = {
@@ -198,19 +271,19 @@ export function Steps({ steps }: { steps: Step[] }) {
 
 /** The run's progress: the strip while it works, one folded line once it has finished. */
 export function RunProgress({
-  events,
+  steps,
   status,
   latencyMs,
   facts,
 }: {
-  events: RunEvent[];
+  /** From {@link usePacedSteps}. */
+  steps: Step[];
   status: string;
   /** How long ARIA took to have the report ready. */
   latencyMs: number | null | undefined;
   /** Model and tool use, in words ("offline: no language model, 3 tool calls"). */
   facts: string;
 }) {
-  const steps = useMemo(() => progressSteps(events, status), [events, status]);
   if (FOLDED.has(status)) {
     return (
       <details className="group/progress rounded-lg bg-raised px-5 py-3">

@@ -50,6 +50,16 @@ export function shortTime(iso: string | null | undefined): string {
   return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
+/** A log pattern as people read it: each part that varies ("<*>") becomes "…". */
+export const plainTemplate = (template: string): string => template.replaceAll("<*>", "…");
+
+/** How long a stretch of logs spans: "under a minute", "1 minute", "7.7 minutes". */
+export function minutesWords(seconds: number): string {
+  if (seconds < 60) return "under a minute";
+  const minutes = Number((seconds / 60).toFixed(1));
+  return minutes === 1 ? "1 minute" : `${minutes} minutes`;
+}
+
 /** 734 -> "734 ms", 12_400 -> "12.4 s", 193_000 -> "3 min 13 s", 7_260_000 -> "2 h 1 min". */
 export function duration(ms: number | null | undefined): string {
   if (ms == null) return "";

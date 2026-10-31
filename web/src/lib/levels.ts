@@ -13,7 +13,7 @@ export const LEVEL_WORD: Record<Severity, string> = {
 export const LEVEL_RESPONSE: Record<Severity, string> = {
   SEV1: "Widespread outage or data at risk. Usual response: page everyone needed, now.",
   SEV2: "Major degradation or a failing critical part. Usual response: page the on-call team.",
-  SEV3: "Contained errors with limited user impact. Usual response: fix it during working hours.",
+  SEV3: "A contained problem with limited user impact. Usual response: fix it during working hours.",
   SEV4: "Informational, or noise. Usual response: no action needed now.",
 };
 
@@ -32,7 +32,8 @@ export function shortListText(
   a: Pick<
     SeverityAssessment,
     "severity" | "prediction_set" | "set_empty" | "decided_by" | "needs_review"
-  >,
+  > &
+    Partial<Pick<SeverityAssessment, "confidence" | "model_version">>,
   status?: string,
 ): string {
   const set = a.prediction_set;
@@ -52,9 +53,18 @@ export function shortListText(
       return `${set[0]} is likely, but a safety rule keeps it at ${a.severity}.`;
     }
     if (!unsure) return `Only ${a.severity} is likely.`;
+    // Why it asks, said here rather than only under "How ARIA decided": the rules rated the logs
+    // alone (unlike what the model learned from, or no model), or the model's figure fell short.
+    if (a.model_version?.startsWith("rules-only")) {
+      return ended
+        ? `Probably ${a.severity}. Only ARIA's rules rated these logs.${ask("confirm")}`
+        : `Probably ${a.severity}. Only ARIA's rules rated these logs, so please confirm.`;
+    }
+    // Rounded down, so a figure just short of the bar never reads as reaching it.
+    const likely = a.confidence ? `, ${Math.floor(a.confidence * 100 + 1e-9)}% likely` : "";
     return ended
-      ? `Probably ${a.severity}. ARIA wasn't sure enough to decide alone.${ask("confirm")}`
-      : `Probably ${a.severity}. ARIA isn't sure enough to decide alone, so please confirm.`;
+      ? `Probably ${a.severity}${likely}. ARIA wasn't sure enough to decide alone.${ask("confirm")}`
+      : `Probably ${a.severity}${likely}. ARIA isn't sure enough to decide alone, so please confirm.`;
   }
   const chose =
     a.decided_by === "llm"

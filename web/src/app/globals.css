@@ -265,6 +265,11 @@
     :where(#console-main [id]) {
       scroll-margin-top: 5rem;
     }
+    /* Keyboard focus that scrolls the page, going back up with Shift+Tab, stops below the bar
+       too, never under it (WCAG 2.4.11). */
+    html:has(#console-main) {
+      scroll-padding-top: 5rem;
+    }
   }
   html.dark {
     color-scheme: dark;

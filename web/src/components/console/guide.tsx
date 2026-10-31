@@ -159,7 +159,14 @@ export function Guide({ back = null }: { back?: string | null }) {
           id="read-a-run"
           number={2}
           title="Read a severity rating"
-          action={<TaskLink href="/console/runs">Open your incidents</TaskLink>}
+          action={
+            // Arriving here from an incident, the way back sits where the reading starts.
+            back ? (
+              <TaskLink href={back}>Back to the incident</TaskLink>
+            ) : (
+              <TaskLink href="/console/runs">Open your incidents</TaskLink>
+            )
+          }
         >
           <p>
             An incident opens with its level, what that level usually means and the short list of

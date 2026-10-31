@@ -12,8 +12,8 @@ export default function ConsoleNotFound() {
       <LostSpot className="h-auto w-full max-w-60" />
       <h1 className="text-3xl leading-tight tracking-heading">This page is not in the console</h1>
       <p className="text-muted-foreground">
-        The link may be out of date. Every page is in the menu, and Search at the top of it finds
-        pages, incidents and samples.
+        The link may be out of date. Every page is in the menu, and Search finds pages, incidents,
+        samples and runbooks.
       </p>
       <div className="flex flex-wrap gap-3">
         <Button asChild variant="primary">

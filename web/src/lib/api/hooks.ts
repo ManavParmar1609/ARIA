@@ -2,6 +2,8 @@
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { markStarted } from "@/lib/started";
+
 import { apiFetch, postJson } from "./client";
 import type { ModelKeyCheck, SavedModelKey } from "./model-key";
 import type { Session } from "./session";
@@ -243,7 +245,10 @@ export function useStartSample() {
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: SampleRunRequest }) =>
       postJson<RunAccepted>(v1(`/scenarios/${encodeURIComponent(id)}/runs`), body),
-    onSuccess: () => client.invalidateQueries({ queryKey: ["runs"] }),
+    onSuccess: (accepted) => {
+      markStarted(accepted.run_id);
+      return client.invalidateQueries({ queryKey: ["runs"] });
+    },
   });
 }
 
@@ -271,7 +276,10 @@ export function useCreateRun() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (request: TriageRequest) => postJson<RunAccepted>(v1("/runs"), request),
-    onSuccess: () => client.invalidateQueries({ queryKey: ["runs"] }),
+    onSuccess: (accepted) => {
+      markStarted(accepted.run_id);
+      return client.invalidateQueries({ queryKey: ["runs"] });
+    },
   });
 }
 
@@ -280,7 +288,10 @@ export function useReplay() {
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: ReplayRequest }) =>
       postJson<RunAccepted>(v1(`/real-incidents/${encodeURIComponent(id)}/replay`), body),
-    onSuccess: () => client.invalidateQueries({ queryKey: ["runs"] }),
+    onSuccess: (accepted) => {
+      markStarted(accepted.run_id);
+      return client.invalidateQueries({ queryKey: ["runs"] });
+    },
   });
 }
 
@@ -314,7 +325,10 @@ export function useFork(id: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (body: ForkRequest) => postJson<RunAccepted>(runPath(id, "/fork"), body),
-    onSuccess: () => client.invalidateQueries({ queryKey: ["runs"] }),
+    onSuccess: (accepted) => {
+      markStarted(accepted.run_id);
+      return client.invalidateQueries({ queryKey: ["runs"] });
+    },
   });
 }
 

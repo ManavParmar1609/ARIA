@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/popover";
 import type { Evidence, LogEvent } from "@/lib/api/types";
 import { failureName } from "@/lib/failure-modes";
+import { plainTemplate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -66,6 +67,9 @@ interface EvidenceState {
   origin: HTMLElement | null;
   /** The element that shows a pinned citation: the evidence panel, or an answer's sources. */
   panelId: string;
+  /** Where the panel sits beside the text (a media query): pointing at a citation fills it there,
+   * so no card opens on top to say the same. */
+  besidePanel: string | null;
   hover: (id: string | null) => void;
   pin: (id: string | null, from?: HTMLElement | null) => void;
   linesFor: (id: string) => LogEvent[];
@@ -81,11 +85,13 @@ export function EvidenceProvider({
   evidence,
   events,
   panelId = "evidence-panel",
+  besidePanel = null,
   children,
 }: {
   evidence: Evidence[];
   events: LogEvent[];
   panelId?: string;
+  besidePanel?: string | null;
   children: ReactNode;
 }) {
   const [hovered, setHovered] = useState<string | null>(null);
@@ -123,11 +129,12 @@ export function EvidenceProvider({
       pinned,
       origin,
       panelId,
+      besidePanel,
       hover: setHovered,
       pin,
       linesFor,
     }),
-    [byId, events, hovered, pinned, origin, panelId, pin, linesFor],
+    [byId, events, hovered, pinned, origin, panelId, besidePanel, pin, linesFor],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -162,7 +169,7 @@ function EvidencePreview({ evidence, lines }: { evidence: Evidence; lines: LogEv
  * its own, just far enough to show the panel, so the page stays put; in one column the panel sits
  * below the report, so the page scrolls to it.
  */
-function revealPanel(panelId: string) {
+function revealPanel(panelId: string, pinning = false) {
   const panel = document.getElementById(panelId);
   if (!panel) return;
   const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -171,6 +178,8 @@ function revealPanel(panelId: string) {
   const column = panel.closest("aside");
   if (!column || !window.matchMedia("(min-width: 1280px)").matches) {
     panel.scrollIntoView({ block: "nearest", behavior });
+    // Far from the claim, the reader continues from the panel: its "Back to the claim" is next.
+    if (pinning && panel.getAttribute("tabindex") === "-1") panel.focus({ preventScroll: true });
     return;
   }
   const top = panel.offsetTop;
@@ -203,13 +212,32 @@ function useCanHover(): boolean {
   );
 }
 
+/** Whether ``query`` matches; false when there is none. */
+function useMatches(query: string | null): boolean {
+  const subscribe = useCallback(
+    (changed: () => void) => {
+      if (!query) return () => {};
+      const media = window.matchMedia(query);
+      media.addEventListener("change", changed);
+      return () => media.removeEventListener("change", changed);
+    },
+    [query],
+  );
+  return useSyncExternalStore(
+    subscribe,
+    () => (query ? window.matchMedia(query).matches : false),
+    () => false,
+  );
+}
+
 /**
  * A citation. Hovering shows the evidence beside it; focusing or hovering also fills the
  * evidence panel (announced to screen readers); a click pins it there.
  */
 export function EvidenceChip({ id, label }: { id: string; label?: string }) {
-  const { byId, active, pinned, panelId, hover, pin, linesFor } = useEvidence();
+  const { byId, active, pinned, panelId, besidePanel, hover, pin, linesFor } = useEvidence();
   const [preview, setPreview] = useState(false);
+  const beside = useMatches(besidePanel);
   // After a click pins the evidence, the card stays shut until the pointer or focus leaves.
   const quiet = useRef(false);
   const canHover = useCanHover();
@@ -242,10 +270,11 @@ export function EvidenceChip({ id, label }: { id: string; label?: string }) {
         quiet.current = false;
       }}
       onClick={(event) => {
-        pin(pinned === id ? null : id, event.currentTarget);
+        const pinning = pinned !== id;
+        pin(pinning ? id : null, event.currentTarget);
         quiet.current = true; // the panel shows it now; a card on top would repeat it
         setPreview(false);
-        requestAnimationFrame(() => revealPanel(panelId));
+        requestAnimationFrame(() => revealPanel(panelId, pinning));
       }}
       className={cn(
         "inline-flex h-6 items-center rounded-xs border px-1.5 align-baseline font-mono text-xs transition-colors duration-(--duration-quick)",
@@ -259,7 +288,7 @@ export function EvidenceChip({ id, label }: { id: string; label?: string }) {
       {label ?? id}
     </button>
   );
-  if (!evidence || !canHover) return button;
+  if (!evidence || !canHover || beside) return button;
   return (
     <HoverCard
       open={preview}
@@ -286,7 +315,7 @@ export function evidenceTitle(evidence: Pick<Evidence, "kind" | "title">): strin
   const pattern = evidence.kind === "template" ? /^(\d+)x (.+)$/s.exec(evidence.title) : null;
   if (!pattern?.[1] || !pattern[2]) return evidence.title;
   const n = Number(pattern[1]);
-  const text = pattern[2].replaceAll("<*>", "…");
+  const text = plainTemplate(pattern[2]);
   return n === 1 ? `1 line: “${text}”` : `${n.toLocaleString("en")} lines like “${text}”`;
 }
 
@@ -394,6 +423,28 @@ function DataTable({ data, kind }: { data: Record<string, unknown>; kind: string
   );
 }
 
+// A log line or pattern can run to thousands of characters: past this, show its start and let the
+// reader ask for the rest, so one line does not become a wall.
+const LONG_LINE = 400;
+
+/** A long line's start, and the whole of it on request. */
+export function LongLine({ text }: { text: string }) {
+  const [whole, setWhole] = useState(false);
+  if (text.length <= LONG_LINE || whole) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, LONG_LINE)}…{" "}
+      <button
+        type="button"
+        onClick={() => setWhole(true)}
+        className="font-sans text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+      >
+        Show all {text.length.toLocaleString("en")} characters
+      </button>
+    </>
+  );
+}
+
 export function LogLines({
   lines,
   limit = 12,
@@ -435,7 +486,9 @@ export function LogLines({
           >
             {line.level ?? ""}
           </span>
-          <span>{line.message}</span>
+          <span>
+            <LongLine text={line.message} />
+          </span>
         </li>
       ))}
     </ol>
@@ -472,17 +525,24 @@ export function EvidencePanel({ className }: { className?: string }) {
     returning = origin;
     origin.focus({ preventScroll: true });
   };
+  const pinnedEvidence = pinned ? byId.get(pinned) : undefined;
   return (
     <section
       id={panelId}
       aria-label="Evidence"
-      aria-live="polite"
+      // Focus lands here after a pin in one column, where the panel sits far below the claim.
+      tabIndex={-1}
       className={cn(
-        "grid min-w-0 content-start gap-3 rounded-lg bg-raised p-4 sm:p-5",
+        "grid min-w-0 content-start gap-3 rounded-lg bg-raised p-4 outline-none sm:p-5",
         !(evidence && pinned) && "max-xl:hidden",
         className,
       )}
     >
+      {/* Only a pin is announced, in a few words: a citation's own name already gives its title,
+          and reading whole cards out as focus moves would bury the report. */}
+      <p className="sr-only" aria-live="polite">
+        {pinnedEvidence ? `Pinned ${pinnedEvidence.id}: ${evidenceTitle(pinnedEvidence)}` : ""}
+      </p>
       {evidence ? (
         <>
           <div className="flex items-start justify-between gap-3">

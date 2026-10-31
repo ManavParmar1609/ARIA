@@ -68,22 +68,22 @@ async def replay_real_incident(
     incident = real_incident(incident_id)
     if incident is None or not await asyncio.to_thread(lambda: incident.available):
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"no real incident {incident_id}")
-    await make_room(state, viewer)
-    lines = await asyncio.to_thread(incident.lines)
-    options = (body or ReplayRequest()).options
-    if not may_use_model(state, visitor, viewer.tag, options.use_llm):
-        options = offline(options)
-    # The run keeps the name the visitor chose it by; the report says what ARIA found.
-    request = TriageRequest(
-        system=incident.system,
-        title=incident.title,
-        logs=lines,
-        options=options,
-        replay_of=incident.id,
-    )
-    run_id = await asyncio.to_thread(
-        state.runner.submit, request, trigger="replay", visitor=viewer.tag
-    )
+    async with make_room(state, viewer):
+        lines = await asyncio.to_thread(incident.lines)
+        options = (body or ReplayRequest()).options
+        if not may_use_model(state, visitor, viewer.tag, options.use_llm):
+            options = offline(options)
+        # The run keeps the name the visitor chose it by; the report says what ARIA found.
+        request = TriageRequest(
+            system=incident.system,
+            title=incident.title,
+            logs=lines,
+            options=options,
+            replay_of=incident.id,
+        )
+        run_id = await asyncio.to_thread(
+            state.runner.submit, request, trigger="replay", visitor=viewer.tag
+        )
     if visitor is not None:
         state.runner.keys.hold(run_id, visitor)
     if state.inprocess:

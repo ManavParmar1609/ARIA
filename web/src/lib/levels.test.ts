@@ -29,6 +29,17 @@ describe("shortListText", () => {
     );
   });
 
+  it("says why it asks: the model's figure, or the rules alone", () => {
+    expect(shortListText(assessment({ prediction_set: ["SEV2"], confidence: 0.77 }))).toBe(
+      "Probably SEV2, 77% likely. ARIA isn't sure enough to decide alone, so please confirm.",
+    );
+    expect(
+      shortListText(
+        assessment({ prediction_set: ["SEV2"], confidence: 0.95, model_version: "rules-only" }),
+      ),
+    ).toBe("Probably SEV2. Only ARIA's rules rated these logs, so please confirm.");
+  });
+
   it("says what came of the check once a person decided", () => {
     expect(shortListText(assessment({ prediction_set: ["SEV2"] }), "published")).toBe(
       "Probably SEV2. ARIA wasn't sure enough to decide alone. A reviewer confirmed it.",

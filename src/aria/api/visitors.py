@@ -13,6 +13,9 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import weakref
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Annotated, Any
 
@@ -51,19 +54,35 @@ class Viewer:
 SEES_ALL = Viewer()  # a server without scoping, or a caller with an API key
 
 
-async def make_room(state: AppState, viewer: Viewer) -> None:
+# One lock per visitor while they have a start in progress; unused ones go with the last holder.
+_ROOMS: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
+
+
+@asynccontextmanager
+async def make_room(state: AppState, viewer: Viewer) -> AsyncIterator[None]:
     """Refuse a visitor's new triage while their share is already waiting or running: with one
-    queue for everyone, a visitor's pile of pastes would hold up every other visitor's next one."""
+    queue for everyone, a visitor's pile of pastes would hold up every other visitor's next one.
+
+    Record the run inside it. A visitor's starts take turns through it, so several that arrive
+    together cannot all pass the count before any of them is recorded. The turns are kept in this
+    process, which is all a demo server runs.
+    """
     most = state.services.settings.max_active_runs_per_visitor
     if not most or viewer.tag is None:
+        yield
         return
-    active = await asyncio.to_thread(repo.active_runs, state.services.engine, viewer.tag)
-    if active >= most:
-        raise HTTPException(
-            status.HTTP_429_TOO_MANY_REQUESTS,
-            f"You already have {active} triages waiting or running. Start another when one of "
-            "them is ready for review.",
-        )
+    lock = _ROOMS.get(viewer.tag)
+    if lock is None:
+        lock = _ROOMS[viewer.tag] = asyncio.Lock()
+    async with lock:
+        active = await asyncio.to_thread(repo.active_runs, state.services.engine, viewer.tag)
+        if active >= most:
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                f"You already have {active} triages queued or running. Start another once one "
+                "of them is ready for review.",
+            )
+        yield
 
 
 def visitor_tag(session_id: str | None) -> str:

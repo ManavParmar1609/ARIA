@@ -26,7 +26,7 @@ const POINTS: { icon: LucideIcon; title: string; body: string }[] = [
   {
     icon: ShieldCheckIcon,
     title: "Keeps bad input out",
-    body: "Secrets and personal details are masked, and a line that reads like an instruction is set aside before any model sees the logs.",
+    body: "Secrets and personal details are masked, and a line that reads like an instruction is kept out of the analysis: a model sees it only as quoted text.",
   },
 ];
 
