@@ -1,7 +1,7 @@
 {
   "suite": "all",
-  "created_at": "2026-10-30T20:42:08+00:00",
-  "git_sha": "e7bfb7b",
+  "created_at": "2026-10-31T00:23:34+00:00",
+  "git_sha": "c6d459d",
   "llm": false,
   "data": {
     "synthetic": true,
@@ -322,6 +322,118 @@
           "tengine"
         ]
       },
+      "real_lines_flagged_as_injection": 0
+    },
+    "loghub2": {
+      "source": "Loghub-2.0 whole logs",
+      "citation": "Z. Jiang, J. Liu, J. Huang, Y. Li, Y. Huo, J. Gu, Z. Chen, J. Zhu, M. R. Lyu. A Large-scale Evaluation for Log Parsing Techniques: How Far are We? ISSTA 2024.",
+      "systems": {
+        "Apache": {
+          "lines": 51978,
+          "events": 29,
+          "templates": 29,
+          "grouping_accuracy": 1.0,
+          "group_f1": 1.0,
+          "flagged_as_injection": 0,
+          "seconds": 6.4,
+          "aria_system": "apache"
+        },
+        "HPC": {
+          "lines": 429988,
+          "events": 74,
+          "templates": 322,
+          "grouping_accuracy": 0.8082,
+          "group_f1": 0.3081,
+          "flagged_as_injection": 0,
+          "seconds": 38.4,
+          "aria_system": "hpc"
+        },
+        "Hadoop": {
+          "lines": 179993,
+          "events": 236,
+          "templates": 321,
+          "grouping_accuracy": 0.9651,
+          "group_f1": 0.7935,
+          "flagged_as_injection": 0,
+          "seconds": 30.3,
+          "aria_system": "hadoop"
+        },
+        "HealthApp": {
+          "lines": 212394,
+          "events": 156,
+          "templates": 28002,
+          "grouping_accuracy": 0.8268,
+          "group_f1": 0.0102,
+          "flagged_as_injection": 0,
+          "seconds": 835.8,
+          "aria_system": "healthapp"
+        },
+        "Linux": {
+          "lines": 23921,
+          "events": 338,
+          "templates": 357,
+          "grouping_accuracy": 0.6724,
+          "group_f1": 0.8058,
+          "flagged_as_injection": 0,
+          "seconds": 2.8,
+          "aria_system": "linux"
+        },
+        "Mac": {
+          "lines": 100314,
+          "events": 626,
+          "templates": 3933,
+          "grouping_accuracy": 0.8239,
+          "group_f1": 0.2207,
+          "flagged_as_injection": 0,
+          "seconds": 23.5,
+          "aria_system": "mac"
+        },
+        "OpenSSH": {
+          "lines": 638947,
+          "events": 38,
+          "templates": 40,
+          "grouping_accuracy": 0.7067,
+          "group_f1": 0.8718,
+          "flagged_as_injection": 0,
+          "seconds": 99.4,
+          "aria_system": "openssh"
+        },
+        "OpenStack": {
+          "lines": 207632,
+          "events": 48,
+          "templates": 2105,
+          "grouping_accuracy": 0.8806,
+          "group_f1": 0.0344,
+          "flagged_as_injection": 0,
+          "seconds": 69.9,
+          "aria_system": "openstack"
+        },
+        "Proxifier": {
+          "lines": 21320,
+          "events": 11,
+          "templates": 56,
+          "grouping_accuracy": 0.6923,
+          "group_f1": 0.209,
+          "flagged_as_injection": 0,
+          "seconds": 2.7,
+          "aria_system": "proxifier"
+        },
+        "Zookeeper": {
+          "lines": 74273,
+          "events": 89,
+          "templates": 78,
+          "grouping_accuracy": 0.9942,
+          "group_f1": 0.9222,
+          "flagged_as_injection": 0,
+          "seconds": 10.7,
+          "aria_system": "zookeeper"
+        }
+      },
+      "n_systems": 10,
+      "lines": 1940760,
+      "mean_grouping_accuracy": 0.837,
+      "mean_group_f1": 0.5176,
+      "pooled_grouping_accuracy": 0.8092,
       "real_lines_flagged_as_injection": 0
     }
   },
@@ -1266,6 +1378,7 @@
       }
     },
     "bgl": {
+      "system": "bgl",
       "source": "Loghub BGL.log, the full BlueGene/L log with alert tags",
       "citation": "A. J. Oliner, J. Stearley. What Supercomputers Say: A Study of Five System Logs. DSN 2007.",
       "lines": 4747963,
@@ -1453,9 +1566,234 @@
           ]
         ]
       },
+      "rules_on_paged_quiet_windows": [
+        [
+          "novel_error_template",
+          438
+        ],
+        [
+          "errors_present",
+          435
+        ],
+        [
+          "errors_spread",
+          408
+        ],
+        [
+          "sustained_burst",
+          188
+        ],
+        [
+          "error_storm",
+          134
+        ]
+      ],
       "overlap_with_training_sample": {
         "lines": 1863047,
         "share": 0.3924
+      },
+      "model_version": "severity-log-20261029-a362d541"
+    },
+    "thunderbird": {
+      "system": "thunderbird",
+      "source": "Loghub-2.0's Thunderbird log, with alert tags",
+      "citation": "A. J. Oliner, J. Stearley. What Supercomputers Say: A Study of Five System Logs. DSN 2007. The log as Loghub-2.0 publishes it: Jiang et al., ISSTA 2024.",
+      "lines": 16601745,
+      "lines_without_time": 0,
+      "alert_lines": 554,
+      "days": 47.5,
+      "window_min": 20,
+      "windows": 3114,
+      "labels": {
+        "SEV3": 135,
+        "SEV4": 2979
+      },
+      "windows_over_line_cap": 103,
+      "line_cap": 20000,
+      "methods": {
+        "aria_policy": {
+          "accuracy": 0.0151,
+          "accuracy_ci95": [
+            0.0109,
+            0.0196
+          ],
+          "macro_f1": 0.0098,
+          "macro_f1_ci95": [
+            0.0069,
+            0.0132
+          ],
+          "severe_under_triage": 0.0,
+          "severe_missed": 0,
+          "quiet_paged": 2329,
+          "recall": {
+            "SEV3": 0.0296,
+            "SEV4": 0.0144
+          }
+        },
+        "rules_only": {
+          "accuracy": 0.0244,
+          "accuracy_ci95": [
+            0.0189,
+            0.0299
+          ],
+          "macro_f1": 0.0145,
+          "macro_f1_ci95": [
+            0.011,
+            0.0183
+          ],
+          "severe_under_triage": 0.0,
+          "severe_missed": 0,
+          "quiet_paged": 2186,
+          "recall": {
+            "SEV3": 0.037,
+            "SEV4": 0.0238
+          }
+        },
+        "model_only": {
+          "accuracy": 0.0183,
+          "accuracy_ci95": [
+            0.0135,
+            0.0231
+          ],
+          "macro_f1": 0.011,
+          "macro_f1_ci95": [
+            0.0081,
+            0.0141
+          ],
+          "severe_under_triage": 0.0,
+          "severe_missed": 0,
+          "quiet_paged": 1703,
+          "recall": {
+            "SEV3": 0.0593,
+            "SEV4": 0.0164
+          }
+        },
+        "keyword": {
+          "accuracy": 0.0456,
+          "accuracy_ci95": [
+            0.0385,
+            0.053
+          ],
+          "macro_f1": 0.0259,
+          "macro_f1_ci95": [
+            0.0219,
+            0.03
+          ],
+          "severe_under_triage": 0.0,
+          "severe_missed": 0,
+          "quiet_paged": 827,
+          "recall": {
+            "SEV3": 0.3407,
+            "SEV4": 0.0322
+          }
+        },
+        "highest_level": {
+          "accuracy": 0.0093,
+          "accuracy_ci95": [
+            0.0061,
+            0.0128
+          ],
+          "macro_f1": 0.0048,
+          "macro_f1_ci95": [
+            0.0032,
+            0.0066
+          ],
+          "severe_under_triage": 0.0,
+          "severe_missed": 0,
+          "quiet_paged": 2912,
+          "recall": {
+            "SEV3": 0.0,
+            "SEV4": 0.0097
+          }
+        },
+        "majority_class": {
+          "accuracy": 0.9566,
+          "accuracy_ci95": [
+            0.9496,
+            0.9637
+          ],
+          "macro_f1": 0.4889,
+          "macro_f1_ci95": [
+            0.4871,
+            0.4908
+          ],
+          "severe_under_triage": 0.0,
+          "severe_missed": 0,
+          "quiet_paged": 0,
+          "recall": {
+            "SEV3": 0.0,
+            "SEV4": 1.0
+          }
+        }
+      },
+      "conformal": {
+        "target_coverage": 0.9,
+        "coverage": 0.0552,
+        "mean_set_size": 1.738
+      },
+      "automation": {
+        "auto_decided": 0.3182,
+        "accuracy_when_auto": 0.003
+      },
+      "confusion": {
+        "classes": [
+          "SEV1",
+          "SEV2",
+          "SEV3",
+          "SEV4"
+        ],
+        "matrix": [
+          [
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            96,
+            35,
+            4,
+            0
+          ],
+          [
+            1192,
+            1137,
+            607,
+            43
+          ]
+        ]
+      },
+      "rules_on_paged_quiet_windows": [
+        [
+          "degradation_signs",
+          2320
+        ],
+        [
+          "novel_error_template",
+          2312
+        ],
+        [
+          "errors_present",
+          2301
+        ],
+        [
+          "persistent_errors",
+          2100
+        ],
+        [
+          "critical_component_errors",
+          1527
+        ]
+      ],
+      "overlap_with_training_sample": {
+        "lines": 5394924,
+        "share": 0.325
       },
       "model_version": "severity-log-20261029-a362d541"
     },
@@ -2565,6 +2903,119 @@
         }
       }
     },
+    "logchunks": {
+      "source": "LogChunks: failed Travis CI builds, each with the chunk that explains it",
+      "citation": "C. E. Brandt, A. Panichella, A. Zaidman, M. Beller. LogChunks: A Data Set for Build Log Analysis. MSR 2020.",
+      "builds": 797,
+      "located": 756,
+      "triaged": 756,
+      "languages": 29,
+      "over_line_cap": 19,
+      "line_cap": 20000,
+      "median_lines": 1384.0,
+      "mean_kept": 10.81,
+      "aria": {
+        "hits": 314,
+        "rate": 0.4153,
+        "ci95": [
+          0.3799,
+          0.4514
+        ]
+      },
+      "baselines": {
+        "last_lines": {
+          "hits": 139,
+          "rate": 0.1839,
+          "ci95": [
+            0.1569,
+            0.2134
+          ]
+        },
+        "last_error_lines": {
+          "hits": 334,
+          "rate": 0.4418,
+          "ci95": [
+            0.406,
+            0.478
+          ]
+        },
+        "random_lines": {
+          "hits": 49,
+          "rate": 0.0648,
+          "ci95": [
+            0.0483,
+            0.0848
+          ]
+        }
+      },
+      "by_category": {
+        "0": {
+          "hits": 200,
+          "rate": 0.4,
+          "ci95": [
+            0.3568,
+            0.4444
+          ]
+        },
+        "1": {
+          "hits": 66,
+          "rate": 0.4,
+          "ci95": [
+            0.3246,
+            0.479
+          ]
+        },
+        "2": {
+          "hits": 29,
+          "rate": 0.5179,
+          "ci95": [
+            0.3803,
+            0.6534
+          ]
+        },
+        "3": {
+          "hits": 7,
+          "rate": 0.4375,
+          "ci95": [
+            0.1975,
+            0.7012
+          ]
+        },
+        "4": {
+          "hits": 6,
+          "rate": 0.5,
+          "ci95": [
+            0.2109,
+            0.7891
+          ]
+        },
+        "5": {
+          "hits": 4,
+          "rate": 1.0,
+          "ci95": [
+            0.3976,
+            1.0
+          ]
+        },
+        "6": {
+          "hits": 0,
+          "rate": 0.0,
+          "ci95": [
+            0.0,
+            0.975
+          ]
+        },
+        "7": {
+          "hits": 2,
+          "rate": 1.0,
+          "ci95": [
+            0.1581,
+            1.0
+          ]
+        }
+      },
+      "nothing_kept": 29
+    },
     "gitlab": {
       "source": "GitLab.com production incidents (gitlab-com/gl-infra/production)",
       "citation": "GitLab Inc., GitLab.com production incident tracker (public issues).",
@@ -3603,31 +4054,31 @@
       "false_alarms": 0.0
     },
     "latency": {
-      "time_to_review_p50_s": 0.635,
-      "time_to_review_p95_s": 1.404,
+      "time_to_review_p50_s": 0.548,
+      "time_to_review_p95_s": 1.135,
       "stage_p50_ms": {
-        "assess": 6.2,
-        "comms": 14.6,
-        "investigate": 128.1,
-        "merge": 75.0,
-        "parse_shard": 119.7,
-        "plan": 11.6,
-        "recall": 20.7,
-        "report": 18.6,
-        "review": 7.0,
-        "severity": 28.8
+        "assess": 7.3,
+        "comms": 10.8,
+        "investigate": 99.4,
+        "merge": 65.8,
+        "parse_shard": 108.9,
+        "plan": 9.8,
+        "recall": 18.9,
+        "report": 17.2,
+        "review": 5.8,
+        "severity": 25.6
       },
       "stage_p95_ms": {
-        "assess": 15.9,
-        "comms": 25.9,
-        "investigate": 220.7,
-        "merge": 197.6,
-        "parse_shard": 435.9,
-        "plan": 19.5,
-        "recall": 31.5,
-        "report": 31.3,
-        "review": 16.1,
-        "severity": 65.2
+        "assess": 15.8,
+        "comms": 18.8,
+        "investigate": 187.6,
+        "merge": 162.1,
+        "parse_shard": 409.4,
+        "plan": 20.7,
+        "recall": 26.6,
+        "report": 26.2,
+        "review": 14.7,
+        "severity": 40.4
       },
       "llm_call_p50_ms": 0.0,
       "llm_call_p95_ms": 0.0
