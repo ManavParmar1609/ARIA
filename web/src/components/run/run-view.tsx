@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ChevronDownIcon,
   CircleHelpIcon,
   DownloadIcon,
   HistoryIcon,
@@ -9,7 +10,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { LevelChip } from "@/components/aria/severity";
@@ -102,6 +103,15 @@ function storedTab(runId: string): string {
   if (typeof window === "undefined") return "work";
   const tab = storedTabs()[runId];
   return typeof tab === "string" && TABS.has(tab) ? tab : "work";
+}
+
+/** One line on what a part of the technical details shows, for someone opening it first. */
+function TabNote({ children }: { children: ReactNode }) {
+  return <p className="max-w-prose text-base text-muted-foreground">{children}</p>;
+}
+
+function hasStoredTab(runId: string): boolean {
+  return typeof window !== "undefined" && runId in storedTabs();
 }
 
 function storeTab(runId: string, tab: string) {
@@ -354,6 +364,8 @@ export function RunView({
     setTab(next);
     storeTab(runId, next);
   };
+  // Folded until asked for, and kept open on an incident whose details were opened before.
+  const [technical, setTechnical] = useState(() => hasStoredTab(runId));
   const status = run.data?.status;
   // Followed live only while ARIA works: a paused or finished run is read once, and again when
   // its status moves on (stream.ts says why).
@@ -585,18 +597,10 @@ export function RunView({
           />
         ) : null}
 
-        {/* Four panels, one question each (item 13). On a wide screen the severity and the past
-            incidents sit beside the other two, and stay in view while the report scrolls. */}
+        {/* Four panels, one question each (item 13), the report first: it says in words what
+            happened and what to do. On a wide screen the severity and the evidence sit beside it,
+            and stay in view while the report scrolls; the logs and past incidents follow it. */}
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] xl:grid-rows-[auto_auto_1fr] xl:gap-x-8">
-          <div className="min-w-0 xl:col-start-1 xl:row-start-1">
-            {values?.batch ? (
-              <WhatHappened batch={values.batch} timeline={report?.timeline ?? []} />
-            ) : detail.status === "queued" ? (
-              <EmptyState title="Waiting to start">{waitingText(detail.ahead)}</EmptyState>
-            ) : (
-              <LoadingRows rows={4} label="Reading the logs" />
-            )}
-          </div>
           <div className="grid min-w-0 [scrollbar-width:thin] content-start gap-6 xl:sticky xl:top-6 xl:col-start-2 xl:row-span-3 xl:row-start-1 xl:max-h-[calc(100dvh-3rem)] xl:self-start xl:overflow-y-auto">
             {severity ? (
               <SeverityPanel
@@ -609,7 +613,7 @@ export function RunView({
                 aria-labelledby="severity-title"
                 className="grid gap-2 rounded-lg bg-raised p-5"
               >
-                <h2 id="severity-title" className="text-base font-medium">
+                <h2 id="severity-title" className="text-xl">
                   How serious
                 </h2>
                 <p className="max-w-prose text-sm text-muted-foreground">
@@ -621,14 +625,7 @@ export function RunView({
             )}
             <EvidencePanel />
           </div>
-          <div className="min-w-0 xl:col-start-1 xl:row-start-2">
-            <SeenBefore
-              incidents={report?.similar_incidents ?? values?.retrieval?.incidents ?? []}
-              retrieval={values?.retrieval}
-              system={detail.system}
-            />
-          </div>
-          <div className="min-w-0 xl:col-start-1 xl:row-start-3">
+          <div className="min-w-0 xl:col-start-1 xl:row-start-1">
             {report ? (
               <ReportView
                 report={report}
@@ -644,6 +641,22 @@ export function RunView({
                 and investigated.
               </EmptyState>
             )}
+          </div>
+          <div className="min-w-0 xl:col-start-1 xl:row-start-2">
+            {values?.batch ? (
+              <WhatHappened batch={values.batch} timeline={report?.timeline ?? []} />
+            ) : detail.status === "queued" ? (
+              <EmptyState title="Waiting to start">{waitingText(detail.ahead)}</EmptyState>
+            ) : (
+              <LoadingRows rows={4} label="Reading the logs" />
+            )}
+          </div>
+          <div className="min-w-0 xl:col-start-1 xl:row-start-3">
+            <SeenBefore
+              incidents={report?.similar_incidents ?? values?.retrieval?.incidents ?? []}
+              retrieval={values?.retrieval}
+              system={detail.system}
+            />
           </div>
         </div>
 
@@ -664,61 +677,99 @@ export function RunView({
           </Suspense>
         ) : null}
 
-        <Tabs value={tab} onValueChange={chooseTab} className="mt-2">
-          <TabsList aria-label="Run details">
-            <TabsTrigger value="work">What ARIA did</TabsTrigger>
-            <TabsTrigger value="evidence">Evidence ({evidence.length})</TabsTrigger>
-            <TabsTrigger value="logs">Logs</TabsTrigger>
-            <TabsTrigger value="history">History</TabsTrigger>
-          </TabsList>
-          <TabsContent value="work" className="grid gap-6">
-            {values ? (
-              <AgentTeam values={values} events={timeline.events} example={detail.example} />
-            ) : (
-              <LoadingRows rows={3} label="Loading what the agents did" />
-            )}
-            <details className="text-sm">
-              <summary className="w-fit cursor-pointer py-0.5 font-medium">
-                Every event ({timeline.events.length})
-              </summary>
-              <div className="grid gap-2 pt-3">
-                {mode === "live" ? (
-                  <p className="text-xs text-muted-foreground" role="status">
-                    {timeline.state === "live"
-                      ? "Live: following the triage as it happens."
-                      : timeline.state === "reconnecting"
-                        ? "Reconnecting to the live updates."
-                        : timeline.state === "closed"
-                          ? "Live updates ended."
-                          : "Connecting to the live updates."}
+        <details
+          open={technical}
+          onToggle={(event) => setTechnical(event.currentTarget.open)}
+          className="group/technical mt-2 rounded-card border border-rule bg-raised"
+        >
+          <summary className="flex cursor-pointer items-start justify-between gap-4 p-5 sm:p-6 [&::-webkit-details-marker]:hidden">
+            <span className="grid gap-1">
+              <span className="text-xl font-semibold text-heading">Technical details</span>
+              <span className="max-w-prose text-base text-muted-foreground">
+                For engineers: what each part of ARIA did, all the evidence, the logs as ARIA read
+                them, and the incident&apos;s history.
+              </span>
+            </span>
+            <ChevronDownIcon
+              aria-hidden
+              className="mt-1 size-5 shrink-0 text-muted-foreground transition-transform duration-(--duration-quick) group-open/technical:rotate-180 motion-reduce:transition-none"
+            />
+          </summary>
+          <div className="border-t border-rule p-5 sm:p-6">
+            <Tabs value={tab} onValueChange={chooseTab}>
+              <TabsList aria-label="Run details">
+                <TabsTrigger value="work">What ARIA did</TabsTrigger>
+                <TabsTrigger value="evidence">Evidence ({evidence.length})</TabsTrigger>
+                <TabsTrigger value="logs">Logs</TabsTrigger>
+                <TabsTrigger value="history">History</TabsTrigger>
+              </TabsList>
+              <TabsContent value="work" className="grid gap-6">
+                <TabNote>
+                  Each part of ARIA in turn: what it read, what it found and what it decided.
+                </TabNote>
+                {values ? (
+                  <AgentTeam values={values} events={timeline.events} example={detail.example} />
+                ) : (
+                  <LoadingRows rows={3} label="Loading what the agents did" />
+                )}
+                <details className="text-sm">
+                  <summary className="w-fit cursor-pointer py-0.5 font-medium">
+                    Every event ({timeline.events.length})
+                  </summary>
+                  <div className="grid gap-2 pt-3">
+                    {mode === "live" ? (
+                      <p className="text-xs text-muted-foreground" role="status">
+                        {timeline.state === "live"
+                          ? "Live: following the triage as it happens."
+                          : timeline.state === "reconnecting"
+                            ? "Reconnecting to the live updates."
+                            : timeline.state === "closed"
+                              ? "Live updates ended."
+                              : "Connecting to the live updates."}
+                      </p>
+                    ) : null}
+                    <Activity
+                      events={timeline.events}
+                      offline={offline ?? undefined}
+                      titles={messageTitles}
+                    />
+                  </div>
+                </details>
+              </TabsContent>
+              <TabsContent value="evidence" className="grid gap-4">
+                <TabNote>
+                  Everything the report may cite. Each statement in the report points to the
+                  evidence it rests on, such as E3.
+                </TabNote>
+                {evidence.length ? (
+                  <EvidenceTable evidence={evidence} cited={cited} />
+                ) : (
+                  <p className="text-sm text-muted-foreground">No evidence yet.</p>
+                )}
+              </TabsContent>
+              <TabsContent value="logs" className="grid gap-4">
+                <TabNote>
+                  The logs as ARIA read them: lines that differ only in details are grouped into one
+                  pattern, with how many lines share it.
+                </TabNote>
+                {values?.batch ? (
+                  <Templates batch={values.batch} />
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    The logs have not been parsed yet.
                   </p>
-                ) : null}
-                <Activity
-                  events={timeline.events}
-                  offline={offline ?? undefined}
-                  titles={messageTitles}
-                />
-              </div>
-            </details>
-          </TabsContent>
-          <TabsContent value="evidence">
-            {evidence.length ? (
-              <EvidenceTable evidence={evidence} cited={cited} />
-            ) : (
-              <p className="text-sm text-muted-foreground">No evidence yet.</p>
-            )}
-          </TabsContent>
-          <TabsContent value="logs">
-            {values?.batch ? (
-              <Templates batch={values.batch} />
-            ) : (
-              <p className="text-sm text-muted-foreground">The logs have not been parsed yet.</p>
-            )}
-          </TabsContent>
-          <TabsContent value="history">
-            <History runId={detail.id} viewing={checkpoint} onView={setCheckpoint} />
-          </TabsContent>
-        </Tabs>
+                )}
+              </TabsContent>
+              <TabsContent value="history" className="grid gap-4">
+                <TabNote>
+                  ARIA saves its place after every step. View the incident as it was after any of
+                  them.
+                </TabNote>
+                <History runId={detail.id} viewing={checkpoint} onView={setCheckpoint} />
+              </TabsContent>
+            </Tabs>
+          </div>
+        </details>
       </div>
     </EvidenceProvider>
   );

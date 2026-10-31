@@ -29,9 +29,11 @@ off it.
      slate panels.
    - There are no drop shadows and no coloured card borders. A neutral hairline (`--rule`)
      marks a card when it sits on cream.
-2. **A light serif and a quiet sans.**
-   - Newsreader at weight 300 sets every headline (`h1` to `h3`) and editorial statement. It is
-     never bold.
+2. **A serif for pages and sections, a firm sans for everything inside them.**
+   - Newsreader sets page titles (`h1`), the landing page's sections and large statistics, at
+     weight 350 to 400 and never smaller than 28 px, so no title is thin.
+   - Inter at weight 600 sets the titles inside a page (`h2` and `h3`: panels, cards, steps), so
+     each stands apart from the text under it at a glance.
    - Inter sets everything else: body, navigation, labels and buttons.
    - Geist Mono sets log lines, IDs and commands.
 3. **One saturated dark.**
@@ -77,16 +79,19 @@ Severity keeps its own earthy hues, apart from the greens, so a level never read
 
 ## Type
 
-| Role                              | Face           | Size                  | Notes                                     |
-| --------------------------------- | -------------- | --------------------- | ----------------------------------------- |
-| Hero (`.text-hero`)               | Newsreader 300 | 44 to 68 px           | -0.03em, line height 1.04                 |
-| Section opener (`.text-display`)  | Newsreader 300 | 36 to 56 px           | -0.03em                                   |
-| Section heading (`.text-section`) | Newsreader 300 | 30 to 40 px           | -0.01em                                   |
-| Statement (`.text-statement`)     | Newsreader 300 | 23 to 28 px           | Forest                                    |
-| Subhead (`.text-lead`)            | Inter 400      | 15 to 18 px           | Muted                                     |
-| Body                              | Inter 400      | 15 px (console 14 px) | Charcoal                                  |
-| Tag (`.tag`)                      | Inter 500      | 12 px                 | Sentence case on a slate (or cream) label |
-| Stat (`.stat`)                    | Newsreader 300 | 48 px and up          | Lining, tabular figures                   |
+| Role                              | Face           | Size               | Notes                                     |
+| --------------------------------- | -------------- | ------------------ | ----------------------------------------- |
+| Hero (`.text-hero`)               | Newsreader 350 | 44 to 68 px        | -0.03em, line height 1.04                 |
+| Section opener (`.text-display`)  | Newsreader 400 | 36 to 56 px        | -0.03em                                   |
+| Section heading (`.text-section`) | Newsreader 400 | 30 to 40 px        | -0.01em                                   |
+| Page title (`h1`)                 | Newsreader 400 | 36 to 40 px        | -0.01em                                   |
+| Console section (`SectionHeader`) | Newsreader 400 | 28 px              | Groups a long page's cards                |
+| Panel, card and step title        | Inter 600      | 18 to 24 px        | `h2` and `h3`                             |
+| Statement (`.text-statement`)     | Newsreader 400 | 23 to 28 px        | Forest                                    |
+| Subhead (`.text-lead`)            | Inter 400      | 17 to 20 px        | Muted                                     |
+| Body                              | Inter 400      | 17 px (help 15 px) | Charcoal                                  |
+| Tag (`.tag`)                      | Inter 500      | 12 px              | Sentence case on a slate (or cream) label |
+| Stat (`.stat`)                    | Newsreader 400 | 48 px and up       | Lining, tabular figures                   |
 
 The floor is 12 px; the reference's 10 and 11 px labels are raised to it.
 

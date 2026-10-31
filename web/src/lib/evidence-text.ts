@@ -1,4 +1,5 @@
 import type { Evidence } from "@/lib/api/types";
+import { failureName } from "@/lib/failure-modes";
 import { plainTemplate } from "@/lib/format";
 import { systemName } from "@/lib/systems";
 
@@ -9,11 +10,18 @@ import { systemName } from "@/lib/systems";
  * An evidence title as a person reads it. A pattern is recorded as "16x Failed password for
  * <*> port <*>"; it reads "16 lines like “Failed password for … port …”".
  */
-export function evidenceTitle(evidence: { kind: string; title: string }): string {
+export function evidenceTitle(evidence: {
+  kind: string;
+  title: string;
+  data?: Record<string, unknown> | null;
+}): string {
   if (evidence.kind === "incident") return incidentTitle(evidence.title);
   if (evidence.kind === "rule") return ruleTitle(evidence.title);
   if (evidence.kind === "model") return modelTitle(evidence.title);
   if (evidence.kind === "feature") return featureTitle(evidence.title);
+  if (evidence.kind === "tool") return toolTitle(evidence.title, evidence.data);
+  if (evidence.kind === "hypothesis") return causeTitle(evidence.title, evidence.data);
+  if (evidence.kind === "runbook") return evidence.title.replace(/^Runbook \S+: /, "Runbook: ");
   const pattern = evidence.kind === "template" ? /^(\d+)x (.+)$/s.exec(evidence.title) : null;
   if (!pattern?.[1] || !pattern[2]) return evidence.title;
   const n = Number(pattern[1]);
@@ -78,6 +86,105 @@ function modelTitle(title: string): string {
     : `Each level's share of the rule scores: ${levels}`;
 }
 
+// What ARIA did with each of its read-only tools.
+const TOOL_DID: Record<string, string> = {
+  search_incidents: "Searched past incidents",
+  get_incident: "Read a past incident",
+  summarize_incident: "Read a past incident's summary",
+  search_runbooks: "Searched the runbooks",
+  get_runbook: "Read a runbook",
+  get_ticket_history: "Read the ticket history",
+  search_logs: "Searched the logs",
+  get_template_examples: "Looked up example lines",
+  component_timeline: "Read a component's timeline",
+  node_breakdown: "Counted problems by server",
+};
+
+const count = (n: string, one: string, many: string) =>
+  `${Number(n).toLocaleString("en")} ${n === "1" ? one : many}`;
+
+/** The gist of a tool's one-line summary, as the tool belt writes it (mcp/client.py), without
+ * record ids, file names or a cut-off payload. */
+function toolGist(summary: string): string {
+  let found: RegExpExecArray | null;
+  if (summary === "no similar incidents") return "none similar";
+  if ((found = /^(\d+) similar incidents\b/.exec(summary)) && found[1]) {
+    return count(found[1], "similar incident", "similar incidents");
+  }
+  if ((found = /^(\d+) log lines( \(more not shown\))?/.exec(summary)) && found[1]) {
+    return `${count(found[1], "line", "lines")}${found[2] ? ", and more not shown" : ""}`;
+  }
+  found = /^(.+): (\d+) lines over (\d+) min, (\d+) errors and (\d+) warnings/.exec(summary);
+  if (found?.[1] && found[2] && found[3] && found[4] && found[5]) {
+    return `${found[1]}, ${count(found[2], "line", "lines")} over ${count(found[3], "minute", "minutes")}: ${count(found[4], "error", "errors")} and ${count(found[5], "warning", "warnings")}`;
+  }
+  if ((found = /^no lines for component (.+)$/.exec(summary)) && found[1]) {
+    return `no lines from ${found[1]}`;
+  }
+  if ((found = /^(\d+) nodes? with errors or warnings/.exec(summary)) && found[1]) {
+    return `${count(found[1], "server", "servers")} with errors or warnings`;
+  }
+  if (summary === "no nodes") return "no servers";
+  if ((found = /^runbooks: (.*)$/.exec(summary))) {
+    const n = String(found[1] ? found[1].split(", ").length : 0);
+    return count(n, "runbook", "runbooks");
+  }
+  found = /^runbook \S+: (\d+) mitigation steps \(risk (\w+)\)/.exec(summary);
+  if (found?.[1] && found[2]) {
+    return `${count(found[1], "step", "steps")} to fix it, ${found[2]} risk`;
+  }
+  if ((found = /^(\d+) similar tickets$/.exec(summary)) && found[1]) {
+    return count(found[1], "similar ticket", "similar tickets");
+  }
+  if (summary === "no ticket history") return "no similar tickets";
+  if (/ returned \d+ bytes$/.test(summary)) return "done";
+  return shortened(summary, 120);
+}
+
+/** Text cut at a word boundary, with an ellipsis when anything was cut. */
+function shortened(text: string, most: number): string {
+  if (text.length <= most) return text;
+  const cut = text.slice(0, most);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > most / 2 ? cut.slice(0, space) : cut).replace(/[\s,;:]+$/, "")}…`;
+}
+
+/** A tool result's title: what ARIA did and what came back, "Searched past incidents for “got
+ * exception while serving”: 3 similar incidents". */
+function toolTitle(title: string, data?: Record<string, unknown> | null): string {
+  const named = /^(\w+): /.exec(title)?.[1] ?? "";
+  const tool = typeof data?.tool === "string" ? data.tool : named;
+  const summary = named === tool ? title.slice(tool.length + 2) : title;
+  const args = data?.arguments;
+  const query =
+    args && typeof args === "object" && "query" in args && typeof args.query === "string"
+      ? args.query
+      : null;
+  const did = TOOL_DID[tool];
+  if (!did) return title;
+  return `${did}${query ? ` for “${shortened(query, 60)}”` : ""}: ${toolGist(summary)}`;
+}
+
+// Hypothesis statuses, as the investigator records them ("H1 supported: ...").
+const CAUSE_STATUS: Record<string, string> = {
+  supported: "Likely cause",
+  refuted: "Ruled out",
+  inconclusive: "Not settled",
+  open: "Still open",
+};
+
+/** A cause the investigator tested, by what it found: "Likely cause, 93% sure: ...". */
+function causeTitle(title: string, data?: Record<string, unknown> | null): string {
+  const found = /^H\d+ (\w+): (.+)$/s.exec(title);
+  if (!found?.[1] || !found[2]) return title;
+  const status = CAUSE_STATUS[found[1]] ?? found[1];
+  const sure =
+    found[1] === "supported" && typeof data?.confidence === "number"
+      ? `, ${chance(data.confidence)} sure`
+      : "";
+  return `${status}${sure}: ${found[2]}`;
+}
+
 /** A probability as a person reads it: "54%", and "under 1%" rather than a bare "0%". */
 export function chance(p: number): string {
   if (p > 0 && p < 0.005) return "under 1%";
@@ -90,6 +197,14 @@ export function chance(p: number): string {
  * of 0 nodes": both read as the steps, and as no errors, instead. */
 export function evidenceDetail(evidence: Pick<Evidence, "kind" | "detail">): string {
   const detail = evidence.detail ?? "";
+  if (evidence.kind === "tool") return toolDetail(detail);
+  if (evidence.kind === "runbook") return detail.replace(/ \[risk: (\w+)\]/g, " ($1 risk)");
+  if (evidence.kind === "hypothesis") {
+    const found = /^failure mode (\S+); component (.+)$/.exec(detail);
+    return found?.[1] && found[2]
+      ? `Kind of failure: ${failureName(found[1])}. Component: ${found[2]}.`
+      : detail;
+  }
   if (evidence.kind !== "incident") return detail;
   return detail
     .split("\n")
@@ -106,6 +221,75 @@ export function evidenceDetail(evidence: Pick<Evidence, "kind" | "detail">): str
         ),
     )
     .join("\n");
+}
+
+const parsed = (detail: string): Record<string, unknown> | null => {
+  try {
+    const value: unknown = JSON.parse(detail);
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : null;
+  } catch {
+    return null; // a long result is stored cut short, so it may not parse
+  }
+};
+
+const rows = (value: unknown): Record<string, unknown>[] =>
+  Array.isArray(value)
+    ? value.filter((v): v is Record<string, unknown> => Boolean(v) && typeof v === "object")
+    : [];
+
+const text = (value: unknown) => (typeof value === "string" ? value : String(value ?? ""));
+
+/** What a tool sent back, in lines a person reads: the past incidents by title, the log lines, a
+ * runbook's steps. The raw result stays one click away (see `rawResult`). */
+function toolDetail(detail: string): string {
+  const data = parsed(detail);
+  if (!data) return "";
+  if (Array.isArray(data.incidents)) {
+    return rows(data.incidents)
+      .slice(0, 5)
+      .map((i) => {
+        const seen = Number(i.occurrences);
+        return `${text(i.title)} (${text(i.severity)}${seen > 1 ? `, seen ${seen} times` : ""})`;
+      })
+      .join("\n");
+  }
+  if (Array.isArray(data.lines)) {
+    return rows(data.lines)
+      .slice(0, 5)
+      .map((l) => `line ${text(l.line_no)}: ${text(l.message)}`)
+      .join("\n");
+  }
+  if (Array.isArray(data.mitigate)) {
+    const steps = data.mitigate.map(
+      (step, i) => `${i + 1}. ${text(step).replace(/ \[risk: (\w+)\]/g, " ($1 risk)")}`,
+    );
+    return [text(data.title), ...steps].filter(Boolean).join("\n");
+  }
+  if (Array.isArray(data.nodes)) {
+    return rows(data.nodes)
+      .slice(0, 5)
+      .map(
+        (n) =>
+          `${text(n.node)}: ${count(text(n.errors), "error", "errors")}, ${count(text(n.warnings ?? 0), "warning", "warnings")}`,
+      )
+      .join("\n");
+  }
+  if (Array.isArray(data.runbooks)) {
+    return rows(data.runbooks)
+      .slice(0, 5)
+      .map((r) => text(r.title ?? r.slug))
+      .join("\n");
+  }
+  return "";
+}
+
+/** A tool's result as it came back, laid out to read, for whoever wants the record itself. */
+export function rawResult(evidence: Pick<Evidence, "kind" | "detail">): string | null {
+  if (evidence.kind !== "tool" || !evidence.detail) return null;
+  const data = parsed(evidence.detail);
+  return data ? JSON.stringify(data, null, 2) : evidence.detail;
 }
 
 // The severity model's measurements as the report would name them, with "log1p.", "frac." and

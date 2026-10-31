@@ -30,13 +30,22 @@ function Question({
   answer: string;
   children: React.ReactNode;
 }) {
+  // The answer's first sentence is the verdict; the figures behind it read as its detail.
+  const split = /^(.+?[.!?])\s+(?=[A-Z“"])(.+)$/s.exec(answer);
+  const [verdict, detail] = split ? [split[1], split[2]] : [answer, null];
   return (
-    <section aria-labelledby={id} className="grid gap-4 border-t border-rule pt-6">
+    <section
+      aria-labelledby={id}
+      className="grid gap-5 rounded-card border border-rule bg-raised p-5 sm:p-6"
+    >
       <div className="grid max-w-3xl gap-2">
-        <h2 id={id} className="scroll-mt-24 text-xl tracking-heading lg:scroll-mt-8">
+        <h3 id={id} className="scroll-mt-24 text-xl leading-snug lg:scroll-mt-8">
           {question}
-        </h2>
-        <p className="leading-relaxed">{answer}</p>
+        </h3>
+        <p className="text-lg leading-relaxed font-medium text-foreground">{verdict}</p>
+        {detail ? (
+          <p className="text-base leading-relaxed text-muted-foreground">{detail}</p>
+        ) : null}
       </div>
       {children}
     </section>
@@ -413,7 +422,7 @@ export function TestQuestions({
     },
   ];
   return (
-    <div className="grid gap-10">
+    <div className="grid gap-4">
       <Question
         id="q-unsure"
         question="Does it say when it isn't sure?"

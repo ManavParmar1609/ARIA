@@ -140,7 +140,7 @@ export function NewRun({ publicDemo = false }: { publicDemo?: boolean }) {
     <div className="grid gap-8">
       <PageHeader
         title="New triage"
-        description="Pick a sample to triage, or paste your own logs. ARIA reads them, rates how serious the incident is and drafts a report with its sources, and nothing is sent until you approve it."
+        description="Choose where the logs come from and an issue to triage, or paste your own logs. ARIA reads them, rates how serious the incident is and drafts a report with its sources. Nothing is sent until you approve it."
       />
       <Tabs value={tab} onValueChange={setTab} className="grid gap-8">
         <TabsList aria-label="What to triage">

@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowUpIcon, PinIcon, XIcon } from "lucide-react";
+import { ArrowRightIcon, ArrowUpIcon, PinIcon, XIcon } from "lucide-react";
+import Link from "next/link";
 import {
   createContext,
   useCallback,
@@ -16,7 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/popover";
 import type { Evidence, LogEvent } from "@/lib/api/types";
-import { chance, evidenceDetail, evidenceTitle, featureName } from "@/lib/evidence-text";
+import { chance, evidenceDetail, evidenceTitle, featureName, rawResult } from "@/lib/evidence-text";
 import { failureName } from "@/lib/failure-modes";
 import { cn } from "@/lib/utils";
 
@@ -37,10 +38,19 @@ const SOURCE_LABEL: Record<string, string> = {
   "mcp.search_incidents": "the incident library",
   "mcp.ticket_history": "the ticket history",
   "mcp.get_runbook": "the runbooks",
+  "mcp.search_runbooks": "the runbooks",
+  "mcp.get_incident": "the incident library",
+  "mcp.summarize_incident": "the incident library",
+  "mcp.get_ticket_history": "the ticket history",
+  "mcp.search_logs": "the logs",
+  "mcp.get_template_examples": "the logs",
+  "mcp.component_timeline": "the logs",
+  "mcp.node_breakdown": "the logs",
 };
 
 /** Where evidence came from, in words: "the severity rules" rather than "severity.rules". */
-export const sourceLabel = (source: string) => SOURCE_LABEL[source] ?? source;
+export const sourceLabel = (source: string) =>
+  SOURCE_LABEL[source] ?? (source.startsWith("mcp.") ? "ARIA's read-only tools" : source);
 
 export const KIND_LABEL: Record<string, string> = {
   log: "Log line",
@@ -153,7 +163,7 @@ function EvidencePreview({ evidence, lines }: { evidence: Evidence; lines: LogEv
         {KIND_LABEL[evidence.kind] ?? evidence.kind}, from {sourceLabel(evidence.source)}
       </p>
       <p className="text-sm leading-snug font-medium wrap-anywhere">{evidenceTitle(evidence)}</p>
-      {evidence.detail ? (
+      {evidenceDetail(evidence) ? (
         <p className="line-clamp-4 text-xs leading-5 wrap-anywhere whitespace-pre-wrap text-muted-foreground">
           {evidenceDetail(evidence)}
         </p>
@@ -485,10 +495,25 @@ function likeliest(data: Record<string, unknown>): string | null {
   return best?.[0] ?? null;
 }
 
+// What each kind's title and detail already say: a tool's name and arguments, a cause's status and
+// certainty, a runbook's file name.
+const KIND_HIDDEN: Record<string, Set<string>> = {
+  tool: new Set(["tool", "arguments", "agent"]),
+  hypothesis: new Set(["id", "status", "confidence", "failure_mode", "component"]),
+  runbook: new Set(["slug", "failure_modes"]),
+};
+
+// A tested cause's evidence, said as evidence rather than as field names.
+const CAUSE_FIELDS: Record<string, string> = {
+  supporting: "backed by",
+  refuting: "against it",
+};
+
 function DataTable({ data, kind }: { data: Record<string, unknown>; kind: string }) {
   const entries = Object.entries(data).filter(
     ([k, v]) =>
       !HIDDEN_FIELDS.has(k) &&
+      !KIND_HIDDEN[kind]?.has(k) &&
       !(k === "nodes" && v === 0) &&
       v !== null &&
       v !== "" &&
@@ -500,7 +525,9 @@ function DataTable({ data, kind }: { data: Record<string, unknown>; kind: string
       ? { ...FIELD_NAMES, ...INCIDENT_FIELDS }
       : kind === "model" || kind === "rule"
         ? { ...FIELD_NAMES, ...MODEL_FIELDS }
-        : FIELD_NAMES;
+        : kind === "hypothesis"
+          ? { ...FIELD_NAMES, ...CAUSE_FIELDS }
+          : FIELD_NAMES;
   const toward = kind === "model" ? likeliest(data) : null;
   return (
     <dl className="grid grid-cols-[minmax(0,9rem)_1fr] gap-x-3 gap-y-1 text-xs">
@@ -604,6 +631,42 @@ export function LogLines({
   );
 }
 
+/** A tool's result as it came back, folded away: the detail above says what it means. */
+export function RawResult({ evidence }: { evidence: Evidence }) {
+  const raw = rawResult(evidence);
+  if (!raw) return null;
+  return (
+    <details className="text-xs">
+      <summary className="w-fit cursor-pointer text-muted-foreground underline decoration-control underline-offset-4 hover:text-foreground">
+        Show the raw result
+      </summary>
+      <pre
+        tabIndex={0}
+        role="region"
+        aria-label="Raw result"
+        className="mt-2 max-h-48 overflow-auto rounded-sm bg-sunken p-2 leading-5 whitespace-pre-wrap"
+      >
+        {raw}
+      </pre>
+    </details>
+  );
+}
+
+/** The way to a runbook's own page, from the evidence that cites it. */
+function RunbookLink({ evidence }: { evidence: Evidence }) {
+  const slug = (evidence.data as Record<string, unknown> | null | undefined)?.slug;
+  if (evidence.kind !== "runbook" || typeof slug !== "string") return null;
+  return (
+    <Link
+      href={`/console/runbooks/${encodeURIComponent(slug)}` as never}
+      className="inline-flex w-fit items-center gap-1 text-xs underline decoration-control underline-offset-4 hover:decoration-foreground"
+    >
+      Open the runbook
+      <ArrowRightIcon aria-hidden className="size-3.5" />
+    </Link>
+  );
+}
+
 /** The evidence behind whatever citation the reader is pointing at. */
 export function EvidencePanel({ className }: { className?: string }) {
   const { active, pinned, origin, panelId, byId, pin, linesFor } = useEvidence();
@@ -679,7 +742,7 @@ export function EvidencePanel({ className }: { className?: string }) {
               Back to the claim
             </Button>
           ) : null}
-          {evidence.detail ? (
+          {evidenceDetail(evidence) ? (
             <pre
               tabIndex={0}
               role="region"
@@ -689,6 +752,8 @@ export function EvidencePanel({ className }: { className?: string }) {
               {evidenceDetail(evidence)}
             </pre>
           ) : null}
+          <RawResult evidence={evidence} />
+          <RunbookLink evidence={evidence} />
           {/* Keyed by evidence, so each citation pointed at sends its own pass of light. */}
           <LogLines
             key={evidence.id}
