@@ -4,7 +4,7 @@ import { LevelChip, SeverityScale } from "@/components/aria/severity";
 import { decisionPhrase } from "@/lib/decision";
 import { SEVERITIES, type SeverityAssessment } from "@/lib/api/types";
 import { percent } from "@/lib/format";
-import { LEVEL_RESPONSE, orList } from "@/lib/levels";
+import { LEVEL_RESPONSE, orList, unsettled } from "@/lib/levels";
 import { cn } from "@/lib/utils";
 
 import { Citations } from "./evidence";
@@ -65,7 +65,11 @@ export function SeverityPanel({
           stamp
           className="justify-self-start"
         />
-        <p className="text-sm">{LEVEL_RESPONSE[assessment.severity]}</p>
+        <p className="text-sm">
+          {unsettled(assessment, status) && status !== "rejected"
+            ? `Not settled: ARIA could not narrow it down, so it plans for ${assessment.severity} until someone decides. ${LEVEL_RESPONSE[assessment.severity]}`
+            : LEVEL_RESPONSE[assessment.severity]}
+        </p>
       </div>
       {/* In words, not badges: the level is already shown twice on this screen. */}
       <p className="text-sm">

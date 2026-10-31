@@ -86,3 +86,23 @@ export function shortListText(
       : `ARIA ${plans} for ${a.severity}.`;
   return `Could be ${orList(set)}. ${chose}${ask("confirm")}`;
 }
+
+/**
+ * Whether no one has settled the level, and the short list is too wide to say much on its own:
+ * every level, or three or more from the rules alone. The header and the severity panel then
+ * lead with that, not with a level's colour (S2); a reviewer's own level, or their approval,
+ * settles it. Only the words change: the policy and the review are the same.
+ */
+export function unsettled(
+  assessment: Pick<
+    SeverityAssessment,
+    "prediction_set" | "model_version" | "needs_review" | "decided_by"
+  >,
+  status?: string,
+): boolean {
+  const set = assessment.prediction_set;
+  const wide =
+    set.length >= 4 || (assessment.model_version.startsWith("rules-only") && set.length >= 3);
+  const asked = assessment.needs_review || assessment.decided_by === "fallback";
+  return wide && asked && assessment.decided_by !== "human" && status !== "published";
+}

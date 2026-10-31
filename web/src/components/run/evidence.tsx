@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRightIcon, ArrowUpIcon, PinIcon, XIcon } from "lucide-react";
+import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, PinIcon, XIcon } from "lucide-react";
 import Link from "next/link";
 import {
   createContext,
@@ -16,7 +16,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/popover";
-import type { Evidence, LogEvent } from "@/lib/api/types";
+import type { Evidence, LogEvent, TemplateStat } from "@/lib/api/types";
 import { chance, evidenceDetail, evidenceTitle, featureName, rawResult } from "@/lib/evidence-text";
 import { failureName } from "@/lib/failure-modes";
 import { cn } from "@/lib/utils";
@@ -75,6 +75,8 @@ interface EvidenceState {
   pinned: string | null;
   /** The citation that pinned the evidence, so a phone reader can get back to the claim. */
   origin: HTMLElement | null;
+  /** Whether that citation comes after the panel on the page, so the way back points down. */
+  originBelow: boolean;
   /** The element that shows a pinned citation: the evidence panel, or an answer's sources. */
   panelId: string;
   /** Where the panel sits beside the text (a media query): pointing at a citation fills it there,
@@ -107,10 +109,22 @@ export function EvidenceProvider({
   const [hovered, setHovered] = useState<string | null>(null);
   const [pinned, setPinned] = useState<string | null>(null);
   const [origin, setOrigin] = useState<HTMLElement | null>(null);
-  const pin = useCallback((id: string | null, from: HTMLElement | null = null) => {
-    setPinned(id);
-    setOrigin(id ? from : null);
-  }, []);
+  const [originBelow, setOriginBelow] = useState(false);
+  const pin = useCallback(
+    (id: string | null, from: HTMLElement | null = null) => {
+      setPinned(id);
+      setOrigin(id ? from : null);
+      // In one column the page reads in document order, and the panel sits above the report, so
+      // most claims are below it; one in "How serious" is above it (L5).
+      const panel = id && from ? document.getElementById(panelId) : null;
+      setOriginBelow(
+        Boolean(
+          from && panel && panel.compareDocumentPosition(from) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ),
+      );
+    },
+    [panelId],
+  );
   const byId = useMemo(() => new Map(evidence.map((e) => [e.id, e])), [evidence]);
   const byTemplate = useMemo(() => {
     const map = new Map<string, LogEvent[]>();
@@ -138,13 +152,14 @@ export function EvidenceProvider({
       active: hovered ?? pinned,
       pinned,
       origin,
+      originBelow,
       panelId,
       besidePanel,
       hover: setHovered,
       pin,
       linesFor,
     }),
-    [byId, events, hovered, pinned, origin, panelId, besidePanel, pin, linesFor],
+    [byId, events, hovered, pinned, origin, originBelow, panelId, besidePanel, pin, linesFor],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -175,9 +190,10 @@ function EvidencePreview({ evidence, lines }: { evidence: Evidence; lines: LogEv
 }
 
 /**
- * Bring the evidence panel into view after a pin. Beside the report the side column scrolls on
- * its own, just far enough to show the panel, so the page stays put; in one column the panel sits
- * below the report, so the page scrolls to it.
+ * Bring the evidence panel into view after a pin. In one column the panel sits above the report,
+ * so the page scrolls up to it. Beside the report, the side column scrolls just far enough to
+ * show the panel, and so does the page when the panel starts below the fold, as it does on a long
+ * page's first screen (P3).
  */
 function revealPanel(panelId: string, pinning = false) {
   const panel = document.getElementById(panelId);
@@ -185,8 +201,8 @@ function revealPanel(panelId: string, pinning = false) {
   const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches
     ? "auto"
     : "smooth";
-  // Beside the report from 1280 px (the page's xl column); below the report otherwise. Asked of
-  // the screen, not of the markup: the panel's column is no longer an <aside> (RQ-M2).
+  // Beside the report from 1280 px (the page's xl column); above it otherwise. Asked of the
+  // screen, not of the markup: the panel's column is no longer an <aside> (RQ-M2).
   if (!window.matchMedia("(min-width: 1280px)").matches) {
     // Its top, where its title and "Back to the claim" are: "nearest" would show only the bottom
     // of a panel taller than the screen (J-M3).
@@ -195,17 +211,25 @@ function revealPanel(panelId: string, pinning = false) {
     if (pinning && panel.getAttribute("tabindex") === "-1") panel.focus({ preventScroll: true });
     return;
   }
-  // Beside the report, focus stays on the citation and only the side column scrolls.
-  const column = scrollingParent(panel);
-  if (!column) return;
-  const top =
-    panel.getBoundingClientRect().top - column.getBoundingClientRect().top + column.scrollTop;
-  const bottom = top + panel.offsetHeight;
-  const { scrollTop, clientHeight } = column;
-  if (top < scrollTop) column.scrollTo({ top, behavior });
-  else if (bottom > scrollTop + clientHeight) {
-    column.scrollTo({ top: Math.min(top, bottom - clientHeight), behavior });
+  // Beside the report, focus stays on the citation. "Nearest" moves the page no further than the
+  // panel needs, and the column sticks before the claim beside it could leave the screen. A reader
+  // already past the column (in Technical details) stays where they are.
+  const column = scrollingParent(panel) ?? panel;
+  if (pinning && column.getBoundingClientRect().bottom > 0) {
+    panel.scrollIntoView({ block: "nearest", behavior });
   }
+}
+
+/** Whether the panel's top, where the evidence is named, shows inside the window and the column
+ * that scrolls it, with room for a few lines under it. */
+function panelInView(panelId: string): boolean {
+  const panel = document.getElementById(panelId);
+  if (!panel) return false;
+  const { top, height } = panel.getBoundingClientRect();
+  const column = scrollingParent(panel)?.getBoundingClientRect();
+  const from = Math.max(0, column?.top ?? 0);
+  const to = Math.min(window.innerHeight, column?.bottom ?? Infinity);
+  return top >= from - 1 && top + Math.min(height, 160) <= to + 1;
 }
 
 /** The nearest ancestor that scrolls on its own, if any. */
@@ -257,8 +281,9 @@ function useMatches(query: string | null): boolean {
 }
 
 /**
- * A citation. Hovering shows the evidence beside it; focusing or hovering also fills the
- * evidence panel (announced to screen readers); a click pins it there.
+ * A citation. Hovering or focusing it fills the evidence panel and, unless the panel is beside it
+ * and in view, opens a card with the evidence by the citation; a click pins it in the panel (only
+ * a pin is announced to screen readers).
  */
 export function EvidenceChip({ id, label }: { id: string; label?: string }) {
   const { byId, active, pinned, panelId, besidePanel, hover, pin, linesFor } = useEvidence();
@@ -314,11 +339,15 @@ export function EvidenceChip({ id, label }: { id: string; label?: string }) {
       {label ?? id}
     </button>
   );
-  if (!evidence || !canHover || beside) return button;
+  if (!evidence || !canHover) return button;
   return (
     <HoverCard
       open={preview}
-      onOpenChange={(open) => setPreview(open && !quiet.current)}
+      // Beside the report the panel shows the evidence, so no card repeats it there; but on a long
+      // page's first screen the panel starts below the fold, and the card shows it instead (P3).
+      onOpenChange={(open) =>
+        setPreview(open && !quiet.current && !(beside && panelInView(panelId)))
+      }
       openDelay={180}
       closeDelay={80}
     >
@@ -331,6 +360,22 @@ export function EvidenceChip({ id, label }: { id: string; label?: string }) {
       </HoverCardContent>
     </HoverCard>
   );
+}
+
+/**
+ * What a log pattern can cite: its own evidence. ARIA keeps evidence for the patterns that stand
+ * out, and the rest point at the whole window's counts, which say nothing about the pattern, so
+ * those cite nothing (M3). An id that is not among the evidence stays, to show as missing.
+ */
+export function patternEvidence(
+  template: Pick<TemplateStat, "template_id" | "evidence_id">,
+  byId: ReadonlyMap<string, Evidence>,
+): string[] {
+  const evidence = byId.get(template.evidence_id);
+  const about = (evidence?.data as Record<string, unknown> | null | undefined)?.template_id;
+  return !evidence || (evidence.kind === "template" && about === template.template_id)
+    ? [template.evidence_id]
+    : [];
 }
 
 /** How many citations a claim shows before "+N": two read as sources, more as noise. */
@@ -669,11 +714,12 @@ function RunbookLink({ evidence }: { evidence: Evidence }) {
 
 /** The evidence behind whatever citation the reader is pointing at. */
 export function EvidencePanel({ className }: { className?: string }) {
-  const { active, pinned, origin, panelId, byId, pin, linesFor } = useEvidence();
+  const { active, pinned, origin, originBelow, panelId, byId, pin, linesFor } = useEvidence();
   const evidence = active ? byId.get(active) : undefined;
   // In one column the panel sits above later citations, so it opens only on a click there:
   // appearing on hover or focus would push the citation being read down the page.
-  // In one column the page scrolled down to this panel; this takes the reader back up.
+  // In one column the page scrolled to this panel; this takes the reader back to the claim.
+  const BackIcon = originBelow ? ArrowDownIcon : ArrowUpIcon;
   const backToClaim = () => {
     if (!origin?.isConnected) return;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -738,7 +784,7 @@ export function EvidencePanel({ className }: { className?: string }) {
               className="-my-1 -ml-2 justify-self-start xl:hidden"
               onClick={backToClaim}
             >
-              <ArrowUpIcon aria-hidden />
+              <BackIcon aria-hidden />
               Back to the claim
             </Button>
           ) : null}

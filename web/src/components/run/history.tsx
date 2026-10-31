@@ -121,8 +121,8 @@ export function History({
 
   return (
     <div className="grid gap-4">
-      <p className="max-w-prose text-sm text-muted-foreground">
-        ARIA keeps a checkpoint after every step. View the incident as it was at any of them, or
+      <p className="max-w-prose text-base text-muted-foreground">
+        ARIA saves its place after every step. View the incident as it was after any of them, or
         copy it from one into a new incident, for example to try it again with a model or without
         investigation.
       </p>

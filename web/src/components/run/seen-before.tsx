@@ -69,7 +69,6 @@ function Incident({ kind, sameFix, system }: { kind: PastKind; sameFix: boolean;
       <p className="flex flex-wrap items-center gap-2">
         <SeverityBadge severity={isSeverity(lead.severity) ? lead.severity : null} size="sm" />
         <span className="font-medium">{lead.title}</span>
-        <Citations ids={ids} />
       </p>
       <p className="text-sm text-muted-foreground">
         {/* The same fix, card after card, says nothing new: write it once. */}
@@ -81,13 +80,23 @@ function Incident({ kind, sameFix, system }: { kind: PastKind; sameFix: boolean;
           </>
         )}
       </p>
-      <p className="text-xs text-faint">
-        Seen {lead.occurrences} {lead.occurrences === 1 ? "time" : "times"}
-        {lead.mttr_minutes != null
-          ? `, resolved in about ${Math.round(lead.mttr_minutes)} min`
-          : ""}
-        {sources.length ? `, ${sources.join(" and ")}` : ""}
-        {lead.system !== system ? `, on ${systemName(lead.system)}` : ""}
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-faint">
+        <span>
+          Seen {lead.occurrences} {lead.occurrences === 1 ? "time" : "times"}
+          {lead.mttr_minutes != null
+            ? `, resolved in about ${Math.round(lead.mttr_minutes)} min`
+            : ""}
+          {sources.length ? `, ${sources.join(" and ")}` : ""}
+          {lead.system !== system ? `, on ${systemName(lead.system)}` : ""}.
+        </span>
+        {/* The row stands for every sighting of this kind, and its citations are those
+            sightings, each with its own details: not sources for the title above (M4). */}
+        {ids.length ? (
+          <span className="inline-flex flex-wrap items-center gap-1.5">
+            {ids.length === 1 ? "The closest sighting:" : "The closest sightings:"}
+            <Citations ids={ids} />
+          </span>
+        ) : null}
       </p>
     </li>
   );

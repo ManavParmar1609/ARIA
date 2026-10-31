@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { LevelChip } from "@/components/aria/severity";
@@ -42,9 +42,10 @@ import {
   type SeverityAssessment,
 } from "@/lib/api/types";
 import { absoluteTime, relativeTime, stripSeverity, writtenOffline } from "@/lib/format";
-import { shortListText } from "@/lib/levels";
+import { orList, shortListText, unsettled } from "@/lib/levels";
 import { waitingText } from "@/lib/queue";
 import { systemName, triggerLabel } from "@/lib/systems";
+import { cn } from "@/lib/utils";
 
 import { Activity } from "./activity";
 import { Deliveries } from "./deliveries";
@@ -128,39 +129,87 @@ function storeTab(runId: string, tab: string) {
   }
 }
 
+/** What the header says of the rating: its badge, when the level is unsettled, and the sentence
+ * under the title. A level still open is said as a plan, not as a finding (S2). */
+export function headerRating(
+  assessment: SeverityAssessment,
+  status: string,
+): { badge: string | null; sentence: string } {
+  if (!unsettled(assessment, status)) {
+    return { badge: null, sentence: shortListText(assessment, status) };
+  }
+  if (status === "rejected") {
+    // A discarded draft waits for no one: its short list says what ARIA had planned.
+    return { badge: "Not rated", sentence: shortListText(assessment, status) };
+  }
+  return {
+    badge: "Not rated: needs a person",
+    sentence: `Could be ${orList(assessment.prediction_set)}. ARIA plans for ${assessment.severity} until someone decides.`,
+  };
+}
+
+// A title longer than this takes a smaller size, so it does not fill a phone's first screen (L10).
+const LONG_TITLE = 80;
+
 /** The answer first (item 14): the level and its word, the title, and the short list of levels
  * it could be; then where the incident came from. */
 function Header({
   run,
   assessment,
+  shortList = true,
+  replaying = false,
+  now = false,
   shared = false,
 }: {
   run: RunDetail;
+  /** The rating, once the steps on show have reached it, as the panels below show it. */
   assessment: SeverityAssessment | undefined;
+  /** The short list's sentence. A playback holds it back until the strip folds, so the header
+   * does not grow under the strip while the visitor watches it (SL-M1). */
+  shortList?: boolean;
+  /** A finished run's steps play back: nothing claims ARIA is still at work (S5). */
+  replaying?: boolean;
+  /** History shows an earlier step below, and the header the incident as it is now (S7). */
+  now?: boolean;
   /** A shared demo, where each visitor's incidents are theirs alone. */
   shared?: boolean;
 }) {
   const level = assessment?.severity ?? run.severity;
+  const rating = assessment ? headerRating(assessment, run.status) : null;
+  const title = runTitle(run);
   // Arriving here, from New triage or a link, puts focus on the incident's title (item 35).
-  const title = useRef<HTMLHeadingElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
-    title.current?.focus({ preventScroll: true });
+    heading.current?.focus({ preventScroll: true });
   }, []);
   return (
     <header className="grid gap-2">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <LevelChip severity={isSeverity(level) ? level : null} />
+        {now ? (
+          <span className="text-sm font-medium text-muted-foreground">As it is now:</span>
+        ) : null}
+        {rating?.badge ? (
+          // Drawn like "Not rated yet": dashed and in ink, with no level's colour.
+          <span className="inline-flex h-7 items-center rounded-sm border border-dashed border-control px-2.5 text-sm font-medium text-faint">
+            {rating.badge}
+          </span>
+        ) : (
+          <LevelChip severity={isSeverity(level) ? level : null} />
+        )}
         {run.example ? <ExampleStatus status={run.status} /> : <RunStatus status={run.status} />}
       </div>
       <h1
-        ref={title}
+        ref={heading}
         tabIndex={-1}
-        className="text-2xl leading-tight tracking-heading wrap-anywhere outline-none sm:text-3xl"
+        className={cn(
+          "leading-tight tracking-heading wrap-anywhere outline-none",
+          title.length > LONG_TITLE ? "text-xl sm:text-2xl" : "text-2xl sm:text-3xl",
+        )}
       >
-        {runTitle(run)}
+        {title}
       </h1>
-      <StatusAnnouncer status={run.status} />
-      {assessment ? <p className="text-base">{shortListText(assessment, run.status)}</p> : null}
+      <StatusAnnouncer status={run.status} replaying={replaying} />
+      {rating && shortList ? <p className="text-base">{rating.sentence}</p> : null}
       <p className="text-sm text-muted-foreground">
         {/* A fork says so once, with a link to the run it came from (below). */}
         {systemName(run.system)},{" "}
@@ -199,13 +248,45 @@ const ANNOUNCE: Record<string, string> = {
 };
 
 /** Announces the run's progress, but only for a run that was still going when the page opened:
- * opening a finished incident announces nothing. */
-function StatusAnnouncer({ status }: { status: string }) {
+ * opening a finished incident announces nothing. While a finished run's steps play back it says
+ * nothing either, and then how the run ended, once the playback has caught up (S5). */
+function StatusAnnouncer({ status, replaying }: { status: string; replaying: boolean }) {
   const [watching] = useState(() => ACTIVE.has(status));
   return (
     <p className="sr-only" aria-live="polite">
-      {watching ? (ANNOUNCE[status] ?? "") : ""}
+      {watching && !replaying ? (ANNOUNCE[status] ?? "") : ""}
     </p>
+  );
+}
+
+/**
+ * Marks the ends of a box that scrolls on its own, `data-more-start` and `data-more-end`, while
+ * they hold more than it shows, so a fade there can say so (M6, L6). A callback ref, so it starts
+ * whenever the box appears; it watches the box and the one element in it, whose size changes as
+ * a section inside opens.
+ */
+function useScrollEnds(axis: "x" | "y") {
+  return useCallback(
+    (box: HTMLElement | null) => {
+      if (!box || typeof ResizeObserver === "undefined") return;
+      const mark = () => {
+        const [at, shown, whole] =
+          axis === "x"
+            ? [box.scrollLeft, box.clientWidth, box.scrollWidth]
+            : [box.scrollTop, box.clientHeight, box.scrollHeight];
+        box.toggleAttribute("data-more-start", at > 1);
+        box.toggleAttribute("data-more-end", at + shown < whole - 1);
+      };
+      const resize = new ResizeObserver(mark);
+      resize.observe(box);
+      if (box.firstElementChild) resize.observe(box.firstElementChild);
+      box.addEventListener("scroll", mark, { passive: true });
+      return () => {
+        resize.disconnect();
+        box.removeEventListener("scroll", mark);
+      };
+    },
+    [axis],
   );
 }
 
@@ -374,10 +455,16 @@ export function RunView({
   const progress = usePacedSteps(runId, timeline.events, status);
   // Fetched alongside the run, not after it; a queued run has no state yet.
   const state = useRunState(runId, checkpoint, status !== "queued");
+  // The incident as it is now, as read before History opened an earlier step: the header goes on
+  // showing it, marked so, while the panels below show that step (S7).
+  const head = useRunState(runId, null, false).data?.values;
   // While a run that finished in a blink plays its steps back, each part of the page arrives as
   // the trace reaches its step, so nothing shows before its step or goes away again (M1, J-M6).
   const full = state.data?.values;
   const values = progress.playing && full ? reached(full, progress.passed) : full;
+  // Edges that fade while the side column or the row of tabs holds more than it shows.
+  const sideEnds = useScrollEnds("y");
+  const tabEnds = useScrollEnds("x");
   const evidence = useMemo(() => values?.evidence ?? values?.report?.evidence ?? [], [values]);
   const events = useMemo(() => values?.batch?.events ?? [], [values]);
   const cited = useMemo(() => new Set((values?.report?.evidence ?? []).map((e) => e.id)), [values]);
@@ -428,22 +515,27 @@ export function RunView({
     );
   }
 
+  const severity = values?.severity;
   const detail: RunDetail = progress.playing
     ? {
         ...run.data,
         status: "running",
-        severity: null,
+        // Rated once the "Rate severity" step has played, as the panels below show it (P8, S5).
+        severity: severity?.severity ?? null,
         report_id: null,
         latency_ms: null,
         title: openedTitle ?? null,
       }
     : run.data;
+  // A finished run whose steps play back, said so rather than passed off as live.
+  const replaying = progress.playing && !WORKING.has(run.data.status);
+  // A copy carries its rating over from the original: it shows whole from the first frame.
+  const ratingCarried = progress.steps.some((step) => step.key === "rate" && step.copied);
   const prompt =
     detail.status === "awaiting_review" ? (detail.review as ReviewPrompt | null) : null;
   const report = values?.report;
   // Until the report is in, whether a model wrote it is not known (null), so nothing is claimed.
   const offline = report ? writtenOffline(report) : null;
-  const severity = values?.severity;
   // The report writer's words as they stream; a playback shows the finished report at its step.
   const liveText = progress.playing ? "" : (timeline.liveText.report ?? "");
   const viewing = checkpoint ? state.data : null;
@@ -523,7 +615,14 @@ export function RunView({
           </div>
         </div>
 
-        <Header run={detail} assessment={progress.playing ? undefined : severity} shared={shared} />
+        <Header
+          run={detail}
+          assessment={viewing ? head?.severity : severity}
+          shortList={!progress.playing || ratingCarried}
+          replaying={replaying}
+          now={Boolean(viewing)}
+          shared={shared}
+        />
 
         {viewing ? (
           <div
@@ -554,7 +653,8 @@ export function RunView({
           status={detail.status}
           latencyMs={detail.latency_ms}
           facts={workFacts(detail, offline)}
-          replaying={progress.playing && !WORKING.has(run.data.status)}
+          replaying={replaying}
+          onSkip={progress.skip}
         />
 
         {sample && !viewing ? (
@@ -601,29 +701,36 @@ export function RunView({
             happened and what to do. On a wide screen the severity and the evidence sit beside it,
             and stay in view while the report scrolls; the logs and past incidents follow it. */}
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] xl:grid-rows-[auto_auto_1fr] xl:gap-x-8">
-          <div className="grid min-w-0 [scrollbar-width:thin] content-start gap-6 xl:sticky xl:top-6 xl:col-start-2 xl:row-span-3 xl:row-start-1 xl:max-h-[calc(100dvh-3rem)] xl:self-start xl:overflow-y-auto">
-            {severity ? (
-              <SeverityPanel
-                assessment={severity}
-                shortListHeld={shortListHeld}
-                status={detail.status}
-              />
-            ) : (
-              <section
-                aria-labelledby="severity-title"
-                className="grid gap-2 rounded-lg bg-raised p-5"
-              >
-                <h2 id="severity-title" className="text-xl">
-                  How serious
-                </h2>
-                <p className="max-w-prose text-sm text-muted-foreground">
-                  {ENDED_UNRATED.has(detail.status)
-                    ? "This triage ended before ARIA rated it."
-                    : "ARIA rates the incident once it has read the logs."}
-                </p>
-              </section>
-            )}
-            <EvidencePanel />
+          {/* Beside the report it scrolls on its own once a section in it opens: its edges fade
+              while they hold more, and focus stops clear of the fades (M6). */}
+          <div
+            ref={sideEnds}
+            className="min-w-0 [scrollbar-width:thin] xl:sticky xl:top-6 xl:col-start-2 xl:row-span-3 xl:row-start-1 xl:max-h-[calc(100dvh-3rem)] xl:scroll-pt-6 xl:scroll-pb-12 xl:self-start xl:overflow-y-auto xl:data-more-end:mask-b-from-[calc(100%-3rem)] xl:data-more-start:mask-t-from-[calc(100%-1.5rem)]"
+          >
+            <div className="grid content-start gap-6">
+              {severity ? (
+                <SeverityPanel
+                  assessment={severity}
+                  shortListHeld={shortListHeld}
+                  status={detail.status}
+                />
+              ) : (
+                <section
+                  aria-labelledby="severity-title"
+                  className="grid gap-2 rounded-lg bg-raised p-5"
+                >
+                  <h2 id="severity-title" className="text-xl">
+                    How serious
+                  </h2>
+                  <p className="max-w-prose text-sm text-muted-foreground">
+                    {ENDED_UNRATED.has(detail.status)
+                      ? "This triage ended before ARIA rated it."
+                      : "ARIA rates the incident once it has read the logs."}
+                  </p>
+                </section>
+              )}
+              <EvidencePanel />
+            </div>
           </div>
           <div className="min-w-0 xl:col-start-1 xl:row-start-1">
             {report ? (
@@ -697,12 +804,23 @@ export function RunView({
           </summary>
           <div className="border-t border-rule p-5 sm:p-6">
             <Tabs value={tab} onValueChange={chooseTab}>
-              <TabsList aria-label="Run details">
-                <TabsTrigger value="work">What ARIA did</TabsTrigger>
-                <TabsTrigger value="evidence">Evidence ({evidence.length})</TabsTrigger>
-                <TabsTrigger value="logs">Logs</TabsTrigger>
-                <TabsTrigger value="history">History</TabsTrigger>
-              </TabsList>
+              {/* One row at any width: on a phone the row scrolls sideways, its edges fade while
+                  there is more, and the selected tab's line stays under it (L6). The arrow keys
+                  bring each tab into view, clear of the fades. */}
+              <div
+                ref={tabEnds}
+                className="scroll-px-10 [scrollbar-width:thin] overflow-x-auto [contain:inline-size] data-more-end:mask-r-from-[calc(100%-2.5rem)] data-more-start:mask-l-from-[calc(100%-2.5rem)]"
+              >
+                <TabsList
+                  aria-label="Run details"
+                  className="w-max min-w-full flex-nowrap [contain:none]"
+                >
+                  <TabsTrigger value="work">What ARIA did</TabsTrigger>
+                  <TabsTrigger value="evidence">Evidence ({evidence.length})</TabsTrigger>
+                  <TabsTrigger value="logs">Logs</TabsTrigger>
+                  <TabsTrigger value="history">History</TabsTrigger>
+                </TabsList>
+              </div>
               <TabsContent value="work" className="grid gap-6">
                 <TabNote>
                   Each part of ARIA in turn: what it read, what it found and what it decided.
@@ -719,13 +837,17 @@ export function RunView({
                   <div className="grid gap-2 pt-3">
                     {mode === "live" ? (
                       <p className="text-xs text-muted-foreground" role="status">
+                        {/* Nothing when the run's own pause or end closes the stream: the page
+                            announces that, and "ended" sounded like a failure (A10). */}
                         {timeline.state === "live"
                           ? "Live: following the triage as it happens."
                           : timeline.state === "reconnecting"
                             ? "Reconnecting to the live updates."
-                            : timeline.state === "closed"
-                              ? "Live updates ended."
-                              : "Connecting to the live updates."}
+                            : timeline.state === "error"
+                              ? "Live updates stopped. This page still checks for progress every few seconds."
+                              : timeline.state === "closed"
+                                ? ""
+                                : "Connecting to the live updates."}
                       </p>
                     ) : null}
                     <Activity
@@ -761,10 +883,7 @@ export function RunView({
                 )}
               </TabsContent>
               <TabsContent value="history" className="grid gap-4">
-                <TabNote>
-                  ARIA saves its place after every step. View the incident as it was after any of
-                  them.
-                </TabNote>
+                {/* History introduces itself: one sentence, not two that say the same (D12). */}
                 <History runId={detail.id} viewing={checkpoint} onView={setCheckpoint} />
               </TabsContent>
             </Tabs>
