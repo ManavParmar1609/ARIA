@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import type { Delivery, OutboundAction } from "@/lib/api/types";
 import { absoluteTime, reviewerName, shortTime } from "@/lib/format";
 
+import { ActionChoice } from "./review-panel";
+
 // After the review, the panel that asked for it becomes a receipt in the same place: who decided
 // and when, and what happened to each message, with the report to download (item 18).
 
@@ -83,6 +85,14 @@ export function receiptText(f: ReceiptFacts): { decision: string; messages: stri
   return { decision, messages: `${text.charAt(0).toUpperCase()}${text.slice(1)}.` };
 }
 
+/** The drafted messages no channel sent: kept with the incident, unsent. */
+function keptMessages(f: Pick<ReceiptFacts, "actions" | "deliveries">): OutboundAction[] {
+  const delivered = new Set(
+    f.deliveries.filter((d) => d.status !== "skipped").map((d) => d.action_id),
+  );
+  return f.actions.filter((a) => !delivered.has(a.action_id));
+}
+
 export function Receipt({
   runId,
   facts,
@@ -127,6 +137,19 @@ export function Receipt({
         <p className="text-sm text-muted-foreground">
           Comment: <q>{comment}</q>
         </p>
+      ) : null}
+      {/* The messages the receipt says are kept here: to read and copy (NV-M3). */}
+      {!rejected && keptMessages(facts).length ? (
+        <details className="text-sm">
+          <summary className="w-fit cursor-pointer py-0.5 font-medium">
+            Show the {keptMessages(facts).length === 1 ? "message" : "messages"} kept here
+          </summary>
+          <ul className="mt-2 grid gap-2">
+            {keptMessages(facts).map((action) => (
+              <ActionChoice key={action.action_id} action={action} />
+            ))}
+          </ul>
+        </details>
       ) : null}
       <div className="flex flex-wrap gap-2">
         <Button asChild size="sm">

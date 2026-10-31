@@ -4,6 +4,7 @@ import { ChevronDownIcon, CircleCheckIcon, TriangleAlertIcon } from "lucide-reac
 import { useId, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { CopyButton } from "@/components/ui/copy-button";
 import {
   Dialog,
   DialogContent,
@@ -44,8 +45,8 @@ const KIND: Record<string, string> = {
 };
 
 /** One message ARIA drafted. With a connected channel it has a box to tick; without one it is a
- * preview to read, with nothing to tick. */
-function ActionChoice({
+ * preview to read, with nothing to tick. The receipt lists the ones kept unsent the same way. */
+export function ActionChoice({
   action,
   checked,
   onChange,
@@ -121,6 +122,12 @@ function ActionChoice({
             <span className="text-muted-foreground">to {action.audience}</span>
           </p>
           <p className="mt-2 text-sm leading-6 whitespace-pre-wrap">{action.body}</p>
+          {/* No channel sends it, so a person may want to post it by hand. */}
+          <CopyButton
+            text={action.body}
+            label={`${KIND[action.kind] ?? action.kind} message to ${action.audience}`}
+            className="mt-2"
+          />
         </div>
       ) : null}
     </li>
@@ -186,6 +193,7 @@ export function ReviewPanel({
   actions,
   report,
   onDecided,
+  className,
 }: {
   runId: string;
   prompt: ReviewPrompt;
@@ -193,6 +201,7 @@ export function ReviewPanel({
   report: IncidentReport | undefined;
   /** Called once the decision is saved; the page then shows its receipt in this place. */
   onDecided?: () => void;
+  className?: string;
 }) {
   const id = useId();
   const review = useReview(runId);
@@ -277,7 +286,7 @@ export function ReviewPanel({
   return (
     <section
       aria-labelledby={`${id}-title`}
-      className="grid gap-4 rounded-lg bg-raised p-5 ring-1 ring-primary/50"
+      className={cn("grid gap-4 rounded-lg bg-raised p-5 ring-1 ring-primary/50", className)}
     >
       <div className="grid gap-1">
         <h2

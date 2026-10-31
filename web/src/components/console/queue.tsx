@@ -182,9 +182,22 @@ export function Queue() {
         <Waiting onShow={() => setStatus("awaiting_review")} />
       ) : null}
 
+      {/* A refresh that fails keeps the list on screen, with a line that says so (SL-m4). */}
+      {runs.isError && runs.data ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          This list could not be refreshed just now, so it may be out of date.{" "}
+          <button
+            type="button"
+            onClick={() => void runs.refetch()}
+            className="font-medium text-foreground underline underline-offset-2"
+          >
+            Try again
+          </button>
+        </p>
+      ) : null}
       {runs.isPending ? (
         <LoadingRows rows={6} label="Loading incidents" />
-      ) : runs.isError ? (
+      ) : runs.isError && !runs.data ? (
         <ErrorState
           title="Incidents could not be loaded"
           error={runs.error}

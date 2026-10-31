@@ -53,15 +53,21 @@ export function TriageReplay({ data }: { data: Replay }) {
     gsap
       .timeline({
         defaults: { ease: "power3.out" },
-        scrollTrigger: { trigger: root.current, start: "top 75%", once: true },
+        // Starts as the example enters the screen and is done in about a second and a half, so
+        // a visitor scrolling past never meets an empty card (SL-m6).
+        scrollTrigger: { trigger: root.current, start: "top 92%", once: true },
       })
-      .fromTo("[data-anim=line]", { autoAlpha: 0, y: 6 }, { ...show, duration: 0.3, stagger: 0.05 })
-      .fromTo("[data-anim=flag]", { autoAlpha: 0, x: -8 }, { ...show, duration: 0.35 }, "-=0.05")
+      .fromTo(
+        "[data-anim=line]",
+        { autoAlpha: 0, y: 6 },
+        { ...show, duration: 0.25, stagger: 0.03 },
+      )
+      .fromTo("[data-anim=flag]", { autoAlpha: 0, x: -8 }, { ...show, duration: 0.3 }, "-=0.1")
       .fromTo(
         "[data-tag] [data-bar]",
         { scaleY: 0 },
-        { scaleY: 1, transformOrigin: "bottom", duration: 0.6, stagger: 0.07 },
-        "-=0.35",
+        { scaleY: 1, transformOrigin: "bottom", duration: 0.45, stagger: 0.05 },
+        "-=0.3",
       )
       // the severity lands like a rubber stamp (it scales and turns but never fades, so its label
       // keeps its contrast), then the prediction-set bracket draws across
@@ -81,10 +87,10 @@ export function TriageReplay({ data }: { data: Replay }) {
       .fromTo(
         "[data-anim=claim]",
         { autoAlpha: 0, y: 8 },
-        { ...show, duration: 0.4, stagger: 0.09 },
+        { ...show, duration: 0.3, stagger: 0.06 },
         "-=0.3",
       )
-      .fromTo("[data-anim=status]", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.4 })
+      .fromTo("[data-anim=status]", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.3 })
       // the waiting dot pulses three times as the status appears, then rests
       .to("[data-pulse]", {
         opacity: 0.35,

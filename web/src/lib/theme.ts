@@ -31,7 +31,15 @@ function resolve(choice: ThemeChoice): Theme {
   return window.matchMedia(DARK).matches ? "dark" : "light";
 }
 
+/** The browser bar on a phone follows the page's theme, not the system's (SL-p8). */
+function paintBar(theme: Theme): void {
+  document
+    .querySelector('meta[name="theme-color"]')
+    ?.setAttribute("content", theme === "dark" ? "#0f1a13" : "#fffefc");
+}
+
 function apply(theme: Theme): void {
+  paintBar(theme);
   const root = document.documentElement;
   if (root.classList.contains("dark") === (theme === "dark")) return;
   // Switch every colour at once rather than letting each element's transition run.
@@ -53,6 +61,8 @@ const emit = () => {
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   if (!detach) {
+    // The head script set the page's theme before it painted; the bar follows it from here.
+    paintBar(document.documentElement.classList.contains("dark") ? "dark" : "light");
     // Follow changes made in other tabs, and the system's preference when the choice is "system".
     const media = window.matchMedia(DARK);
     const sync = () => {

@@ -232,6 +232,21 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
     }, 300);
     return () => window.clearTimeout(later);
   }, [title, system, text, useLlm, investigate, approval]);
+  // Leaving the tab or the page within that delay keeps the draft too (SL-p3).
+  const latest = useRef(draft);
+  useEffect(() => {
+    latest.current = { title, system, text, useLlm, investigate, approval };
+  });
+  useEffect(() => {
+    const keep = () => {
+      if (!sent.current) saveDraft(latest.current);
+    };
+    window.addEventListener("pagehide", keep);
+    return () => {
+      window.removeEventListener("pagehide", keep);
+      keep();
+    };
+  }, []);
   // The server's rule wins: where it requires approval, every run waits for a person.
   const settings = useSettingsView().data;
   const approvalRequired = settings?.require_approval ?? true;

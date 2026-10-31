@@ -213,22 +213,44 @@ export function ReportView({
   );
 }
 
+// A sentence in the report writer's streamed JSON: its "text" or "title", the last one perhaps
+// still being written.
+const DRAFT_SENTENCE = /"(?:text|title)"\s*:\s*"((?:[^"\\]|\\.)*)/g;
+
+/** The sentences so far in the report writer's output, which streams as JSON: what a person
+ * reads, not the brackets and field names around it (SL-M2). Plain text passes through. */
+export function draftSentences(text: string): string[] {
+  if (!/^\s*[{[]/.test(text)) return text.trim() ? [text.trim()] : [];
+  return [...text.matchAll(DRAFT_SENTENCE)]
+    .map((match) =>
+      (match[1] ?? "").replace(/\\n/g, " ").replace(/\\"/g, '"').replace(/\\\\/g, "\\").trim(),
+    )
+    .filter(Boolean);
+}
+
 /** Model output while the report is being written (live only; tokens are never stored). */
 export function LiveDraft({ text }: { text: string }) {
+  const sentences = draftSentences(text).slice(-12);
   return (
     <section aria-label="Report being written" className="grid gap-2 rounded-lg bg-sunken p-5">
       <p className="flex items-center gap-2 text-sm font-medium">
         <span aria-hidden className="block size-2 animate-pulse-dot rounded-full bg-primary" />
         Writing the report
       </p>
-      <pre
-        tabIndex={0}
-        role="region"
-        aria-label="Report text so far"
-        className="max-h-80 overflow-auto font-mono text-xs leading-5 whitespace-pre-wrap text-muted-foreground"
-      >
-        {text.slice(-4000)}
-      </pre>
+      {sentences.length ? (
+        <ul
+          tabIndex={0}
+          role="region"
+          aria-label="Report text so far"
+          className="grid max-h-80 gap-1.5 overflow-auto text-sm leading-6 text-muted-foreground"
+        >
+          {sentences.map((sentence, i) => (
+            <li key={i} className="wrap-anywhere">
+              {sentence}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </section>
   );
 }

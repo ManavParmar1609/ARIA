@@ -59,8 +59,14 @@ const FOLDED = new Set(["awaiting_review", "published", "rejected"]);
 export function progressSteps(events: RunEvent[], status: string): Step[] {
   const { state, took } = stepStates(events);
   const replanned = events.some((e) => e.kind === "replan");
-  const steps = STEPS.map(({ key, label, nodes }): Step => {
+  const started = STEPS.map(({ nodes }) => nodes.some((n) => state[n]));
+  const steps = STEPS.map(({ key, label, nodes }, i): Step => {
     const states = nodes.map((n) => state[n]).filter(Boolean);
+    // A step with a part still to come (the report, then the messages) is at work until a later
+    // step starts, so its tick never comes and goes (SL-m3). Parts a run skips (widening the
+    // search) are settled by the next step starting, or by the run's end.
+    const partway =
+      states.length < nodes.length && !started.slice(i + 1).some(Boolean) && !FOLDED.has(status);
     const stepState: StepState = states.includes("failed")
       ? "failed"
       : states.includes("running")
@@ -68,7 +74,9 @@ export function progressSteps(events: RunEvent[], status: string): Step[] {
         : states.includes("paused")
           ? "paused"
           : states.includes("done")
-            ? "done"
+            ? partway && !ENDED.has(status)
+              ? "running"
+              : "done"
             : "pending";
     const times = nodes.map((n) => took[n]).filter((t): t is number => t != null);
     return {
@@ -149,7 +157,9 @@ export function usePacedSteps(
       const next = setTimeout(() => setShown((n) => n + 1), STEP_MS);
       return () => clearTimeout(next);
     }
-    if (!over || held) return;
+    // Nothing to hold before the steps have loaded (a slow connection): the playback waits for
+    // them rather than folding an empty strip (SL-m1).
+    if (!over || held || reached === 0) return;
     const fold = setTimeout(() => {
       setHeld(true);
       forgetStarted(runId);
@@ -251,8 +261,8 @@ export function Steps({ steps }: { steps: Step[] }) {
                 step.state === "running" && "border-primary bg-background",
                 step.state === "paused" && "border-primary bg-highlight text-highlight-foreground",
                 step.state === "failed" && "border-danger bg-danger text-background",
-                step.state === "pending" && "border-rule bg-background",
-                step.state === "skipped" && "border-dashed border-rule bg-background",
+                step.state === "pending" && "border-control bg-background",
+                step.state === "skipped" && "border-dashed border-control bg-background",
               )}
             >
               {Icon ? <Icon aria-hidden className="size-3" strokeWidth={2.5} /> : null}
@@ -289,6 +299,7 @@ export function RunProgress({
   status,
   latencyMs,
   facts,
+  replaying = false,
 }: {
   /** From {@link usePacedSteps}. */
   steps: Step[];
@@ -297,10 +308,12 @@ export function RunProgress({
   latencyMs: number | null | undefined;
   /** Model and tool use, in words ("offline: no language model, 3 tool calls"). */
   facts: string;
+  /** The run has finished and its steps play back: said so, rather than passed off as live. */
+  replaying?: boolean;
 }) {
   if (FOLDED.has(status)) {
     return (
-      <details className="group/progress rounded-lg bg-raised px-5 py-3">
+      <details className="group/progress rounded-lg bg-raised px-5 py-3 duration-(--duration-moderate) ease-(--ease-out) motion-safe:animate-in motion-safe:fade-in-0">
         <summary className="flex cursor-pointer flex-wrap items-center gap-x-2 gap-y-1 text-sm">
           <CircleCheckIcon aria-hidden className="size-4 text-ok" />
           <span className="font-medium">
@@ -321,7 +334,11 @@ export function RunProgress({
   return (
     <section aria-label="Progress" className="grid gap-3 rounded-lg bg-raised p-5">
       <Steps steps={steps} />
-      {facts && status !== "queued" && status !== "running" ? (
+      {replaying ? (
+        <p className="text-xs text-muted-foreground">
+          ARIA has already finished: its steps play back at a pace you can follow.
+        </p>
+      ) : facts && status !== "queued" && status !== "running" ? (
         <p className="text-xs text-muted-foreground">{facts}</p>
       ) : null}
     </section>

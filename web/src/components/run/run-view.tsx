@@ -76,7 +76,9 @@ function reached(values: RunStateValues, passed: ReadonlySet<string>): RunStateV
     investigation: passed.has("investigate") ? values.investigation : undefined,
     report: wrote ? values.report : undefined,
     actions: wrote ? values.actions : undefined,
-    evidence: wrote ? values.evidence : undefined,
+    // With the logs, so the patterns What happened cites resolve at once instead of reading as
+    // missing sources until the report is written (NV-M2). Nothing else shows it before its step.
+    evidence: passed.has("read") ? values.evidence : undefined,
   };
 }
 
@@ -342,6 +344,10 @@ export function RunView({
   // same "not here" page, with a title that says so.
   const missing = run.error instanceof ApiError && [400, 404, 422].includes(run.error.status);
   useDocumentTitle(run.data ? runTitle(run.data) : missing ? "Incident not found" : null);
+  // The title as the page first saw it: a playback keeps it until the trace folds, so the header
+  // does not grow under the strip while the visitor watches it (SL-M1).
+  const [openedTitle, setOpenedTitle] = useState<string | null | undefined>(undefined);
+  if (openedTitle === undefined && run.data) setOpenedTitle(run.data.title ?? null);
   const [checkpoint, setCheckpoint] = useState<string | null>(null);
   const [tab, setTab] = useState(() => storedTab(runId));
   const chooseTab = (next: string) => {
@@ -411,7 +417,14 @@ export function RunView({
   }
 
   const detail: RunDetail = progress.playing
-    ? { ...run.data, status: "running", severity: null, report_id: null, latency_ms: null }
+    ? {
+        ...run.data,
+        status: "running",
+        severity: null,
+        report_id: null,
+        latency_ms: null,
+        title: openedTitle ?? null,
+      }
     : run.data;
   const prompt =
     detail.status === "awaiting_review" ? (detail.review as ReviewPrompt | null) : null;
@@ -419,7 +432,8 @@ export function RunView({
   // Until the report is in, whether a model wrote it is not known (null), so nothing is claimed.
   const offline = report ? writtenOffline(report) : null;
   const severity = values?.severity;
-  const liveText = timeline.liveText.report ?? "";
+  // The report writer's words as they stream; a playback shows the finished report at its step.
+  const liveText = progress.playing ? "" : (timeline.liveText.report ?? "");
   const viewing = checkpoint ? state.data : null;
   const terminal = !ACTIVE.has(detail.status);
   const sample = detail.trigger === "sample" ? sampleOf(values?.request) : null;
@@ -497,7 +511,7 @@ export function RunView({
           </div>
         </div>
 
-        <Header run={detail} assessment={severity} shared={shared} />
+        <Header run={detail} assessment={progress.playing ? undefined : severity} shared={shared} />
 
         {viewing ? (
           <div
@@ -521,6 +535,16 @@ export function RunView({
           />
         ) : null}
 
+        {/* Above the review: when ARIA's part ends, the strip folds where it is, and the review
+            arrives below it instead of pushing the strip down (SL-M1). */}
+        <RunProgress
+          steps={progress.steps}
+          status={detail.status}
+          latencyMs={detail.latency_ms}
+          facts={workFacts(detail, offline)}
+          replaying={progress.playing && !WORKING.has(run.data.status)}
+        />
+
         {sample && !viewing ? (
           <HarmlessNote sample={sample} severity={severity?.severity ?? detail.severity} />
         ) : null}
@@ -529,6 +553,7 @@ export function RunView({
           <ExampleNote runId={detail.id} />
         ) : prompt && !viewing ? (
           <ReviewPanel
+            className="duration-(--duration-moderate) ease-(--ease-out) motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2"
             runId={detail.id}
             prompt={prompt}
             actions={values?.actions ?? []}
@@ -551,13 +576,6 @@ export function RunView({
             readOnly={detail.example}
           />
         ) : null}
-
-        <RunProgress
-          steps={progress.steps}
-          status={detail.status}
-          latencyMs={detail.latency_ms}
-          facts={workFacts(detail, offline)}
-        />
 
         {state.isError && !state.data ? (
           <ErrorState

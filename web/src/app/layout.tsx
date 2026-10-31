@@ -27,10 +27,9 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fffefc" },
-    { media: "(prefers-color-scheme: dark)", color: "#0f1a13" },
-  ],
+  // The page starts light whatever the system prefers, so the browser bar does too; choosing the
+  // dark theme switches it (lib/theme.ts) (SL-p8).
+  themeColor: "#fffefc",
   colorScheme: "light dark",
 };
 

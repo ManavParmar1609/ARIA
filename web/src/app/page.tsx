@@ -127,7 +127,10 @@ function Section({
       aria-labelledby={`${id}-title`}
       className={cn(
         "mx-auto max-w-[75rem] px-3 sm:px-6",
-        deferred && "[contain-intrinsic-size:auto_1400px] [content-visibility:auto]",
+        // Reserved at about the height it draws at each width, so the page does not shrink under
+        // the reader when it first draws (SL-p4).
+        deferred &&
+          "[contain-intrinsic-size:auto_1200px] [content-visibility:auto] md:[contain-intrinsic-size:auto_800px] lg:[contain-intrinsic-size:auto_650px]",
       )}
     >
       <div

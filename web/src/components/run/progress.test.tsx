@@ -18,6 +18,25 @@ const reading = [
 ];
 
 describe("progressSteps", () => {
+  it("keeps a step at work between its parts, so its tick never comes and goes", () => {
+    const written = [
+      ...reading,
+      event(7, "node_started", "report", "2026-10-01T00:00:00.060Z"),
+      event(8, "node_finished", "report", "2026-10-01T00:00:00.070Z"),
+    ];
+    const write = (events: RunEvent[], status: string) =>
+      progressSteps(events, status).find((s) => s.key === "write")?.state;
+    expect(write(written, "running")).toBe("running");
+    const reviewing = [
+      ...written,
+      event(9, "node_started", "comms", "2026-10-01T00:00:00.071Z"),
+      event(10, "node_finished", "comms", "2026-10-01T00:00:00.080Z"),
+      event(11, "node_started", "review", "2026-10-01T00:00:00.081Z"),
+      event(12, "interrupt", "review", "2026-10-01T00:00:00.082Z"),
+    ];
+    expect(write(reviewing, "awaiting_review")).toBe("done");
+  });
+
   it("names eight steps in plain words, each as far as its graph nodes got", () => {
     const steps = progressSteps(
       [
