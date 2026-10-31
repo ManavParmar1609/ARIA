@@ -275,7 +275,14 @@ function slides(data: StepShowcase): Slide[] {
   ];
 }
 
-export function StepCarousel({ data }: { data: StepShowcase }) {
+export function StepCarousel({
+  data,
+  factLead = "In the example below:",
+}: {
+  data: StepShowcase;
+  /** What the figure under each step is about: the example further down, or elsewhere. */
+  factLead?: string;
+}) {
   const id = useId();
   const steps = slides(data);
   const count = steps.length;
@@ -463,7 +470,7 @@ export function StepCarousel({ data }: { data: StepShowcase }) {
                 <h3 className="text-2xl leading-snug sm:text-3xl">{step.title}</h3>
                 <p className="text-lg leading-relaxed text-heading/85">{step.body}</p>
                 <p className="mt-2 border-t border-heading/15 pt-4 text-base leading-relaxed text-heading/85">
-                  <span className="font-semibold text-heading">In the example below: </span>
+                  <span className="font-semibold text-heading">{factLead} </span>
                   {step.fact}
                 </p>
               </div>

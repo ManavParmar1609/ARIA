@@ -6,6 +6,8 @@ import { Explainer } from "@/components/site/explainer";
 import { Faq } from "@/components/site/faq";
 import { ResultsRow } from "@/components/site/results-row";
 import { RunGraph, type GraphStep } from "@/components/site/run-graph";
+import { StepCarousel } from "@/components/site/step-carousel";
+import { stepShowcase } from "@/components/site/step-showcase";
 import { TriageReplay } from "@/components/site/triage-replay";
 import { Why } from "@/components/site/why";
 import {
@@ -156,7 +158,8 @@ export function ExamplePart() {
   );
 }
 
-/** Part 3: the four steps, with what each did in the recorded incident. */
+/** Part 3: the four steps, first at a glance as a carousel on the recorded incident, then each
+ * in detail with what it did there. */
 export function StepsPart() {
   return (
     <Part
@@ -164,6 +167,10 @@ export function StepsPart() {
       title="Four steps, then a person decides"
       intro="What ARIA does with an alert's logs, step by step. The figures come from the recorded example, and words with a dotted underline open a short definition."
     >
+      <Suspense>
+        <StepCarousel data={stepShowcase()} factLead="In the recorded example:" />
+      </Suspense>
+      <h3 className="mt-4 text-2xl">Each step in detail</h3>
       <Suspense>
         <RunGraph steps={steps(runFacts(), evaluation().severity.targetCoverage)} />
       </Suspense>
