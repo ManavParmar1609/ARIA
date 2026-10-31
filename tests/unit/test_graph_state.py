@@ -20,6 +20,7 @@ from aria.graph.state import add_usage, merge_evidence, usage_delta
 from aria.graph.store import SqlStore
 from aria.llm.router import LLMRouter
 from aria.reporting.grounding import validate_report
+from aria.reporting.markdown import render_markdown
 from aria.reporting.review import apply_review
 
 
@@ -212,6 +213,23 @@ def test_reviewer_may_go_below_the_floor_as_an_accountable_human_decision() -> N
     assert out.summary[0].text == "Reviewer raj assigned SEV4; ARIA's assessment was SEV2."
     assert out.summary[1:] == report.summary
     assert out.open_questions == ["Reviewer note: test env"]
+
+
+def test_an_anonymous_reviewer_is_named_plainly_and_their_note_has_its_own_heading() -> None:
+    store = EvidenceStore()
+    report, assessment = _report_and_assessment(store)
+    decision = ReviewDecision.model_validate(
+        {
+            "decision": "edit",
+            "reviewer": "anonymous",
+            "edits": {"severity": "SEV3", "note": "Seen this before"},
+        }
+    )
+    out, _ = apply_review(report, assessment, decision, store)
+    assert out.summary[0].text == "A reviewer assigned SEV3; ARIA's assessment was SEV2."
+    text = render_markdown(out)
+    assert "## Reviewer's note\n- Seen this before" in text
+    assert "## Open questions" not in text
 
 
 def test_a_summary_line_the_reviewer_kept_still_cites_its_evidence() -> None:

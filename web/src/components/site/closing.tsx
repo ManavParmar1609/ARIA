@@ -10,7 +10,10 @@ const QUICKSTART = ["make install", "uv run aria db upgrade && uv run aria seed"
 /** The last panel: one action, the three commands behind it, and the lines running together. */
 export function Closing() {
   return (
-    <section aria-labelledby="try-title" className="mx-auto max-w-[75rem] px-3 pb-6 sm:px-6">
+    <section
+      aria-labelledby="try-title"
+      className="mx-auto max-w-[75rem] px-3 pt-6 pb-6 sm:px-6 sm:pt-8"
+    >
       <div className="relative overflow-hidden rounded-card bg-panel-sage px-7 pt-12 pb-0 sm:px-12 sm:pt-16">
         <div className="relative grid gap-6 lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] lg:items-end lg:gap-12">
           <div className="grid gap-5">

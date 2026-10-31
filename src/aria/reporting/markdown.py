@@ -6,6 +6,9 @@ from aria.contracts.base import Claim
 from aria.contracts.report import IncidentReport
 from aria.reporting.writer import cited_evidence
 
+# How a reviewer's note is stored in a report's open questions (``reporting.review``).
+REVIEWER_NOTE = "Reviewer note: "
+
 # Report text quotes log lines, which anyone can write. The exports are pasted into other tools,
 # so HTML, links, images and chat mentions (<!channel>) in that text must stay inert text, and so
 # must emphasis and code marks: a template's "<*>" must not turn the text after it italic.
@@ -107,8 +110,15 @@ def render_markdown(report: IncidentReport, *, decided_by: str | None = None) ->
                 f"- [ ] {_safe(action.text)} ({risk}{runbook}) {_cite(action.evidence_ids)}"
             )
         lines.append("")
-    if report.open_questions:
-        lines += ["## Open questions", *[f"- {_safe(q)}" for q in report.open_questions], ""]
+    # A reviewer's note travels with the open questions but is not one, so it gets its own heading.
+    notes = [
+        q.removeprefix(REVIEWER_NOTE) for q in report.open_questions if q.startswith(REVIEWER_NOTE)
+    ]
+    questions = [q for q in report.open_questions if not q.startswith(REVIEWER_NOTE)]
+    if questions:
+        lines += ["## Open questions", *[f"- {_safe(q)}" for q in questions], ""]
+    if notes:
+        lines += ["## Reviewer's note", *[f"- {_safe(n)}" for n in notes], ""]
 
     cited = cited_evidence(report)
     if cited:

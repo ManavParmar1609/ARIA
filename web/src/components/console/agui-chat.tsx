@@ -229,7 +229,7 @@ export function AguiChat() {
 
   return (
     <div className="grid gap-6">
-      <p className="max-w-3xl text-muted-foreground">
+      <p className="max-w-prose text-muted-foreground">
         Paste logs and ARIA triages them here, over the AG-UI protocol: each step, tool call and the
         report stream in as events, and the review comes back as an interrupt you answer below.
       </p>

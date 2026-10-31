@@ -68,16 +68,16 @@ function Section({
         </h3>
         <p className="text-sm text-muted-foreground">{what}</p>
       </div>
-      {headline ? <p className="max-w-3xl leading-relaxed">{headline}</p> : null}
+      {headline ? <p className="max-w-prose leading-relaxed">{headline}</p> : null}
       <details className="group">
         <summary className="w-fit cursor-pointer text-sm font-medium text-muted-foreground hover:text-heading">
           Show details
         </summary>
         <div className="grid gap-5 pt-5">
-          {intro ? <p className="max-w-3xl text-sm text-muted-foreground">{intro}</p> : null}
+          {intro ? <p className="max-w-prose text-sm text-muted-foreground">{intro}</p> : null}
           {children}
           {source ? (
-            <p className="max-w-3xl text-xs leading-5 text-faint">Source: {source}</p>
+            <p className="max-w-prose text-xs leading-5 text-faint">Source: {source}</p>
           ) : null}
         </div>
       </details>
@@ -254,7 +254,7 @@ function RealSection({ real }: { real: RealLogs }) {
           ))}
         </TableBody>
       </Table>
-      <p className="max-w-3xl text-sm text-muted-foreground">
+      <p className="max-w-prose text-sm text-muted-foreground">
         The standard detectors read the experts&rsquo; event templates and fit on the whole sample
         at once; ARIA parses each window itself. ARIA flagged all {real.steps.distinctCaught}{" "}
         failures whose step counts no healthy block shares, and {real.steps.lookAlikeCaught} of the{" "}
@@ -267,7 +267,7 @@ function RealSection({ real }: { real: RealLogs }) {
           : ""}{" "}
         The deployed log scan opens a run on a burst of errors, and this log has none.
       </p>
-      <p className="max-w-3xl text-sm text-muted-foreground">
+      <p className="max-w-prose text-sm text-muted-foreground">
         A block is judged only in a window that holds its whole life, so the window length moves the
         result most (ARIA uses {real.windowMin} minutes):
       </p>
@@ -298,7 +298,7 @@ function RealSection({ real }: { real: RealLogs }) {
           ))}
         </TableBody>
       </Table>
-      <p className="max-w-3xl text-sm text-muted-foreground">
+      <p className="max-w-prose text-sm text-muted-foreground">
         And with the check&apos;s two settings: how often two steps&apos; counts must agree before
         they count as a pair (ARIA uses {pct(real.minSupport, 0)}), and how long it waits before
         judging a block, as the share of healthy blocks finished by then (ARIA uses{" "}
@@ -926,8 +926,8 @@ export function Evals({
         description={
           <>
             How ARIA was tested, in four plain questions, with the simplest methods it should beat
-            beside it, including where they win. Results from commit <code>{data.gitSha}</code>, run{" "}
-            {data.createdAt.slice(0, 10)}; <code>make eval</code> reproduces them.{" "}
+            beside it, including where they win. Measured on {data.createdAt.slice(0, 10)}, and
+            anyone can measure them again from the source code.{" "}
             <a
               href={EVAL_DOC_URL}
               className="text-foreground underline decoration-control underline-offset-4"
@@ -1221,7 +1221,7 @@ export function Evals({
               ))}
             </TableBody>
           </Table>
-          <p className="max-w-3xl text-sm text-muted-foreground">
+          <p className="max-w-prose text-sm text-muted-foreground">
             Too few runs to generalise from. Latency depended on the hosted service&apos;s load that
             day.{" "}
             {live.exhausted > 0

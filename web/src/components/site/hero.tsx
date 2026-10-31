@@ -54,7 +54,7 @@ function ReportCard({ data }: { data: Replay }) {
           <div className="grid gap-3 border-t border-rule pt-5">
             <p className="text-sm leading-relaxed text-foreground">
               {open.claim.text}{" "}
-              <span className="rounded-full bg-primary px-2 py-0.5 font-mono text-[0.6875rem] text-primary-foreground">
+              <span className="rounded-full bg-primary px-2 py-0.5 font-mono text-xs text-primary-foreground">
                 {open.evidence.id}
               </span>
             </p>
@@ -108,7 +108,7 @@ const PROOF: { title: string; body: string; href: string; link: string }[] = [
   {
     title: "Nothing is sent without you",
     body: "Messages for chat or a status page wait as drafts until a person approves them.",
-    href: "#how",
+    href: "#how-4",
     link: "See the review step",
   },
 ];
@@ -153,9 +153,9 @@ export function Hero({ data }: { data: Replay }) {
               Turn a wall of logs into a report you can check.
             </h1>
             <p className="mt-8 max-w-[46ch] text-[0.9375rem] leading-relaxed text-heading xl:mt-auto xl:pt-14">
-              ARIA reads an alert&apos;s logs, rates how serious it is, finds what happened before
-              and drafts the report, with every claim citing its log line. Nothing is sent without
-              your approval.
+              For the person on call: ARIA reads an alert&apos;s logs, rates how serious it is,
+              finds what happened before and drafts the report, with every claim citing its log
+              line. Nothing is sent without your approval.
             </p>
           </div>
           <Link
@@ -163,7 +163,7 @@ export function Hero({ data }: { data: Replay }) {
             prefetch={false}
             className="group/button flex h-16 items-center justify-between rounded-card bg-primary px-7 text-[0.9375rem] font-medium text-primary-foreground transition-colors duration-(--duration-quick) hover:bg-primary-hover sm:h-[4.75rem]"
           >
-            Try a real incident
+            Try it on real logs
             <ArrowRightIcon
               aria-hidden
               strokeWidth={1.5}

@@ -40,7 +40,7 @@ const LINK =
   "text-muted-foreground transition-colors duration-(--duration-quick) hover:text-heading";
 
 /** The site's foot: what ARIA is made of, and where to go next. */
-export function SiteFooter({ recordedAt, gitSha }: { recordedAt: string; gitSha: string }) {
+export function SiteFooter({ recordedAt }: { recordedAt: string }) {
   return (
     <footer className="border-t border-rule">
       <div className="mx-auto grid max-w-[75rem] gap-12 px-4 pt-16 pb-12 sm:px-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:pt-20">
@@ -78,7 +78,7 @@ export function SiteFooter({ recordedAt, gitSha }: { recordedAt: string; gitSha:
         </nav>
       </div>
       <div className="mx-auto max-w-[75rem] border-t border-rule px-4 py-6 text-sm text-faint sm:px-6">
-        Replay recorded {recordedAt.slice(0, 10)} at commit {gitSha}.
+        The example incident was recorded on {recordedAt.slice(0, 10)}.
       </div>
     </footer>
   );

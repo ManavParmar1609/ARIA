@@ -113,6 +113,7 @@ export function RunGraph({ steps }: { steps: GraphStep[] }) {
         {steps.map((step, i) => (
           <li
             key={step.title}
+            id={`how-${i + 1}`}
             data-step
             className="grid grid-cols-[2.5rem_1fr] gap-x-4"
             aria-current={i === active ? "step" : undefined}

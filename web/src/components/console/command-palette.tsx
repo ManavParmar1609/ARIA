@@ -146,9 +146,10 @@ const PAGES: { href: string; label: string; hint: string; icon: LucideIcon; keyw
     {
       href: "/console/settings",
       label: "Settings",
-      hint: "Session, theme, model providers",
+      hint: "Your model key, theme and session",
       icon: SettingsIcon,
-      keywords: "preferences providers theme",
+      keywords:
+        "preferences providers theme key keys api model language llm claude anthropic gemini google openai gpt nvidia nim",
     },
     {
       href: "/",
@@ -171,7 +172,16 @@ function score(item: Item, words: string[]): number {
   return words.every((w) => label.includes(w)) ? 2 : 1;
 }
 
-function Palette({ onClose, onHelp }: { onClose: () => void; onHelp: () => void }) {
+function Palette({
+  onClose,
+  onLeave,
+  onHelp,
+}: {
+  onClose: () => void;
+  /** Close for a command that opens another page: that page's content takes focus. */
+  onLeave: () => void;
+  onHelp: () => void;
+}) {
   const router = useRouter();
   const runs = useRuns("all", 30);
   // The samples the server offers, under the names New triage gives them.
@@ -187,10 +197,10 @@ function Palette({ onClose, onHelp }: { onClose: () => void; onHelp: () => void 
 
   const go = useCallback(
     (href: string) => {
-      onClose();
+      onLeave();
       router.push(href as never);
     },
-    [onClose, router],
+    [onLeave, router],
   );
 
   const items = useMemo<Item[]>(() => {
@@ -226,7 +236,7 @@ function Palette({ onClose, onHelp }: { onClose: () => void; onHelp: () => void 
         keywords: `sample demo try example ${systemName(sample.system)} ${sample.summary}`,
         icon: PlayIcon,
         run: () => {
-          onClose();
+          onLeave();
           start.mutate(
             {
               id: sample.id,
@@ -327,6 +337,7 @@ function Palette({ onClose, onHelp }: { onClose: () => void; onHelp: () => void 
     start,
     router,
     onClose,
+    onLeave,
     onHelp,
     setTheme,
     signOut,
@@ -564,22 +575,46 @@ export function ConsoleCommands({ children }: { children: ReactNode }) {
   const [palette, setPalette] = useState(false);
   const [help, setHelp] = useState(false);
   const pendingG = useRef(0);
+  // Neither dialog has a button of its own (a shortcut or a search button opens them), so they
+  // remember what had focus and give it back when they close. After a command that opens a page,
+  // the page's content takes focus instead, as it does with nothing focused before.
+  const opener = useRef<HTMLElement | null>(null);
+  const toPage = useRef(false);
+  const remember = useCallback(() => {
+    const active = document.activeElement;
+    opener.current = active instanceof HTMLElement && active !== document.body ? active : null;
+    toPage.current = false;
+  }, []);
+  const showPalette = useCallback(() => {
+    remember();
+    setHelp(false);
+    setPalette(true);
+  }, [remember]);
+  const giveFocusBack = useCallback((event: Event) => {
+    event.preventDefault();
+    const back =
+      !toPage.current && opener.current?.isConnected
+        ? opener.current
+        : document.getElementById("console-main");
+    back?.focus({ preventScroll: true });
+  }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        setHelp(false);
-        setPalette((open) => !open);
+        if (palette) setPalette(false);
+        else showPalette();
         return;
       }
       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
       if (!enabled || palette || help || isTypingTarget(event.target)) return;
       if (event.key === "/") {
         event.preventDefault();
-        setPalette(true);
+        showPalette();
       } else if (event.key === "?") {
         event.preventDefault();
+        remember();
         setHelp(true);
       } else if (event.key === "g") {
         pendingG.current = Date.now();
@@ -594,13 +629,23 @@ export function ConsoleCommands({ children }: { children: ReactNode }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [enabled, palette, help, router]);
+  }, [enabled, palette, help, router, remember, showPalette]);
 
   const commands = useMemo<Commands>(
-    () => ({ openPalette: () => setPalette(true), openHelp: () => setHelp(true) }),
-    [],
+    () => ({
+      openPalette: showPalette,
+      openHelp: () => {
+        remember();
+        setHelp(true);
+      },
+    }),
+    [remember, showPalette],
   );
   const closePalette = useCallback(() => setPalette(false), []);
+  const leavePalette = useCallback(() => {
+    toPage.current = true;
+    setPalette(false);
+  }, []);
   const openHelp = useCallback(() => setHelp(true), []);
 
   return (
@@ -609,6 +654,7 @@ export function ConsoleCommands({ children }: { children: ReactNode }) {
       <Dialog open={palette} onOpenChange={setPalette}>
         <DialogContent
           instant
+          onCloseAutoFocus={giveFocusBack}
           closeLabel="Close the command palette"
           className="top-[12vh] max-w-2xl translate-y-0 gap-0 overflow-hidden p-0 [&>button:last-child]:hidden"
         >
@@ -616,11 +662,18 @@ export function ConsoleCommands({ children }: { children: ReactNode }) {
           <DialogDescription className="sr-only">
             Type to find a page, an incident, a sample or a word, then press Enter.
           </DialogDescription>
-          {palette ? <Palette onClose={closePalette} onHelp={openHelp} /> : null}
+          {palette ? (
+            <Palette onClose={closePalette} onLeave={leavePalette} onHelp={openHelp} />
+          ) : null}
         </DialogContent>
       </Dialog>
       <Dialog open={help} onOpenChange={setHelp}>
-        <DialogContent instant closeLabel="Close the shortcuts" className="max-w-xl">
+        <DialogContent
+          instant
+          onCloseAutoFocus={giveFocusBack}
+          closeLabel="Close the shortcuts"
+          className="max-w-xl"
+        >
           <DialogTitle>Keyboard shortcuts</DialogTitle>
           <DialogDescription>
             Move around the console without the mouse. Shortcuts wait while you type in a field.

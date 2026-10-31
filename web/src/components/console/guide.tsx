@@ -160,11 +160,18 @@ export function Guide() {
             and how often short lists like this one held the right level.
           </p>
         </Task>
-        <Task id="check-a-claim" number={3} title="Check a claim against its evidence">
+        <Task
+          id="check-a-claim"
+          number={3}
+          title="Check a claim against its evidence"
+          action={
+            <TaskLink href="/console/runs?status=published">Open a published report</TaskLink>
+          }
+        >
           <p>
             Every statement in a report ends with its sources, such as E3. Point at one to see what
-            it rests on, or click it to keep it open beside the report. The Evidence tab lists
-            everything a report may cite.
+            it rests on, or click or tap it to keep it open beside the report. The Evidence tab
+            lists everything a report may cite.
           </p>
         </Task>
         <Task

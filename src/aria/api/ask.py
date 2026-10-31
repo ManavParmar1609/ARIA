@@ -12,7 +12,7 @@ import re
 from collections.abc import Sequence
 
 from aria.config import BudgetConfig
-from aria.contracts.base import Evidence, EvidenceKind
+from aria.contracts.base import Evidence, EvidenceKind, JsonDict
 from aria.evidence import EvidenceStore
 from aria.llm.base import BudgetExceededError, LLMError
 from aria.llm.budget import BudgetGuard
@@ -44,29 +44,58 @@ def terms(text: str) -> set[str]:
 # The everyday words for each kind of evidence, so that a question in plain words ("what did the
 # investigation find?", "has this happened before?") reaches it without a model.
 _KIND_WORDS: dict[EvidenceKind, str] = {
-    EvidenceKind.HYPOTHESIS: "investigation investigated cause caused find found why",
+    EvidenceKind.HYPOTHESIS: "investigation investigated cause caused find found failed failure "
+    "broke broken wrong problem",
     EvidenceKind.INCIDENT: "similar before previous history happened fixed resolved",
-    EvidenceKind.RUNBOOK: "fix steps first check should",
+    EvidenceKind.RUNBOOK: "fix steps first check should next action mitigate",
     EvidenceKind.TEMPLATE: "pattern patterns errors often most",
-    EvidenceKind.FEATURE: "errors servers nodes long many",
-    EvidenceKind.RULE: "serious severity",
+    EvidenceKind.FEATURE: "errors long many",
+    EvidenceKind.RULE: "serious severity rated rating level",
+    EvidenceKind.MODEL: "serious severity rated rating level likely confident",
 }
+# The same for the investigation's own checks, whose records are matched on these words alone:
+# their titles are terse summaries and their details raw data. (The investigation's other tools
+# repeat evidence cited on its own.)
+_TOOL_WORDS = {
+    "mcp.node_breakdown": "servers server nodes hosts machines where affected spread",
+    "mcp.component_timeline": "component components affected when time timeline started first peak",
+    "mcp.get_template_examples": "example examples lines show",
+}
+_REPEATS = frozenset({"mcp.search_incidents", "mcp.get_runbook", "mcp.list_runbooks"})
+# Equal matches go to the kind that answers most directly: a tested cause, then the rating.
+_DIRECTNESS = (
+    EvidenceKind.HYPOTHESIS,
+    EvidenceKind.RULE,
+    EvidenceKind.MODEL,
+    EvidenceKind.INCIDENT,
+    EvidenceKind.RUNBOOK,
+    EvidenceKind.TEMPLATE,
+    EvidenceKind.LOG,
+    EvidenceKind.ALERT,
+    EvidenceKind.FEATURE,
+    EvidenceKind.TOOL,
+)
 
 
 def rank(
     question: str, evidence: Sequence[Evidence], *, limit: int = MAX_EVIDENCE
 ) -> list[Evidence]:
-    """Evidence ordered by how many of the question's terms it contains (ties keep order)."""
+    """Evidence ordered by how many of the question's terms it contains. Ties go to the kind of
+    evidence that answers more directly, then keep their order."""
     wanted = terms(question)
     scored = []
     for position, item in enumerate(evidence):
-        words = _KIND_WORDS.get(item.kind, "")
-        text = f"{item.title} {item.detail} {item.source} {item.kind} {words}".lower()
+        if item.kind is EvidenceKind.TOOL:
+            text = _TOOL_WORDS.get(item.source, "")
+        else:
+            words = _KIND_WORDS.get(item.kind, "")
+            text = f"{item.title} {item.detail} {item.source} {item.kind} {words}".lower()
         hits = sum(1 for term in wanted if term in text)
         if hits:
-            scored.append((-hits, position, item))
-    scored.sort(key=lambda entry: (entry[0], entry[1]))
-    return [item for _, _, item in scored[:limit]]
+            direct = _DIRECTNESS.index(item.kind) if item.kind in _DIRECTNESS else len(_DIRECTNESS)
+            scored.append((-hits, direct, position, item))
+    scored.sort(key=lambda entry: entry[:3])
+    return [entry[3] for entry in scored[:limit]]
 
 
 async def memory_evidence(services: Services, question: str, *, limit: int = 6) -> list[Evidence]:
@@ -106,14 +135,32 @@ def _fallback(ranked: Sequence[Evidence]) -> AnswerOutput:
 
 def _claims(ranked: Sequence[Evidence], *, limit: int = 3) -> list[ClaimOut]:
     """One statement per finding, in rank order. Past incidents that were fixed the same way share
-    one statement that cites them all, rather than repeating the fix once for each."""
+    one statement that cites them all, rather than repeating the fix once for each.
+
+    Each kind of evidence gets a statement before any kind gets a second, so a question in two
+    parts ("why was it rated SEV3, and what do I do first?") hears about the rating and the
+    runbook. The records of the tools that found incidents and runbooks come in only when nothing
+    else matches: the incidents and runbooks say the same in plainer words."""
+    plain = [
+        item for item in ranked if item.source not in _REPEATS or item.kind is not EvidenceKind.TOOL
+    ]
+    plain = plain or list(ranked)
     groups: dict[str, list[Evidence]] = {}
-    for item in ranked:
-        data = item.data or {}
-        fixed = item.kind is EvidenceKind.INCIDENT and data.get("title") and data.get("resolution")
-        key = f"{data.get('source') == 'run'}:{data['resolution']}" if fixed else item.id
-        if key in groups or len(groups) < limit:
-            groups.setdefault(key, []).append(item)
+    kinds: set[EvidenceKind] = set()
+    placed: set[str] = set()
+    for new_kinds_only in (True, False):
+        for item in plain:
+            if item.id in placed:
+                continue
+            fixed = _fixed(item)
+            key = f"{(item.data or {}).get('source') == 'run'}:{fixed[1]}" if fixed else item.id
+            if key not in groups:
+                if len(groups) >= limit or (new_kinds_only and item.kind in kinds):
+                    continue
+                groups[key] = []
+                kinds.add(item.kind)
+            groups[key].append(item)
+            placed.add(item.id)
     return [
         ClaimOut(text=_clip(_plain_group(items), 400), evidence_ids=[item.id for item in items])
         for items in groups.values()
@@ -125,8 +172,9 @@ _WORDS = ("two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"
 
 def _plain_group(items: Sequence[Evidence]) -> str:
     """Several past incidents with one fix, said once: how many, one example, and the fix."""
-    if len(items) == 1:
+    if len(items) == 1 or (fixed := _fixed(items[0])) is None:
         return _plain(items[0])
+    title, resolution = fixed
     data = items[0].data or {}
     count = _WORDS[len(items) - 2] if len(items) - 2 < len(_WORDS) else str(len(items))
     samples = sum(1 for item in items if (item.data or {}).get("synthetic"))
@@ -139,13 +187,29 @@ def _plain_group(items: Sequence[Evidence]) -> str:
     )
     if data.get("source") == "run":
         return (
-            f"{count.capitalize()} similar past incidents, such as {data['title']}, were triaged "
-            f"by ARIA; the reviewers approved the same next steps: {data['resolution']}"
+            f"{count.capitalize()} similar past incidents, such as {title}, were triaged "
+            f"by ARIA; the reviewers approved the same next steps: {resolution}"
         )
     return (
-        f"{count.capitalize()} similar past incidents{built}, such as {data['title']}, were "
-        f"resolved the same way: {data['resolution']}"
+        f"{count.capitalize()} similar past incidents{built}, such as {title}, were "
+        f"resolved the same way: {resolution}"
     )
+
+
+# A past incident as the investigation's search cites it, and the fix its detail records.
+_SIMILAR = re.compile(r"^(?:Similar|Past) incident \S+: (?P<title>.+?)(?: \(SEV\d[^)]*\))?$")
+_RESOLUTION = re.compile(r"^Resolution: (?P<fix>.+)$", re.MULTILINE)
+
+
+def _fixed(item: Evidence) -> tuple[str, str] | None:
+    """A past incident's title and how it was resolved, when the evidence says both."""
+    if item.kind is not EvidenceKind.INCIDENT:
+        return None
+    data = item.data or {}
+    if data.get("title") and data.get("resolution"):
+        return str(data["title"]), str(data["resolution"])
+    title, fix = _SIMILAR.match(item.title), _RESOLUTION.search(item.detail)
+    return (title["title"], fix["fix"]) if title and fix else None
 
 
 def _clip(text: str, limit: int) -> str:
@@ -158,6 +222,33 @@ def _clip(text: str, limit: int) -> str:
 _HYPOTHESIS = re.compile(r"^H\d+ (?P<status>\w+): (?P<statement>.+)$", re.DOTALL)
 _LINE = re.compile(r"^line (?P<n>\d+): (?P<line>.+)$", re.DOTALL)
 _TEMPLATE = re.compile(r"^(?P<count>\d+)x (?P<pattern>.+)$", re.DOTALL)
+_RULE = re.compile(
+    r"^Rule \S+ \((?P<effect>score|floor) (?P<level>SEV\d)\): (?P<why>.+)$", re.DOTALL
+)
+_SCORES = re.compile(r"^(?P<by>Severity|Rule-score) probabilities: (?P<shown>.+)$")
+_RUNBOOK = re.compile(r"^Runbook \S+: (?P<name>.+)$", re.DOTALL)
+_STEP = re.compile(r"^\d+\.\s*(?P<text>.+?)(?:\s*\[risk: (?P<risk>\w+)\])?$")
+# What each investigation tool's record says, for when nothing plainer matches a question.
+_TOOL_LEADS = {
+    "get_template_examples": "Examples of the pattern",
+    "node_breakdown": "By server",
+    "component_timeline": "Over time",
+    "list_runbooks": "Runbooks that match",
+    "get_runbook": "The runbook ARIA read",
+}
+
+
+def _levels(levels: Sequence[str]) -> str:
+    """SEV2, or SEV2 or SEV3, or SEV1, SEV2 or SEV3."""
+    if len(levels) < 2:
+        return "".join(levels)
+    return f"{', '.join(levels[:-1])} or {levels[-1]}"
+
+
+def _sentence(text: str) -> str:
+    """A clause that can follow a colon: lower-cased first letter unless it starts a name."""
+    text = text.rstrip(".")
+    return text[:1].lower() + text[1:] if text[1:2].islower() else text
 
 
 def _plain(item: Evidence) -> str:
@@ -165,16 +256,14 @@ def _plain(item: Evidence) -> str:
     with internal IDs left to the citation chips."""
     data = item.data or {}
     sample = " (built from a sample)" if data.get("synthetic") else ""
-    if item.kind is EvidenceKind.INCIDENT and data.get("title") and data.get("resolution"):
+    if fixed := _fixed(item):
+        title, resolution = fixed
         if data.get("source") == "run":  # ARIA's own report: what was approved, not what fixed it
             return (
-                f"A similar past incident, {data['title']}, was triaged by ARIA; the reviewer "
-                f"approved these next steps: {data['resolution']}"
+                f"A similar past incident, {title}, was triaged by ARIA; the reviewer "
+                f"approved these next steps: {resolution}"
             )
-        return (
-            f"A similar past incident, {data['title']}{sample}, was resolved this way: "
-            f"{data['resolution']}"
-        )
+        return f"A similar past incident, {title}{sample}, was resolved this way: {resolution}"
     if item.kind is EvidenceKind.INCIDENT and ": " in item.title:
         return f"A similar past incident{sample}: {item.title.split(': ', 1)[1]}"
     if item.kind is EvidenceKind.HYPOTHESIS and (found := _HYPOTHESIS.match(item.title)):
@@ -190,7 +279,44 @@ def _plain(item: Evidence) -> str:
         if found["count"] == "1":
             return f'One log line has a pattern of its own: "{pattern}"'
         return f'{found["count"]} log lines follow one pattern: "{pattern}"'
+    if item.kind is EvidenceKind.RULE and (found := _RULE.match(item.title)):
+        why = _sentence(found["why"])
+        if found["effect"] == "floor":
+            return f"A severity rule keeps this at {found['level']} or more serious: {why}."
+        return f"A severity rule points to {found['level']}: {why}."
+    if item.kind is EvidenceKind.MODEL and (found := _SCORES.match(item.title)):
+        return _scores(found["by"], found["shown"], data) or item.title
+    if item.kind is EvidenceKind.RUNBOOK and (found := _RUNBOOK.match(item.title)):
+        name = found["name"].rstrip(".")
+        steps = [line.strip() for line in item.detail.splitlines() if line.strip()]
+        step = _STEP.match(steps[0]) if steps else None
+        if step is None:
+            return f'The runbook to follow is "{name}".'
+        risk = f" (risk: {step['risk']})" if step["risk"] else ""
+        return f'The runbook "{name}" starts with: {_sentence(step["text"])}{risk}.'
+    if item.kind is EvidenceKind.FEATURE and item.source == "parser" and " events, " in item.title:
+        return f"This log has {item.title}."
+    if item.kind is EvidenceKind.TOOL and ": " in item.title:
+        tool, summary = item.title.split(": ", 1)
+        if tool == "search_incidents":  # the incidents themselves are cited on their own
+            return f"The investigation found {summary.split(': ', 1)[0]}."
+        lead = _TOOL_LEADS.get(tool, f"The investigation's {tool.replace('_', ' ')} check")
+        return f"{lead}: {summary}"
     return item.title
+
+
+def _scores(by: str, shown: str, data: JsonDict) -> str | None:
+    """The severity model's (or, without it, the rules') most likely level and its short list."""
+    try:
+        scores = {level: float(p) for level, p in (pair.split(" ") for pair in shown.split(", "))}
+    except ValueError:
+        return None
+    top = max(scores, key=lambda level: scores[level])
+    if by == "Rule-score":
+        return f"The severity rules score {top} highest ({scores[top]:.2f})."
+    listed = [str(level) for level in data.get("prediction_set") or []]
+    short = f"; its short list of likely levels is {_levels(listed)}" if listed else ""
+    return f"The severity model finds {top} most likely ({scores[top]:.2f}){short}."
 
 
 def check_answer(output: AnswerOutput, known: dict[str, Evidence]) -> list[str]:

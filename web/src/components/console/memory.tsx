@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useIncidents } from "@/lib/api/hooks";
+import { useIncidents, useSettingsView } from "@/lib/api/hooks";
 import { isSeverity, type IncidentOut } from "@/lib/api/types";
 import { relativeTime, stripSeverity } from "@/lib/format";
 import { systemName } from "@/lib/systems";
@@ -54,6 +54,8 @@ export function Memory() {
     system === "all" ? undefined : system,
   );
   const all = useIncidents();
+  // On a shared demo, what a visitor publishes stays theirs: it never joins this library.
+  const shared = useSettingsView().data?.visitor_scope ?? false;
   const systems = useMemo(
     () => [...new Set((all.data ?? []).map((i) => i.system))].sort(),
     [all.data],
@@ -83,7 +85,11 @@ export function Memory() {
     <div className="grid gap-6">
       <PageHeader
         title="Incident library"
-        description="Past incidents ARIA searches when a new one comes in, by keyword and by meaning. Each published report adds one."
+        description={
+          shared
+            ? "Past incidents ARIA searches when a new one comes in, by keyword and by meaning. On this shared demo, the incidents you publish stay yours and don't join it."
+            : "Past incidents ARIA searches when a new one comes in, by keyword and by meaning. Each published report adds one."
+        }
       >
         <div className="flex flex-wrap items-end gap-3">
           <div className="grid min-w-64 flex-1 gap-1.5 md:max-w-md">
@@ -180,9 +186,7 @@ export function Memory() {
                       </span>
                       <span className="text-xs text-muted-foreground">{seen(incident)}</span>
                       {tag(incident) ? (
-                        <span className="rounded-xs border border-rule px-1.5 text-xs text-muted-foreground">
-                          {tag(incident)}
-                        </span>
+                        <span className="text-xs text-muted-foreground">{tag(incident)}</span>
                       ) : null}
                     </summary>
                     <div className="grid gap-3 border-t border-rule px-4 py-3 text-sm">

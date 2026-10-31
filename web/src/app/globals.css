@@ -221,8 +221,8 @@
   --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 
-  /* Infinite only while work is under way (a reply or a report being written); a status that
-     waits for a person pulses three times and then rests. */
+  /* Only while work is under way (a reply or a report being written); a status that waits for a
+     person stays still. */
   --animate-pulse-dot: pulse-dot 1.6s var(--ease-in-out) infinite;
   --animate-in: aria-enter var(--tw-animation-duration, var(--tw-duration, 0.15s))
     var(--tw-ease, ease) var(--tw-animation-delay, 0s) var(--tw-animation-iteration-count, 1)
@@ -230,7 +230,6 @@
   --animate-out: aria-exit var(--tw-animation-duration, var(--tw-duration, 0.15s))
     var(--tw-ease, ease) var(--tw-animation-delay, 0s) var(--tw-animation-iteration-count, 1)
     var(--tw-animation-direction, normal) var(--tw-animation-fill-mode, none);
-  --animate-pulse-dot-thrice: pulse-dot 1.6s var(--ease-in-out) 3;
 
   @keyframes pulse-dot {
     0%,

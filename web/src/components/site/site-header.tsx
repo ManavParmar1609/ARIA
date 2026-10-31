@@ -36,7 +36,8 @@ export function SiteHeader() {
           <Link
             href="/console"
             prefetch={false}
-            className={buttonVariants({ variant: "primary", size: "md" })}
+            // A cream button with a hairline: the hero's "Try it" is the page's one main action.
+            className={buttonVariants({ variant: "raised", size: "md" })}
           >
             {/* "Console" on a phone; a screen reader always hears "Open the console". */}
             <span>

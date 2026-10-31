@@ -56,6 +56,8 @@ const STATUS: Record<string, string> = {
  * the panels above it. `titleHidden` drops the report's own title when the page's heading
  * already says the same thing.
  */
+const REVIEWER_NOTE = "Reviewer note: ";
+
 export function ReportView({
   report,
   titleHidden = false,
@@ -65,6 +67,12 @@ export function ReportView({
 }) {
   const validation = report.validation;
   const ok = validation?.ok ?? false;
+  // A reviewer's note is kept with the open questions (prefixed "Reviewer note: ") but is not one.
+  const all = report.open_questions ?? [];
+  const notes = all
+    .filter((q) => q.startsWith(REVIEWER_NOTE))
+    .map((q) => q.slice(REVIEWER_NOTE.length));
+  const questions = all.filter((q) => !q.startsWith(REVIEWER_NOTE));
   return (
     <article
       aria-labelledby="report-title"
@@ -80,9 +88,20 @@ export function ReportView({
           </span>
           <span>
             written by{" "}
-            {writtenOffline(report)
-              ? "ARIA's evidence template (offline mode)"
-              : `a language model (${report.model ?? "model"})`}
+            {writtenOffline(report) ? (
+              <>
+                ARIA&apos;s evidence template (
+                <Link
+                  href="/console/settings#set-model-key"
+                  className="underline decoration-control underline-offset-2 hover:text-foreground hover:decoration-foreground"
+                >
+                  offline mode
+                </Link>
+                )
+              </>
+            ) : (
+              `a language model (${report.model ?? "model"})`
+            )}
           </span>
           <span
             className={cn(
@@ -162,11 +181,20 @@ export function ReportView({
           </ol>
         </Section>
       ) : null}
-      {report.open_questions?.length ? (
+      {questions.length ? (
         <Section title="Open questions">
           <ul className="grid list-disc gap-1.5 pl-5 text-muted-foreground">
-            {report.open_questions.map((q) => (
+            {questions.map((q) => (
               <li key={q}>{q}</li>
+            ))}
+          </ul>
+        </Section>
+      ) : null}
+      {notes.length ? (
+        <Section title="Reviewer's note">
+          <ul className="grid gap-1.5 text-muted-foreground">
+            {notes.map((n) => (
+              <li key={n}>{n}</li>
             ))}
           </ul>
         </Section>

@@ -33,7 +33,15 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogTitle, DialogTrigger, SheetContent } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useHealth, useRuns, useSession, useSignOut } from "@/lib/api/hooks";
+import {
+  useHealth,
+  useModelKey,
+  useRuns,
+  useSession,
+  useSettingsView,
+  useSignOut,
+} from "@/lib/api/hooks";
+import { accessShort, modelAccess } from "@/lib/model-access";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -253,20 +261,37 @@ function ApiStatus() {
   );
 }
 
-function SessionFooter() {
+/** Who answers this visitor's runs and questions, as a link to the key form on Settings. */
+function ModelLine({ onNavigate }: { onNavigate?: () => void }) {
+  const view = useSettingsView();
+  const saved = useModelKey();
+  if (!view.data) return null;
+  const kinds = view.data.visitor_keys ?? [];
+  const access = modelAccess(saved.data?.provider ?? null, kinds, view.data.shared_model);
+  return (
+    <Link
+      href="/console/settings#set-model-key"
+      onClick={onNavigate}
+      className="w-fit text-xs text-muted-foreground underline decoration-control underline-offset-2 hover:text-foreground hover:decoration-foreground"
+    >
+      {accessShort(access, kinds.length > 0)}
+    </Link>
+  );
+}
+
+function SessionFooter({ onNavigate }: { onNavigate?: () => void }) {
   const { data: session } = useSession();
   const signOut = useSignOut();
   return (
     <div className="grid gap-3 border-t border-rule pt-4">
       <ApiStatus />
+      <ModelLine onNavigate={onNavigate} />
       <div className="flex items-center justify-between gap-2">
         <p className="min-w-0 truncate text-xs text-muted-foreground">
           {session?.signedIn ? (
             <>
               Signed in as <span className="font-medium text-foreground">{session.name}</span>
             </>
-          ) : session?.authRequired === false ? (
-            "No key needed: this API is open"
           ) : null}
         </p>
         <div className="flex items-center">
@@ -409,7 +434,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
                   <div className="flex-1 overflow-y-auto">
                     <Nav onNavigate={() => setOpen(false)} />
                   </div>
-                  <SessionFooter />
+                  <SessionFooter onNavigate={() => setOpen(false)} />
                 </SheetContent>
               </Dialog>
               <Link href="/console" className="rounded-sm" aria-label="ARIA console">
@@ -421,9 +446,11 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
               </div>
             </div>
           </header>
+          {/* Focusable, so the skip link and a closed command palette can hand it focus. */}
           <main
             id="console-main"
-            className="mx-auto w-full max-w-[90rem] flex-1 px-4 py-8 sm:px-6 lg:px-8 lg:py-12"
+            tabIndex={-1}
+            className="mx-auto w-full max-w-[90rem] flex-1 px-4 py-8 outline-none sm:px-6 lg:px-8 lg:py-12"
           >
             <Gate>{children}</Gate>
           </main>

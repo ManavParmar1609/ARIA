@@ -17,7 +17,7 @@ export default function ConsoleNotFound() {
       </p>
       <div className="flex flex-wrap gap-3">
         <Button asChild variant="primary">
-          <Link href="/console">Go to the overview</Link>
+          <Link href="/console/runs">Your incidents</Link>
         </Button>
         <Button asChild variant="ghost">
           <Link href="/console/runs/new">Start a triage</Link>

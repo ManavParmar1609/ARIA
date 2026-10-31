@@ -251,10 +251,8 @@ export function ReviewPanel({
           id={`${id}-title`}
           className="flex items-center gap-2 font-sans text-base font-semibold"
         >
-          <span
-            aria-hidden
-            className="block size-2 animate-pulse-dot-thrice rounded-full bg-primary"
-          />
+          {/* A still dot: the severity stamp is this page's one entrance animation. */}
+          <span aria-hidden className="block size-2 rounded-full bg-primary" />
           Waiting for your review
         </h2>
         <p className="text-sm text-muted-foreground">
@@ -271,7 +269,15 @@ export function ReviewPanel({
           >
             {approveLabel(sending, review.isPending)}
           </Button>
-          <Button onClick={() => setEditing(true)} disabled={review.isPending}>
+          <Button
+            onClick={() => {
+              // Start from the report as it is now: it may have arrived after this panel did, and
+              // an empty summary box would read as "no summary" (lines kept keep their sources).
+              setEdit({ ...edit, title: original.title, summary: original.summary.join("\n") });
+              setEditing(true);
+            }}
+            disabled={review.isPending}
+          >
             Edit before sending
           </Button>
           <Button variant="danger" onClick={() => setDiscarding(true)} disabled={review.isPending}>
@@ -412,8 +418,12 @@ export function ReviewPanel({
                 id={`${id}-edit-summary`}
                 rows={5}
                 value={edit.summary}
+                aria-describedby={`${id}-edit-summary-hint`}
                 onChange={(e) => change({ summary: e.target.value })}
               />
+              <p id={`${id}-edit-summary-hint`} className="text-xs text-muted-foreground">
+                Lines you keep keep their sources. A line you change or add cites your review.
+              </p>
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor={`${id}-edit-actions`}>Add next steps, one per line</Label>

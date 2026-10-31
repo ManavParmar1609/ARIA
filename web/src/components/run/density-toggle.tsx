@@ -28,7 +28,7 @@ export function DensityToggle({ className }: { className?: string }) {
             className={cn(
               "inline-flex h-7 cursor-pointer items-center px-2.5 first:rounded-l-md last:rounded-r-md has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-ring",
               density === choice.value
-                ? "bg-foreground text-background"
+                ? "bg-highlight font-medium text-highlight-foreground"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >

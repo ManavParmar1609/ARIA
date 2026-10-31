@@ -149,7 +149,7 @@ export function Steps({ steps }: { steps: Step[] }) {
             )}
             <span
               className={cn(
-                "relative z-10 grid size-5 shrink-0 place-items-center rounded-full border text-[0.625rem]",
+                "relative z-10 grid size-5 shrink-0 place-items-center rounded-full border text-xs",
                 step.state === "done" && "border-foreground bg-foreground text-background",
                 step.state === "running" && "border-primary bg-background",
                 step.state === "paused" && "border-primary bg-highlight text-highlight-foreground",

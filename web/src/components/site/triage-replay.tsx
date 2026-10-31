@@ -40,6 +40,8 @@ export function TriageReplay({ data }: { data: Replay }) {
     return order;
   }, [lit, data.lines]);
   const evidence = active ? data.evidence[active] : undefined;
+  // The first line the evidence lights, quoted under the tag on a phone, where the log is far up.
+  const firstLit = data.lines.find((line) => lit.has(line.lineNo));
   const p = Math.round((data.probabilities[data.severity] ?? 0) * 100);
   const firstShown = data.lines[0]?.lineNo ?? 1;
 
@@ -213,7 +215,7 @@ export function TriageReplay({ data }: { data: Replay }) {
               ) : null}
             </>
           ) : (
-            "Point at a citation on the tag to see the evidence behind its claim."
+            "Point at or tap a citation on the tag to see the evidence behind its claim."
           )}
         </p>
       </div>
@@ -285,6 +287,11 @@ export function TriageReplay({ data }: { data: Replay }) {
             >
               <span className="font-mono text-foreground">{evidence.id}</span>{" "}
               <span className="text-foreground">{evidence.title}</span>
+              {firstLit ? (
+                <span className="mt-1 block font-mono text-xs break-all">
+                  Line {firstLit.lineNo}: {firstLit.text}
+                </span>
+              ) : null}
             </p>
           ) : null}
           <div

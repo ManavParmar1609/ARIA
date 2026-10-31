@@ -116,10 +116,11 @@ export function NewRun({ publicDemo = false }: { publicDemo?: boolean }) {
           <TabsTrigger value="samples">Samples</TabsTrigger>
           <TabsTrigger value="own">Your own logs</TabsTrigger>
         </TabsList>
-        <TabsContent value="samples">
+        {/* Each panel starts with controls of its own, so the panel itself is no extra Tab stop. */}
+        <TabsContent value="samples" tabIndex={-1}>
           <SampleGallery />
         </TabsContent>
-        <TabsContent value="own">
+        <TabsContent value="own" tabIndex={-1}>
           <OwnLogs publicDemo={publicDemo} />
         </TabsContent>
       </Tabs>

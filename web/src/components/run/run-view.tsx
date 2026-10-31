@@ -201,14 +201,17 @@ function DeleteRun({ runId }: { runId: string }) {
  * named it. */
 function Crumbs({ title }: { title?: string | null }) {
   return (
-    <nav aria-label="Breadcrumb" className="text-sm text-muted-foreground">
-      <Link href="/console/runs" className="hover:text-foreground">
+    // One line: a long title ends in an ellipsis here, and the heading below gives it in full.
+    <nav aria-label="Breadcrumb" className="flex min-w-0 text-sm text-muted-foreground">
+      <Link href="/console/runs" className="shrink-0 hover:text-foreground">
         Incidents
       </Link>
-      <span aria-hidden className="px-2 text-faint">
+      <span aria-hidden className="shrink-0 px-2 text-faint">
         /
       </span>
-      <span aria-current="page">{title || "New incident"}</span>
+      <span aria-current="page" className="min-w-0 truncate">
+        {title || "New incident"}
+      </span>
     </nav>
   );
 }

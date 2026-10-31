@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowUpRightIcon, EqualIcon, XIcon } from "lucide-react";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 
 import { ThemeSwitch } from "@/components/theme-switch";
 import { buttonVariants } from "@/components/ui/button-variants";
@@ -10,10 +10,31 @@ import { cx } from "@/lib/cx";
 /**
  * The round menu button and the panel it opens: every section, the source, and the theme.
  * It is the browser's own popover: the button opens it, and a click outside, Escape or a chosen
- * link closes it.
+ * link closes it, handing focus back to the button. While it is open, focus starts on the first
+ * link and Tab stays inside it, as in a dialog.
  */
 export function SiteMenu({ links }: { links: { href: string; label: string }[] }) {
   const menu = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const nav = menu.current;
+    if (!nav) return;
+    const onToggle = (event: Event) => {
+      if ((event as ToggleEvent).newState === "open") nav.querySelector<HTMLElement>("a")?.focus();
+    };
+    const holdTab = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const stops = [...nav.querySelectorAll<HTMLElement>("a, button")];
+      if (document.activeElement !== (event.shiftKey ? stops[0] : stops.at(-1))) return;
+      event.preventDefault();
+      (event.shiftKey ? stops.at(-1) : stops[0])?.focus();
+    };
+    nav.addEventListener("toggle", onToggle);
+    nav.addEventListener("keydown", holdTab);
+    return () => {
+      nav.removeEventListener("toggle", onToggle);
+      nav.removeEventListener("keydown", holdTab);
+    };
+  }, []);
   return (
     <>
       <button

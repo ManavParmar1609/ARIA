@@ -72,8 +72,10 @@ async def replay_real_incident(
     options = (body or ReplayRequest()).options
     if not may_use_model(state, visitor, viewer.tag, options.use_llm):
         options = offline(options)
+    # The run keeps the name the visitor chose it by; the report says what ARIA found.
     request = TriageRequest(
         system=incident.system,
+        title=incident.title,
         logs=lines,
         options=options,
         replay_of=incident.id,

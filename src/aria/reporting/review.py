@@ -16,9 +16,16 @@ from aria.contracts.report import ActionItem, IncidentReport, ReportEdits, Revie
 from aria.contracts.severity import SeverityAssessment
 from aria.evidence import EvidenceStore
 from aria.reporting.composer import CONFIRM_SEVERITY
+from aria.reporting.markdown import REVIEWER_NOTE
 from aria.text import headline
 
 AUTO_REVIEWER = "aria:auto"  # the run did not ask for approval (``graph.workflow.review``)
+
+
+def _who(reviewer: str) -> str:
+    """The reviewer as a report names them: by name when there is one, else "A reviewer" (an open
+    server's callers are all "anonymous")."""
+    return "A reviewer" if reviewer in ("anonymous", "") else f"Reviewer {reviewer}"
 
 
 def review_evidence(
@@ -81,7 +88,7 @@ def apply_review(
     if edits.severity and edits.severity != report.severity:
         # Worded so it does not read like an instruction to a model ("set the severity to ...").
         note = Claim(
-            text=f"Reviewer {decision.reviewer} assigned {edits.severity}; "
+            text=f"{_who(decision.reviewer)} assigned {edits.severity}; "
             f"ARIA's assessment was {report.severity}.",
             evidence_ids=[eid],
         )
@@ -107,7 +114,7 @@ def apply_review(
         ]
         update["actions"] = [*update.get("actions", report.actions), *added]
     if edits.note:
-        update["open_questions"] = [*report.open_questions, f"Reviewer note: {edits.note}"]
+        update["open_questions"] = [*report.open_questions, f"{REVIEWER_NOTE}{edits.note}"]
     return report.model_copy(update=update), new_severity
 
 

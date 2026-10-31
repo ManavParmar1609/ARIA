@@ -271,13 +271,14 @@ function Questions() {
               placeholder="How was the last ZooKeeper quorum loss fixed?"
             />
           </div>
-          <div className="grid gap-1.5">
+          {/* minmax(0, 1fr): a long incident title truncates instead of widening the page. */}
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1.5">
             <Label htmlFor={`${id}-about`}>About</Label>
             <Select value={about} onValueChange={setAbout}>
               <SelectTrigger id={`${id}-about`}>
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-w-[min(32rem,calc(100vw-2rem))]">
                 <SelectItem value={ABOUT_ALL}>All past incidents</SelectItem>
                 {linked && !missing && !runs.data?.runs.some((run) => run.id === linked) ? (
                   <SelectItem value={linked}>

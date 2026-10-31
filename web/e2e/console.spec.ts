@@ -283,7 +283,11 @@ test.describe("console", () => {
         await expect(card.getByRole("table").first()).toBeVisible();
       }
     }
-    // Reviews from the earlier tests feed the recalibration queue.
+    // Settings leads with the model. The deployment's own settings are folded away until asked for;
+    // there, reviews from the earlier tests feed the recalibration queue.
+    await expect(page.getByRole("heading", { level: 2 }).first()).toHaveText("Language model");
+    await expect(page.getByRole("table", { name: "Recent reviews" })).toBeHidden();
+    await page.getByText("Deployment details").click();
     await expect(page.getByRole("table", { name: "Recent reviews" })).toContainText("Approved");
     await expect(page.getByText(/of 30 needed/)).toBeVisible();
 
@@ -349,8 +353,9 @@ test.describe("console", () => {
 
     await expect(page).toHaveURL(/\/console\/runs\/run-/);
     await expect(page.getByText("a real incident, replayed")).toBeVisible();
+    // The incident keeps the name its card gave it.
     await expect(
-      page.getByRole("heading", { level: 1, name: /HDFS blocks stopping partway/ }),
+      page.getByRole("heading", { level: 1, name: /Silent block failures on a Hadoop cluster/ }),
     ).toBeVisible({ timeout: 60_000 });
     const check = page.locator("section", {
       has: page.getByRole("heading", { name: "Check ARIA against the experts" }),

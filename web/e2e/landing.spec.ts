@@ -68,7 +68,7 @@ test.describe("landing page", () => {
 
   test("links the hero to real incidents and each result to its test", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("link", { name: "Try a real incident" }).click();
+    await page.getByRole("link", { name: "Try it on real logs" }).click();
     await expect(page).toHaveURL(/\/console\/runs\/new\?source=bigdata$/);
     await expect(page.getByRole("button", { name: /^Replay it: / }).first()).toBeVisible();
     await page.goto("/#results");

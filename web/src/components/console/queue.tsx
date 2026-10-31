@@ -4,15 +4,22 @@ import { useQuery } from "@tanstack/react-query";
 import { InboxIcon, PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { SeverityBadge } from "@/components/aria/severity";
 import { runTitle } from "@/components/console/run-row";
 import { EmptyState, ErrorState, LoadingRows, PageHeader } from "@/components/console/states";
 import { AllClearSpot, SearchSpot } from "@/components/illustrations/spots";
-import { RunStatus } from "@/components/console/status";
+import { ExampleStatus, RunStatus } from "@/components/console/status";
 import { decidedByLabel } from "@/lib/decision";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -31,10 +38,9 @@ import {
 } from "@/lib/api/types";
 import { absoluteTime, relativeTime } from "@/lib/format";
 import { systemName, triggerLabel } from "@/lib/systems";
-import { cn } from "@/lib/utils";
 
 const FILTERS: { value: Status | "all"; label: string }[] = [
-  { value: "all", label: "All" },
+  { value: "all", label: "All incidents" },
   { value: "awaiting_review", label: "Waiting for review" },
   { value: "running", label: "Running" },
   { value: "published", label: "Published" },
@@ -105,6 +111,7 @@ export function Queue() {
   const status = (FILTERS.some((f) => f.value === raw) ? raw : "all") as Status | "all";
   const runs = usePages(status);
   const list = runs.data?.runs ?? [];
+  const filterId = useId();
 
   const setStatus = (value: string) => {
     const next = new URLSearchParams(params.toString());
@@ -128,23 +135,23 @@ export function Queue() {
           </Button>
         }
       >
-        <div role="group" aria-label="Filter by status" className="flex flex-wrap gap-1.5">
-          {FILTERS.map((f) => (
-            <button
-              key={f.value}
-              type="button"
-              aria-pressed={status === f.value}
-              onClick={() => setStatus(f.value)}
-              className={cn(
-                "h-8 rounded-md border px-3 text-sm transition-colors duration-(--duration-quick)",
-                status === f.value
-                  ? "border-primary bg-highlight font-medium text-highlight-foreground"
-                  : "border-rule text-muted-foreground hover:border-control hover:text-foreground",
-              )}
-            >
-              {f.label}
-            </button>
-          ))}
+        {/* One quiet control instead of six buttons: the calm budget allows four badges. */}
+        <div className="flex items-center gap-2 text-sm">
+          <label htmlFor={filterId} className="text-muted-foreground">
+            Show
+          </label>
+          <Select value={status} onValueChange={setStatus}>
+            <SelectTrigger id={filterId} className="h-9 w-auto min-w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {FILTERS.map((f) => (
+                <SelectItem key={f.value} value={f.value}>
+                  {f.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </PageHeader>
 
@@ -210,13 +217,13 @@ export function Queue() {
                         {runTitle(run)}
                       </Link>
                       <span className="block truncate text-xs text-muted-foreground">
-                        {run.example ? <ExampleTag /> : null}
-                        {systemName(run.system)}, {triggerLabel(run.trigger)}
+                        {systemName(run.system)},{" "}
+                        {run.example ? "an example every visitor sees" : triggerLabel(run.trigger)}
                         {run.parent_run_id && run.trigger !== "fork" ? ", forked" : ""}
                       </span>
                     </TableCell>
                     <TableCell>
-                      <RunStatus status={run.status} />
+                      {run.example ? <ExampleStatus /> : <RunStatus status={run.status} />}
                     </TableCell>
                     <TableCell className="text-sm">
                       <Decider run={run} />
@@ -239,7 +246,7 @@ export function Queue() {
                     severity={isSeverity(run.severity) ? run.severity : null}
                     size="sm"
                   />
-                  <RunStatus status={run.status} />
+                  {run.example ? <ExampleStatus /> : <RunStatus status={run.status} />}
                 </div>
                 <Link
                   href={`/console/runs/${encodeURIComponent(run.id)}` as never}
@@ -248,7 +255,6 @@ export function Queue() {
                   {runTitle(run)}
                 </Link>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  {run.example ? <ExampleTag /> : null}
                   {systemName(run.system)}, {relativeTime(run.created_at)}
                 </p>
               </li>
@@ -267,12 +273,6 @@ export function Queue() {
 
 /** The incidents waiting for a person, as one line above the list, with a way to show only them. */
 /** Marks an incident every visitor of a shared demo sees, which only a copy of one's own changes. */
-function ExampleTag() {
-  return (
-    <span className="mr-1.5 rounded-sm border border-rule px-1 text-muted-foreground">Example</span>
-  );
-}
-
 function Waiting({ onShow }: { onShow: () => void }) {
   const { data } = useRuns("awaiting_review", 50);
   // Examples wait for review too, but only on a copy of one's own: they are not "your" review.

@@ -137,7 +137,7 @@ export function PageHeader({
           ) : null}
           <h1 className="text-[2.25rem] leading-none tracking-heading sm:text-4xl">{title}</h1>
           {description ? (
-            <p className="max-w-3xl text-lg text-muted-foreground">{description}</p>
+            <p className="max-w-prose text-lg text-muted-foreground">{description}</p>
           ) : null}
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}

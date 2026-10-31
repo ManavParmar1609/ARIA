@@ -59,7 +59,7 @@ export function Connect() {
             tabIndex={0}
             role="region"
             aria-label={way.label}
-            className="overflow-x-auto rounded-lg bg-sunken p-4 text-xs leading-5"
+            className="overflow-x-auto rounded-lg border border-rule bg-raised p-4 text-[0.8125rem] leading-6 max-sm:break-all max-sm:whitespace-pre-wrap"
           >
             <code>{way.code}</code>
           </pre>

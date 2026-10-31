@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { accessSentence, modelAccess } from "./model-access";
+import { accessSentence, accessShort, modelAccess } from "./model-access";
 
 describe("who answers a visitor's runs", () => {
   it("is the visitor's own key first", () => {
@@ -24,6 +24,19 @@ describe("who answers a visitor's runs", () => {
     expect(none.kind).toBe("offline");
     expect(accessSentence(none, false)).toBe(
       "Offline: runs use the rules, the calibrated model and the grounded template, and nothing leaves the server.",
+    );
+  });
+
+  it("points at the key form below it on Settings, and says the short version in the sidebar", () => {
+    const offline = modelAccess(null, ["gemini"], null);
+    expect(accessSentence(offline, true, true)).toMatch(/Add your own key below to use a model\.$/);
+    expect(accessShort(offline, true)).toBe("Offline. Add a model key");
+    expect(accessShort(offline, false)).toBe("Offline: no language model");
+    expect(accessShort(modelAccess("gemini", ["gemini"], null), true)).toBe(
+      "Your Gemini key answers",
+    );
+    expect(accessShort(modelAccess(null, [], { left: 2, per_visitor: 5 }), false)).toBe(
+      "The site's key answers: 2 left today",
     );
   });
 });

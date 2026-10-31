@@ -717,3 +717,86 @@ def test_offline_answers_find_evidence_from_plain_questions() -> None:
         _plain(by_id[single])
         == 'One log line has a pattern of its own: "POSSIBLE BREAK-IN ATTEMPT …"'
     )
+
+
+def test_offline_answers_explain_a_rating_and_the_first_step_without_tool_records() -> None:
+    from aria.api.ask import _fallback, rank
+
+    store = EvidenceStore()
+    rule = store.add(
+        EvidenceKind.RULE,
+        "Rule degradation_signs (score SEV3): Retries, timeouts or degradation messages",
+        source="severity.rules",
+        data={"effect": "score", "severity": "SEV3"},
+    )
+    store.add(
+        EvidenceKind.RULE,
+        "Rule auth_attack (floor SEV2): SSH brute-force attempts",
+        source="severity.rules",
+        data={"effect": "floor", "severity": "SEV2"},
+    )
+    model = store.add(
+        EvidenceKind.MODEL,
+        "Severity probabilities: SEV1 0.03, SEV2 0.40, SEV3 0.45, SEV4 0.12",
+        source="severity.model",
+        data={"prediction_set": ["SEV2", "SEV3"]},
+    )
+    past = store.add(
+        EvidenceKind.INCIDENT,
+        "Similar incident syn-hdfs-1: DataNodes failing to serve blocks (SEV3; 4x on hdfs)",
+        source="mcp.search_incidents",
+        detail="Resolution: Decommission the failing DataNode.\nSummary: 3 nodes.",
+        data={"incident_id": "syn-hdfs-1", "synthetic": True},
+    )
+    runbook = store.add(
+        EvidenceKind.RUNBOOK,
+        "Runbook hdfs-block-serve: DataNodes failing to serve blocks",
+        source="mcp.get_runbook",
+        detail="1. Decommission a DataNode whose disk is failing. [risk: medium]\n2. Watch it.",
+    )
+    store.add(
+        EvidenceKind.TOOL,
+        "search_incidents: 1 similar incident: syn-hdfs-1 block_serve_exceptions (SEV3, 4x)",
+        source="mcp.search_incidents",
+    )
+    servers = store.add(
+        EvidenceKind.TOOL,
+        "node_breakdown: 2 nodes with errors or warnings; top: dn-7 (4 errors, 9 warnings)",
+        source="mcp.node_breakdown",
+    )
+    items = store.all()
+
+    output = _fallback(rank("Why was this rated SEV3, and what should I do first?", items))
+    assert [claim.evidence_ids for claim in output.answer] == [[rule], [model], [runbook]]
+    assert [claim.text for claim in output.answer] == [
+        "A severity rule points to SEV3: retries, timeouts or degradation messages.",
+        (
+            "The severity model finds SEV3 most likely (0.45); its short list of likely levels "
+            "is SEV2 or SEV3."
+        ),
+        (
+            'The runbook "DataNodes failing to serve blocks" starts with: decommission a '
+            "DataNode whose disk is failing (risk: medium)."
+        ),
+    ]
+    floor_text = _fallback(rank("Is the brute-force rule serious?", items)).answer[0].text
+    assert (
+        floor_text
+        == "A severity rule keeps this at SEV2 or more serious: SSH brute-force attempts."
+    )
+    before = _fallback(rank("How was this fixed before?", items)).answer
+    assert before[0].evidence_ids == [past]
+    assert before[0].text == (
+        "A similar past incident, DataNodes failing to serve blocks (built from a sample), was "
+        "resolved this way: Decommission the failing DataNode."
+    )
+    where = _fallback(rank("Which servers are affected?", items)).answer
+    assert [claim.evidence_ids for claim in where] == [[servers]]
+    assert where[0].text.startswith("By server: 2 nodes with errors or warnings")
+    every = " ".join(
+        c.text
+        for q in ("what first?", "similar incidents?")
+        for c in _fallback(rank(q, items)).answer
+    )
+    assert "search_incidents" not in every
+    assert "syn-" not in every

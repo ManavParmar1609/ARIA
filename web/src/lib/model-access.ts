@@ -34,9 +34,16 @@ export function modelAccess(
 
 const OFFLINE = "the rules, the calibrated model and the grounded template";
 
-/** One sentence: what answers, and what the visitor can do about it. */
-export function accessSentence(access: ModelAccess, canBringKey: boolean): string {
-  const bring = canBringKey ? " Add your own key in Settings to use a model." : "";
+/** One sentence: what answers, and what the visitor can do about it. On Settings itself the key
+ * form sits just below the sentence. */
+export function accessSentence(
+  access: ModelAccess,
+  canBringKey: boolean,
+  onSettings = false,
+): string {
+  const bring = canBringKey
+    ? ` Add your own key ${onSettings ? "below" : "in Settings"} to use a model.`
+    : "";
   switch (access.kind) {
     case "own":
       return `${access.label} answers your runs and questions.`;
@@ -48,5 +55,19 @@ export function accessSentence(access: ModelAccess, canBringKey: boolean): strin
       return access.usedUp
         ? `Offline for today: your share of the site's key is used, so runs use ${OFFLINE}.${bring}`
         : `Offline: runs use ${OFFLINE}, and nothing leaves the server.${bring}`;
+  }
+}
+
+/** The few words the console's sidebar shows, as a link to Settings. */
+export function accessShort(access: ModelAccess, canBringKey: boolean): string {
+  switch (access.kind) {
+    case "own":
+      return `${access.label} answers`;
+    case "shared":
+      return access.left == null
+        ? "The site's key answers"
+        : `The site's key answers: ${access.left} left today`;
+    case "offline":
+      return canBringKey ? "Offline. Add a model key" : "Offline: no language model";
   }
 }

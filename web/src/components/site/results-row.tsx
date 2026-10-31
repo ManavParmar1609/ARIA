@@ -41,8 +41,8 @@ export function resultTiles(data: Evaluation, real: RealLogs, more: RealData): R
     {
       figure: `${per100(s.autoDecided)} in 100`,
       label: `built incidents rated without help, and ${per100(s.accuracyWhenAuto)} in 100 of those were right. ARIA asked a person about the rest, the harder ones.`,
-      href: "/console/evals#ev-severity",
-      link: "The severity test",
+      href: "/console/evals#ev-calibration",
+      link: "When it asks a person",
     },
     {
       figure: p.valid === 1 ? "Every report" : `${per100(p.valid)} in 100 reports`,

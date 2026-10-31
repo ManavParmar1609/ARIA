@@ -541,7 +541,8 @@ async def test_a_real_incident_replays_as_an_ordinary_run(api: Api) -> None:
     run_id = created.json()["run_id"]
     detail = await wait_for(api, run_id, "awaiting_review", timeout_s=120)
     assert detail["trigger"] == "replay"
-    assert detail["title"].endswith("HDFS blocks stopping partway")
+    # The run keeps the incident's name, the one its card showed.
+    assert detail["title"] == incident["title"]
     values = (await api.client.get(f"/api/v1/runs/{run_id}/state")).json()["values"]
     assert values["request"]["synthetic"] is False
     assert values["batch"]["features"]["broken_flows"] >= 3

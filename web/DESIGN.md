@@ -99,11 +99,11 @@ The floor is 12 px; the reference's 10 and 11 px labels are raised to it.
 ## Components
 
 - **Navigation.** The name on the left, the sections in charcoal, and "Open the console" as the
-  forest button on the right. A keylime pill marks the section being read (the sliding nav
+  cream button with a hairline on the right (the hero holds the page's one forest action). A keylime pill marks the section being read (the sliding nav
   pill). On a wide screen the theme button sits beside the console button; below that, one menu
   holds the sections, GitHub and the theme.
-- **Hero.** A sage panel holds the serif headline, which names the outcome, and the summary;
-  beneath it sits a full-width forest button, "Try a real incident". To the right, a slate panel
+- **Hero.** A sage panel holds the serif headline, which names the outcome, and the summary, which
+  names who it is for; beneath it sits a full-width forest button, "Try it on real logs". To the right, a slate panel
   holds one cream card from the recorded run: the level, one claim with its citation open on the
   log line it cites, and a status that is plainly not a button. Below, three bordered tiles each
   link to the proof of one claim (the test results, the example, the review step).

@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOutIcon } from "lucide-react";
+import { ChevronRightIcon, LogOutIcon } from "lucide-react";
 import Link from "next/link";
 
 import { ModelKeyPanel } from "@/components/console/model-key";
@@ -52,7 +52,7 @@ function Section({
         <h2 id={id} className="text-xl tracking-heading">
           {title}
         </h2>
-        {intro ? <p className="max-w-3xl text-sm text-muted-foreground">{intro}</p> : null}
+        {intro ? <p className="max-w-prose text-sm text-muted-foreground">{intro}</p> : null}
       </div>
       {children}
     </section>
@@ -136,7 +136,7 @@ function Configuration({ view }: { view: SettingsView }) {
       <Section id="set-decisions" title="Severity, retrieval and investigation">
         <Pairs
           items={[
-            ["Prediction-set coverage", `${Math.round((1 - alpha) * 100)}%`],
+            ["Short-list coverage", `${Math.round((1 - alpha) * 100)}%`],
             ["Similar incidents per run", r.k],
             ["Candidates before reranking", r.candidates],
             ["Candidates when widened", r.widen_candidates],
@@ -289,12 +289,13 @@ export function Settings() {
   const savedKey = useModelKey();
   const kinds = view.data?.visitor_keys ?? [];
   const { theme, setTheme } = useTheme();
-  // When the API is down every section fails the same way: say so once, in the first section
-  // that failed, and let that one "Try again" reload them all.
-  const failed = providers.isError
-    ? "providers"
-    : view.isError
-      ? "view"
+  // When the API is down every section fails the same way: say so once, at the top when the
+  // configuration failed (the model section needs it) or else where the first failure is, and
+  // let that one "Try again" reload them all.
+  const failed = view.isError
+    ? "view"
+    : providers.isError
+      ? "providers"
       : feedback.isError
         ? "feedback"
         : null;
@@ -314,8 +315,35 @@ export function Settings() {
     <div className="grid gap-8">
       <PageHeader
         title="Settings"
-        description="What this ARIA deployment is configured to do. Settings live in config/aria.yaml and environment variables, never in the browser."
+        description="Which model answers your incidents and questions, and how the console looks."
       />
+
+      <Section
+        id="set-model-key"
+        title="Language model"
+        intro={
+          kinds.length > 0
+            ? "Use your own Claude, Gemini, OpenAI or NVIDIA key for the runs you start and the questions you ask. Your browser keeps it and sends it only with those requests; the server uses it for that work alone and never stores it."
+            : "Which model writes your reports and answers here."
+        }
+      >
+        {view.isError ? (
+          failure("view", "Settings could not be loaded", view.error)
+        ) : view.isPending ? (
+          <LoadingRows rows={2} label="Loading the model settings" />
+        ) : (
+          <>
+            <p role="status" className="text-sm">
+              {accessSentence(
+                modelAccess(savedKey.data?.provider ?? null, kinds, view.data.shared_model),
+                kinds.length > 0,
+                true,
+              )}
+            </p>
+            {kinds.length > 0 || savedKey.data?.provider ? <ModelKeyPanel kinds={kinds} /> : null}
+          </>
+        )}
+      </Section>
 
       <Section id="set-session" title="Your session">
         <div className="flex flex-wrap items-center justify-between gap-4 text-sm">
@@ -366,106 +394,103 @@ export function Settings() {
         </fieldset>
       </Section>
 
-      <Section
-        id="set-model-key"
-        title="Language model"
-        intro={
-          kinds.length > 0
-            ? "Use your own Claude, Gemini, OpenAI or NVIDIA key for the runs you start and the questions you ask. Your browser keeps it and sends it only with those requests; the server uses it for that work alone and never stores it."
-            : "Which model writes your reports and answers here."
-        }
-      >
-        <p role="status" className="text-sm">
-          {accessSentence(
-            modelAccess(savedKey.data?.provider ?? null, kinds, view.data?.shared_model),
-            kinds.length > 0,
-          )}
+      <details className="group/deployment border-t border-rule pt-6">
+        <summary className="flex w-fit cursor-pointer items-center gap-2 text-xl tracking-heading">
+          Deployment details
+          <ChevronRightIcon
+            aria-hidden
+            className="size-5 text-muted-foreground transition-transform duration-(--duration-quick) group-open/deployment:rotate-90 motion-reduce:transition-none"
+          />
+        </summary>
+        <p className="mt-1 max-w-[65ch] text-sm text-muted-foreground">
+          What this ARIA deployment is set up to do: its model providers, limits, guardrails and
+          learning. The server reads them from config/aria.yaml and its environment variables.
         </p>
-        {kinds.length > 0 || savedKey.data?.provider ? <ModelKeyPanel kinds={kinds} /> : null}
-      </Section>
+        <div className="mt-6 grid gap-8">
+          <Section
+            id="set-providers"
+            title="Model providers"
+            intro="A self-hosted NIM leads the chain, then Gemini, then hosted NIM, each once its key or endpoint is set. Keys are never shown."
+          >
+            {providers.isPending ? (
+              <LoadingRows rows={3} label="Loading providers" />
+            ) : providers.isError ? (
+              failure("providers", "Providers could not be loaded", providers.error)
+            ) : (
+              <Table aria-label="Providers">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Provider</TableHead>
+                    <TableHead>Kind</TableHead>
+                    <TableHead>Chat model</TableHead>
+                    <TableHead>Embeddings</TableHead>
+                    <TableHead>State</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {providers.data.map((p) => (
+                    <TableRow key={p.name}>
+                      <TableHead scope="row">{p.name}</TableHead>
+                      <TableCell className="text-muted-foreground">
+                        {p.kind.replaceAll("_", " ")}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{p.chat_model ?? ""}</TableCell>
+                      <TableCell className="font-mono text-xs">{p.embedding_model ?? ""}</TableCell>
+                      <TableCell>
+                        <span
+                          className={cn(
+                            "text-sm",
+                            !p.enabled
+                              ? "text-faint"
+                              : p.breaker === "closed"
+                                ? "text-ok"
+                                : "text-sev3-fg",
+                          )}
+                        >
+                          {!p.enabled
+                            ? "Not configured"
+                            : p.breaker === "closed"
+                              ? "Ready"
+                              : `Circuit ${p.breaker.replace("_", "-")}`}
+                        </span>
+                        {p.last_error ? (
+                          <span className="block text-xs text-danger">{p.last_error}</span>
+                        ) : null}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </Section>
 
-      <Section
-        id="set-providers"
-        title="Model providers"
-        intro="A self-hosted NIM leads the chain, then Gemini, then hosted NIM, each once its key or endpoint is set. Keys are never shown."
-      >
-        {providers.isPending ? (
-          <LoadingRows rows={3} label="Loading providers" />
-        ) : providers.isError ? (
-          failure("providers", "Providers could not be loaded", providers.error)
-        ) : (
-          <Table aria-label="Providers">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Provider</TableHead>
-                <TableHead>Kind</TableHead>
-                <TableHead>Chat model</TableHead>
-                <TableHead>Embeddings</TableHead>
-                <TableHead>State</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {providers.data.map((p) => (
-                <TableRow key={p.name}>
-                  <TableHead scope="row">{p.name}</TableHead>
-                  <TableCell className="text-muted-foreground">
-                    {p.kind.replaceAll("_", " ")}
-                  </TableCell>
-                  <TableCell className="font-mono text-xs">{p.chat_model ?? ""}</TableCell>
-                  <TableCell className="font-mono text-xs">{p.embedding_model ?? ""}</TableCell>
-                  <TableCell>
-                    <span
-                      className={cn(
-                        "text-sm",
-                        !p.enabled
-                          ? "text-faint"
-                          : p.breaker === "closed"
-                            ? "text-ok"
-                            : "text-sev3-fg",
-                      )}
-                    >
-                      {!p.enabled
-                        ? "Not configured"
-                        : p.breaker === "closed"
-                          ? "Ready"
-                          : `Circuit ${p.breaker.replace("_", "-")}`}
-                    </span>
-                    {p.last_error ? (
-                      <span className="block text-xs text-danger">{p.last_error}</span>
-                    ) : null}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </Section>
+          {view.isPending ? (
+            <LoadingRows rows={4} label="Loading settings" />
+          ) : view.isError ? (
+            <p className="text-sm text-muted-foreground">Not loaded: see the error above.</p>
+          ) : (
+            <Configuration view={view.data} />
+          )}
 
-      {view.isPending ? (
-        <LoadingRows rows={4} label="Loading settings" />
-      ) : view.isError ? (
-        failure("view", "The configuration could not be loaded", view.error)
-      ) : (
-        <Configuration view={view.data} />
-      )}
-
-      <Section
-        id="set-learning"
-        title="Learning from reviews"
-        intro={
-          view.data?.visitor_scope
-            ? "Every review records the severity a reviewer settled on, and once enough have gathered ARIA recalibrates its short lists on them. On this shared demo, reviews of your own incidents stay private and never retrain it."
-            : "Every review records the severity a reviewer settled on. Once enough have gathered, ARIA recalibrates its short lists on them, so the lists hold the reviewer's severity on this deployment's own incidents."
-        }
-      >
-        {feedback.isPending ? (
-          <LoadingRows rows={3} label="Loading reviews" />
-        ) : feedback.isError ? (
-          failure("feedback", "Reviews could not be loaded", feedback.error)
-        ) : (
-          <Learning view={feedback.data} />
-        )}
-      </Section>
+          <Section
+            id="set-learning"
+            title="Learning from reviews"
+            intro={
+              view.data?.visitor_scope
+                ? "Every review records the severity a reviewer settled on, and once enough have gathered ARIA recalibrates its short lists on them. On this shared demo, reviews of your own incidents stay private and never retrain it."
+                : "Every review records the severity a reviewer settled on. Once enough have gathered, ARIA recalibrates its short lists on them, so the lists hold the reviewer's severity on this deployment's own incidents."
+            }
+          >
+            {feedback.isPending ? (
+              <LoadingRows rows={3} label="Loading reviews" />
+            ) : feedback.isError ? (
+              failure("feedback", "Reviews could not be loaded", feedback.error)
+            ) : (
+              <Learning view={feedback.data} />
+            )}
+          </Section>
+        </div>
+      </details>
     </div>
   );
 }

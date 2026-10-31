@@ -13,18 +13,19 @@ import { systemName } from "@/lib/systems";
 import { cn } from "@/lib/utils";
 import { useDocumentTitle } from "@/lib/document-title";
 
-// Risk keeps to ink and the danger red: the severity hues mean severity only.
+// Risk is quiet text, not a badge: the calm budget keeps badges for what needs a decision. It
+// keeps to ink and the danger red; the severity hues mean severity only.
 const RISK: Record<string, string> = {
-  low: "border-rule text-muted-foreground",
-  medium: "border-control text-foreground",
-  high: "border-danger/60 text-danger",
+  low: "text-muted-foreground",
+  medium: "text-muted-foreground",
+  high: "font-medium text-danger",
 };
 
 function Risk({ risk }: { risk: string }) {
   return (
     <span
       className={cn(
-        "inline-flex h-5 shrink-0 items-center justify-self-start rounded-xs border px-1.5 text-xs font-medium whitespace-nowrap",
+        "inline-flex shrink-0 items-center justify-self-start text-xs whitespace-nowrap",
         RISK[risk] ?? RISK.low,
       )}
     >
@@ -59,7 +60,7 @@ export function Runbooks() {
     <div className="grid gap-6">
       <PageHeader
         title="Runbooks"
-        description="ARIA proposes next steps only from these runbooks, and cites the one it used. Edit them as Markdown in the repository's runbooks folder."
+        description="ARIA proposes next steps only from these runbooks, and cites the one it used. A team adds its own as short text files kept with ARIA."
       />
       {runbooks.isPending ? (
         <LoadingRows rows={6} label="Loading runbooks" />

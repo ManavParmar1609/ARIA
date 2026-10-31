@@ -66,7 +66,7 @@ function SizePicker({
               // the fill, visible on the selected choice too.
               "inline-flex h-8 cursor-pointer items-center rounded-sm px-3 text-sm ring-1 ring-rule ring-inset has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-ring",
               value === option.value
-                ? "bg-foreground text-background ring-foreground"
+                ? "bg-highlight font-medium text-highlight-foreground ring-primary"
                 : "text-muted-foreground hover:bg-sunken",
             )}
           >
@@ -218,7 +218,7 @@ function RealIncidentCard({ incident }: { incident: RealIncident }) {
   return (
     <li className="flex flex-col gap-3 rounded-lg bg-raised p-5 ring-1 ring-primary/40 ring-inset">
       <div className="grid gap-1">
-        <p className="text-xs font-medium text-primary">Real logs</p>
+        <p className="text-xs font-medium text-primary">Real incident</p>
         <h3 className="font-sans text-base leading-snug font-semibold text-heading">
           {incident.title}
         </h3>
@@ -273,7 +273,7 @@ function SourceFilter({ current }: { current: Source }) {
               className={cn(
                 "inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm ring-1 ring-rule ring-inset",
                 current === chip.key
-                  ? "bg-foreground text-background ring-foreground"
+                  ? "bg-highlight font-medium text-highlight-foreground ring-primary"
                   : "text-heading hover:bg-sunken",
               )}
             >
@@ -378,6 +378,9 @@ export function SampleGallery() {
           <p className="max-w-prose text-sm text-muted-foreground">
             Every sample is made of real lines from Loghub&rsquo;s public logs, arranged into an
             incident. Runs from samples are marked as samples, and each waits for your review.
+            {listedReals.length
+              ? " A real incident replays a cluster’s logs exactly as it wrote them, with the experts’ labels to check ARIA against."
+              : ""}
           </p>
         </div>
         <SourceFilter current={source} />

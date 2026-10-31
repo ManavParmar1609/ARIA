@@ -249,7 +249,7 @@ export function EvidenceChip({ id, label }: { id: string; label?: string }) {
       <HoverCardTrigger asChild>{button}</HoverCardTrigger>
       <HoverCardContent
         side="top"
-        className="max-h-(--radix-hover-card-content-available-height) w-96 overflow-auto"
+        className="max-h-(--radix-hover-card-content-available-height) w-96 max-w-[calc(100vw-2rem)] overflow-auto"
       >
         <EvidencePreview evidence={evidence} lines={linesFor(id)} />
       </HoverCardContent>

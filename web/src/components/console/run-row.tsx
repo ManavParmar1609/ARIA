@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { RunStatus } from "@/components/console/status";
+import { ExampleStatus, RunStatus } from "@/components/console/status";
 import { SEVERITY_BG } from "@/components/aria/severity";
 import { Button } from "@/components/ui/button";
 import { isSeverity, type RunSummary } from "@/lib/api/types";
@@ -35,14 +35,19 @@ export function RunRow({ run, action }: { run: RunSummary; action?: "review" | "
             {runTitle(run)}
           </Link>
           <p className="truncate text-sm text-muted-foreground">
-            {systemName(run.system)}, {triggerLabel(run.trigger)},{" "}
+            {systemName(run.system)},{" "}
+            {run.example ? "an example every visitor sees" : triggerLabel(run.trigger)},{" "}
             <time dateTime={run.created_at} title={absoluteTime(run.created_at)}>
               {relativeTime(run.created_at)}
             </time>
           </p>
         </div>
         <div className="relative z-10 flex items-center gap-3">
-          {action === "review" ? null : <RunStatus status={run.status} />}
+          {action === "review" ? null : run.example ? (
+            <ExampleStatus />
+          ) : (
+            <RunStatus status={run.status} />
+          )}
           {action === "review" ? (
             <Button asChild size="sm" variant="secondary">
               <Link href={href as never}>Review</Link>
