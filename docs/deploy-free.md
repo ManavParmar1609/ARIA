@@ -82,11 +82,23 @@ custom domain later, set `ARIA_WEB_URL` to it and redeploy.
 
 ## Step 3: check it as a visitor would
 
-1. The landing page loads and the replay plays.
-2. **Open the console** opens **New triage**. **Incidents** lists two waiting for review.
-3. In **New triage**, load a sample and choose **Start triage**. The run view follows the run
-   live; when it finishes, approve it.
-4. If the console says it is still connecting, the API is waking up. See the next section.
+1. The home page loads. In its example incident, pointing at a citation lights up the log lines
+   behind it.
+2. **Open the console** opens **New triage**. **Incidents** lists the examples: two waiting for
+   review and one approved.
+3. In **New triage**, choose **Run it** on a sample. The incident page follows the run live; when
+   it waits for you, approve it.
+4. If the console says ARIA's server is waking up, wait a minute. See the next section.
+5. Before you share the link, stress the API from your own machine the way many visitors would
+   use it at once:
+
+   ```bash
+   uv run python -I scripts/stress_demo.py --base https://<your-api>.onrender.com --visitors 12
+   ```
+
+   It should end with "no problems": no server errors, no visitor seeing another's incidents, and
+   a clear refusal for every bad request. It stops at once if the API has a model key of its own,
+   because every simulated visitor would spend that key's allowance.
 
 ## What to expect from the free plans
 
