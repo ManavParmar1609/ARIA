@@ -388,6 +388,8 @@ test.describe("console", () => {
 
   test("guides a first visit and triages a sample in one click", async ({ page }) => {
     await page.goto("/console");
+    // The page has loaded and answers clicks once New triage shows (a cold server takes a moment).
+    await expect(page.getByRole("heading", { level: 1, name: "New triage" })).toBeVisible();
     await page.getByRole("link", { name: "Guide", exact: true }).first().click();
     await expect(page.getByRole("heading", { level: 1, name: "Guide" })).toBeVisible();
     await expect(page.getByRole("term").filter({ hasText: "Prediction set" })).toBeVisible();
