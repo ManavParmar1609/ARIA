@@ -36,7 +36,9 @@ class Preliminary:
     rule_evidence: list[str] = field(default_factory=list)
     model_evidence: str | None = None
     conformal: bool = True
-    set_empty: bool = False  # no class cleared the conformal threshold (raw_set is the argmax)
+    # No class cleared the conformal threshold: raw_set holds the model's most likely class and
+    # the rules' class, and the policy plans for the more serious.
+    set_empty: bool = False
     # Features too far from the model's training data for it to be used; rules decided the set.
     outside_training: list[str] = field(default_factory=list)
 
@@ -181,8 +183,14 @@ def decide(
     if claims:
         claims.append(
             Claim(
-                text=f"Not confident enough to auto-decide and {reason}, so ARIA chose the most "
-                f"severe class in the set ({chosen}) and flagged it for review.",
+                text=(
+                    f"No level was likely enough on its own and {reason}, so ARIA planned for the "
+                    f"more serious of the model's most likely level and the rules' ({chosen}) and "
+                    "flagged it for review."
+                    if pre.set_empty
+                    else f"Not confident enough to auto-decide and {reason}, so ARIA chose the "
+                    f"most severe class in the set ({chosen}) and flagged it for review."
+                ),
                 evidence_ids=claims[0].evidence_ids,
             )
         )

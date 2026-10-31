@@ -42,7 +42,9 @@ function featureTitle(title: string): string {
     errors === "0"
       ? "no errors"
       : `${Number(errors).toLocaleString("en")} ${errors === "1" ? "error" : "errors"} (${share})`;
-  return `${many}, ${bad}, over ${minutes} minutes`;
+  // A window shorter than a minute is "within a minute", not "over 0.0 minutes".
+  const span = Number(minutes) < 1 ? "within a minute" : `over ${minutes} minutes`;
+  return `${many}, ${bad}, ${span}`;
 }
 
 // "Similar incident syn-x-1: Disk filling up (SEV3; 6x on hdfs)", as the retriever records it.
@@ -293,7 +295,8 @@ export function rawResult(evidence: Pick<Evidence, "kind" | "detail">): string |
 }
 
 // The severity model's measurements as the report would name them, with "log1p.", "frac." and
-// "keyword_hits." prefixes read away.
+// "keyword_hits." prefixes read away. "issue_keyword_hits." counts only warnings, errors and lines
+// with no level.
 const FEATURE_NAMES: Record<string, string> = {
   n_events: "lines",
   error_events: "error lines",
@@ -314,6 +317,7 @@ const FEATURE_NAMES: Record<string, string> = {
   error_ratio: "share of error lines",
   node_spread: "spread across servers",
   max_component_criticality: "most critical service",
+  warn_component_criticality: "most critical service with warnings",
   burst_score: "error burst",
   persistence_min_log1p: "how long errors lasted",
   floor_rank: "safety floor",
@@ -330,8 +334,11 @@ const KEYWORD_TOPICS: Record<string, string> = {
 /** A severity-model measurement in words: "log1p.keyword_hits.crash" reads "words about crashes". */
 export function featureName(name: string): string {
   const bare = name.replace(/^log1p\./, "");
-  const keyword = /^keyword_hits\.(\w+)$/.exec(bare)?.[1];
-  if (keyword) return `words about ${KEYWORD_TOPICS[keyword] ?? keyword.replaceAll("_", " ")}`;
+  const [, issue, keyword] = /^(issue_)?keyword_hits\.(\w+)$/.exec(bare) ?? [];
+  if (keyword) {
+    const words = `words about ${KEYWORD_TOPICS[keyword] ?? keyword.replaceAll("_", " ")}`;
+    return issue ? `${words} in warnings and errors` : words;
+  }
   const level = /^frac\.(\w+)$/.exec(bare)?.[1];
   if (level) return `share of ${level} lines`;
   const rule = /^rule_p\.(SEV\d)$/.exec(bare)?.[1];

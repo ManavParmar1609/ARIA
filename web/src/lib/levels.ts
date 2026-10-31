@@ -46,7 +46,11 @@ export function shortListText(
     !unsure ? "" : !ended ? ` Please ${verb}.` : approved ? " A reviewer confirmed it." : "";
   if (a.decided_by === "human") return `A reviewer set ${a.severity}.`;
   if (a.set_empty || set.length === 0) {
-    return `No level was likely enough on its own. ARIA ${plans} for ${a.severity}, the most likely.${ask("decide")}`;
+    // The model's best guess and the rules' level both stay possible; ARIA plans for the more
+    // serious of the two.
+    const open = set.length > 1 ? `, so ${orList(set)} stay possible` : "";
+    const which = set.length > 1 ? "the more serious" : "where the model and the rules meet";
+    return `No level was likely enough on its own${open}. ARIA ${plans} for ${a.severity}, ${which}.${ask("decide")}`;
   }
   if (set.length === 1) {
     if (set[0] !== a.severity) {

@@ -27,7 +27,7 @@ from aria.llm.local_embed import LocalEmbeddingProvider
 from aria.llm.router import LLMRouter
 from aria.parsing.parser import parse_lines
 from aria.reporting.comms import deterministic_drafts, draft_comms
-from aria.reporting.composer import ReportContext, compose_draft
+from aria.reporting.composer import ReportContext, compose_draft, compose_title
 from aria.reporting.grounding import (
     numbers_in,
     ungrounded_numbers,
@@ -615,9 +615,11 @@ async def test_a_one_line_paste_is_counted_in_words_that_fit_it() -> None:
         runbooks=RUNBOOKS,
     )
     summary = " ".join(c.text for c in compose_draft(ctx).summary)
-    assert "1 error (100.0% of 1 line within a minute of logs)" in summary
+    assert "1 error in 1 line (100.0%), within a minute" in summary
     assert "1 errors" not in summary
     assert "0.0 minutes" not in summary
+    # Named by what the error says (resources running out), not "Error spike".
+    assert compose_title(ctx).startswith(f"{severity.severity} · Resources running out")
 
 
 def test_a_sentence_starting_with_a_name_keeps_the_name_as_written() -> None:

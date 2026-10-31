@@ -117,6 +117,57 @@ def test_features_capture_spread_and_criticality() -> None:
     assert features.novel_error_templates == 1
 
 
+def _line(level: str | None, message: str, component: str | None = None) -> FeatureInput:
+    return FeatureInput(datetime(2026, 1, 1, tzinfo=UTC), "n1", component, level, message, "T")
+
+
+def test_issue_keyword_hits_leave_out_routine_lines() -> None:
+    lines = [
+        _line("INFO", "block checksum verified"),
+        _line("WARN", "checksum mismatch on block 7"),
+        _line(None, "checksum error in a log that carries no levels"),
+        _line("ERROR", "Disk full: no space left on device"),
+    ]
+    features = compute_features(lines, system="hdfs", novel_template_ids=set())
+    assert features.keyword_hits["data_risk"] == 3
+    assert features.issue_keyword_hits["data_risk"] == 2
+    assert features.issue_keyword_hits["resource"] == 1
+
+
+def test_routine_phrases_are_not_counted_as_crashes_or_data_loss() -> None:
+    lines = [
+        _line("ERROR", "fatal: Read from socket failed: Software caused connection abort"),
+        _line("INFO", "inconsistent nodesets node-31 0x1fffffffe <ok> node-0 0xfffffffe <ok>"),
+    ]
+    features = compute_features(lines, system="linux", novel_template_ids=set())
+    assert "crash" not in features.keyword_hits
+    assert "data_risk" not in features.keyword_hits
+    aborted = compute_features(
+        [_line("FATAL", "Job aborted after the worker crashed")],
+        system="hadoop",
+        novel_template_ids=set(),
+    )
+    assert aborted.keyword_hits["crash"] == 1
+
+
+def test_warn_component_criticality_reads_warnings_and_falls_back_to_the_default() -> None:
+    warned = compute_features(
+        [_line("INFO", "ok", "KERNEL"), _line("WARN", "link degraded", "KERNEL")],
+        system="bgl",
+        novel_template_ids=set(),
+    )
+    assert warned.max_component_criticality == 0  # no error lines
+    assert warned.warn_component_criticality == pytest.approx(0.9)
+    unnamed = compute_features(
+        [_line("WARN", "slow response from upstream")], system="bgl", novel_template_ids=set()
+    )
+    assert 0 < unnamed.warn_component_criticality < 0.9  # the catalog default
+    quiet = compute_features(
+        [_line("INFO", "ok", "KERNEL")], system="bgl", novel_template_ids=set()
+    )
+    assert quiet.warn_component_criticality == 0
+
+
 @pytest.fixture(scope="module")
 def builder() -> ScenarioBuilder:
     return ScenarioBuilder(LinePools.from_loghub(FIXTURES))

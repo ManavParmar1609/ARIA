@@ -2,6 +2,7 @@ import { type CSSProperties } from "react";
 
 import { SEVERITIES, SEVERITY_MEANING, type Severity } from "@/lib/api/types";
 import { cx } from "@/lib/cx";
+import { chance } from "@/lib/format";
 import { LEVEL_WORD } from "@/lib/levels";
 
 export const SEVERITY_BG: Record<Severity, string> = {
@@ -209,12 +210,13 @@ export function SeverityScale({
   const barMax = compact ? 44 : 72;
   const coverage = Math.round((1 - alpha) * 100);
   const described = SEVERITIES.map(
-    (s) => `${s} ${Math.round((probabilities[s] ?? 0) * 100)}%`,
+    (s) =>
+      `${s} ${rulesOnly ? `${Math.round((probabilities[s] ?? 0) * 100)}%` : chance(probabilities[s] ?? 0)}`,
   ).join(", ");
   return (
     <figure
       className={cx("grid gap-1", className)}
-      aria-label={`${rulesOnly ? "Rule scores (the calibrated model was not used)" : "Model probabilities"}: ${described}. ${rulesOnly ? `Levels the rules leave open: ${predictionSet.join(", ")}.` : setEmpty ? `No level is likely enough to make the short list, so the likeliest stands in.` : `Short list, built to hold the right level ${coverage}% of the time: ${predictionSet.join(", ")}.`} Decided: ${decided}.${floor ? ` Safety floor: ${floor}.` : ""}`}
+      aria-label={`${rulesOnly ? "Rule scores (the calibrated model was not used)" : "Model probabilities"}: ${described}. ${rulesOnly ? `Levels the rules leave open: ${predictionSet.join(", ")}.` : setEmpty ? `No level is likely enough to make the short list on its own, so the model's best guess and the rules' level stand in.` : `Short list, built to hold the right level ${coverage}% of the time: ${predictionSet.join(", ")}.`} Decided: ${decided}.${floor ? ` Safety floor: ${floor}.` : ""}`}
     >
       <div className="relative grid grid-cols-4 gap-1.5" aria-hidden>
         {setIdx.length > 0 ? (
@@ -242,7 +244,7 @@ export function SeverityScale({
                   isDecided ? "font-medium text-foreground" : "text-muted-foreground",
                 )}
               >
-                {Math.round(p * 100)}%
+                {rulesOnly ? `${Math.round(p * 100)}%` : chance(p)}
               </span>
               <div className="flex w-full items-end justify-center" style={{ height: barMax }}>
                 <div
@@ -279,7 +281,7 @@ export function SeverityScale({
           {rulesOnly
             ? "Bars: rule scores, as shares. Bracket: the levels the rules leave open."
             : setEmpty
-              ? `Bars: calibrated model probability. Dashed bracket: no level is likely enough to make the short list, so the likeliest stands in.`
+              ? `Bars: calibrated model probability. Dashed bracket: no level is likely enough to make the short list on its own, so the model's best guess and the rules' level stand in.`
               : `Bars: calibrated model probability. Bracket: the short list, built to hold the right level ${coverage}% of the time.`}
         </figcaption>
       ) : null}

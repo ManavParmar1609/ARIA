@@ -14,10 +14,11 @@
 #
 # Conditions are {feature, op, value}, combined with all: [...] or any: [...] and nested freely.
 # Features: every numeric WindowFeatures field, level_counts.<LEVEL>, keyword_hits.<category>
-# (see config/lexicon.yaml), n_critical_components, alerts.firing, alerts.critical and
-# alerts.warning. Unknown feature names fail at load time.
+# (see config/lexicon.yaml), issue_keyword_hits.<category> (the same, on lines at WARN or above
+# or with no level), n_critical_components, alerts.firing, alerts.critical and alerts.warning.
+# Unknown feature names fail at load time.
 
-version: "2026.10.2"
+version: "2026.10.3"
 
 # A severity is decided without the LLM only when the prediction set is a single class and the
 # calibrated model gives it at least this probability.

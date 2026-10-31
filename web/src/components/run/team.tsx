@@ -15,7 +15,14 @@ import {
 import { useMemo, type ReactNode } from "react";
 
 import type { Hypothesis, RunEvent, RunStateValues, SeverityAssessment } from "@/lib/api/types";
-import { capitalise, decisionWords, listed, reviewerName, writtenOffline } from "@/lib/format";
+import {
+  capitalise,
+  chance,
+  decisionWords,
+  listed,
+  reviewerName,
+  writtenOffline,
+} from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import { Citations } from "./evidence";
@@ -52,7 +59,7 @@ const STATUS_WORD: Record<Hypothesis["status"], string> = {
 };
 
 const n = (value: number) => value.toLocaleString("en");
-const pct = (p: number | undefined) => `${Math.round(100 * (p ?? 0))}%`;
+const pct = (p: number | undefined) => chance(p ?? 0);
 
 // Parallel shards run one node several times at once, and a resumed review starts its node
 // again, so each node counts the runs still going rather than starts against finishes.
@@ -109,7 +116,7 @@ function severityLine(sev: SeverityAssessment): ReactNode[] {
   } else if (sev.decided_by === "fallback") {
     lines.push(
       sev.set_empty
-        ? `Rated it ${sev.severity}: no severity was likely enough on its own, so it took the most likely and flagged it for you.`
+        ? `Rated it ${sev.severity}: no severity was likely enough on its own, so it took the more serious of the model's best guess and the rules' level and flagged it for you.`
         : sev.prediction_set.length === 1
           ? `Rated it ${sev.severity}: only ${sev.severity} remained, but not with enough confidence to decide alone, so it flagged it for you.`
           : `Rated it ${sev.severity}: unsure between ${listed(sev.prediction_set)}, so it took the most severe and flagged it for you.`,

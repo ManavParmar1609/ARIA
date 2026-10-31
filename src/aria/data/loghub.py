@@ -437,6 +437,80 @@ _TIMESTAMPS: tuple[tuple[re.Pattern[str], Callable[[str], datetime]], ...] = (
 )
 
 
+# Times a line may carry elsewhere: an epoch in seconds or milliseconds as its first field
+# ("1793416932840|ledger-sync|I|..."), the common log format's "[31/Oct/2026:02:00:00 +0000]"
+# anywhere (web access logs), or an ISO time a few fields in.
+_EPOCH = re.compile(r"^(\d{10}|\d{13})(?:[.,]\d+)?$")
+_CLF_TIME = re.compile(r"\[(\d{2}/[A-Z][a-z]{2}/\d{4}:\d{2}:\d{2}:\d{2}(?: [+-]\d{4})?)\]")
+_ISO_TIME = re.compile(
+    r"(?<!\d)(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?)(?!\d)"
+)
+# A level word a few fields in, as Kubernetes pods log it: "checkout-6b7c9d checkout INFO ...".
+# Upper case only, so an ordinary word in a message is not read as one.
+_LATE_LEVEL = re.compile(
+    r"^(?:\S+\s+){1,3}?(?P<level>TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|ERR|SEVERE|"
+    r"CRITICAL|FATAL)\s+\S"
+)
+# A web request's status in an access log: "GET /api HTTP/1.1" 502.
+_ACCESS_STATUS = re.compile(
+    r'"(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|CONNECT) [^"]*"\s+(?P<status>[1-5]\d\d)\b'
+)
+_NAME = re.compile(r"[A-Za-z][\w.$/-]{1,79}")
+
+
+def _epoch_field(text: str) -> datetime | None:
+    found = _EPOCH.match(text)
+    if not found:
+        return None
+    value = int(found.group(1))
+    seconds = value / 1000 if len(found.group(1)) == 13 else value
+    try:
+        return datetime.fromtimestamp(seconds, tz=UTC)
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+def _time_anywhere(text: str) -> datetime | None:
+    clf = _CLF_TIME.search(text)
+    if clf:
+        try:
+            return datetime.strptime(clf.group(1), "%d/%b/%Y:%H:%M:%S %z").astimezone(UTC)
+        except ValueError:
+            try:
+                return datetime.strptime(clf.group(1), "%d/%b/%Y:%H:%M:%S").replace(tzinfo=UTC)
+            except ValueError:
+                return None
+    iso = _ISO_TIME.search(text[:80])
+    if iso:
+        try:
+            when = _iso(iso.group(1))
+        except ValueError:
+            return None
+        return when.replace(tzinfo=UTC) if when.tzinfo is None else when.astimezone(UTC)
+    return None
+
+
+def _delimited(text: str) -> tuple[datetime | None, str, str | None, str] | None:
+    """A line of fields split by "|", one of the first four a level: the time, the level, the
+    field before the level as the component, and the fields after it as the message."""
+    parts = [part.strip() for part in text.split("|")]
+    if len(parts) < 3:
+        return None
+    found = next(
+        ((i, level) for i, part in enumerate(parts[:4]) if (level := normalize_level(part))), None
+    )
+    if found is None:
+        return None
+    at, level = found
+    head = parts[:at]
+    when = next(
+        (t for t in (_epoch_field(part) or _time_anywhere(part) for part in head) if t), None
+    )
+    names = [part for part in head if _NAME.fullmatch(part)]
+    message = " | ".join(part for part in parts[at + 1 :] if part)
+    return when, level, (names[-1] if names else None), message or text
+
+
 def parse_generic_line(system: str, line: str, line_no: int = 0) -> LogRecord:
     rest = line.strip()
     ts: datetime | None = None
@@ -450,18 +524,40 @@ def parse_generic_line(system: str, line: str, line_no: int = 0) -> LogRecord:
             ts = ts.replace(tzinfo=UTC) if ts.tzinfo is None else ts.astimezone(UTC)
             rest = rest[found.end() :]
             break
+    delimited = _delimited(rest) if rest.count("|") >= 2 else None
+    if delimited is not None:
+        when, field_level, field_component, field_message = delimited
+        return LogRecord(
+            system=system,
+            line_no=line_no,
+            message=field_message,
+            ts=ts or when,
+            component=field_component,
+            level=field_level,
+            level_raw=field_level,
+        )
     match = _GENERIC.match(rest)
     groups = match.groupdict() if match else {}
     message = (groups.get("message") or rest or line).strip()
-    level = normalize_level(groups.get("level")) or _derive_level(system, {}, message)
+    explicit = groups.get("level")
+    component = groups.get("component")
+    if not explicit and (late := _LATE_LEVEL.match(message)):
+        # The level is read, the line is kept whole: what comes before it may be a pod and a
+        # container, or the start of a sentence.
+        explicit = late.group("level")
+    level = normalize_level(explicit) or _derive_level(system, {}, message)
+    status = None if explicit else _ACCESS_STATUS.search(message)
+    if status is not None:
+        # An access log has no level: a server error is an error, whatever words the path holds.
+        level = "ERROR" if status.group("status").startswith("5") else "INFO"
     return LogRecord(
         system=system,
         line_no=line_no,
         message=message,
-        ts=ts,
-        component=groups.get("component"),
+        ts=ts or _time_anywhere(rest),
+        component=component,
         level=level,
-        level_raw=groups.get("level"),
+        level_raw=explicit,
     )
 
 

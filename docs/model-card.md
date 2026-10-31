@@ -48,8 +48,10 @@ order:
    trips.
 2. **The model gives calibrated probabilities.** It reads the window's features, including the
    rules' output. The prediction set holds every class whose probability is at least 1 − q,
-   where q is the conformal threshold. If no class clears it, the most likely class stands
-   alone and the set is marked empty.
+   where q is the conformal threshold. If no class clears it, the set is marked empty and holds
+   the model's most likely class and the rules' class, so the conservative fallback plans for
+   the more serious of the two. (With the most likely class alone, a crash-looping service the
+   rules rated SEV2 came out SEV4.)
 3. **Floors narrow the set.** They remove every class less severe than the floor.
 4. **A confident one-class set is decided without an LLM.** This happens when the model gives
    the class at least 0.85 (the `gate` in the rules file), or when a floor alone settled it.
@@ -88,7 +90,7 @@ Every assessment records the following, and the run view shows all of it:
 
 ## Inputs
 
-The model reads 38 features of one window
+The model reads 39 features of one window
 ([`src/aria/severity/features.py`](../src/aria/severity/features.py)). The parser computes them
 from redacted message text, levels, timestamps, nodes and components, plus any firing alerts.
 Lines quarantined as possible prompt injection are left out first. No feature reads dataset
@@ -97,9 +99,9 @@ labels or BGL alert tags.
 | Group | Features | Scale |
 |---|---|---|
 | Volume and spread (16) | Events, error events, events per minute, peak errors per minute, distinct nodes, nodes with errors, templates, novel templates, novel error templates, peak warnings per minute, nodes with warnings, novel warning templates, critical components, firing alerts, critical alerts, warning alerts | log(1 + x) |
-| Ratios (3) | Error ratio, node spread, highest criticality among components logging errors | 0 to 1 |
+| Ratios (4) | Error ratio, node spread, highest criticality among components logging errors, highest criticality among components logging warnings or errors (the catalog default when those lines name none) | 0 to 1 |
 | Shape (5) | Burst score (capped at 50, divided by 10), persistence in minutes (log scale), shares of WARN, ERROR and FATAL lines | As listed |
-| Keyword categories (9) | Crash, data risk, unavailable, resource, security, hardware, storage, network, degradation ([`config/lexicon.yaml`](../config/lexicon.yaml)) | log(1 + matching lines) |
+| Keyword categories (9) | Crash, data risk, unavailable, resource, security, hardware, storage, network, degradation ([`config/lexicon.yaml`](../config/lexicon.yaml)), counted on lines logged at WARN or above or with no level, because at INFO the same words are usually routine. The rules count every line | log(1 + matching lines) |
 | Rules (5) | The rules' smoothed probability for each severity, and the floor rank (0 is a SEV1 floor and 3 a SEV4 floor; 4 means no floor) | 0 to 1; 0 to 4 |
 
 Two of these depend on configuration and history:
@@ -147,7 +149,7 @@ The coverage guarantee holds only on data like the calibration split. A deployme
 incidents differ from the semi-synthetic windows, so ARIA recalibrates on them
 ([`src/aria/severity/recalibration.py`](../src/aria/severity/recalibration.py)).
 
-**What is recorded.** Every human review stores the run's model input (the 38 features) and the
+**What is recorded.** Every human review stores the run's model input (the 39 features) and the
 severity the reviewer settled on:
 
 - an approval confirms ARIA's severity, and an edit corrects it;
@@ -303,7 +305,9 @@ regression.
   parser, features, investigator and label policy changed after runs on them, and CI's smoke gate
   runs on seed 41. Read the severity numbers as development-set results. Their intervals resample
   windows as if they were independent, but windows of one failure mode share a few source
-  messages, so the true uncertainty is wider.
+  messages, so the true uncertainty is wider. The changes in rules version 2026.10.3 (keywords
+  and criticality read from warning lines, and two keyword patterns narrowed) were chosen on
+  separate validation seeds, 51–56, without looking at the test seeds.
 - **Prediction sets.** Almost every set holds one label, so coverage sits close to top-1
   accuracy and an LLM adjudicates rarely. The 90% target holds on windows exchangeable with the
   calibration windows; coverage differs by class and falls under a shift.

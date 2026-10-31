@@ -14,6 +14,8 @@ from aria.parsing.catalog import ServiceCatalog, load_catalog, load_lexicon
 
 ERROR_LEVELS = frozenset({"ERROR", "FATAL"})
 WARN = "WARN"
+# Levels at which a log reports trouble. The same words at INFO are usually routine.
+ISSUE_LEVELS = frozenset({"WARN", "ERROR", "FATAL"})
 CRITICAL_COMPONENT = 0.8
 
 
@@ -76,15 +78,20 @@ def compute_features(
         peak_warnings = float(len(warnings) > 0)
 
     lowered = [line.message.lower() for line in lines]
-    keyword_hits = {
-        name: sum(1 for text in lowered if pattern.search(text))
-        for name, pattern in lexicon.items()
-    }
+    # Lines with no level count as reported trouble too: some logs carry no levels at all.
+    flagged = [not line.level or line.level in ISSUE_LEVELS for line in lines]
+    keyword_hits: dict[str, int] = {}
+    issue_keyword_hits: dict[str, int] = {}
+    for name, pattern in lexicon.items():
+        hits = [issue for text, issue in zip(lowered, flagged, strict=True) if pattern.search(text)]
+        keyword_hits[name], issue_keyword_hits[name] = len(hits), sum(hits)
     nodes = {line.node for line in lines if line.node}
     error_nodes = {line.node for line in errors if line.node}
     components = sorted({line.component for line in lines if line.component})
     error_components = {line.component for line in errors if line.component}
     criticality = {c: catalog.criticality(system, c) for c in error_components}
+    issue_lines = [line for line in lines if line.level in ISSUE_LEVELS]
+    issue_components = {line.component for line in issue_lines if line.component}
     error_templates = {line.template_id for line in errors}
     warning_templates = {line.template_id for line in warnings}
 
@@ -97,6 +104,7 @@ def compute_features(
         error_events=len(errors),
         error_ratio=round(len(errors) / n, 4) if n else 0.0,
         keyword_hits={k: v for k, v in keyword_hits.items() if v},
+        issue_keyword_hits={k: v for k, v in issue_keyword_hits.items() if v},
         burst_score=burst,
         peak_errors_per_min=peak,
         distinct_nodes=len(nodes),
@@ -112,6 +120,10 @@ def compute_features(
             :20
         ],
         max_component_criticality=max(criticality.values(), default=0.0) if errors else 0.0,
+        warn_component_criticality=max(
+            (catalog.criticality(system, c) for c in issue_components),
+            default=catalog.default if issue_lines else 0.0,
+        ),
         persistence_s=round((error_times[-1] - error_times[0]).total_seconds(), 3)
         if len(error_times) > 1
         else 0.0,
