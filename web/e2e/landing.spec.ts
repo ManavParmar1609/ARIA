@@ -200,8 +200,9 @@ test.describe("how ARIA works", () => {
     const results = page.locator("section", {
       has: page.getByRole("heading", { name: "What the tests show" }),
     });
-    await expect(results.getByRole("listitem")).toHaveCount(4);
-    await expect(results.getByRole("link", { name: "Where it falls short" })).toBeVisible();
+    await expect(results.getByRole("listitem")).toHaveCount(3);
+    await expect(results.getByRole("link", { name: "When it asks a person" })).toBeVisible();
+    await expect(results.getByRole("link", { name: "The end-to-end test" })).toBeVisible();
     await results.getByRole("link", { name: "The real cluster test" }).click();
     await expect(page).toHaveURL(/\/console\/evals#ev-real$/);
   });

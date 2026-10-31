@@ -79,8 +79,8 @@ def _severity(section: Mapping[str, Any], heading: str = "## Severity") -> list[
         lines += [
             "",
             (
-                "The text baseline reads each window's raw lines, minus the alert tag that BGL and "
-                "Thunderbird lines open with: the BGL labels come from that tag."
+                "The text baseline reads each window's raw lines, minus the alert tag that BGL "
+                "lines open with: the BGL labels come from that tag."
             ),
         ]
     curve = ", ".join(
@@ -370,30 +370,8 @@ _BGL_METHODS = {
 }
 
 
-# Each log with alert tags: its section title, what the log is, where its window labels come
-# from, and the name of Loghub's 2,000-line sample of it.
-_TAGGED = {
-    "bgl": (
-        "Real logs, a supercomputer's alert tags",
-        "The whole log of LLNL's BlueGene/L supercomputer",
-        "the rubric that also labels the BGL training scenarios",
-        "BGL",
-    ),
-    "thunderbird": (
-        "Real logs, a second supercomputer's alert tags",
-        "A stretch of the log of Sandia's Thunderbird cluster, as Loghub-2.0 publishes it",
-        (
-            "a rubric written for this log from what its tags' messages say, with BGL's window "
-            "rules (no training scenario was labelled with it)"
-        ),
-        "Thunderbird",
-    ),
-}
-
-
-def _bgl(section: Mapping[str, Any], system: str = "bgl") -> list[str]:
-    title, whole, rubric, sample = _TAGGED[system]
-    lines = [f"## {title}", ""]
+def _bgl(section: Mapping[str, Any]) -> list[str]:
+    lines = ["## Real logs, a supercomputer's alert tags", ""]
     if "missing" in section:
         return [*lines, f"No results: {section['missing']}.", ""]
     labels, methods = section["labels"], section["methods"]
@@ -405,13 +383,15 @@ def _bgl(section: Mapping[str, Any], system: str = "bgl") -> list[str]:
     return [
         *lines,
         (
-            f"{whole}: {section['lines']:,} lines over "
+            f"The whole log of LLNL's BlueGene/L supercomputer: {section['lines']:,} lines over "
             f"{section['days']:g} days, {section['alert_lines']:,} of them tagged as alerts by "
             f"the machine's administrators. Source: {section['source']}; {section['citation']} "
             f"ARIA rated every {section['window_min']}-minute window that holds lines "
             f"({section['windows']:,} windows) from the lines alone: the tags are removed before "
             "parsing, and nothing was tuned on this log. Each window's label comes from its tags "
-            f"through {rubric}: " + ", ".join(f"{n:,} × {c}" for c, n in labels.items()) + "."
+            "through the rubric that also labels the BGL training scenarios: "
+            + ", ".join(f"{n:,} × {c}" for c, n in labels.items())
+            + "."
         ),
         "",
         (
@@ -441,7 +421,7 @@ def _bgl(section: Mapping[str, Any], system: str = "bgl") -> list[str]:
         ),
         (
             f"- **Overlap with training data**: {_pct(overlap['share'])} of these lines carry a "
-            f"message that also appears in Loghub's 2,000-line {sample} sample, which the training "
+            "message that also appears in Loghub's 2,000-line BGL sample, which the training "
             "scenarios are composed from. The scenarios re-time and recombine those lines; no "
             "window here was seen in training."
         ),
@@ -456,8 +436,7 @@ def _bgl(section: Mapping[str, Any], system: str = "bgl") -> list[str]:
                             for rule, n in section.get("rules_on_paged_quiet_windows", [])
                         ]
                     )
-                    + ". These rules count words and error lines in the window itself; none knows "
-                    "what is routine for a system ARIA has not seen before."
+                    + ". These rules count words and error lines in the window itself."
                 )
             ]
             if section.get("rules_on_paged_quiet_windows")
@@ -1327,7 +1306,6 @@ def _robustness(section: Mapping[str, Any]) -> list[str]:
 _REAL_SOURCES = {
     "hdfs": "a Hadoop cluster's log, with its experts' label for each storage block",
     "bgl": "the whole BlueGene/L log, with its administrators' alert tags",
-    "thunderbird": "seven weeks of the Thunderbird cluster's log, with its administrators' alert tags",
     "hadoop": "Hadoop jobs, with the failure injected into each",
     "openstack": "OpenStack runs, with a bug injected into each and the outcome it had",
     "logchunks": "failed CI builds, with the lines a person marked as the reason each failed",
@@ -1395,9 +1373,8 @@ def render(results: Mapping[str, Any], live: Mapping[str, Any] | None = None) ->
         ]
     if "real" in results:
         lines += _real(results["real"])
-        for system in _TAGGED:
-            if system in results["real"]:
-                lines += _bgl(results["real"][system], system)
+        if "bgl" in results["real"]:
+            lines += _bgl(results["real"]["bgl"])
         if "hadoop" in results["real"]:
             lines += _hadoop(results["real"]["hadoop"])
         if "openstack" in results["real"]:
@@ -1483,7 +1460,6 @@ def _unmeasured(real: Mapping[str, Any]) -> list[str]:
     """A limitation line for each real source that produced no results this time."""
     names = {
         "bgl": "contiguous BGL windows",
-        "thunderbird": "contiguous Thunderbird windows",
         "hadoop": "the Hadoop jobs",
         "openstack": "the OpenStack fault-injection runs",
         "logchunks": "LogChunks' failed CI builds",
@@ -1555,7 +1531,7 @@ def _real_summary(section: Mapping[str, Any]) -> list[str]:
     ]
 
 
-def _bgl_summary(section: Mapping[str, Any], machine: str = "a supercomputer") -> list[str]:
+def _bgl_summary(section: Mapping[str, Any]) -> list[str]:
     if "methods" not in section:
         return []
     methods = section["methods"]
@@ -1564,24 +1540,18 @@ def _bgl_summary(section: Mapping[str, Any], machine: str = "a supercomputer") -
     # Next to the strongest baselines, not the weakest: ARIA's own rules and the highest level.
     against = [
         f"{label}: {methods[key]['severe_missed']:,} and {methods[key]['quiet_paged']:,}"
-        if severe
-        else f"{label}: {methods[key]['quiet_paged']:,}"
         for key, label in (
             ("rules_only", "ARIA's rules alone"),
             ("highest_level", "the highest log level"),
         )
         if key in methods
     ]
-    caught = (
-        f"ARIA rated {aria['severe_missed']:,} of the {severe:,} SEV1-2 windows as SEV3-4 and paged"
-        if severe
-        else "no window was labelled SEV1-2, and ARIA paged"
-    )
     return [
         (
             f"**Real severity**: on all {section['windows']:,} {section['window_min']}-minute "
-            f"windows of {machine}'s {section['days']:g}-day log, labelled by its "
-            f"administrators' alert tags, {caught} on {aria['quiet_paged']:,} of "
+            f"windows of a supercomputer's {section['days']:g}-day log, labelled by its "
+            f"administrators' alert tags, ARIA rated {aria['severe_missed']:,} of the "
+            f"{severe:,} SEV1-2 windows as SEV3-4 and paged on {aria['quiet_paged']:,} of "
             f"{section['labels'].get('SEV4', 0):,} quiet windows"
             + (f" ({'; '.join(against)})" if against else "")
             + f"; accuracy {_pct(aria['accuracy'])} ({_ci(aria['accuracy_ci95'])}), "
@@ -1733,7 +1703,6 @@ def _results(results: Mapping[str, Any], live: Mapping[str, Any] | None) -> list
     if "real" in results:
         lines += _real_summary(results["real"])
         lines += _bgl_summary(results["real"].get("bgl") or {})
-        lines += _bgl_summary(results["real"].get("thunderbird") or {}, "a second supercomputer")
         lines += _hadoop_summary(results["real"].get("hadoop") or {})
         lines += _openstack_summary(results["real"].get("openstack") or {})
         lines += _logchunks_summary(results["real"].get("logchunks") or {})

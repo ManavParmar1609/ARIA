@@ -142,7 +142,7 @@ async def test_health_is_public_and_everything_else_needs_a_key(api: Api) -> Non
     ready = (await api.client.get("/readyz", headers=anonymous)).json()
     assert (ready["database"], ready["providers"], ready["incidents"]) == (True, None, None)
     known = (await api.client.get("/readyz", headers=RAJ)).json()
-    assert (known["database"], known["incidents"], known["runbooks"]) == (True, 3, 19)
+    assert (known["database"], known["incidents"], known["runbooks"]) == (True, 3, 18)
     card = await api.client.get("/.well-known/agent-card.json", headers=anonymous)
     assert card.status_code == 200
     assert "bearer" in card.json()["securitySchemes"]

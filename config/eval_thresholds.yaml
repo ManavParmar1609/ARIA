@@ -3,9 +3,9 @@
 # Each key is a dotted path into the suite's results and a bound. The offline smoke suite is
 # deterministic, so the bounds leave room for a case or two to flip on a legitimate change while a
 # real regression fails CI. Tighten them when a change improves the numbers; never loosen them to
-# make a failing change pass. The smoke sample is small: 34 severity windows (8 of them SEV1/SEV2),
-# 12 end-to-end runs (8 incidents, 2 quiet windows) and 4 attacked windows. The parsing and
-# edge-case suites run in full: 32,000 labelled Loghub lines and 2,000 inputs.
+# make a failing change pass. The smoke sample is small: one severity window per failure mode and
+# one quiet window per system, 12 end-to-end runs and 4 attacked windows. The parsing and
+# edge-case suites run in full: every labelled line of the Loghub samples and 2,000 inputs.
 smoke:
   severity.methods.aria_policy.macro_f1: {min: 0.85}
   severity.methods.aria_policy.severe_under_triage: {max: 0.10}  # no SEV1/SEV2 rated SEV3/SEV4

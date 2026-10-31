@@ -321,11 +321,6 @@ function MemoryRows({ data, more }: { data: Evaluation; more: RealData }) {
   );
 }
 
-export function thunderbirdResult(more: RealData): string {
-  const t = more.thunderbird;
-  return `ARIA raised false alarms on ${count(t.aria.quietPaged)} of ${count(t.quiet)} quiet stretches, and its short list held the right level only ${per100(t.coverage)} times in 100. Its rules count error lines, warning words and new messages in each stretch, and none of them knows what is routine for a system ARIA has not seen before; on Thunderbird those lines are routine.`;
-}
-
 export function buildsResult(more: RealData): string {
   const b = more.builds;
   const gap = b.lastErrorLines.rate - b.aria.rate;
@@ -347,7 +342,6 @@ const INJECTION_WHY =
 
 export function shortfallLines(data: Evaluation, more: RealData): string[] {
   return [
-    `Thunderbird, a second supercomputer: ${thunderbirdResult(more)}`,
     `Build logs from failed CI builds, which ARIA was not built for (no timestamps, servers or levels, and nothing was tuned on them): ${buildsResult(more)}`,
     `Public prompt-injection attacks: ${injectionResult(data, more)} ${INJECTION_WHY}`,
   ];
@@ -485,14 +479,6 @@ export function bglVerdict(bgl: RealData["bgl"]): string {
           ? "that beats its own rules alone"
           : "its own rules alone strike a different balance";
   return `On a real supercomputer, ${facts}; ${rival}.`;
-}
-
-export function thunderbirdVerdict(more: RealData): string {
-  const t = more.thunderbird;
-  const alarms = t.aria.quietPaged / Math.max(1, t.quiet);
-  return alarms >= 0.3
-    ? `Not ready for a machine it has never seen: ${inTen(alarms)} quiet stretches raised a false alarm.`
-    : `Calm on a machine it has never seen: ${inTen(alarms)} quiet stretches raised a false alarm.`;
 }
 
 export function hadoopVerdict(more: RealData): string {
@@ -659,8 +645,8 @@ export function liveVerdict(data: Evaluation): string {
   return `With a language model writing, ${passed}${slower}${few}.`;
 }
 
-/** The four findings How ARIA works shows, as one sentence for the person on call. */
-export function resultsInShort(data: Evaluation, real: RealLogs, more: RealData): string {
+/** The findings How ARIA works shows, as one sentence for the person on call. */
+export function resultsInShort(data: Evaluation, real: RealLogs): string {
   const storage = {
     same: " as well as the best standard detector",
     better: " better than the best standard detector",
@@ -677,15 +663,7 @@ export function resultsInShort(data: Evaluation, real: RealLogs, more: RealData)
     valid === 1
       ? "backs every claim with evidence"
       : `backs every claim with evidence in ${per100(valid)} reports in 100`;
-  const t = more.thunderbird;
-  const alarms = t.aria.quietPaged / Math.max(1, t.quiet);
-  const unseen =
-    alarms >= 0.5
-      ? "but on a system it has never seen, it raises false alarms on most quiet stretches"
-      : alarms >= 0.2
-        ? "but on a system it has never seen, it raises false alarms on many quiet stretches"
-        : "and it stays calm on a system it has never seen";
-  return `For the person on call: ARIA catches failing storage on a real cluster${storage}, ${asks} and ${cites}, ${unseen}.`;
+  return `For the person on call: ARIA catches failing storage on a real cluster${storage}, ${asks} and ${cites}.`;
 }
 
 export function TestQuestions({
@@ -706,11 +684,6 @@ export function TestQuestions({
       value: data.severity.coverageWithFloors,
     },
     { name: "BlueGene/L", detail: "a supercomputer's whole log", value: more.bgl.coverage },
-    {
-      name: "Thunderbird",
-      detail: "a second supercomputer's log",
-      value: more.thunderbird.coverage,
-    },
   ];
   return (
     <div className="grid gap-4">
@@ -743,7 +716,7 @@ export function TestQuestions({
       <Question
         id="q-limits"
         question="Where does it fall short, and why?"
-        answer="Where a system's normal noise looks like trouble, and on logs unlike the ones it was built for."
+        answer="On logs unlike the ones it was built for, and on attacks phrased as ordinary requests."
       >
         <ul className="grid max-w-prose list-disc gap-2 pl-5 text-sm leading-relaxed">
           {shortfallLines(data, more).map((line) => (

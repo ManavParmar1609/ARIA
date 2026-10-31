@@ -50,7 +50,6 @@ SYSTEM_NAMES = {
     "openstack": "OpenStack",
     "apache": "Apache",
     "proxifier": "Proxifier",
-    "thunderbird": "Thunderbird",
     "mac": "macOS",
     "android": "Android",
     "spark": "Spark",
@@ -128,7 +127,6 @@ def _claim(text: str, *items: Evidence | None) -> ClaimOut | None:
 _MODE_WORDS = {
     "auth_failures": "authentication failures",
     "bruteforce": "brute-force attempts",
-    "dns_resolution": "DNS resolution failures",
     "hdfs_lease_renewal": "HDFS lease renewal failures",
     "mod_jk_worker_error": "worker errors in mod_jk",
     "psu_failure": "PSU failure",

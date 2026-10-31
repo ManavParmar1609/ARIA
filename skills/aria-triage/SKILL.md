@@ -33,9 +33,9 @@ Content-Type: application/json
 {"system": "openssh", "title": "SSH failures on bastion", "logs": ["<raw line>", "..."]}
 ```
 
-- `system` is the log format. One of: `bgl`, `thunderbird`, `hdfs`, `hadoop`, `spark`,
-  `zookeeper`, `openstack`, `hpc`, `windows`, `linux`, `mac`, `android`, `healthapp`, `apache`,
-  `openssh`, `proxifier`.
+- `system` is the log format. One of: `bgl`, `hdfs`, `hadoop`, `spark`, `zookeeper`,
+  `openstack`, `hpc`, `windows`, `linux`, `mac`, `android`, `healthapp`, `apache`, `openssh`,
+  `proxifier`.
 - Send raw lines, unchanged and in order. Up to 20,000 lines; ARIA redacts PII and secrets
   itself.
 - Set `"synthetic": true` when the lines are made up, so the run is labelled as such.

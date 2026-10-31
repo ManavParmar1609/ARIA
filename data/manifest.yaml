@@ -18,7 +18,7 @@ sources:
       - CITATION
     license: Loghub license (free for research and academic work; cite Zhu et al., ISSRE 2023)
     citation: "J. Zhu, S. He, P. He, J. Liu, M. R. Lyu. Loghub: A Large Collection of System Log Datasets for AI-driven Log Analytics. ISSRE 2023."
-    description: 2,000-line samples from 16 systems with ground-truth templates; BGL and Thunderbird carry sysadmin alert tags.
+    description: 2,000-line samples of each system's log with ground-truth templates; BGL's lines carry sysadmin alert tags.
 
   loghub2-corrected:
     kind: git
@@ -29,7 +29,7 @@ sources:
       - "2k_dataset/*/*_2k.log_templates_corrected.csv"
     license: Loghub license
     citation: "Z. Jiang et al. A Large-scale Evaluation for Log Parsing Techniques: How Far are We? ISSTA 2024."
-    description: Corrected ground-truth templates for 14 of the 2k samples. The parsing evaluation scores the same parse against these too, joined by line id, beside the original Loghub templates.
+    description: Corrected ground-truth templates for most of the 2k samples. The parsing evaluation scores the same parse against these too, joined by line id, beside the original Loghub templates.
 
   hdfs-100k:
     kind: git
@@ -80,15 +80,6 @@ sources:
     license: CC BY 4.0 (the Zenodo record's licence)
     citation: "W. Xu, L. Huang, A. Fox, D. Patterson, M. I. Jordan. Detecting Large-Scale System Problems by Mining Console Logs. SOSP 2009."
     description: The whole HDFS_v1 log with the experts' label for every block. Kept zipped; the real-log evaluation reads it from the zip and checks units of work that stop partway on all of it, not one sample.
-
-  loghub2-thunderbird:
-    kind: zenodo
-    record: "8275861"
-    files: [Thunderbird.zip]
-    extract: false
-    license: CC BY 4.0 (the Zenodo record's licence)
-    citation: "A. J. Oliner, J. Stearley. What Supercomputers Say: A Study of Five System Logs. DSN 2007."
-    description: Loghub-2.0's copy of the Thunderbird supercomputer log, with the system administrators' alert tags. Kept zipped; the real-log evaluation reads it from the zip and scores ARIA's severity on contiguous windows of it, as for BGL.
 
   logchunks:
     kind: zenodo

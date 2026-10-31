@@ -15,7 +15,7 @@ It follows the spirit of [Model Cards for Model Reporting](https://arxiv.org/abs
 | | |
 |---|---|
 | Name | `severity_log` |
-| Committed version | `severity-log-20261029-a362d541`: the `version` field of [`models/severity_log.json`](../models/severity_log.json) |
+| Committed version | The `version` field of [`models/severity_log.json`](../models/severity_log.json) |
 | Task | Rate one window of log lines, plus any firing alerts, from SEV1 to SEV4 |
 | Type | Multinomial logistic regression on standardised features, with temperature scaling and split-conformal prediction sets |
 | Output | A calibrated probability for each of the four classes, and a prediction set that targets 90% coverage (alpha 0.1) |
@@ -118,10 +118,9 @@ Two of these depend on configuration and history:
 - **Data.** The semi-synthetic scenario suite, built from real lines in the Loghub 2k samples.
   - Each seed contributes 6 windows per failure mode and 3 quiet windows per system.
   - The splits use separate seeds: train 11–14, temperature 21 and conformal 31–32.
-  - The committed model's metadata records 660 training, 165 temperature and 330 conformal
-    windows. The per-split label counts are in
-    [`models/severity_log.report.json`](../models/severity_log.report.json) and in the data
-    card.
+  - The committed model's training report,
+    [`models/severity_log.report.json`](../models/severity_log.report.json), records how many
+    windows each split holds and their labels.
   - Every window goes through the production parser and rules, so training sees exactly the
     features a run computes.
 - **Fit.** scikit-learn's logistic regression on standardised features, with balanced class

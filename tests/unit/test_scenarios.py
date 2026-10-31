@@ -72,7 +72,7 @@ def test_every_sample_has_a_plain_card_under_a_known_source(builder: ScenarioBui
     cards = {key: mode.card for key, mode in builder.pools.modes.items()}
     assert all(cards.values()), [key for key, card in cards.items() if card is None]
     by_source = Counter(card.source for card in cards.values() if card)
-    assert by_source == {"security": 2, "web": 3, "bigdata": 4, "hpc": 9, "noise": 3}
+    assert by_source == {"security": 2, "web": 3, "bigdata": 4, "hpc": 8, "noise": 3}
     headlines = [key for key, card in cards.items() if card and card.headline]
     assert 3 <= len(headlines) <= 4
     for card in cards.values():
