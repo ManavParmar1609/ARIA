@@ -14,19 +14,20 @@ export interface GraphStep {
 
 type NodeSpec = { id: string; label: string; x: number; y: number; w?: number; kind?: "person" };
 
+// Labels use the console's own words for each step (Read the logs, Rate severity, ...).
 const NODES: NodeSpec[] = [
   { id: "plan", label: "plan", x: 180, y: 36 },
-  { id: "parse1", label: "parse", x: 66, y: 116, w: 64 },
-  { id: "parse2", label: "parse", x: 142, y: 116, w: 64 },
-  { id: "parse3", label: "parse", x: 218, y: 116, w: 64 },
-  { id: "parse4", label: "parse", x: 294, y: 116, w: 64 },
-  { id: "merge", label: "merge", x: 180, y: 196 },
-  { id: "severity", label: "severity", x: 104, y: 276, w: 112 },
-  { id: "recall", label: "recall", x: 256, y: 276, w: 112 },
+  { id: "parse1", label: "read", x: 66, y: 116, w: 64 },
+  { id: "parse2", label: "read", x: 142, y: 116, w: 64 },
+  { id: "parse3", label: "read", x: 218, y: 116, w: 64 },
+  { id: "parse4", label: "read", x: 294, y: 116, w: 64 },
+  { id: "merge", label: "combine", x: 180, y: 196 },
+  { id: "severity", label: "rate", x: 104, y: 276, w: 112 },
+  { id: "recall", label: "find similar", x: 256, y: 276, w: 112 },
   { id: "investigate", label: "investigate", x: 180, y: 356, w: 132 },
-  { id: "assess", label: "assess", x: 180, y: 436 },
-  { id: "report", label: "report", x: 180, y: 516 },
-  { id: "comms", label: "comms", x: 180, y: 596 },
+  { id: "assess", label: "decide", x: 180, y: 436 },
+  { id: "report", label: "write", x: 180, y: 516 },
+  { id: "comms", label: "messages", x: 180, y: 596 },
   { id: "review", label: "review", x: 180, y: 676, w: 128, kind: "person" },
   { id: "publish", label: "publish", x: 180, y: 756 },
 ];
@@ -169,9 +170,10 @@ export function RunGraph({ steps }: { steps: GraphStep[] }) {
             aria-labelledby="graph-title"
           >
             <title id="graph-title">
-              ARIA&apos;s triage graph: plan, four parse workers, merge, severity and recall in
-              parallel, investigate, assess (which can widen the search and investigate again),
-              report, comms, human review, publish.
+              ARIA&apos;s steps: plan, four readers in parallel, combine, then rate the severity and
+              find similar incidents at the same time, investigate, decide whether to look further
+              (which can widen the search and investigate again), write the report and the messages,
+              a person&apos;s review, publish.
             </title>
             <g fill="none" strokeWidth="1.5" strokeLinecap="round">
               {EDGES.map(([a, b]) => {

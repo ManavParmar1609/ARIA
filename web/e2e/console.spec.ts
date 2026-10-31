@@ -65,7 +65,7 @@ test.describe("console", () => {
         /^Drafted by ARIA, approved by you at \d\d:\d\d\. \d+ previews? kept \(no channel connected\)\.$/,
       ),
     ).toBeVisible();
-    await expect(page.getByRole("link", { name: "Download the postmortem draft" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Postmortem draft (Markdown)" })).toBeVisible();
     // A sample's page then offers ways to keep exploring.
     const next = page.locator("section", {
       has: page.getByRole("heading", { name: "What next?" }),
@@ -363,16 +363,20 @@ test.describe("console", () => {
       .click();
     await expect(page).toHaveURL(/\/console\/runs\/run-/);
     await expect(page.getByRole("heading", { name: "How serious", exact: true })).toBeVisible();
+    const incident = page.url();
     await page.getByRole("link", { name: "How to read this" }).click();
-    await expect(page).toHaveURL(/\/console\/guide#read-a-run$/);
+    await expect(page).toHaveURL(/\/console\/guide\?from=[^#]+#read-a-run$/);
     await expect(page.getByRole("heading", { name: "Read a severity rating" })).toBeVisible();
+    // The guide offers the way back to the incident it was opened from.
+    await page.getByRole("link", { name: "Back to the incident" }).click();
+    await expect(page).toHaveURL(incident);
   });
 
   test("replays a real incident and checks ARIA against the experts", async ({ page }) => {
     // Real incidents live on New triage, beside the samples from the same kind of system.
     await page.goto("/console/runs/new?source=bigdata");
     const card = page.locator("li", { hasText: "Silent block failures on a Hadoop cluster" });
-    await expect(card.getByText(/the label experts gave each/)).toBeVisible();
+    await expect(card.getByText(/Experts marked each block healthy or failed/)).toBeVisible();
     await card.getByRole("button", { name: /^Replay it: Silent block failures/ }).click();
 
     await expect(page).toHaveURL(/\/console\/runs\/run-/);

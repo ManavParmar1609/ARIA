@@ -47,13 +47,13 @@ export function HarmlessNote({
   if (!card?.benign || !isSeverity(severity)) return null;
   if (severity === "SEV4") {
     return (
-      <p className="rounded-md bg-ok/10 p-3 text-sm">
+      <p className="max-w-prose rounded-md bg-ok/10 p-3 text-sm">
         This sample is harmless noise, and ARIA rated it SEV4, as it should.
       </p>
     );
   }
   return (
-    <p className="rounded-md bg-sev3/12 p-3 text-sm">
+    <p className="max-w-prose rounded-md bg-sev3/12 p-3 text-sm">
       This sample is harmless noise, so the right level is SEV4. ARIA rated it {severity}: a false
       alarm. The rules that matched are under How serious, in How ARIA decided, and{" "}
       <Link href="/console/evals#q-limits" className="underline underline-offset-4">
@@ -137,10 +137,13 @@ export function SampleNext({
   runId,
   sample,
   severity,
+  waiting = false,
 }: {
   runId: string;
   sample: SampleRef;
   severity: string | null | undefined;
+  /** The incident waits for review: its approval is the page's one main action. */
+  waiting?: boolean;
 }) {
   const router = useRouter();
   const compare = useSearchParams().get("compare");
@@ -191,14 +194,19 @@ export function SampleNext({
       <ul className="flex flex-wrap gap-2">
         {bigger ? (
           <li>
-            <Button size="sm" variant="primary" onClick={runBigger} disabled={busy}>
+            <Button
+              size="sm"
+              variant={waiting ? "secondary" : "primary"}
+              onClick={runBigger}
+              disabled={busy}
+            >
               {busy ? <LoaderCircleIcon aria-hidden className="animate-spin" /> : null}
               {busy ? "Starting" : bigger.label}
             </Button>
           </li>
         ) : null}
         <li>
-          <Button asChild size="sm" variant={bigger ? "secondary" : "primary"}>
+          <Button asChild size="sm" variant={bigger || waiting ? "secondary" : "primary"}>
             <Link href={`/console/ask?run=${encodeURIComponent(runId)}` as never}>
               <MessageSquareTextIcon aria-hidden />
               Ask about this incident

@@ -186,11 +186,6 @@ export default function Landing() {
         >
           <Why />
           <Explainer lines={data.fileLines} />
-          <p className="max-w-[62ch] text-[0.9375rem] leading-relaxed text-heading">
-            For people evaluating AI tools: every claim links to its evidence, nothing is sent
-            without a person&apos;s approval, and every test result on this site comes from a
-            published test.
-          </p>
         </Section>
 
         <Section

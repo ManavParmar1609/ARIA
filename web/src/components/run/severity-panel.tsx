@@ -90,7 +90,7 @@ export function SeverityPanel({
       </p>
 
       <details className="group grid gap-3 text-sm">
-        <summary className="w-fit cursor-pointer font-medium text-muted-foreground hover:text-heading">
+        <summary className="w-fit cursor-pointer py-0.5 font-medium text-muted-foreground hover:text-heading">
           How ARIA decided
         </summary>
         <div className="grid gap-4 pt-3">

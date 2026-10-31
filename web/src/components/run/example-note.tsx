@@ -3,7 +3,6 @@
 import { CopyIcon, LoaderCircleIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { toast } from "sonner";
 
 import { ErrorState } from "@/components/console/states";
 import { Button } from "@/components/ui/button";
@@ -33,7 +32,8 @@ export function ExampleNote({ runId }: { runId: string }) {
       {
         onSuccess: (accepted) => {
           setStarted(true);
-          toast.success("Your copy is ready to review");
+          // No toast: the copy's own page opens and shows it reaching your review, and a toast
+          // saying it was ready came a moment too early and covered buttons on a phone.
           router.push(`/console/runs/${encodeURIComponent(accepted.run_id)}` as never);
         },
         onSettled: () => {

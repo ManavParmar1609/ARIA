@@ -27,10 +27,21 @@ import { cn } from "@/lib/utils";
 
 import { stepLabel } from "./progress";
 
+// The part that comes next, where one step of the progress strip has several, so two
+// checkpoints inside one step read differently.
+const PART: Record<string, string> = {
+  plan: "planning how to read them",
+  merge: "joining what was read",
+  report: "the report itself",
+  comms: "the message drafts",
+};
+
 /** A checkpoint, named by the steps the progress strip shows: "Before “Rate severity”". */
 export function checkpointName(cp: Pick<Checkpoint, "next" | "interrupted">): string {
   if (cp.next.length === 0) return "The end of the triage";
   if (cp.next.includes("__start__")) return "The input, before anything ran";
+  const only = cp.next.length === 1 ? cp.next[0] : undefined;
+  if (only && PART[only] && !cp.interrupted) return `Before “${stepLabel(only)}”: ${PART[only]}`;
   // Parallel parts repeat one step: "“Read the logs” (3 parts at once)", not the step three times.
   const counts = new Map<string, number>();
   for (const n of cp.next) {

@@ -131,7 +131,9 @@ export function Deliveries({
       </ul>
       {settings.length ? (
         <details className="text-sm text-muted-foreground">
-          <summary className="w-fit cursor-pointer text-foreground">Connect a channel</summary>
+          <summary className="w-fit cursor-pointer py-0.5 text-foreground">
+            Connect a channel
+          </summary>
           <p className="mt-2 max-w-prose">
             If you run ARIA yourself, set{" "}
             {settings.map((name, i) => (

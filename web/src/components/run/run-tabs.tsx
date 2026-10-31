@@ -15,7 +15,14 @@ import { capitalise, percent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import { DensityToggle } from "./density-toggle";
-import { Citations, EvidenceChip, KIND_LABEL, sourceLabel, useEvidence } from "./evidence";
+import {
+  Citations,
+  EvidenceChip,
+  evidenceTitle,
+  KIND_LABEL,
+  sourceLabel,
+  useEvidence,
+} from "./evidence";
 
 /** All evidence the run collected, filterable by kind. */
 export function EvidenceTable({ evidence, cited }: { evidence: Evidence[]; cited: Set<string> }) {
@@ -64,7 +71,7 @@ export function EvidenceTable({ evidence, cited }: { evidence: Evidence[]; cited
           >
             <EvidenceChip id={e.id} />
             <button type="button" onClick={() => pin(e.id)} className="min-w-0 text-left">
-              <span className="block truncate">{e.title}</span>
+              <span className="block truncate">{evidenceTitle(e)}</span>
               <span className="block text-xs text-muted-foreground">
                 {KIND_LABEL[e.kind] ?? e.kind}, from {sourceLabel(e.source)}
                 {cited.has(e.id) ? ", cited in the report" : ""}

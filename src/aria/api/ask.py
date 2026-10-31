@@ -21,7 +21,7 @@ from aria.llm.router import LLMRouter
 from aria.llm.schemas import AnswerOutput, ClaimOut
 from aria.reporting.grounding import ungrounded_numbers
 from aria.services import Services
-from aria.text import headline
+from aria.text import failure_words, headline
 
 _WORD = re.compile(r"[a-z0-9]+")
 _STOP = frozenset(
@@ -225,8 +225,8 @@ async def memory_evidence(services: Services, question: str, *, limit: int = 6) 
             EvidenceKind.INCIDENT,
             f"Past incident {incident.id}: {incident.title} ({incident.severity}, {incident.system})",
             source="memory.search",
-            detail=f"Failure mode: {incident.failure_mode}\nResolution: {incident.resolution}\n"
-            f"Summary: {incident.summary}",
+            detail=f"Kind of failure: {failure_words(incident.failure_mode)}\n"
+            f"Resolution: {_steps_text(incident.resolution)}\nSummary: {incident.summary}",
             data={
                 "incident_id": incident.id,
                 "title": headline(incident.title),

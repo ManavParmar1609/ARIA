@@ -111,7 +111,7 @@ function PaletteButton() {
     >
       <SearchIcon aria-hidden className="size-4" />
       <span className="flex-1 text-left">Search</span>
-      <kbd className="rounded-md border border-control/50 px-1.5 text-xs">
+      <kbd className="rounded-md border border-control/50 px-1.5 text-xs [@media(pointer:coarse)]:hidden">
         {mac ? "⌘ K" : "Ctrl K"}
       </kbd>
     </button>

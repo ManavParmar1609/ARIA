@@ -4,6 +4,7 @@ import { CircleCheckIcon, CircleAlertIcon, ShieldAlertIcon } from "lucide-react"
 import Link from "next/link";
 
 import { CodeText } from "@/components/ui/code-text";
+import { useRunbooks } from "@/lib/api/hooks";
 import type { Claim, IncidentReport } from "@/lib/api/types";
 import { percent, stripSeverity, writtenOffline } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -65,6 +66,9 @@ export function ReportView({
   report: IncidentReport;
   titleHidden?: boolean;
 }) {
+  // Runbooks by what they are about, not their IDs (the list is cached for a few minutes).
+  const runbooks = useRunbooks().data;
+  const runbookTitle = (slug: string) => runbooks?.find((rb) => rb.slug === slug)?.title ?? slug;
   const validation = report.validation;
   const ok = validation?.ok ?? false;
   // A reviewer's note is kept with the open questions (prefixed "Reviewer note: ") but is not one.
@@ -163,14 +167,14 @@ export function ReportView({
                     <span className={RISK[action.risk ?? "low"]}>{action.risk ?? "low"} risk</span>
                     {action.runbook_slug ? (
                       <>
-                        {", from runbook "}
+                        {", from the runbook "}
                         <Link
                           href={
                             `/console/runbooks/${encodeURIComponent(action.runbook_slug)}` as never
                           }
                           className="underline decoration-control underline-offset-2 hover:decoration-foreground"
                         >
-                          {action.runbook_slug}
+                          {runbookTitle(action.runbook_slug)}
                         </Link>
                       </>
                     ) : null}

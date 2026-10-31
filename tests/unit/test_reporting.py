@@ -225,6 +225,25 @@ async def test_the_severity_check_says_why_a_person_must_confirm(builder: Scenar
     assert "No level was likely enough" in compose_draft(unsure).summary[0].text
 
 
+async def test_a_moderate_window_without_errors_is_not_said_to_have_them(
+    builder: ScenarioBuilder,
+) -> None:
+    ctx = await _context(builder)
+    quiet = ctx.batch.features.model_copy(update={"error_events": 0, "error_ratio": 0.0})
+    moderate = replace(
+        ctx,
+        batch=ctx.batch.model_copy(update={"features": quiet}),
+        severity=ctx.severity.model_copy(update={"severity": Severity.SEV3}),
+    )
+    level = compose_draft(moderate).summary[0].text
+    assert level.startswith("SEV3: Moderate: a contained problem with limited user impact.")
+    assert "contained errors" not in level
+    noisy = replace(moderate, batch=ctx.batch)
+    assert compose_draft(noisy).summary[0].text.startswith(
+        "SEV3: Moderate: contained errors with limited user impact."
+    )
+
+
 async def test_validator_catches_every_kind_of_defect(builder: ScenarioBuilder) -> None:
     ctx = await _context(builder)
     report = (

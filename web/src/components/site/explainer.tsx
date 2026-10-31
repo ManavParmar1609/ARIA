@@ -22,7 +22,7 @@ export function Explainer({ lines }: { lines: number }) {
       </video>
       <figcaption>
         <details>
-          <summary className="w-fit cursor-pointer text-sm font-medium text-heading underline decoration-control underline-offset-4">
+          <summary className="w-fit cursor-pointer py-0.5 text-sm font-medium text-heading underline decoration-control underline-offset-4">
             What the video shows (it has no sound)
           </summary>
           <ol className="mt-3 grid max-w-[62ch] list-decimal gap-1.5 pl-5 text-sm leading-relaxed text-muted-foreground">

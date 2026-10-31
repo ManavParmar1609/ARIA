@@ -19,7 +19,7 @@ import {
 import { useIncidents, useSettingsView } from "@/lib/api/hooks";
 import { isSeverity, type IncidentOut } from "@/lib/api/types";
 import { failureName } from "@/lib/failure-modes";
-import { plainResolution, relativeTime, stripSeverity } from "@/lib/format";
+import { capitalise, plainResolution, relativeTime, stripSeverity } from "@/lib/format";
 import { systemName } from "@/lib/systems";
 
 const PAGE = 20;
@@ -33,7 +33,7 @@ function seen(incident: IncidentOut): string {
       : when
         ? `seen ${when}`
         : "";
-  return [systemName(incident.system), count].filter(Boolean).join(", ");
+  return capitalise([systemName(incident.system), count].filter(Boolean).join(", "));
 }
 
 /**

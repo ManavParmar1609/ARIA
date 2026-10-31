@@ -125,7 +125,7 @@ export function WhatHappened({
       ) : null}
       {timeline.length ? (
         <details className="text-sm">
-          <summary className="w-fit cursor-pointer text-muted-foreground hover:text-heading">
+          <summary className="w-fit cursor-pointer py-0.5 text-muted-foreground hover:text-heading">
             When it happened ({timeline.length} {timeline.length === 1 ? "moment" : "moments"})
           </summary>
           <ol className="mt-3 grid gap-2 border-l border-rule pl-4">

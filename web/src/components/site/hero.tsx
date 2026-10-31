@@ -37,7 +37,9 @@ function ReportCard({ data }: { data: Replay }) {
   const open = openClaim(data);
   const line = open ? citedLine(data, open.evidence) : undefined;
   const p = Math.round((data.probabilities[data.severity] ?? 0) * 100);
-  const others = data.claims.length - 1;
+  // The other levels it could not rule out, said plainly: "short list" is explained further down.
+  const others = data.predictionSet.filter((level) => level !== data.severity);
+  const moreClaims = data.claims.length - 1;
   return (
     <figure className="hero-rise grid gap-3">
       <div className="grid gap-5 rounded-[12px] bg-raised p-5 sm:p-6">
@@ -45,7 +47,8 @@ function ReportCard({ data }: { data: Replay }) {
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <LevelChip severity={data.severity} />
             <span className="text-xs text-muted-foreground">
-              {p}% likely. Short list: {data.predictionSet.join(" or ")}
+              {p}% likely
+              {others.length ? `. Could also be ${others.join(" or ")}` : ""}
             </span>
           </div>
           <p className="text-lg leading-snug tracking-heading text-heading">{data.title}</p>
@@ -70,9 +73,9 @@ function ReportCard({ data }: { data: Replay }) {
                 {line.text}
               </code>
             </div>
-            {others > 0 ? (
+            {moreClaims > 0 ? (
               <p className="text-xs text-muted-foreground">
-                {others} more {others === 1 ? "claim" : "claims"}, each with its sources
+                {moreClaims} more {moreClaims === 1 ? "claim" : "claims"}, each with its sources
               </p>
             ) : null}
           </div>
@@ -85,8 +88,8 @@ function ReportCard({ data }: { data: Replay }) {
       </div>
       <figcaption className="px-1 text-xs leading-relaxed text-heading/80 dark:text-muted-foreground">
         From a recorded run
-        {data.model ? ` with ${data.model.service}` : ""}: {data.nLines} real HDFS log lines from
-        Loghub, arranged into an incident.
+        {data.model ? ` with ${data.model.service}` : ""}: {data.nLines} real log lines from a
+        Hadoop file system (HDFS) in the public Loghub collection, arranged into an incident.
       </figcaption>
     </figure>
   );
@@ -154,8 +157,7 @@ export function Hero({ data }: { data: Replay }) {
             </h1>
             <p className="mt-8 max-w-[46ch] text-[0.9375rem] leading-relaxed text-heading xl:mt-auto xl:pt-14">
               For the person on call: ARIA reads an alert&apos;s logs, rates how serious it is,
-              finds what happened before and drafts the report, with every claim citing its log
-              line. Nothing is sent without your approval.
+              finds what happened before, and drafts the report and the messages.
             </p>
           </div>
           <Link

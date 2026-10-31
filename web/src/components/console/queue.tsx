@@ -6,7 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 
-import { SeverityBadge } from "@/components/aria/severity";
+import { SeverityDot } from "@/components/aria/severity";
 import { runTitle } from "@/components/console/run-row";
 import { EmptyState, ErrorState, LoadingRows, PageHeader } from "@/components/console/states";
 import { AllClearSpot, SearchSpot } from "@/components/illustrations/spots";
@@ -218,7 +218,7 @@ export function Queue() {
                   <TableHead className="w-24">Severity</TableHead>
                   <TableHead>Incident</TableHead>
                   <TableHead className="w-36">Status</TableHead>
-                  <TableHead className="w-52">Decided by</TableHead>
+                  <TableHead className="w-52">How it was rated</TableHead>
                   <TableHead className="w-32 text-right">Started</TableHead>
                 </TableRow>
               </TableHeader>
@@ -226,7 +226,9 @@ export function Queue() {
                 {list.map((run, index) => (
                   <TableRow key={run.id} className="relative hover:bg-raised/60">
                     <TableCell>
-                      <SeverityBadge severity={isSeverity(run.severity) ? run.severity : null} />
+                      {/* A dot, as in the incident library: a filled badge on every row, beside a
+                          status, made the list a wall of labels. */}
+                      <SeverityDot severity={isSeverity(run.severity) ? run.severity : null} />
                     </TableCell>
                     <TableCell className="max-w-0">
                       <Link
@@ -267,10 +269,7 @@ export function Queue() {
             {list.map((run, index) => (
               <li key={run.id} className="relative rounded-lg bg-raised p-4">
                 <div className="flex items-center justify-between gap-2">
-                  <SeverityBadge
-                    severity={isSeverity(run.severity) ? run.severity : null}
-                    size="sm"
-                  />
+                  <SeverityDot severity={isSeverity(run.severity) ? run.severity : null} />
                   {run.example ? (
                     <ExampleStatus status={run.status} />
                   ) : (

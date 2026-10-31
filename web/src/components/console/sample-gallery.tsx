@@ -90,7 +90,7 @@ function RealLines({ lines }: { lines: string[] }) {
   if (!lines.length) return null;
   return (
     <details className="group text-sm">
-      <summary className="w-fit cursor-pointer text-muted-foreground hover:text-heading">
+      <summary className="w-fit cursor-pointer py-0.5 text-muted-foreground hover:text-heading">
         Show {lines.length} real {lines.length === 1 ? "line" : "lines"}
       </summary>
       <pre
@@ -225,8 +225,9 @@ function RealIncidentCard({ incident }: { incident: RealIncident }) {
       </div>
       <p className="text-sm text-muted-foreground">{incident.summary}</p>
       <p className="text-xs text-muted-foreground">
-        {incident.lines.toLocaleString("en")} real lines, and the label experts gave each{" "}
-        {incident.unit}, which ARIA never sees.
+        {incident.lines.toLocaleString("en")} real lines. Experts marked each {incident.unit}{" "}
+        healthy or failed: ARIA never sees their verdicts, and the incident compares them with its
+        own once it is done.
       </p>
       <div className="mt-auto pt-1">
         <Button

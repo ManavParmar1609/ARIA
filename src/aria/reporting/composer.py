@@ -14,7 +14,7 @@ from datetime import datetime
 
 from aria.contracts.base import SEVERITY_DESCRIPTIONS, Claim, Evidence, EvidenceKind, Severity
 from aria.contracts.inputs import AlertSignal
-from aria.contracts.parsing import ParsedBatch, TemplateStat
+from aria.contracts.parsing import ParsedBatch, TemplateStat, WindowFeatures
 from aria.contracts.report import ActionItem, TimelineEntry
 from aria.contracts.retrieval import Hypothesis, Investigation, RetrievalResult
 from aria.contracts.severity import SeverityAssessment
@@ -209,6 +209,13 @@ def compose_title(ctx: ReportContext) -> str:
     return clip(f"{ctx.severity.severity} · {what}{place}{nodes}", 140)
 
 
+def _meaning(severity: Severity, features: WindowFeatures) -> str:
+    """What a level means, without claiming errors the window does not have."""
+    if severity is Severity.SEV3 and not features.error_events:
+        return "Moderate: a contained problem with limited user impact."
+    return SEVERITY_DESCRIPTIONS[severity]
+
+
 def compose_draft(ctx: ReportContext) -> NarrativeOutput:
     features = ctx.batch.features
     sev = ctx.severity
@@ -226,6 +233,7 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
 
     summary: list[ClaimOut | None] = []
     p = sev.probabilities.get(sev.severity, 0.0)
+    meaning = _meaning(sev.severity, features)
     how = DECIDED_BY_TEXT[sev.decided_by]
     if sev.set_empty and sev.decided_by == "fallback":
         how = (
@@ -238,7 +246,7 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
             "The calibrated model was not used, because this window is unlike the ones it "
             "learned from: the rules set the choices, and a person confirms"
         )
-    severity_text = f"{sev.severity}: {SEVERITY_DESCRIPTIONS[sev.severity]} {how}"
+    severity_text = f"{sev.severity}: {meaning} {how}"
     if sev.decided_by in ("model", "llm", "fallback") and model_ev is not None:
         scorer = "the rules' score" if unlike else "the model"
         severity_text += f" ({scorer} gives it {p:.0%})"
@@ -251,7 +259,7 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
         # thought, so a reviewer sees why the two disagree.
         rule = floor_ev.title.split(": ", 1)[-1].rstrip(".")
         severity_text = (
-            f"{sev.severity}: {SEVERITY_DESCRIPTIONS[sev.severity]} Held there by a safety floor: "
+            f"{sev.severity}: {meaning} Held there by a safety floor: "
             f"{rule}"
         )
         if model_ev is not None:
@@ -262,7 +270,7 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
     if ticket_ev is not None and any(ticket_ev.id in c.evidence_ids for c in sev.rationale):
         # The ticket's own fields set this rating above what the logs show.
         severity_text = (
-            f"{sev.severity}: {SEVERITY_DESCRIPTIONS[sev.severity]} Raised to the ticket's "
+            f"{sev.severity}: {meaning} Raised to the ticket's "
             f"rating: the ticket model gives priority {ticket_ev.data.get('priority')} from its "
             "fields, above what the logs alone show, and a person confirms"
         )

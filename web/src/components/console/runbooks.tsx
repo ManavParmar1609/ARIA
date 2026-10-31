@@ -147,15 +147,21 @@ export function RunbookDetail({ slug }: { slug: string }) {
   const rb = runbook.data;
   return (
     <article className="grid max-w-3xl gap-8">
-      <nav aria-label="Breadcrumb" className="text-sm text-muted-foreground">
-        <Link href="/console/runbooks" className="hover:text-foreground">
+      <nav
+        aria-label="Breadcrumb"
+        className="flex min-w-0 items-center text-sm text-muted-foreground"
+      >
+        <Link
+          href="/console/runbooks"
+          className="inline-flex min-h-6 shrink-0 items-center hover:text-foreground"
+        >
           Runbooks
         </Link>
-        <span aria-hidden className="px-2 text-faint">
+        <span aria-hidden className="shrink-0 px-2 text-faint">
           /
         </span>
-        <span aria-current="page" className="font-mono text-xs">
-          {rb.slug}
+        <span aria-current="page" className="min-w-0 truncate">
+          {rb.title}
         </span>
       </nav>
       <PageHeader

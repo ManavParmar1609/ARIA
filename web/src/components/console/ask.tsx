@@ -186,7 +186,7 @@ function Sources({ id, numbers }: { id: string; numbers: ReadonlyMap<string, str
                       {evidence.detail}
                     </p>
                   ) : null}
-                  {lines.length ? <LogLines lines={lines} limit={4} wrap /> : null}
+                  {lines.length ? <LogLines lines={lines} limit={4} /> : null}
                   {runbook ? (
                     <Link
                       href={`/console/runbooks/${encodeURIComponent(runbook)}` as never}

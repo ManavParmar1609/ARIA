@@ -119,14 +119,14 @@ export function Receipt({
         <Button asChild size="sm">
           <a href={`${base}/report.md`} download={`${runId}-report.md`}>
             <DownloadIcon aria-hidden />
-            Download the report
+            Report (Markdown)
           </a>
         </Button>
         {rejected ? null : (
           <Button asChild size="sm" variant="ghost">
             <a href={`${base}/postmortem.md`} download={`${runId}-postmortem.md`}>
               <DownloadIcon aria-hidden />
-              Download the postmortem draft
+              Postmortem draft (Markdown)
             </a>
           </Button>
         )}

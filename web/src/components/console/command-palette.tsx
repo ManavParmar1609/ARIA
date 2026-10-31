@@ -495,7 +495,8 @@ function Palette({
         )}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-rule px-5 py-3 text-sm text-muted-foreground">
-        <span>Arrow keys to move, Enter to open</span>
+        {/* Keys mean nothing on a touch screen, where a tap opens a result. */}
+        <span className="[@media(pointer:coarse)]:hidden">Arrow keys to move, Enter to open</span>
         <button
           type="button"
           onClick={() => {

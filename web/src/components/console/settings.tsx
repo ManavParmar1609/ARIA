@@ -24,7 +24,7 @@ import {
   type FeedbackView,
   type SettingsView,
 } from "@/lib/api/hooks";
-import { money, percent, relativeTime } from "@/lib/format";
+import { capitalise, money, percent, relativeTime, reviewerName } from "@/lib/format";
 import { useTheme, type ThemeChoice } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { accessSentence, modelAccess } from "@/lib/model-access";
@@ -77,6 +77,13 @@ function Pairs({ items }: { items: [string, React.ReactNode][] }) {
 
 const onOff = (value: unknown) => (value ? "On" : "Off");
 
+// The deployment's environment in words; "dev" is also what the free public demo runs as.
+const ENVIRONMENT: Record<string, string> = {
+  dev: "Development or demo",
+  prod: "Production",
+  test: "Test",
+};
+
 function Configuration({ view }: { view: SettingsView }) {
   const b = view.budgets as Record<string, number>;
   const g = view.guardrails as Record<string, unknown>;
@@ -88,7 +95,7 @@ function Configuration({ view }: { view: SettingsView }) {
       <Section id="set-run" title="Runs" intro="How runs are executed and reviewed.">
         <Pairs
           items={[
-            ["Environment", view.environment],
+            ["Environment", ENVIRONMENT[view.environment] ?? view.environment],
             [
               "Reports wait for approval",
               view.require_approval ? "Yes" : "No, published automatically (nothing is sent)",
@@ -97,7 +104,7 @@ function Configuration({ view }: { view: SettingsView }) {
               "Runs execute in",
               view.worker_mode === "external" ? "a separate worker" : "the API process",
             ],
-            ["Requests per minute, per key", view.rate_limit_per_minute],
+            ["Requests a minute, for each caller", view.rate_limit_per_minute],
           ]}
         />
       </Section>
@@ -263,7 +270,7 @@ function Learning({ view }: { view: FeedbackView }) {
                     ? `${r.from_severity} to ${r.to_severity}`
                     : (r.to_severity ?? "")}
                 </TableCell>
-                <TableCell>{r.reviewer}</TableCell>
+                <TableCell>{capitalise(reviewerName(r.reviewer))}</TableCell>
                 <TableCell className="text-muted-foreground">
                   {relativeTime(r.created_at)}
                 </TableCell>
@@ -430,7 +437,10 @@ export function Settings() {
                 <TableBody>
                   {providers.data.map((p) => (
                     <TableRow key={p.name}>
-                      <TableHead scope="row">{p.name}</TableHead>
+                      <TableHead scope="row">
+                        {/* The offline stand-in answers every step when no model is set up. */}
+                        {p.name === "fake" ? "Offline, no model" : p.name}
+                      </TableHead>
                       <TableCell className="text-muted-foreground">
                         {p.kind.replaceAll("_", " ")}
                       </TableCell>

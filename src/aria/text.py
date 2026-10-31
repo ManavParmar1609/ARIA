@@ -28,3 +28,22 @@ def clip(text: str, limit: int) -> str:
         else:  # one very long word: at least never end on part of a number
             head = _TRAILING_NUMBER.sub("", head)
     return head.rstrip() + "…"
+
+
+# Failure modes as people write them (the console's own list, web/src/lib/failure-modes.ts); the
+# rest read fine with spaces for underscores.
+_FAILURE_WORDS = {
+    "auth_failures": "authentication failures",
+    "bruteforce": "brute-force attempts",
+    "dns_resolution": "DNS resolution",
+    "hdfs_lease_renewal": "HDFS lease renewal",
+    "mod_jk_worker_error": "mod_jk worker errors",
+    "psu_failure": "PSU failure",
+    "resourcemanager_unreachable": "ResourceManager unreachable",
+    "unfinished_work": "work that stops partway",
+}
+
+
+def failure_words(mode: str) -> str:
+    """A failure mode in words: "bruteforce" reads "brute-force attempts"."""
+    return _FAILURE_WORDS.get(mode, mode.replace("_", " "))

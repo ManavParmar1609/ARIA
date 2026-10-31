@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRightIcon, LoaderCircleIcon, PlayIcon } from "lucide-react";
+import { ArrowLeftIcon, ArrowRightIcon, LoaderCircleIcon, PlayIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState, type ReactNode } from "react";
@@ -125,9 +125,19 @@ function TaskLink({ href, children }: { href: string; children: ReactNode }) {
   );
 }
 
-export function Guide() {
+export function Guide({ back = null }: { back?: string | null }) {
   return (
     <div className="grid gap-14">
+      {back ? (
+        // Opened from an incident's "How to read this": the way back, without the browser's Back.
+        <Link
+          href={back as never}
+          className="-mb-10 inline-flex min-h-6 w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeftIcon aria-hidden className="size-4" />
+          Back to the incident
+        </Link>
+      ) : null}
       <PageHeader
         title="Guide"
         description="ARIA reads an alert and its logs, rates how serious it is, finds what happened before and drafts a report in which every claim names its source. Nothing is sent until a person approves it. Five short tasks show the way round."

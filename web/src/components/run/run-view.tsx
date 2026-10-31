@@ -62,9 +62,12 @@ const ACTIVE = new Set(["queued", "running", "awaiting_review"]);
 function Header({
   run,
   assessment,
+  shared = false,
 }: {
   run: RunDetail;
   assessment: SeverityAssessment | undefined;
+  /** A shared demo, where each visitor's incidents are theirs alone. */
+  shared?: boolean;
 }) {
   const level = assessment?.severity ?? run.severity;
   // Arriving here, from New triage or a link, puts focus on the incident's title (item 35).
@@ -107,6 +110,8 @@ function Header({
             </Link>
           </>
         ) : null}
+        {/* A link sent to someone else opens nothing for them: say so before they try. */}
+        {shared && !run.example ? ". Only your browser can open this incident's link." : null}
       </p>
     </header>
   );
@@ -208,8 +213,14 @@ function DeleteRun({ runId }: { runId: string }) {
 function Crumbs({ title }: { title?: string | null }) {
   return (
     // One line: a long title ends in an ellipsis here, and the heading below gives it in full.
-    <nav aria-label="Breadcrumb" className="flex min-w-0 text-sm text-muted-foreground">
-      <Link href="/console/runs" className="shrink-0 hover:text-foreground">
+    <nav
+      aria-label="Breadcrumb"
+      className="flex min-w-0 items-center text-sm text-muted-foreground"
+    >
+      <Link
+        href="/console/runs"
+        className="inline-flex min-h-6 shrink-0 items-center hover:text-foreground"
+      >
         Incidents
       </Link>
       <span aria-hidden className="shrink-0 px-2 text-faint">
@@ -360,7 +371,11 @@ export function RunView({
           <Crumbs title={detail.title ? runTitle(detail) : null} />
           <div className="flex flex-wrap gap-1.5">
             <Button asChild size="sm" variant="ghost">
-              <Link href="/console/guide#read-a-run">
+              <Link
+                href={
+                  `/console/guide?from=${encodeURIComponent(`/console/runs/${detail.id}`)}#read-a-run` as never
+                }
+              >
                 <CircleHelpIcon aria-hidden />
                 How to read this
               </Link>
@@ -373,7 +388,7 @@ export function RunView({
                     download={`${detail.id}-report.md`}
                   >
                     <DownloadIcon aria-hidden />
-                    Report
+                    Report (Markdown)
                   </a>
                 </Button>
                 {detail.status === "published" ? (
@@ -383,7 +398,7 @@ export function RunView({
                       download={`${detail.id}-postmortem.md`}
                     >
                       <DownloadIcon aria-hidden />
-                      Postmortem draft
+                      Postmortem draft (Markdown)
                     </a>
                   </Button>
                 ) : null}
@@ -393,7 +408,7 @@ export function RunView({
           </div>
         </div>
 
-        <Header run={detail} assessment={severity} />
+        <Header run={detail} assessment={severity} shared={shared} />
 
         {viewing ? (
           <div
@@ -536,6 +551,7 @@ export function RunView({
               runId={detail.id}
               sample={sample}
               severity={severity?.severity ?? detail.severity}
+              waiting={detail.status === "awaiting_review"}
             />
           </Suspense>
         ) : null}
@@ -554,7 +570,7 @@ export function RunView({
               <LoadingRows rows={3} label="Loading what the agents did" />
             )}
             <details className="text-sm">
-              <summary className="w-fit cursor-pointer font-medium">
+              <summary className="w-fit cursor-pointer py-0.5 font-medium">
                 Every event ({timeline.events.length})
               </summary>
               <div className="grid gap-2 pt-3">

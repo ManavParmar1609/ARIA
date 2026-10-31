@@ -319,6 +319,11 @@ regression.
 - **What the model sees.** It is a linear model over aggregates of a single window. It sees
   order only through the burst and persistence features, and it does not connect incidents
   across windows.
+- **Quiet windows.** The model learned from busy windows. A short paste of quiet, healthy lines
+  sits near the edge of what it has seen, and it can rate them too high: routine HDFS lines with
+  no errors can come out SEV3. On HDFS the keyword list adds to this, because it counts the
+  routine `PacketResponder` lines as network messages. The report still says the window had no
+  errors, and a person makes the final call.
 - **The rules.** The model reads the rules' output, so changing the rules means retraining. The
   rules version is recorded in the model so that a mismatch can be seen.
 - **The ticket model.** It knows one company's anonymised service desk ([below](#the-ticket-models)).

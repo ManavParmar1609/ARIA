@@ -77,8 +77,11 @@ export function SiteFooter({ recordedAt }: { recordedAt: string }) {
           ))}
         </nav>
       </div>
-      <div className="mx-auto max-w-[75rem] border-t border-rule px-4 py-6 text-sm text-faint sm:px-6">
-        The example incident was recorded on {recordedAt.slice(0, 10)}.
+      {/* The rule spans the text's width, not the padding around it. */}
+      <div className="mx-auto max-w-[75rem] px-4 sm:px-6">
+        <p className="border-t border-rule py-6 text-sm text-faint">
+          The example incident was recorded on {recordedAt.slice(0, 10)}.
+        </p>
       </div>
     </footer>
   );

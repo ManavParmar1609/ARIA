@@ -181,7 +181,7 @@ export function TriageReplay({ data }: { data: Replay }) {
                   </span>
                   <span
                     className={cx(
-                      "break-all sm:truncate",
+                      "wrap-anywhere sm:truncate",
                       line.quarantined && "line-through decoration-danger/70",
                     )}
                   >
@@ -215,7 +215,7 @@ export function TriageReplay({ data }: { data: Replay }) {
               ) : null}
             </>
           ) : (
-            "Point at or tap a citation on the tag to see the evidence behind its claim."
+            "The lines behind a citation appear here when you point at or tap it."
           )}
         </p>
       </div>
@@ -224,9 +224,10 @@ export function TriageReplay({ data }: { data: Replay }) {
       <article
         data-tag
         aria-label={`Triage tag: ${data.severity}, ${data.title}`}
-        className="flex overflow-hidden rounded-lg bg-raised"
+        className="flex flex-col overflow-hidden rounded-lg bg-raised sm:flex-row"
       >
-        <TagStrip severity={data.severity} className="w-12 sm:w-14" />
+        {/* On a phone the stamp sits above the text, so the text keeps the card's full width. */}
+        <TagStrip severity={data.severity} className="mx-5 mt-5 w-12 sm:m-3 sm:w-14" />
         <div className="min-w-0 flex-1 p-5 sm:p-6">
           <h3 className="text-xl leading-snug tracking-heading">{data.title}</h3>
           <p className="mt-0.5 text-sm text-muted-foreground">

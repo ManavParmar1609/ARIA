@@ -32,7 +32,7 @@ import {
   type Severity,
 } from "@/lib/api/types";
 import { stripSeverity } from "@/lib/format";
-import { orList } from "@/lib/levels";
+import { LEVEL_WORD, orList } from "@/lib/levels";
 import { cn } from "@/lib/utils";
 
 const KIND: Record<string, string> = {
@@ -284,7 +284,16 @@ export function ReviewPanel({
         </h2>
         <p className="text-sm text-muted-foreground">
           Nothing has been sent. Approving publishes the report
-          {sendable.length ? " and sends the messages you tick" : ""}.
+          {sendable.length ? " and sends the messages you tick" : ""}.{" "}
+          {report ? (
+            // The report sits below the panels it rests on: a way down before deciding.
+            <a
+              href="#report-title"
+              className="text-foreground underline decoration-control underline-offset-2 hover:decoration-foreground"
+            >
+              Read the report first
+            </a>
+          ) : null}
         </p>
       </div>
       <div className="grid gap-2">
@@ -371,7 +380,7 @@ export function ReviewPanel({
       ) : null}
       {previews.length > 0 ? (
         <details className="group text-sm">
-          <summary className="w-fit cursor-pointer font-medium">
+          <summary className="w-fit cursor-pointer py-0.5 font-medium">
             {previews.length} message {previews.length === 1 ? "preview" : "previews"}
             <span className="font-normal text-muted-foreground">
               {" "}
@@ -386,7 +395,7 @@ export function ReviewPanel({
         </details>
       ) : null}
       <details className="text-sm" open={comment ? true : undefined}>
-        <summary className="w-fit cursor-pointer text-muted-foreground hover:text-heading">
+        <summary className="w-fit cursor-pointer py-0.5 text-muted-foreground hover:text-heading">
           Add a comment
         </summary>
         <div className="grid gap-1.5 pt-2">
@@ -447,7 +456,7 @@ export function ReviewPanel({
                   <SelectContent>
                     {SEVERITIES.map((s) => (
                       <SelectItem key={s} value={s}>
-                        {s}
+                        {s} · {LEVEL_WORD[s]}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -464,7 +473,8 @@ export function ReviewPanel({
                 onChange={(e) => change({ summary: e.target.value })}
               />
               <p id={`${id}-edit-summary-hint`} className="text-xs text-muted-foreground">
-                Lines you keep keep their sources. A line you change or add cites your review.
+                A line you leave as it is keeps its sources; a line you change or add cites your
+                review.
               </p>
             </div>
             <div className="grid gap-1.5">

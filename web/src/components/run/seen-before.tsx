@@ -121,7 +121,7 @@ export function SeenBefore({
       ) : null}
       {retrieval?.attempts.length ? (
         <details className="text-sm">
-          <summary className="w-fit cursor-pointer text-muted-foreground hover:text-heading">
+          <summary className="w-fit cursor-pointer py-0.5 text-muted-foreground hover:text-heading">
             How ARIA searched
           </summary>
           <div className="grid gap-3 pt-3">

@@ -75,4 +75,14 @@ describe("checkpoint names", () => {
     );
     expect(name({ next: ["review"], interrupted: true })).toBe("Paused at “Your review”");
   });
+
+  it("tell apart two checkpoints inside one step", async () => {
+    const { checkpointName: name } = await import("./history");
+    expect(name({ next: ["report"], interrupted: false })).toBe(
+      "Before “Write the report”: the report itself",
+    );
+    expect(name({ next: ["comms"], interrupted: false })).toBe(
+      "Before “Write the report”: the message drafts",
+    );
+  });
 });

@@ -10,7 +10,7 @@ import { EVAL_DOC_URL, REPO_URL } from "@/lib/site-data";
  */
 
 const LIMITS = [
-  "Most severity labels in the tests come from the samples' recipes, not from people. The tests on real logs use the labels people gave.",
+  "Most severity labels in the tests come from the rules used to build the test incidents, not from people. The tests on real logs use the labels people gave.",
   "The incident library ships with incidents built from samples. Finding similar ones looks easy on it, and will be harder on your own history.",
   "A hosted model makes a triage slower, because it waits for the model's answers. Test results gives the times both ways.",
   "The line filter that catches instructions hidden in logs matches patterns. It is a first defence, not a proof: anything it misses reaches a model only as fenced, untrusted evidence.",

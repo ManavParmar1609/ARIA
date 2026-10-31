@@ -151,7 +151,7 @@ export function TagStrip({
   return (
     <div
       className={cx(
-        "relative m-3 grid aspect-square shrink-0 place-items-center self-start rounded-[18px]",
+        "relative grid aspect-square shrink-0 place-items-center self-start rounded-[18px]",
         severity ? SEVERITY_BG[severity] : "bg-sunken",
         className,
       )}

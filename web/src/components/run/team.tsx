@@ -153,11 +153,21 @@ export function AgentTeam({
       parser.push(
         `Read ${n(batch.n_raw_lines)} lines${batch.shards > 1 ? `, split across ${batch.shards} parsers working at once,` : ""} and found ${n(f.n_templates)} message patterns.`,
       );
-      const redacted = Object.values(batch.guard.redactions?.counts ?? {}).reduce(
-        (a, b) => a + b,
-        0,
-      );
-      if (redacted) parser.push(`Redacted or pseudonymised ${n(redacted)} secrets and addresses.`);
+      // Addresses get stand-in names (routine in any log); secrets are hidden outright. Said
+      // apart, a count of thousands of "secrets and addresses" no longer reads as a leak.
+      let addresses = 0;
+      let secrets = 0;
+      for (const [kind, k] of Object.entries(batch.guard.redactions?.counts ?? {})) {
+        if (kind === "ip" || kind === "email") addresses += k;
+        else secrets += k;
+      }
+      const hid = [
+        addresses
+          ? `gave ${n(addresses)} IP and e-mail ${addresses === 1 ? "address a stand-in name" : "addresses stand-in names"}`
+          : "",
+        secrets ? `hid ${n(secrets)} ${secrets === 1 ? "secret" : "secrets"}` : "",
+      ].filter(Boolean);
+      if (hid.length) parser.push(`${capitalise(hid.join(" and "))}.`);
       if (batch.guard.injections?.length) {
         parser.push(
           `Quarantined ${n(batch.guard.injections.length)} ${batch.guard.injections.length === 1 ? "line that reads" : "lines that read"} like prompt injection.`,
@@ -198,7 +208,9 @@ export function AgentTeam({
         memory.push("Found no similar past incident in memory.");
       }
       if (retrieval.runbooks.length) {
-        memory.push(`Pulled runbooks: ${retrieval.runbooks.map((r) => r.slug).join(", ")}.`);
+        memory.push(
+          `Picked the ${retrieval.runbooks.length === 1 ? "runbook" : "runbooks"} to follow: ${listed(retrieval.runbooks.map((r) => `“${r.title}”`))}.`,
+        );
       }
     }
 
@@ -392,7 +404,7 @@ export function AgentTeam({
                 </span>
               </div>
               {turn.said.length ? (
-                <ul className="grid gap-1.5 text-sm">
+                <ul className="grid max-w-prose gap-1.5 text-sm">
                   {turn.said.map((line, j) => (
                     <li key={j} className="text-pretty">
                       {line}

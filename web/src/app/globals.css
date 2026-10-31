@@ -120,6 +120,9 @@
 }
 
 @theme inline {
+  /* Running text at about 68 characters a line: Tailwind's 65ch is the width of 65 zeros, which
+     in Inter holds about 85 ordinary characters. */
+  --max-width-prose: 56ch;
   --color-background: var(--background);
   --color-app: var(--app);
   --color-foreground: var(--foreground);
@@ -283,7 +286,8 @@
   samp,
   pre {
     @apply font-mono;
-    font-size: 0.875em;
+    /* A shade smaller than the text around it, but never under 12 px. */
+    font-size: max(0.875em, 0.75rem);
   }
   h1,
   h2,

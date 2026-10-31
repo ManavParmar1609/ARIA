@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useId, useMemo, useState, type FormEvent } from "react";
+import { useId, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { SampleGallery } from "@/components/console/sample-gallery";
 import { PageHeader } from "@/components/console/states";
@@ -182,10 +182,15 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
           : null;
   const apiError = create.error instanceof ApiError ? create.error.detail : create.error?.message;
 
+  const logsBox = useRef<HTMLTextAreaElement>(null);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     setTouched(true);
-    if (problem) return;
+    if (problem) {
+      // To the box, whose hint now says what is wrong: a screen reader reads it with the box.
+      logsBox.current?.focus();
+      return;
+    }
     create.mutate(
       {
         title: title.trim() || undefined,
@@ -218,6 +223,7 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
             </span>
           </div>
           <Textarea
+            ref={logsBox}
             id={`${id}-logs`}
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -226,7 +232,7 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
             rows={8}
             className="font-mono text-xs leading-5"
             placeholder={
-              "081109 203615 148 INFO dfs.DataNode$PacketResponder: ...\n081109 203807 222 WARN dfs.DataNode$DataXceiver: ..."
+              "Paste log lines here, one per line, such as:\n2026-10-31 10:00:01 ERROR api.gateway: upstream timed out"
             }
             aria-invalid={touched && problem ? true : undefined}
             aria-describedby={`${id}-logs-hint`}

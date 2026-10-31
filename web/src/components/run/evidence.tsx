@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/popover";
 import type { Evidence, LogEvent } from "@/lib/api/types";
+import { failureName } from "@/lib/failure-modes";
 import { cn } from "@/lib/utils";
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -144,13 +145,13 @@ function EvidencePreview({ evidence, lines }: { evidence: Evidence; lines: LogEv
         <span className="font-mono text-foreground">{evidence.id}</span>{" "}
         {KIND_LABEL[evidence.kind] ?? evidence.kind}, from {sourceLabel(evidence.source)}
       </p>
-      <p className="text-sm leading-snug font-medium wrap-anywhere">{evidence.title}</p>
+      <p className="text-sm leading-snug font-medium wrap-anywhere">{evidenceTitle(evidence)}</p>
       {evidence.detail ? (
         <p className="line-clamp-4 text-xs leading-5 wrap-anywhere whitespace-pre-wrap text-muted-foreground">
           {evidence.detail}
         </p>
       ) : null}
-      <LogLines lines={lines} limit={4} wrap />
+      <LogLines lines={lines} limit={4} />
       <p className="text-xs text-faint">Click the citation to keep it in the evidence panel.</p>
     </div>
   );
@@ -220,7 +221,7 @@ export function EvidenceChip({ id, label }: { id: string; label?: string }) {
       aria-pressed={pinned === id}
       aria-label={
         evidence
-          ? `${label ? `Source ${label}` : `Evidence ${id}`}: ${KIND_LABEL[evidence.kind] ?? evidence.kind}, ${evidence.title}`
+          ? `${label ? `Source ${label}` : `Evidence ${id}`}: ${KIND_LABEL[evidence.kind] ?? evidence.kind}, ${evidenceTitle(evidence)}`
           : `Evidence ${id} (missing)`
       }
       aria-controls={panelId}
@@ -275,6 +276,18 @@ export function EvidenceChip({ id, label }: { id: string; label?: string }) {
       </HoverCardContent>
     </HoverCard>
   );
+}
+
+/**
+ * An evidence title as a person reads it. A pattern is recorded as "16x Failed password for
+ * <*> port <*>"; it reads "16 lines like “Failed password for … port …”".
+ */
+export function evidenceTitle(evidence: Pick<Evidence, "kind" | "title">): string {
+  const pattern = evidence.kind === "template" ? /^(\d+)x (.+)$/s.exec(evidence.title) : null;
+  if (!pattern?.[1] || !pattern[2]) return evidence.title;
+  const n = Number(pattern[1]);
+  const text = pattern[2].replaceAll("<*>", "…");
+  return n === 1 ? `1 line: “${text}”` : `${n.toLocaleString("en")} lines like “${text}”`;
 }
 
 /** How many citations a claim shows before "+N": two read as sources, more as noise. */
@@ -346,21 +359,35 @@ const FIELD_NAMES: Record<string, string> = {
   set_empty: "short list empty",
   coverage_target: "short list target",
   conformal: "calibrated short list",
+  failure_mode: "kind of failure",
 };
 
-function DataTable({ data }: { data: Record<string, unknown> }) {
+// A past incident's search scores, named for what each one measures.
+const INCIDENT_FIELDS: Record<string, string> = {
+  incident_id: "record",
+  score: "match score",
+  lexical: "shared words",
+  dense: "similar meaning",
+  rerank: "reranked match",
+  occurrences: "times seen",
+};
+
+function DataTable({ data, kind }: { data: Record<string, unknown>; kind: string }) {
   const entries = Object.entries(data).filter(
     ([, v]) => v !== null && v !== "" && !(Array.isArray(v) && v.length === 0),
   );
   if (entries.length === 0) return null;
+  const names = kind === "incident" ? { ...FIELD_NAMES, ...INCIDENT_FIELDS } : FIELD_NAMES;
   return (
     <dl className="grid grid-cols-[minmax(0,9rem)_1fr] gap-x-3 gap-y-1 text-xs">
       {entries.slice(0, 14).map(([key, value]) => (
         <div key={key} className="contents">
           <dt className="truncate text-muted-foreground">
-            {FIELD_NAMES[key] ?? key.replace(/^n_/, "").replaceAll("_", " ")}
+            {names[key] ?? key.replace(/^n_/, "").replaceAll("_", " ")}
           </dt>
-          <dd className="min-w-0 font-mono break-words">{show(value)}</dd>
+          <dd className="min-w-0 font-mono break-words">
+            {key === "failure_mode" && typeof value === "string" ? failureName(value) : show(value)}
+          </dd>
         </div>
       ))}
     </dl>
@@ -370,19 +397,16 @@ function DataTable({ data }: { data: Record<string, unknown> }) {
 export function LogLines({
   lines,
   limit = 12,
-  wrap = false,
   sweep = false,
   more = true,
   label = "Log lines",
 }: {
   lines: LogEvent[];
   limit?: number;
-  /** The scrolling block's name, told apart from the page's other blocks of lines. */
+  /** The block's name, told apart from the page's other blocks of lines. */
   label?: string;
   /** Say how many lines are past the limit (off for a single example line). */
   more?: boolean;
-  /** Wrap long lines instead of scrolling (inside hover cards, where nothing can take focus). */
-  wrap?: boolean;
   /** Sweep one pass of the highlight across the lines as they appear (globals.css: .thread-pass). */
   sweep?: boolean;
 }) {
@@ -393,8 +417,8 @@ export function LogLines({
         <li
           key={line.idx}
           className={cn(
-            "grid grid-cols-[2.5rem_2.75rem_1fr] gap-2 px-2",
-            wrap ? "break-all whitespace-pre-wrap" : "whitespace-pre",
+            // Long lines wrap under their own message, so nothing hides past the panel's edge.
+            "grid grid-cols-[2.5rem_2.75rem_1fr] gap-2 px-2 wrap-anywhere whitespace-pre-wrap",
             sweep && "thread-pass",
           )}
           style={sweep ? ({ "--thread-i": i } as CSSProperties) : undefined}
@@ -416,16 +440,15 @@ export function LogLines({
       ))}
     </ol>
   );
-  const frame = "rounded-sm border border-rule bg-sunken py-1.5 font-mono text-xs leading-5";
   return (
     <div className="grid gap-1">
-      {wrap ? (
-        <div className={frame}>{list}</div>
-      ) : (
-        <div tabIndex={0} role="region" aria-label={label} className={cn(frame, "overflow-x-auto")}>
-          {list}
-        </div>
-      )}
+      <div
+        role="group"
+        aria-label={label}
+        className="min-w-0 rounded-sm border border-rule bg-sunken py-1.5 font-mono text-xs leading-5"
+      >
+        {list}
+      </div>
       {more && lines.length > limit ? (
         <p className="text-xs text-muted-foreground">
           and {(lines.length - limit).toLocaleString("en")} more lines like these
@@ -469,7 +492,7 @@ export function EvidencePanel({ className }: { className?: string }) {
                 {KIND_LABEL[evidence.kind] ?? evidence.kind}, from {sourceLabel(evidence.source)}
               </p>
               <h3 className="font-sans text-sm leading-snug font-semibold wrap-anywhere">
-                {evidence.title}
+                {evidenceTitle(evidence)}
               </h3>
             </div>
             {pinned === evidence.id ? (
@@ -520,7 +543,7 @@ export function EvidencePanel({ className }: { className?: string }) {
             sweep
             label={`Log lines behind ${evidence.id}`}
           />
-          <DataTable data={(evidence.data ?? {}) as Record<string, unknown>} />
+          <DataTable data={(evidence.data ?? {}) as Record<string, unknown>} kind={evidence.kind} />
         </>
       ) : (
         <div className="grid gap-1.5">
