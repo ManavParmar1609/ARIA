@@ -329,6 +329,7 @@ const KEYWORD_TOPICS: Record<string, string> = {
   resource: "running out of resources",
   degradation: "slowness",
   network: "the network",
+  power: "power faults",
 };
 
 /** A severity-model measurement in words: "log1p.keyword_hits.crash" reads "words about crashes". */

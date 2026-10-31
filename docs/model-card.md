@@ -39,9 +39,10 @@ The model is one stage of a policy
 order:
 
 1. **Rules score each severity, and some set a floor.** The rules file holds 22 scoring rules
-   and 4 floor rules. Three floors keep signals at SEV2 or worse: data-integrity errors
-   (corruption, data loss, missing blocks), a crashing critical component, and a firing
-   critical alert. The fourth keeps units of work that stopped partway with no error logged
+   and 5 floor rules. Four floors keep signals at SEV2 or worse: data-integrity errors
+   (corruption, data loss, missing blocks), a crashing critical component, a firing critical
+   alert, and a power-supply fault reported as an error. The fifth keeps units of work that
+   stopped partway with no error logged
    (parsing/flows.py) at SEV3 or worse: the model, trained on windows that log their failures,
    reads such a window as noise. A severity's summed rule weight must reach its activation threshold, so one
    decisive SEV1 rule is not outvoted by the weaker SEV2 rules that a severe incident also
@@ -90,7 +91,7 @@ Every assessment records the following, and the run view shows all of it:
 
 ## Inputs
 
-The model reads 39 features of one window
+The model reads 40 features of one window
 ([`src/aria/severity/features.py`](../src/aria/severity/features.py)). The parser computes them
 from redacted message text, levels, timestamps, nodes and components, plus any firing alerts.
 Lines quarantined as possible prompt injection are left out first. No feature reads dataset
@@ -101,7 +102,7 @@ labels or BGL alert tags.
 | Volume and spread (16) | Events, error events, events per minute, peak errors per minute, distinct nodes, nodes with errors, templates, novel templates, novel error templates, peak warnings per minute, nodes with warnings, novel warning templates, critical components, firing alerts, critical alerts, warning alerts | log(1 + x) |
 | Ratios (4) | Error ratio, node spread, highest criticality among components logging errors, highest criticality among components logging warnings or errors (the catalog default when those lines name none) | 0 to 1 |
 | Shape (5) | Burst score (capped at 50, divided by 10), persistence in minutes (log scale), shares of WARN, ERROR and FATAL lines | As listed |
-| Keyword categories (9) | Crash, data risk, unavailable, resource, security, hardware, storage, network, degradation ([`config/lexicon.yaml`](../config/lexicon.yaml)), counted on lines logged at WARN or above or with no level, because at INFO the same words are usually routine. The rules count every line | log(1 + matching lines) |
+| Keyword categories (10) | Crash, data risk, unavailable, resource, security, hardware, storage, network, degradation, power ([`config/lexicon.yaml`](../config/lexicon.yaml)), counted on lines logged at WARN or above or with no level, because at INFO the same words are usually routine. The rules count every line | log(1 + matching lines) |
 | Rules (5) | The rules' smoothed probability for each severity, and the floor rank (0 is a SEV1 floor and 3 a SEV4 floor; 4 means no floor) | 0 to 1; 0 to 4 |
 
 Two of these depend on configuration and history:
@@ -149,7 +150,7 @@ The coverage guarantee holds only on data like the calibration split. A deployme
 incidents differ from the semi-synthetic windows, so ARIA recalibrates on them
 ([`src/aria/severity/recalibration.py`](../src/aria/severity/recalibration.py)).
 
-**What is recorded.** Every human review stores the run's model input (the 39 features) and the
+**What is recorded.** Every human review stores the run's model input (the 40 features) and the
 severity the reviewer settled on:
 
 - an approval confirms ARIA's severity, and an edit corrects it;

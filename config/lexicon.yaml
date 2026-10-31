@@ -16,3 +16,5 @@ categories:
   storage: "mount failed|mount failed|i/o error|input/output error|lustre|filesystem|file system|\\bdisk\\b|storage interrupt"
   network: "packet|tree network|socket|connection reset|broken pipe|link has been severed|connection broken|disconnect"
   degradation: "slow|latency|retry|retrying|backoff|throttl|degraded|lease"
+  # A power supply failing: a narrower subject than hardware, read by a safety floor.
+  power: "\\bpsu\\b|power supply|power-supply|power fault"

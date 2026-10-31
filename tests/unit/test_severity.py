@@ -130,6 +130,25 @@ def test_crash_on_critical_component_sets_a_floor(rules: RuleSet) -> None:
     assert "keyword_hits.crash=30 >= 10" in hit.detail
 
 
+def test_a_power_supply_fault_reported_as_an_error_is_never_below_sev2(rules: RuleSet) -> None:
+    """A failing power supply can take a node down with no other warning (HPC's "psu failure"
+    windows rated SEV3 on validation seeds before this floor)."""
+    window = features(
+        error_events=4,
+        error_ratio=0.02,
+        keyword_hits={"hardware": 4, "power": 4},
+        issue_keyword_hits={"hardware": 4, "power": 4},
+        error_nodes=2,
+        level_counts={"INFO": 196, "ERROR": 4},
+    )
+    result = rules.evaluate(feature_space(window))
+    assert result.floor is Severity.SEV2
+    assert "power_fault_floor" in {h.rule_id for h in result.hits}
+    # The same words on routine lines alone set no floor.
+    routine = features(keyword_hits={"power": 4}, level_counts={"INFO": 200})
+    assert rules.evaluate(feature_space(routine)).floor is None
+
+
 def test_alert_labels_feed_the_rules(rules: RuleSet) -> None:
     alert = AlertSignal(name="NodeDown", fingerprint="f1", labels={"severity": "critical"})
     values = feature_space(features(), [alert, alert.model_copy(update={"status": "resolved"})])
