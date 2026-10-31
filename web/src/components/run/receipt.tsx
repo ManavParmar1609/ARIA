@@ -5,7 +5,7 @@ import { useEffect, useRef } from "react";
 
 import { Button } from "@/components/ui/button";
 import type { Delivery, OutboundAction } from "@/lib/api/types";
-import { absoluteTime, shortTime } from "@/lib/format";
+import { absoluteTime, reviewerName, shortTime } from "@/lib/format";
 
 // After the review, the panel that asked for it becomes a receipt in the same place: who decided
 // and when, and what happened to each message, with the report to download (item 18).
@@ -28,8 +28,7 @@ export interface ReceiptFacts {
 const AUTO = "aria:auto";
 
 function who(reviewer: string, you: boolean): string {
-  if (you) return "you";
-  return reviewer === "cli" ? "the command line" : reviewer;
+  return you ? "you" : reviewerName(reviewer);
 }
 
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;

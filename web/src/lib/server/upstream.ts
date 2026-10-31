@@ -4,6 +4,7 @@ import { type NextRequest } from "next/server";
 
 import { MAX_BODY_BYTES } from "@/lib/limits";
 import { VISITOR_COOKIE, VISITOR_SHAPE, visitorCookieValue } from "@/lib/visitor-cookie";
+import { UNREACHABLE } from "@/lib/unreachable";
 
 export { VISITOR_COOKIE };
 
@@ -210,7 +211,7 @@ export async function forward(
   } catch (error) {
     if (request.signal.aborted) return new Response(null, { status: 499 });
     console.error("ARIA API unreachable", { target: target.origin, error: String(error) });
-    return problem(502, "The ARIA API is not reachable. Check that it is running.");
+    return problem(502, UNREACHABLE);
   }
 
   const out = new Headers();

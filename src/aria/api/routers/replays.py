@@ -18,7 +18,7 @@ from aria.api.schemas import (
     links_for,
 )
 from aria.api.state import AppState, app_state
-from aria.api.visitors import ViewerDep
+from aria.api.visitors import ViewerDep, make_room
 from aria.contracts.inputs import TriageRequest
 from aria.contracts.parsing import FlowCheck
 from aria.contracts.run import RunStatus
@@ -68,6 +68,7 @@ async def replay_real_incident(
     incident = real_incident(incident_id)
     if incident is None or not await asyncio.to_thread(lambda: incident.available):
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"no real incident {incident_id}")
+    await make_room(state, viewer)
     lines = await asyncio.to_thread(incident.lines)
     options = (body or ReplayRequest()).options
     if not may_use_model(state, visitor, viewer.tag, options.use_llm):

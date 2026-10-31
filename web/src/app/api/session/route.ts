@@ -13,6 +13,7 @@ import {
   visitorCookie,
   visitorFrom,
 } from "@/lib/server/upstream";
+import { UNREACHABLE } from "@/lib/unreachable";
 
 // Signing in stores an API key in an HttpOnly, SameSite=Strict cookie scoped to /api. The key is
 // checked against the API first, so a wrong key is refused here rather than on every request.
@@ -86,7 +87,7 @@ export async function POST(request: NextRequest) {
   if (!key || key.length > 512) return problem(400, "Enter an API key.");
   const { status, me } = await whoAmI(request, visitorFrom(request), key);
   if (status === 401) return problem(401, "That key was not accepted. Check it and try again.");
-  if (!me) return problem(502, "The ARIA API is not reachable. Check that it is running.");
+  if (!me) return problem(502, UNREACHABLE);
   if (!me.auth_required) {
     return Response.json({ authRequired: false, signedIn: false, name: null, reachable: true });
   }

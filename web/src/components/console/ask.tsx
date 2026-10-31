@@ -47,12 +47,30 @@ const INCIDENT_QUESTIONS = [
   "What should I check first?",
 ];
 
-interface Turn {
+export interface Turn {
   id: string;
   question: string;
   runId: string | null;
   answer?: AskResponse;
   error?: string;
+}
+
+/**
+ * What a screen reader hears about the latest question: the answer replaces the "Searching"
+ * line, and a region that appears with its content is not read out, so one region that is always
+ * on the page says it. An error is an alert of its own.
+ */
+export function answerNews(turn: Turn | undefined): string {
+  if (!turn || turn.error) return "";
+  const answer = turn.answer;
+  if (!answer) return "Searching ARIA's records";
+  const points = answer.answer.length;
+  if (points === 0) return "Nothing in ARIA's records answers this.";
+  const sources = sourceNumbers(answer).size;
+  const found = answer.insufficient_evidence ? "ARIA found part of an answer" : "ARIA answered";
+  return `${found}: ${points} ${points === 1 ? "point" : "points"}, from ${sources} ${
+    sources === 1 ? "source" : "sources"
+  }.`;
 }
 
 /** Each cited source's number: 1 for the first one the answer cites, and so on. */
@@ -66,21 +84,28 @@ export function sourceNumbers(answer: Pick<AskResponse, "answer">): Map<string, 
   return numbers;
 }
 
-/** What a source is called in the list: a past incident by its own title, the rest as recorded. */
-// Rules and runbooks are titled with their IDs ("Rule R12 (floor SEV2): ...", "Runbook
-// hdfs-disk-full: ..."); a source list names them by what they are about.
+/**
+ * What a source is called in the list, after its kind ("Runbook: ", "Severity rule: "): what it
+ * is about, without the IDs its record is titled with ("Rule R12 (floor SEV2): ...", "Runbook
+ * hdfs-disk-full: ...", "Similar incident syn-hdfs-1: ... (SEV3; 4x on hdfs)").
+ */
 const RULE_TITLE = /^Rule \S+ \((?:score|floor) SEV\d\): (.+)$/s;
 const RUNBOOK_TITLE = /^Runbook \S+: (.+)$/s;
+const INCIDENT_TITLE = /^(?:Similar|Past) incident \S+: (.+?)(?: \(SEV\d[^)]*\))?$/s;
 
 export function sourceName(evidence: Evidence): string {
   const data = (evidence.data ?? {}) as Record<string, unknown>;
-  if (evidence.kind === "incident" && typeof data.title === "string" && data.title) {
-    return data.synthetic ? `${data.title} (built from a sample)` : data.title;
+  if (evidence.kind === "incident") {
+    const title =
+      typeof data.title === "string" && data.title
+        ? data.title
+        : (INCIDENT_TITLE.exec(evidence.title)?.[1] ?? evidence.title);
+    return data.synthetic ? `${title} (built from a sample)` : title;
   }
   const rule = evidence.kind === "rule" ? RULE_TITLE.exec(evidence.title) : null;
-  if (rule?.[1]) return `Rule: ${rule[1]}`;
+  if (rule?.[1]) return rule[1];
   const runbook = evidence.kind === "runbook" ? RUNBOOK_TITLE.exec(evidence.title) : null;
-  if (runbook?.[1]) return `Runbook: ${runbook[1]}`;
+  if (runbook?.[1]) return runbook[1];
   return evidence.title;
 }
 
@@ -194,15 +219,23 @@ function Answer({ turn }: { turn: Turn }) {
   }
   if (!answer) {
     return (
-      <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+      <p className="flex items-center gap-2 text-sm text-muted-foreground">
         <span aria-hidden className="block size-2 animate-pulse-dot rounded-full bg-primary" />
         Searching ARIA&apos;s records
       </p>
     );
   }
+  const notes = answer.notes?.length ? (
+    <ul className="grid gap-1 text-sm text-muted-foreground">
+      {answer.notes.map((note) => (
+        <li key={note}>{note}</li>
+      ))}
+    </ul>
+  ) : null;
   if (answer.answer.length === 0) {
     return (
-      <div role="status" className="grid gap-1 text-sm">
+      <div className="grid gap-1 text-sm">
+        {notes}
         <p>Nothing in ARIA&apos;s records answers this.</p>
         <p className="text-muted-foreground">
           {turn.runId
@@ -222,6 +255,7 @@ function Answer({ turn }: { turn: Turn }) {
             ARIA found only part of an answer. What it found is below.
           </p>
         ) : null}
+        {notes}
         <ul className="grid gap-2.5">
           {answer.answer.map((claim, i) => (
             <li key={i} className="leading-relaxed">
@@ -234,6 +268,10 @@ function Answer({ turn }: { turn: Turn }) {
           {answer.answered_by === "llm"
             ? `Written by ${answer.model ?? "a language model"} from these sources.`
             : "Put together from ARIA's records, without a language model."}
+          {/* Questions about "this incident" asked of the whole library land here. */}
+          {turn.runId
+            ? ""
+            : " This searched all past incidents and runbooks; to ask about one incident, choose it under About."}
         </p>
       </div>
     </EvidenceProvider>
@@ -254,6 +292,7 @@ function Questions() {
   const about = missing && chosen === linked ? ABOUT_ALL : chosen;
   const [turns, setTurns] = useState<Turn[]>([]);
   const counter = useRef(0);
+  const input = useRef<HTMLInputElement>(null);
   const suggestions = about === ABOUT_ALL ? LIBRARY_QUESTIONS : INCIDENT_QUESTIONS;
 
   const send = (text: string) => {
@@ -290,6 +329,8 @@ function Questions() {
         onSubmit={(e: FormEvent) => {
           e.preventDefault();
           send(question);
+          // The button greys out with the box emptied: keep focus where the next question goes.
+          input.current?.focus();
         }}
         className="grid gap-4"
       >
@@ -297,6 +338,7 @@ function Questions() {
           <div className="grid gap-1.5">
             <Label htmlFor={`${id}-q`}>Your question</Label>
             <Input
+              ref={input}
               id={`${id}-q`}
               value={question}
               maxLength={1000}
@@ -320,7 +362,9 @@ function Questions() {
                 ) : null}
                 {(runs.data?.runs ?? []).map((run) => (
                   <SelectItem key={run.id} value={run.id}>
+                    {/* An example can share a title with a visitor's own run of the sample. */}
                     {stripSeverity(run.title) || run.id}
+                    {run.example ? " (example)" : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -355,7 +399,8 @@ function Questions() {
                 variant="secondary"
                 // Questions are long: let them wrap on a phone rather than widen the page.
                 className="h-auto min-h-9 py-1.5 text-left whitespace-normal"
-                disabled={ask.isPending}
+                // Not disabled while ARIA answers: focus would fall off the button to the page.
+                // A second question waits, as send() ignores it until the first is answered.
                 onClick={() => send(s)}
               >
                 {s}
@@ -365,6 +410,9 @@ function Questions() {
         </ul>
       </section>
 
+      <p role="status" className="sr-only">
+        {answerNews(turns[0])}
+      </p>
       {turns.length ? (
         <ol aria-label="Answers" className="grid max-w-3xl gap-8">
           {turns.map((turn) => (

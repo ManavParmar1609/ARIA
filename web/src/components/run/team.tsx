@@ -15,7 +15,7 @@ import {
 import { useMemo, type ReactNode } from "react";
 
 import type { Hypothesis, RunEvent, RunStateValues, SeverityAssessment } from "@/lib/api/types";
-import { listed, writtenOffline } from "@/lib/format";
+import { capitalise, decisionWords, listed, reviewerName, writtenOffline } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import { Citations } from "./evidence";
@@ -89,13 +89,13 @@ function severityLine(sev: SeverityAssessment): ReactNode[] {
   if (sev.decided_by === "rules" && floorHit) {
     lines.push(
       <>
-        Rated it {sev.severity}. A safety floor holds it at {sev.floor} or above: &ldquo;
+        Rated it {sev.severity}. A safety rule holds it at {sev.floor} or worse: &ldquo;
         {floorHit.title}&rdquo;. <Citations ids={floorHit.evidence_ids} />
       </>,
     );
     if (top && top[0] !== sev.severity) {
       lines.push(
-        `On its own, the calibrated model put ${pct(top[1])} on ${top[0]}: the floor is there for exactly this.`,
+        `On its own, the calibrated model put ${pct(top[1])} on ${top[0]}: the safety rule is there for exactly this.`,
       );
     }
   } else if (sev.decided_by === "model") {
@@ -114,14 +114,29 @@ function severityLine(sev: SeverityAssessment): ReactNode[] {
           ? `Rated it ${sev.severity}: only ${sev.severity} remained, but not with enough confidence to decide alone, so it flagged it for you.`
           : `Rated it ${sev.severity}: unsure between ${listed(sev.prediction_set)}, so it took the most severe and flagged it for you.`,
     );
+  } else if (sev.decided_by === "rules") {
+    lines.push(
+      `Rated it ${sev.severity}: the rules and the calibrated model agreed (${pct(probs[sev.severity])}).`,
+    );
+  } else if (sev.decided_by === "human") {
+    lines.push(`A reviewer set the level to ${sev.severity}.`);
   } else {
-    lines.push(`Rated it ${sev.severity} by its rules (${sev.decided_by}).`);
+    lines.push(`Rated it ${sev.severity}.`);
   }
   return lines;
 }
 
 /** The run told as its agents' turns: who did what, what they concluded, and why. */
-export function AgentTeam({ values, events }: { values: RunStateValues; events: RunEvent[] }) {
+export function AgentTeam({
+  values,
+  events,
+  example = false,
+}: {
+  values: RunStateValues;
+  events: RunEvent[];
+  /** An example every visitor sees, which nobody reviews here. */
+  example?: boolean;
+}) {
   const turns = useMemo<Turn[]>(() => {
     const batch = values.batch;
     const flows = batch?.flows;
@@ -209,6 +224,8 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
                   {STATUS_WORD[h.status]}
                   {h.status === "supported" ? `, ${pct(h.confidence)}` : ""}
                 </span>
+                {/* Said apart from the label for a screen reader, which ignores the margin. */}
+                <span className="sr-only">: </span>
                 {h.statement} <Citations ids={[...h.supporting, ...h.refuting].slice(0, 4)} />
               </span>
             </span>,
@@ -247,12 +264,13 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
 
     const you: ReactNode[] = [];
     if (review) {
-      you.push(
-        `${review.decision === "approve" ? "Approved" : review.decision === "reject" ? "Discarded" : "Edited and approved"} by ${review.reviewer && review.reviewer !== "anonymous" ? review.reviewer : "a reviewer"}.`,
-      );
+      const did = decisionWords(review.decision);
+      you.push(`${capitalise(did)} by ${reviewerName(review.reviewer)}.`);
     } else if (report) {
       you.push(
-        "Waiting for you: approve, edit before sending, or discard the draft. Nothing has been sent.",
+        example
+          ? "An example stays as it is for every visitor: nothing has been sent, and nobody reviews it here. Make your own copy to review it."
+          : "Waiting for you: approve, edit before sending, or discard the draft. Nothing has been sent.",
       );
     }
 
@@ -312,7 +330,7 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
         said: you,
       },
     ];
-  }, [values]);
+  }, [values, example]);
 
   return (
     // Lines quote names from the logs (Java classes, block IDs) that can be wider than a phone.
@@ -346,6 +364,7 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
               <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                 <h3 className="font-sans text-base font-semibold">
                   {turn.name}
+                  <span className="sr-only">: </span>
                   <span className="ml-2 text-sm font-normal text-muted-foreground">{turn.job}</span>
                 </h3>
                 <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -366,7 +385,9 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
                     : state === "working"
                       ? "Working"
                       : state === "yours"
-                        ? "Your turn"
+                        ? example
+                          ? "Left as it is"
+                          : "Your turn"
                         : "Not yet"}
                 </span>
               </div>

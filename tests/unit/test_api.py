@@ -246,6 +246,33 @@ async def test_demo_visitors_each_get_their_own_allowance_under_a_site_cap(
             assert await get(None) == 429
 
 
+async def test_a_visitor_waits_for_a_triage_before_queueing_more(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """On a shared demo one visitor's pile of triages must not hold up everyone else's."""
+    monkeypatch.setenv("ARIA_VISITOR_SCOPE", "true")
+    monkeypatch.setenv("ARIA_MAX_ACTIVE_RUNS_PER_VISITOR", "2")
+    monkeypatch.setenv("ARIA_WORKER_MODE", "external")  # nothing claims them: they stay queued
+    reset_caches()
+    builder = await _seed()
+    lines = builder.build("bgl.kernel_panic", seed=8, nodes=4, duration_min=6).lines
+    app = create_app()
+    ana, bo = "visitor-ana-0000000001", "visitor-bo-00000000002"
+    async with LifespanManager(app) as manager:
+        transport = httpx.ASGITransport(app=manager.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://localhost:8000") as c:
+
+            async def start(visitor: str) -> httpx.Response:
+                body = {"system": "bgl", "logs": lines}
+                return await c.post("/api/v1/runs", json=body, headers={"x-visitor-id": visitor})
+
+            assert [(await start(ana)).status_code for _ in range(2)] == [202, 202]
+            third = await start(ana)
+            assert third.status_code == 429
+            assert third.json()["detail"].startswith("You already have 2 triages waiting")
+            assert (await start(bo)).status_code == 202  # Ana's queue does not stop Bo
+
+
 def test_the_rate_limiter_forgets_idle_callers_without_changing_an_answer() -> None:
     from aria.api.security import RateLimiter
 
@@ -928,6 +955,37 @@ async def test_ask_cites_run_evidence(api: Api, monkeypatch: pytest.MonkeyPatch)
     assert nothing["insufficient_evidence"] is True
     missing = await api.client.post("/api/v1/ask", json={"question": "why?", "run_id": "run-nope"})
     assert missing.status_code == 404
+
+
+async def test_ask_cites_each_kind_of_past_incident_once(api: Api) -> None:
+    """The library keeps several sightings of an incident; an answer names it once."""
+    runbooks = load_runbooks(Path("runbooks"))
+    again = [
+        incident_from_scenario(
+            api.builder.build(
+                "openssh.bruteforce", seed=seed, nodes=nodes, duration_min=5, incident_per_min=6
+            ),
+            runbooks,
+        )
+        for seed, nodes in ((11, 5), (12, 12))
+    ]
+    await api.state.services.memory.bulk_insert(again)
+    asked = await api.client.post("/api/v1/ask", json={"question": "brute force ssh logins"})
+    past = [e for e in asked.json()["evidence"] if e["title"].startswith("Past incident")]
+    assert sum("openssh" in e["title"] for e in past) == 1
+
+
+async def test_ask_names_runbooks_and_says_it_cannot_see_systems_now(api: Api) -> None:
+    library = await api.client.post(
+        "/api/v1/ask", json={"question": "Which runbook covers kernel panics?"}
+    )
+    titles = [e["title"] for e in library.json()["evidence"]]
+    assert any(title.startswith("Runbook ") and "Kernel panic" in title for title in titles)
+    now = (
+        await api.client.post("/api/v1/ask", json={"question": "Is the quorum loss still going?"})
+    ).json()
+    assert now["answer"] == []
+    assert now["notes"][0].startswith("ARIA can't see your systems as they are now.")
 
 
 async def test_past_the_daily_allowance_the_sites_model_steps_aside(

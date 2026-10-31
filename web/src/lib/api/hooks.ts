@@ -129,7 +129,8 @@ export function useHealth() {
   return useQuery({
     queryKey: keys.health,
     queryFn: () => apiFetch<Health>("/api/ready"),
-    refetchInterval: 30_000,
+    // Every half minute; every five seconds while the server is not answering.
+    refetchInterval: (query) => (query.state.status === "error" ? 5_000 : 30_000),
   });
 }
 

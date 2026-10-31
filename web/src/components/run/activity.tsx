@@ -19,7 +19,7 @@ import * as m from "motion/react-m";
 import { useMemo } from "react";
 
 import type { RunEvent } from "@/lib/api/types";
-import { duration } from "@/lib/format";
+import { capitalise, decisionWords, duration, reviewerName } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import { NODE_LABEL } from "@/lib/steps";
@@ -177,7 +177,7 @@ function rows(events: RunEvent[], { offline = false, titles = {} }: RowOptions =
           t,
           icon: FlagIcon,
           tone: "accent",
-          title: `Review: ${String(p.decision)} by ${String(p.reviewer ?? "a reviewer")}`,
+          title: `${capitalise(decisionWords(String(p.decision)))} by ${reviewerName(typeof p.reviewer === "string" ? p.reviewer : null)}`,
         });
         break;
       case "action":

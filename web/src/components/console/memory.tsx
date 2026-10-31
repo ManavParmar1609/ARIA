@@ -36,6 +36,34 @@ function seen(incident: IncidentOut): string {
   return [systemName(incident.system), count].filter(Boolean).join(", ");
 }
 
+/**
+ * Entries that tell the same story (system, title, fix and source) as one, counting all their
+ * sightings: the seeded library holds the same sample incident more than once.
+ */
+export function oneOfEach(incidents: IncidentOut[]): IncidentOut[] {
+  const seenAs = new Map<string, IncidentOut>();
+  for (const incident of incidents) {
+    const key = [
+      incident.system,
+      stripSeverity(incident.title),
+      incident.resolution,
+      incident.source,
+    ].join("\u0000");
+    const first = seenAs.get(key);
+    if (!first) {
+      seenAs.set(key, incident);
+      continue;
+    }
+    const lasts = [first.last_seen, incident.last_seen].filter((when): when is string => !!when);
+    seenAs.set(key, {
+      ...first,
+      occurrences: Math.max(1, first.occurrences) + Math.max(1, incident.occurrences),
+      last_seen: lasts.sort().at(-1) ?? null,
+    });
+  }
+  return [...seenAs.values()];
+}
+
 // Where a library entry came from, in the words "Seen before" uses on the incident page.
 const SOURCE_WORDS: Record<string, string> = {
   curated: "built from a sample",
@@ -61,7 +89,7 @@ export function Memory() {
     () => [...new Set((all.data ?? []).map((i) => i.system))].sort(),
     [all.data],
   );
-  const shown = incidents.data ?? [];
+  const shown = useMemo(() => oneOfEach(incidents.data ?? []), [incidents.data]);
   const synthetic = shown.filter((i) => i.synthetic).length;
   // Tag the rarer kind, so a seeded library does not repeat "from a sample" on nearly every row.
   const tagRuns = synthetic > shown.length / 2;

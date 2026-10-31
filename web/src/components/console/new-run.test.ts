@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { logsHint, modelHint } from "./new-run";
+import { logsHint, modelHint, megabytes } from "./new-run";
 
 describe("logsHint", () => {
   it("says how pasted lines are protected", () => {
@@ -54,5 +54,12 @@ describe("modelHint", () => {
     expect(off).toMatch(/^Off: /);
     expect(off).not.toContain("your own Claude key");
     expect(modelHint(["claude"], "claude", null, true)).not.toContain("Off:");
+  });
+});
+
+describe("paste sizes", () => {
+  it("round a paste up and a limit to the nearest tenth, in megabytes", () => {
+    expect(megabytes(4 * 1024 * 1024)).toBe("4 MB");
+    expect(megabytes(4.04 * 1024 * 1024, Math.ceil)).toBe("4.1 MB");
   });
 });

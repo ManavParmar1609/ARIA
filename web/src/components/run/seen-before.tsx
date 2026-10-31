@@ -21,16 +21,34 @@ const SOURCE: Record<string, string> = {
   memory: "from the library",
 };
 
-function Incident({ incident, sameFix }: { incident: SimilarIncident; sameFix: boolean }) {
+/**
+ * Past incidents of one kind (the same system, failure and fix), closest first. The library keeps
+ * several sightings of most kinds and counts them together, so a row each would repeat the same
+ * title, count and fix: one row cites them all instead.
+ */
+export type PastKind = { lead: SimilarIncident; all: SimilarIncident[] };
+
+export function pastKinds(incidents: SimilarIncident[]): PastKind[] {
+  const kinds = new Map<string, PastKind>();
+  for (const incident of incidents) {
+    const key = [incident.system, incident.failure_mode, incident.resolution].join("\u0000");
+    const kind = kinds.get(key);
+    if (kind) kind.all.push(incident);
+    else kinds.set(key, { lead: incident, all: [incident] });
+  }
+  return [...kinds.values()];
+}
+
+function Incident({ kind, sameFix }: { kind: PastKind; sameFix: boolean }) {
+  const { lead, all } = kind;
+  const ids = all.flatMap((incident) => (incident.evidence_id ? [incident.evidence_id] : []));
+  const sources = [...new Set(all.map((incident) => SOURCE[incident.source]).filter(Boolean))];
   return (
     <li className="grid gap-1">
       <p className="flex flex-wrap items-center gap-2">
-        <SeverityBadge
-          severity={isSeverity(incident.severity) ? incident.severity : null}
-          size="sm"
-        />
-        <span className="font-medium">{incident.title}</span>
-        {incident.evidence_id ? <Citations ids={[incident.evidence_id]} /> : null}
+        <SeverityBadge severity={isSeverity(lead.severity) ? lead.severity : null} size="sm" />
+        <span className="font-medium">{lead.title}</span>
+        <Citations ids={ids} />
       </p>
       <p className="text-sm text-muted-foreground">
         {/* The same fix, card after card, says nothing new: write it once. */}
@@ -38,16 +56,16 @@ function Incident({ incident, sameFix }: { incident: SimilarIncident; sameFix: b
           "Fixed the same way as the one above."
         ) : (
           <>
-            Fixed by: <CodeText>{plainResolution(incident.resolution)}</CodeText>
+            Fixed by: <CodeText>{plainResolution(lead.resolution)}</CodeText>
           </>
         )}
       </p>
       <p className="text-xs text-faint">
-        seen {incident.occurrences} {incident.occurrences === 1 ? "time" : "times"}
-        {incident.mttr_minutes != null
-          ? `, resolved in about ${Math.round(incident.mttr_minutes)} min`
+        Seen {lead.occurrences} {lead.occurrences === 1 ? "time" : "times"}
+        {lead.mttr_minutes != null
+          ? `, resolved in about ${Math.round(lead.mttr_minutes)} min`
           : ""}
-        {SOURCE[incident.source] ? `, ${SOURCE[incident.source]}` : ""}
+        {sources.length ? `, ${sources.join(" and ")}` : ""}
       </p>
     </li>
   );
@@ -62,6 +80,7 @@ export function SeenBefore({
   retrieval: RetrievalResult | undefined;
 }) {
   const runbooks = retrieval?.runbooks ?? [];
+  const kinds = pastKinds(incidents);
   return (
     <section aria-labelledby="seen-title" className="grid gap-4 rounded-lg bg-raised p-5">
       <h2 id="seen-title" className="text-base font-medium">
@@ -69,11 +88,11 @@ export function SeenBefore({
       </h2>
       {incidents.length ? (
         <ul className="grid gap-4">
-          {incidents.map((incident, i, all) => (
+          {kinds.map((kind, i) => (
             <Incident
-              key={incident.incident_id}
-              incident={incident}
-              sameFix={i > 0 && all[i - 1]?.resolution === incident.resolution}
+              key={kind.lead.incident_id}
+              kind={kind}
+              sameFix={i > 0 && kinds[i - 1]?.lead.resolution === kind.lead.resolution}
             />
           ))}
         </ul>

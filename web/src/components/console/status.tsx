@@ -26,8 +26,15 @@ const STATUS: Record<string, { label: string; className: string; icon: typeof Ci
   failed: { label: "Failed", className: "text-danger", icon: OctagonAlertIcon },
 };
 
-/** In place of a status on the examples every visitor sees: they never change. */
-export function ExampleStatus({ className }: { className?: string }) {
+/** In place of a status on the examples every visitor sees: they never change, and nobody
+ * reviews one here, so a waiting example is a draft to read, not a task. */
+const EXAMPLE_LABEL: Record<string, string> = {
+  awaiting_review: "Example draft",
+  published: "Published example",
+  rejected: "Discarded example",
+};
+
+export function ExampleStatus({ status, className }: { status?: string; className?: string }) {
   return (
     <span
       className={cn(
@@ -36,7 +43,7 @@ export function ExampleStatus({ className }: { className?: string }) {
       )}
     >
       <BookOpenIcon aria-hidden className="size-3.5" />
-      Example
+      {(status && EXAMPLE_LABEL[status]) ?? "Example"}
     </span>
   );
 }

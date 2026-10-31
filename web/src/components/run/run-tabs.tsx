@@ -11,13 +11,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useDensity } from "@/lib/density";
-import { percent } from "@/lib/format";
+import { capitalise, percent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import { DensityToggle } from "./density-toggle";
 import { Citations, EvidenceChip, KIND_LABEL, sourceLabel, useEvidence } from "./evidence";
-
-const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** All evidence the run collected, filterable by kind. */
 export function EvidenceTable({ evidence, cited }: { evidence: Evidence[]; cited: Set<string> }) {

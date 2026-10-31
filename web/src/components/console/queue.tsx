@@ -58,34 +58,37 @@ const EMPTY: Record<string, string> = {
 };
 
 function usePages(status: Status | "all") {
-  const [pages, setPages] = useState<string[]>([""]);
+  // How many pages are shown, not where each began: every check fetches them again in turn, each
+  // from where the one before it ends now, so incidents that arrive while older ones are open
+  // push the list down instead of opening a gap between two pages.
+  const [count, setCount] = useState(1);
   const [key, setKey] = useState(status);
   if (key !== status) {
     setKey(status);
-    setPages([""]);
+    setCount(1);
   }
   const query = useQuery({
-    queryKey: ["runs", "queue", status, pages],
+    queryKey: ["runs", "queue", status, count],
     queryFn: async () => {
-      const results = await Promise.all(
-        pages.map((before) => {
-          const params = new URLSearchParams({ limit: "50" });
-          if (status !== "all") params.set("status", status);
-          if (before) params.set("before", before);
-          return apiFetch<RunPage>(`/api/v1/runs?${params.toString()}`);
-        }),
-      );
-      return {
-        runs: results.flatMap((r) => r.runs),
-        next: results.at(-1)?.next_before ?? null,
-      };
+      const runs: RunSummary[] = [];
+      let before: string | null = null;
+      for (let page = 0; page < count; page += 1) {
+        const params = new URLSearchParams({ limit: "50" });
+        if (status !== "all") params.set("status", status);
+        if (before) params.set("before", before);
+        const result = await apiFetch<RunPage>(`/api/v1/runs?${params.toString()}`);
+        runs.push(...result.runs);
+        before = result.next_before ?? null;
+        if (!before) break;
+      }
+      const seen = new Set<string>();
+      return { runs: runs.filter((run) => !seen.has(run.id) && seen.add(run.id)), next: before };
     },
     refetchInterval: 10_000,
     placeholderData: (previous) => previous,
   });
   const more = () => {
-    const next = query.data?.next;
-    if (next) setPages((current) => [...current, next]);
+    if (query.data?.next) setCount((current) => current + 1);
   };
   return { ...query, more };
 }
@@ -110,7 +113,10 @@ export function Queue() {
   const raw = params.get("status") ?? "all";
   const status = (FILTERS.some((f) => f.value === raw) ? raw : "all") as Status | "all";
   const runs = usePages(status);
-  const list = runs.data?.runs ?? [];
+  // An example waiting for review is a draft every visitor reads, not a task for this one.
+  const list = (runs.data?.runs ?? []).filter(
+    (run) => status !== "awaiting_review" || !run.example,
+  );
   const filterId = useId();
   // After "Load older incidents", focus moves to the first incident it added, so a keyboard
   // continues down the list instead of starting again at the top.
@@ -238,7 +244,11 @@ export function Queue() {
                       </span>
                     </TableCell>
                     <TableCell>
-                      {run.example ? <ExampleStatus /> : <RunStatus status={run.status} />}
+                      {run.example ? (
+                        <ExampleStatus status={run.status} />
+                      ) : (
+                        <RunStatus status={run.status} />
+                      )}
                     </TableCell>
                     <TableCell className="text-sm">
                       <Decider run={run} />
@@ -261,7 +271,11 @@ export function Queue() {
                     severity={isSeverity(run.severity) ? run.severity : null}
                     size="sm"
                   />
-                  {run.example ? <ExampleStatus /> : <RunStatus status={run.status} />}
+                  {run.example ? (
+                    <ExampleStatus status={run.status} />
+                  ) : (
+                    <RunStatus status={run.status} />
+                  )}
                 </div>
                 <Link
                   href={`/console/runs/${encodeURIComponent(run.id)}` as never}

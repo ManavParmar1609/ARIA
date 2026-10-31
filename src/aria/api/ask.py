@@ -23,13 +23,17 @@ from aria.reporting.grounding import ungrounded_numbers
 from aria.services import Services
 from aria.text import headline
 
-_TERM = re.compile(r"[a-z0-9][a-z0-9_.-]{2,}")
+_WORD = re.compile(r"[a-z0-9]+")
 _STOP = frozenset(
     {
         "the", "and", "for", "was", "were", "what", "why", "how", "when", "which", "with",
         "this", "that", "from", "into", "did", "does", "are", "has", "have", "had", "who",
         "whom", "its", "about", "there", "their", "them", "they", "then", "than", "over",
-        "under", "any", "all",
+        "under", "any", "all", "not", "but", "get", "got", "gets", "only", "just", "also",
+        "very", "much", "more", "still", "out", "off", "too", "yet", "one", "two", "three",
+        "need", "needs", "make", "made", "know", "tell", "use", "used", "using", "please",
+        "may", "might", "must", "doing", "done", "while", "during", "after", "shall", "these",
+        "those", "other", "such", "each", "every",
     }
 )  # fmt: skip
 MAX_EVIDENCE = 12
@@ -38,7 +42,26 @@ ASK_BUDGET = BudgetConfig(max_tokens=6_000, max_cost_usd=0.05, max_latency_s=30.
 
 
 def terms(text: str) -> set[str]:
-    return {t for t in _TERM.findall(text.lower()) if t not in _STOP}
+    return {t for t in _WORD.findall(text.lower()) if len(t) >= 3 and t not in _STOP}
+
+
+def _forms(word: str) -> set[str]:
+    """A word and the roots it may come from, so "disks" finds "disk", "caused" "cause" and
+    "failing" "fail". Words are matched whole: "run" does not find "runbook"."""
+    forms = {word}
+    for suffix in ("ing", "ed", "es", "s"):
+        if word.endswith(suffix) and len(word) - len(suffix) >= 3:
+            root = word[: -len(suffix)]
+            forms.update((root, f"{root}e"))
+    return forms
+
+
+def _vocabulary(text: str) -> set[str]:
+    return {form for word in _WORD.findall(text.lower()) for form in _forms(word)}
+
+
+def _found(term: str, vocabulary: set[str]) -> bool:
+    return not _forms(term).isdisjoint(vocabulary)
 
 
 # The everyday words for each kind of evidence, so that a question in plain words ("what did the
@@ -69,8 +92,13 @@ _GENERIC = frozenset(" ".join([*_KIND_WORDS.values(), *_TOOL_WORDS.values()]).sp
     "like", "anything", "something", "time", "times", "last", "aria", "run", "runs", "outage",
     "outages", "same", "kind", "sort", "type", "again", "occurred", "occur", "been", "being",
     "will", "would", "could", "can", "our", "your", "you", "some", "here", "now", "today",
-    "yesterday", "ago", "recent", "recently",
+    "yesterday", "ago", "recent", "recently", "happening", "going", "on", "matter", "wrong",
 }  # fmt: skip
+
+# A question about the state of things now, which no record of the past can answer.
+_NOW = re.compile(
+    r"\b(?:still|currently|right now|at the moment|ongoing|as we speak|live)\b", re.IGNORECASE
+)
 # Equal matches go to the kind that answers most directly: a tested cause, then the rating.
 _DIRECTNESS = (
     EvidenceKind.HYPOTHESIS,
@@ -86,36 +114,30 @@ _DIRECTNESS = (
 )
 
 
-def _stem(term: str) -> str:
-    """A word without its plural or tense ending, so "disks" finds "disk" and "failing" "fail"."""
-    for suffix in ("ing", "ed", "es", "s"):
-        if term.endswith(suffix) and len(term) - len(suffix) >= 4:
-            return term[: -len(suffix)]
-    return term
-
-
 def rank(
     question: str, evidence: Sequence[Evidence], *, limit: int = MAX_EVIDENCE
 ) -> list[Evidence]:
-    """Evidence ordered by how many of the question's terms it contains. Ties go to the kind of
-    evidence that answers more directly, then keep their order.
+    """Evidence ordered by how many of the question's words it contains, matched as whole words.
+    Ties go to the kind of evidence that answers more directly, then keep their order.
 
-    A past incident counts only if it mentions what the question is about: the history words
-    alone ("before", "similar") match every incident, and an unrelated one is no answer."""
+    A past incident counts only if it mentions at least half of what the question is about (its
+    words that say neither which kind of answer it wants nor anything general): history words
+    alone ("before", "similar") match every incident, and one shared word ("killed" in "Was a pod
+    OOM killed?" and in "killed jobs") does not make an unrelated incident an answer."""
     wanted = terms(question)
-    about = {_stem(term) for term in wanted - _GENERIC}
+    about = wanted - _GENERIC
     scored = []
     for position, item in enumerate(evidence):
-        if about and item.kind is EvidenceKind.INCIDENT:
-            own = f"{item.title} {item.detail}".lower()
-            if not any(term in own for term in about):
-                continue
+        own = _vocabulary(f"{item.title} {item.detail}")
+        named = sum(1 for term in about if _found(term, own))
+        if about and item.kind is EvidenceKind.INCIDENT and 2 * named < len(about):
+            continue
         if item.kind is EvidenceKind.TOOL:
-            text = _TOOL_WORDS.get(item.source, "")
+            vocabulary = _vocabulary(_TOOL_WORDS.get(item.source, ""))
         else:
             words = _KIND_WORDS.get(item.kind, "")
-            text = f"{item.title} {item.detail} {item.source} {item.kind} {words}".lower()
-        hits = sum(1 for term in wanted if term in text)
+            vocabulary = own | _vocabulary(f"{item.source} {item.kind} {words}")
+        hits = sum(1 for term in wanted if _found(term, vocabulary))
         if hits:
             direct = _DIRECTNESS.index(item.kind) if item.kind in _DIRECTNESS else len(_DIRECTNESS)
             scored.append((-hits, direct, position, item))
@@ -123,10 +145,82 @@ def rank(
     return [entry[3] for entry in scored[:limit]]
 
 
+def asks_about_now(question: str) -> bool:
+    """Whether the question asks how things are now ("Is it still happening?")."""
+    return _NOW.search(question) is not None
+
+
+def notes(question: str, cited: Sequence[Evidence], *, run_scoped: bool) -> list[str]:
+    """What an answer cannot say, in so many words: that ARIA does not see systems as they are
+    now, and which of the question's subjects no cited record mentions."""
+    said: list[str] = []
+    if asks_about_now(question):
+        known = (
+            "the logs this triage read and its records"
+            if run_scoped
+            else "its records of past incidents"
+        )
+        said.append(f"ARIA can't see your systems as they are now. It knows only {known}.")
+    if cited:
+        vocabulary = _vocabulary(" ".join(f"{item.title} {item.detail}" for item in cited))
+        missing = sorted(
+            term for term in terms(question) - _GENERIC if not _found(term, vocabulary)
+        )
+        if missing:
+            quoted = [f"“{term}”" for term in missing[:4]]
+            listed = quoted[0] if len(quoted) == 1 else f"{', '.join(quoted[:-1])} or {quoted[-1]}"
+            said.append(f"Nothing below mentions {listed}.")
+    return said
+
+
+def runbook_evidence(
+    services: Services, question: str, store: EvidenceStore, limit: int = 2
+) -> None:
+    """The runbooks a question names most of: what each covers and its first steps."""
+    about = terms(question) - _GENERIC
+    if not about:
+        return
+    scored = []
+    for runbook in services.runbooks.values():
+        if runbook.generic:
+            continue
+        text = " ".join([runbook.title, runbook.when, *runbook.systems, *runbook.failure_modes])
+        own = _vocabulary(text)
+        named = sum(1 for term in about if _found(term, own))
+        if named and 2 * named >= len(about):
+            scored.append((-named, runbook.slug, runbook))
+    for _, _, runbook in sorted(scored)[:limit]:
+        steps = [
+            f"{step.text} [risk: {step.risk}]" if step.risk != "low" else step.text
+            for step in runbook.mitigate
+        ]
+        store.add(
+            EvidenceKind.RUNBOOK,
+            f"Runbook {runbook.slug}: {runbook.title}",
+            source="runbooks",
+            detail="\n".join(f"{i}. {step}" for i, step in enumerate(steps, 1)),
+            data={
+                "slug": runbook.slug,
+                "runbook": runbook.slug,
+                "risk": runbook.risk,
+                "failure_modes": list(runbook.failure_modes),
+            },
+        )
+
+
 async def memory_evidence(services: Services, question: str, *, limit: int = 6) -> list[Evidence]:
-    """Past incidents that match the question, as citable evidence."""
+    """Past incidents that match the question, as citable evidence: the closest of each kind
+    (system, failure and fix), since the library keeps several sightings of most kinds and each
+    would otherwise read as another source saying the same thing."""
     store = EvidenceStore()
-    for incident, hit in (await services.memory.search(question, candidates=limit * 2))[:limit]:
+    kinds: set[tuple[str, str, str]] = set()
+    for incident, hit in await services.memory.search(question, candidates=limit * 4):
+        kind = (incident.system, incident.failure_mode, incident.resolution)
+        if kind in kinds:
+            continue
+        kinds.add(kind)
+        if len(kinds) > limit:
+            break
         store.add(
             EvidenceKind.INCIDENT,
             f"Past incident {incident.id}: {incident.title} ({incident.severity}, {incident.system})",
@@ -145,6 +239,7 @@ async def memory_evidence(services: Services, question: str, *, limit: int = 6) 
             },
             ts=incident.last_seen,
         )
+    runbook_evidence(services, question, store)
     return store.all()
 
 

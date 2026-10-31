@@ -125,3 +125,22 @@ const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eig
 export function count(n: number): string {
   return (Number.isInteger(n) && WORDS[n]) || n.toLocaleString("en");
 }
+
+/** A reviewer as a person reads them: the name they signed in with, "the operator" for a review
+ * made from the command line (as the seeded examples were), "a reviewer" when nobody signed in. */
+export function reviewerName(reviewer: string | null | undefined): string {
+  if (!reviewer || reviewer === "anonymous") return "a reviewer";
+  return reviewer === "cli" ? "the operator, from the command line" : reviewer;
+}
+
+/** What a reviewer did, in a past-tense phrase: "approve" reads "approved". */
+export function decisionWords(decision: string): string {
+  return (
+    { approve: "approved", reject: "discarded", edit: "edited and approved" }[decision] ?? decision
+  );
+}
+
+/** A phrase with its first letter in capitals, to start a sentence. */
+export function capitalise(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}

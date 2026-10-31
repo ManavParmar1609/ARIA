@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Evidence } from "@/lib/api/types";
 
-import { sourceName, sourceNames, sourceNumbers } from "./ask";
+import { answerNews, sourceName, sourceNames, sourceNumbers, type Turn } from "./ask";
 
 describe("Ask ARIA's sources", () => {
   it("numbers sources in the order the answer first cites them", () => {
@@ -41,9 +41,19 @@ describe("Ask ARIA's sources", () => {
       source: "severity.rules",
       data: {},
     } as unknown as Evidence;
-    expect(sourceName(rule)).toBe("Rule: Disk full on a data node");
+    // The list puts each source's kind before its name, so the name does not repeat it.
+    expect(sourceName(rule)).toBe("Disk full on a data node");
     const runbook = { ...rule, kind: "runbook", title: "Runbook hdfs-disk-full: HDFS disk full" };
-    expect(sourceName(runbook as Evidence)).toBe("Runbook: HDFS disk full");
+    expect(sourceName(runbook as Evidence)).toBe("HDFS disk full");
+    const similar = {
+      ...rule,
+      kind: "incident",
+      title: "Similar incident syn-hdfs-1: DataNodes failing to serve blocks (SEV3; 4x on hdfs)",
+      data: { synthetic: true },
+    };
+    expect(sourceName(similar as Evidence)).toBe(
+      "DataNodes failing to serve blocks (built from a sample)",
+    );
   });
 
   it("tells apart two past incidents with one title by the day each was last seen", () => {
@@ -65,5 +75,40 @@ describe("Ask ARIA's sources", () => {
     expect(names.get("E1")).toBe("Quorum loss, last seen 2 Mar 2026");
     expect(names.get("E2")).toBe("Quorum loss, last seen 12 Apr 2026");
     expect(names.get("E3")).toBe("Disk full");
+  });
+});
+
+describe("what a screen reader hears about an answer", () => {
+  const turn = (changes: Partial<Turn> = {}): Turn => ({
+    id: "q1",
+    question: "How was the quorum loss fixed?",
+    runId: null,
+    ...changes,
+  });
+  const answer = (claims: string[][], partial = false) =>
+    ({
+      answer: claims.map((ids, i) => ({ text: `Point ${i}`, evidence_ids: ids })),
+      evidence: [],
+      insufficient_evidence: partial,
+      answered_by: "retrieval",
+      follow_ups: [],
+    }) as unknown as Turn["answer"];
+
+  it("says ARIA is searching, then how much it found", () => {
+    expect(answerNews(turn())).toBe("Searching ARIA's records");
+    expect(answerNews(turn({ answer: answer([["E1"], ["E1", "E2"]]) }))).toBe(
+      "ARIA answered: 2 points, from 2 sources.",
+    );
+    expect(answerNews(turn({ answer: answer([["E1"]], true) }))).toBe(
+      "ARIA found part of an answer: 1 point, from 1 source.",
+    );
+    expect(answerNews(turn({ answer: answer([]) }))).toBe(
+      "Nothing in ARIA's records answers this.",
+    );
+  });
+
+  it("leaves an error to its own alert", () => {
+    expect(answerNews(turn({ error: "ARIA is busy" }))).toBe("");
+    expect(answerNews(undefined)).toBe("");
   });
 });

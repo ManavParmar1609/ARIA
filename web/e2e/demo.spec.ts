@@ -10,9 +10,10 @@ test.describe("public demo", () => {
   test("keeps each visitor's incidents to that visitor", async ({ page, browser }) => {
     await page.goto("/console/runs");
     const table = page.getByRole("table");
-    // One approved example and one waiting for review, both marked, and neither counted as
-    // waiting for this visitor's review.
-    await expect(table.getByText("Example", { exact: true })).toHaveCount(2);
+    // One published example and one draft, both marked, and neither counted as waiting for this
+    // visitor's review.
+    const examples = /^(Published example|Example draft)$/;
+    await expect(table.getByText(examples)).toHaveCount(2);
     await expect(page.getByText(/waiting for your review/)).toHaveCount(0);
 
     await page.goto("/console/runs/new?source=bigdata");
@@ -31,9 +32,7 @@ test.describe("public demo", () => {
     try {
       const stranger = await elsewhere.newPage();
       await stranger.goto("/console/runs");
-      await expect(stranger.getByRole("table").getByText("Example", { exact: true })).toHaveCount(
-        2,
-      );
+      await expect(stranger.getByRole("table").getByText(examples)).toHaveCount(2);
       await expect(stranger.getByRole("table").getByRole("link")).toHaveCount(2);
       await stranger.goto(mine);
       await expect(stranger.getByText("This incident is not here")).toBeVisible();
@@ -46,7 +45,12 @@ test.describe("public demo", () => {
   });
 
   test("makes a copy of an example to review", async ({ page }) => {
+    // The examples are not this visitor's to review, so "Waiting for review" leaves them out.
     await page.goto("/console/runs?status=awaiting_review");
+    await expect(page.getByRole("table").getByRole("link", { name: /Brute-force/i })).toHaveCount(
+      0,
+    );
+    await page.goto("/console/runs");
     await page
       .getByRole("table")
       .getByRole("link", { name: /Brute-force/i })

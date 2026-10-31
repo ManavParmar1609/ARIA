@@ -28,7 +28,7 @@ from aria.api.schemas import (
 from aria.api.security import Principal
 from aria.api.sse import run_events
 from aria.api.state import AppState, app_state, current_principal
-from aria.api.visitors import Viewer, ViewerDep
+from aria.api.visitors import Viewer, ViewerDep, make_room
 from aria.contracts.inputs import TriageRequest
 from aria.contracts.report import ReviewDecision
 from aria.contracts.run import RunEvent, RunStatus
@@ -68,6 +68,7 @@ async def create_run(
 ) -> RunAccepted:
     """Start triage. The run continues in the background; follow it on ``links.stream``."""
     check_provider(state, request.options.provider, visitor)
+    await make_room(state, viewer)
     if not may_use_model(state, visitor, viewer.tag, request.options.use_llm):
         request = request.model_copy(update={"options": offline(request.options)})
     if request.window_id and not request.logs:
@@ -301,6 +302,7 @@ async def fork(
     """Branch a new run from a checkpoint, optionally with different run options. The new run is
     the caller's own, so forking an example is how a visitor gets a copy to change."""
     await _run_or_404(state, run_id, viewer)
+    await make_room(state, viewer)
     options = body.run_options()
     if not may_use_model(state, visitor, viewer.tag, bool((options or {}).get("use_llm", True))):
         options = {**(options or {}), "use_llm": False}

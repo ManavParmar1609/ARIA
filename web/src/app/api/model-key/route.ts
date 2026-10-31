@@ -15,6 +15,7 @@ import {
   readBody,
   type ModelKey,
 } from "@/lib/server/upstream";
+import { UNREACHABLE } from "@/lib/unreachable";
 
 // A visitor's own model key. Saving it asks the ARIA API to check it with the provider first, and
 // only an accepted key is kept, in an HttpOnly, SameSite=Strict cookie scoped to /api that page
@@ -73,7 +74,7 @@ export async function POST(request: NextRequest) {
     upstream = await check(request, { provider, key });
   } catch {
     if (request.signal.aborted) return new Response(null, { status: 499 });
-    return problem(502, "The ARIA API is not reachable. Check that it is running.");
+    return problem(502, UNREACHABLE);
   }
   if (!upstream.ok) {
     const detail = ((await upstream.json().catch(() => ({}))) as { detail?: unknown }).detail;

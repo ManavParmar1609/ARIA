@@ -373,9 +373,12 @@ export function LogLines({
   wrap = false,
   sweep = false,
   more = true,
+  label = "Log lines",
 }: {
   lines: LogEvent[];
   limit?: number;
+  /** The scrolling block's name, told apart from the page's other blocks of lines. */
+  label?: string;
   /** Say how many lines are past the limit (off for a single example line). */
   more?: boolean;
   /** Wrap long lines instead of scrolling (inside hover cards, where nothing can take focus). */
@@ -419,12 +422,7 @@ export function LogLines({
       {wrap ? (
         <div className={frame}>{list}</div>
       ) : (
-        <div
-          tabIndex={0}
-          role="region"
-          aria-label="Log lines"
-          className={cn(frame, "overflow-x-auto")}
-        >
+        <div tabIndex={0} role="region" aria-label={label} className={cn(frame, "overflow-x-auto")}>
           {list}
         </div>
       )}
@@ -516,7 +514,12 @@ export function EvidencePanel({ className }: { className?: string }) {
             </pre>
           ) : null}
           {/* Keyed by evidence, so each citation pointed at sends its own pass of light. */}
-          <LogLines key={evidence.id} lines={linesFor(evidence.id)} sweep />
+          <LogLines
+            key={evidence.id}
+            lines={linesFor(evidence.id)}
+            sweep
+            label={`Log lines behind ${evidence.id}`}
+          />
           <DataTable data={(evidence.data ?? {}) as Record<string, unknown>} />
         </>
       ) : (

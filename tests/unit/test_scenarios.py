@@ -130,3 +130,11 @@ def test_a_preview_shows_real_lines_from_the_sample(builder: ScenarioBuilder) ->
     assert len(preview) == 3
     assert len(set(preview)) == 3
     assert all("Got exception while serving" in line for line in preview)
+
+
+def test_a_title_counts_one_client_in_the_singular() -> None:
+    from aria.data.scenarios import _counted
+
+    template = "Clients cannot connect through the proxy ({nodes} clients)"
+    assert _counted(template, 1) == "Clients cannot connect through the proxy (1 client)"
+    assert _counted(template, 3) == "Clients cannot connect through the proxy (3 clients)"

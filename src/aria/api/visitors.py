@@ -11,6 +11,7 @@ API key see every run, as on a server without scoping.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from dataclasses import dataclass
 from typing import Annotated, Any
@@ -19,6 +20,7 @@ from fastapi import Depends, Header, HTTPException, status
 
 from aria.api.security import VISITOR_ID, Principal
 from aria.api.state import AppState, app_state, current_principal
+from aria.db import repository as repo
 
 ANONYMOUS = "anonymous"
 
@@ -47,6 +49,21 @@ class Viewer:
 
 
 SEES_ALL = Viewer()  # a server without scoping, or a caller with an API key
+
+
+async def make_room(state: AppState, viewer: Viewer) -> None:
+    """Refuse a visitor's new triage while their share is already waiting or running: with one
+    queue for everyone, a visitor's pile of pastes would hold up every other visitor's next one."""
+    most = state.services.settings.max_active_runs_per_visitor
+    if not most or viewer.tag is None:
+        return
+    active = await asyncio.to_thread(repo.active_runs, state.services.engine, viewer.tag)
+    if active >= most:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            f"You already have {active} triages waiting or running. Start another when one of "
+            "them is ready for review.",
+        )
 
 
 def visitor_tag(session_id: str | None) -> str:

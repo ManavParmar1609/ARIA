@@ -124,7 +124,7 @@ export function RunbookDetail({ slug }: { slug: string }) {
   if (runbook.isError) {
     if (runbook.error instanceof ApiError && runbook.error.status === 404) {
       return (
-        <EmptyState title="No runbook by that name">
+        <EmptyState heading="h1" title="No runbook by that name">
           <Link href="/console/runbooks" className="underline">
             See all runbooks
           </Link>

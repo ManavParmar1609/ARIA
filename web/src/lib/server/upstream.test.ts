@@ -12,6 +12,7 @@ import {
   readBody,
   upstreamPath,
 } from "./upstream";
+import { UNREACHABLE } from "@/lib/unreachable";
 
 const req = (
   path: string,
@@ -162,9 +163,7 @@ describe("forward", () => {
     expect(fetch).not.toHaveBeenCalled();
     const down = await forward(req("/api/v1/runs"), "/api/v1/runs");
     expect(down.status).toBe(502);
-    expect(await down.json()).toEqual({
-      detail: "The ARIA API is not reachable. Check that it is running.",
-    });
+    expect(await down.json()).toEqual({ detail: UNREACHABLE });
   });
 });
 

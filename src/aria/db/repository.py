@@ -123,6 +123,17 @@ def runs_ahead(engine: Engine, run_id: str) -> int:
         return int(ahead or 0)
 
 
+def active_runs(engine: Engine, visitor: str) -> int:
+    """How many of one visitor's runs are waiting or running."""
+    with session_scope(engine) as session:
+        count = session.scalar(
+            select(func.count())
+            .select_from(RunRow)
+            .where(RunRow.status.in_(("queued", "running")), RunRow.visitor == visitor)
+        )
+        return int(count or 0)
+
+
 def list_runs(
     engine: Engine,
     *,

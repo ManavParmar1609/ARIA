@@ -11,7 +11,7 @@ import { runTitle } from "@/components/console/run-row";
 import { useDocumentTitle } from "@/lib/document-title";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/console/states";
 import { LostSpot } from "@/components/illustrations/spots";
-import { RunStatus } from "@/components/console/status";
+import { ExampleStatus, RunStatus } from "@/components/console/status";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -76,7 +76,7 @@ function Header({
     <header className="grid gap-2">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <LevelChip severity={isSeverity(level) ? level : null} />
-        <RunStatus status={run.status} />
+        {run.example ? <ExampleStatus status={run.status} /> : <RunStatus status={run.status} />}
       </div>
       <h1
         ref={title}
@@ -293,6 +293,7 @@ export function RunView({
     if (run.error instanceof ApiError && run.error.status === 404) {
       return (
         <EmptyState
+          heading="h1"
           title="This incident is not here"
           art={<LostSpot className="h-auto w-full" />}
           action={
@@ -476,7 +477,11 @@ export function RunView({
           </div>
           <div className="grid min-w-0 [scrollbar-width:thin] content-start gap-6 xl:sticky xl:top-6 xl:col-start-2 xl:row-span-3 xl:row-start-1 xl:max-h-[calc(100dvh-3rem)] xl:self-start xl:overflow-y-auto">
             {severity ? (
-              <SeverityPanel assessment={severity} shortListHeld={shortListHeld} />
+              <SeverityPanel
+                assessment={severity}
+                shortListHeld={shortListHeld}
+                status={detail.status}
+              />
             ) : (
               <section
                 aria-labelledby="severity-title"
@@ -544,7 +549,7 @@ export function RunView({
           </TabsList>
           <TabsContent value="work" className="grid gap-6">
             {values ? (
-              <AgentTeam values={values} events={timeline.events} />
+              <AgentTeam values={values} events={timeline.events} example={detail.example} />
             ) : (
               <LoadingRows rows={3} label="Loading what the agents did" />
             )}

@@ -869,6 +869,8 @@ export type components = {
             insufficient_evidence: boolean;
             /** Model */
             model?: string | null;
+            /** Notes */
+            notes?: string[];
         };
         AuthenticationInfo: {
             /** @example  */
@@ -1791,6 +1793,8 @@ export type components = {
             investigation: {
                 [key: string]: unknown;
             };
+            /** Max Body Bytes */
+            max_body_bytes?: number | null;
             /** Rate Limit Per Minute */
             rate_limit_per_minute: number;
             /** Require Approval */

@@ -307,7 +307,7 @@ export function TriageReplay({ data }: { data: Replay }) {
               Waiting for a person to approve
             </span>
             <span className="tabular text-xs text-muted-foreground">
-              ready for review {(data.timeToReviewMs / 1000).toFixed(1)} s after the logs arrived
+              Ready for review {(data.timeToReviewMs / 1000).toFixed(1)} s after the logs arrived
             </span>
           </div>
         </div>

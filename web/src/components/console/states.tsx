@@ -33,6 +33,7 @@ export function EmptyState({
   children,
   action,
   className,
+  heading: Title = "p",
 }: {
   icon?: LucideIcon;
   /** A small illustration, shown beside the words on wider screens (it replaces the icon). */
@@ -41,6 +42,8 @@ export function EmptyState({
   children?: ReactNode;
   action?: ReactNode;
   className?: string;
+  /** "h1" where the state is the whole page, such as a link to something that is not there. */
+  heading?: "p" | "h1";
 }) {
   return (
     <div
@@ -54,7 +57,7 @@ export function EmptyState({
         {Icon && !art ? (
           <Icon aria-hidden className="size-5 text-foreground" strokeWidth={1.5} />
         ) : null}
-        <p className="text-xl font-medium text-heading">{title}</p>
+        <Title className="text-xl font-medium text-heading">{title}</Title>
         {children ? <div className="max-w-prose text-muted-foreground">{children}</div> : null}
         {action}
       </div>

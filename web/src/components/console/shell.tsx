@@ -235,28 +235,29 @@ function ApiStatus() {
       : data.status === "ok" || offline
         ? "ok"
         : "degraded";
+  // A server that is not answering is usually waking or restarting: a wait, not an alarm.
   const label = {
-    ok: offline ? "API ready, offline mode" : "API ready",
-    degraded: "API degraded",
-    down: "API not reachable",
-    unknown: "Checking the API",
+    ok: offline ? "ARIA is ready, offline mode" : "ARIA is ready",
+    degraded: "Some of ARIA is not working",
+    down: "Waiting for ARIA's server",
+    unknown: "Checking ARIA's server",
   }[state];
   return (
-    <p className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
+    <p
+      className="flex items-center gap-2 text-xs text-muted-foreground"
+      role="status"
+      title={data ? `Version ${data.version}` : undefined}
+    >
       <span
         aria-hidden
         className={cn(
           "block size-2 shrink-0 rounded-full",
           state === "ok" && "bg-ok",
-          state === "degraded" && "bg-sev3",
-          state === "down" && "bg-danger",
+          (state === "degraded" || state === "down") && "bg-sev3",
           state === "unknown" && "bg-control",
         )}
       />
-      <span>
-        {label}
-        {data ? <span className="text-faint"> (v{data.version})</span> : null}
-      </span>
+      <span>{label}</span>
     </p>
   );
 }
@@ -490,7 +491,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
                   <Link href="/" className="rounded-sm px-1.5" onClick={() => setOpen(false)}>
                     <Wordmark />
                   </Link>
-                  <div className="flex-1 overflow-y-auto">
+                  <div className="-mx-1 flex-1 overflow-y-auto px-1 py-1">
                     <Nav onNavigate={() => setOpen(false)} />
                   </div>
                   <SessionFooter onNavigate={() => setOpen(false)} />

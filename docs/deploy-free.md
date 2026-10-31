@@ -201,6 +201,12 @@ Before you add your key, weigh three things:
   together may make 1,800. When either runs out, the console says ARIA is busy and carries on by
   itself a few seconds later. To allow more, raise `ARIA_RATE_LIMIT_PER_MINUTE` (each visitor) or
   `ARIA_RATE_LIMIT_SITE_PER_MINUTE` (everyone) in the Render service's **Environment** settings.
+- **Room for everyone in the queue.** The free plan runs one triage at a time, so each visitor may
+  have 3 waiting or running; the console asks for a fourth to wait until one is ready
+  (`ARIA_MAX_ACTIVE_RUNS_PER_VISITOR`).
+- **Pastes up to 1 MB.** A run's memory grows with its lines, and the free plan has 512 MB, so the
+  demo takes pastes of up to 1 MB, about 5,000 log lines; the console says so before sending a
+  larger one. On a server with more memory, raise `ARIA_MAX_BODY_BYTES` (in bytes).
 
 ## If something goes wrong
 
@@ -210,6 +216,7 @@ Before you add your key, weigh three things:
 | The console says "ARIA's API is not answering" | Check that Render shows the service as Live, and that `ARIA_API_URL` starts with `https://` and has no path after the address. Vercel applies changed variables to new deployments only, so redeploy after a change. |
 | The Vercel install fails with `ERR_INVALID_THIS` or a lockfile error | Vercel used its own pnpm instead of `web/vercel.json`'s. Check that the project's root directory is `web` and that no install command override is set, then deploy the newest commit on `main`. |
 | The console often says ARIA is busy | Raise `ARIA_RATE_LIMIT_SITE_PER_MINUTE` on Render, or `ARIA_RATE_LIMIT_PER_MINUTE` if one visitor sees it alone. |
+| Render restarts the API saying it ran out of memory | Lower `ARIA_MAX_BODY_BYTES`, or move to a plan with more memory. |
 | Link previews show no image | Set `ARIA_WEB_URL` to your site's address and redeploy. |
 
 ## Other places to run the API

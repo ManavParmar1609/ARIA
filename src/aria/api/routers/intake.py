@@ -8,7 +8,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 
 from aria.api import alerts as intake
-from aria.api.ask import answer, memory_evidence
+from aria.api.ask import answer, asks_about_now, memory_evidence, notes
 from aria.api.keys import VisitorKeyDep, may_use_model, offline
 from aria.api.schemas import AlertAccepted, AskRequest, AskResponse
 from aria.api.state import AppState, app_state
@@ -149,6 +149,15 @@ async def ask(
         evidence = [Evidence.model_validate(e) for e in snapshot.values.get("evidence", [])]
     else:
         evidence = await memory_evidence(services, body.question)
+    if asks_about_now(body.question):
+        # No record says how things are now: say so rather than answer with the past.
+        return AskResponse(
+            answer=[],
+            insufficient_evidence=True,
+            notes=notes(body.question, [], run_scoped=bool(body.run_id)),
+            evidence=[],
+            answered_by="retrieval",
+        )
     use_llm = not (run and run.get("request", {}).get("options", {}).get("use_llm") is False)
     use_llm = may_use_model(state, visitor, viewer.tag, use_llm)
     own = services.router.with_key(visitor) if visitor is not None else None
@@ -160,11 +169,13 @@ async def ask(
         if own is not None:
             await own.aclose()
     referenced = {eid for claim in output.answer for eid in claim.evidence_ids}
+    sources = [item for item in cited if item.id in referenced]
     return AskResponse(
         answer=output.answer,
         insufficient_evidence=output.insufficient_evidence,
         follow_ups=output.follow_ups,
-        evidence=[item for item in cited if item.id in referenced] or cited[:5],
+        notes=notes(body.question, sources, run_scoped=bool(body.run_id)),
+        evidence=sources or cited[:5],
         answered_by="llm" if model else "retrieval",
         model=model,
     )

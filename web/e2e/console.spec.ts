@@ -78,7 +78,8 @@ test.describe("console", () => {
     await expect(page.getByText(/^ARIA finished in /)).toBeVisible();
     await page.getByRole("tab", { name: "What ARIA did" }).click();
     await page.getByText(/^Every event \(\d+\)$/).click();
-    await expect(page.getByText(/Review: approve by/)).toBeVisible();
+    const events = page.locator("details", { has: page.getByText(/^Every event \(\d+\)$/) });
+    await expect(events.getByText(/^Approved by /)).toBeVisible();
     await expect(page.getByText(/Run finished: published/)).toBeVisible();
 
     // time travel: view the run as it was before the review, then come back
@@ -129,6 +130,19 @@ test.describe("console", () => {
       await page.getByRole("button", { name: "Discard the draft" }).click();
       await expect(page.getByRole("heading", { name: "Draft discarded" })).toBeVisible();
     };
+    // Closing a review dialog puts focus back on the button that opened it, and the edit
+    // dialog opens on itself rather than on a selected title.
+    const edit = page.getByRole("button", { name: "Edit before sending" });
+    await edit.click();
+    await expect(
+      page.getByRole("dialog", { name: "Edit the report before sending" }),
+    ).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(edit).toBeFocused();
+    const discarding = page.getByRole("button", { name: "Discard draft" });
+    await discarding.click();
+    await page.getByRole("button", { name: "Keep reviewing" }).click();
+    await expect(discarding).toBeFocused();
     await discard();
     const bigger = page.getByRole("button", { name: /^Run it on \d+ servers$/ });
     const next = (await bigger.textContent())?.match(/\d+/)?.[0] ?? "";
@@ -235,6 +249,12 @@ test.describe("console", () => {
     const first = answer.getByRole("button", { name: /^Source 1: Past incident, / }).first();
     await expect(first).toBeVisible();
     await expect(answer.getByRole("heading", { name: "Sources" })).toBeVisible();
+    // A screen reader hears that the answer came, and how much it holds.
+    await expect(
+      page
+        .getByRole("status")
+        .filter({ hasText: /^ARIA answered: \d+ points?, from \d+ sources?\.$/ }),
+    ).toHaveCount(1);
     // A citation opens its source in the list beneath the answer.
     await first.click();
     await expect(answer.locator("details[open]").first()).toContainText("Resolution:");
@@ -245,7 +265,9 @@ test.describe("console", () => {
 
     await page.getByLabel("Your question").fill("What is the weather in Lisbon today?");
     await page.getByRole("button", { name: "Ask ARIA" }).click();
-    await expect(page.getByText("Nothing in ARIA's records answers this.")).toBeVisible();
+    const nothing = "Nothing in ARIA's records answers this.";
+    await expect(page.getByRole("list", { name: "Answers" }).getByText(nothing)).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: nothing })).toHaveCount(1);
   });
 
   test("triages in chat over AG-UI and answers the review interrupt", async ({ page }) => {

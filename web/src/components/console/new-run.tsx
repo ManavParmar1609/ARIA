@@ -27,6 +27,12 @@ import { accessSentence, modelAccess, type SharedModel } from "@/lib/model-acces
 
 const MAX_LINES = 20_000;
 
+/** A size in megabytes, to one decimal place: "3.7 MB". A paste's size rounds up, so one just
+ * over a limit never reads as the limit itself. */
+export function megabytes(bytes: number, round: (x: number) => number = Math.round): string {
+  return `${round((bytes / 1024 / 1024) * 10) / 10} MB`;
+}
+
 function Toggle({
   id,
   label,
@@ -163,13 +169,16 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
     () => new TextEncoder().encode(JSON.stringify(lines)).length + 2048,
     [lines],
   );
+  // The smaller of the console's own limit and the server's, so a paste is refused once,
+  // here, rather than by the server after it was sent.
+  const most = Math.min(MAX_BODY_BYTES, settings?.max_body_bytes ?? MAX_BODY_BYTES);
   const problem =
     lines.length === 0
       ? "Paste at least one log line, or pick a sample on the Samples tab."
       : lines.length > MAX_LINES
         ? `ARIA reads at most ${MAX_LINES.toLocaleString("en")} lines in one triage; this has ${lines.length.toLocaleString("en")}.`
-        : bytes > MAX_BODY_BYTES
-          ? `These lines come to ${Math.ceil((bytes / 1024 / 1024) * 10) / 10} MB, more than the ${MAX_BODY_BYTES / 1024 / 1024} MB the console sends in one triage. Send fewer lines, or split them over several triages.`
+        : bytes > most
+          ? `These lines come to ${megabytes(bytes, Math.ceil)}, more than the ${megabytes(most)} this server takes in one triage. Send fewer lines, or split them over several triages.`
           : null;
   const apiError = create.error instanceof ApiError ? create.error.detail : create.error?.message;
 

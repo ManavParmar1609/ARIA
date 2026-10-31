@@ -43,7 +43,12 @@ function Pattern({ template, lines }: { template: TemplateStat; lines: LogEvent[
   return (
     <li className="grid gap-1.5">
       {lines.length ? (
-        <LogLines lines={lines} limit={1} more={false} />
+        <LogLines
+          lines={lines}
+          limit={1}
+          more={false}
+          label={`An example line of ${template.evidence_id}`}
+        />
       ) : (
         <p className="font-mono text-xs leading-5 break-all">{template.template}</p>
       )}
@@ -64,7 +69,7 @@ function Pattern({ template, lines }: { template: TemplateStat; lines: LogEvent[
               : `Show the ${lines.length.toLocaleString("en")} lines`}
           </summary>
           <div className="pt-2">
-            <LogLines lines={lines} limit={40} />
+            <LogLines lines={lines} limit={40} label={`The lines of ${template.evidence_id}`} />
           </div>
         </details>
       ) : null}
@@ -151,8 +156,9 @@ export function WhatHappened({
           {injections.length === 1
             ? "One line tried to talk ARIA out of the incident."
             : `${injections.length} lines tried to talk ARIA out of the incident.`}{" "}
-          ARIA set {injections.length === 1 ? "it" : "them"} aside and kept{" "}
-          {injections.length === 1 ? "it" : "them"} from every model. See Logs, below.
+          ARIA set {injections.length === 1 ? "it" : "them"} aside: left out of the analysis, so{" "}
+          {injections.length === 1 ? "it" : "they"} cannot move the rating, and shown to a model
+          only as quoted text it is told not to follow. See Logs, below.
         </p>
       ) : null}
     </section>

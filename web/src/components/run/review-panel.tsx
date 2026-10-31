@@ -232,6 +232,16 @@ export function ReviewPanel({
   const sending = sendable.filter((a) => send.has(a.action_id)).length;
   const validation = report?.validation;
 
+  // The dialogs open from these buttons, not from triggers of their own, so closing one puts
+  // focus back by hand: otherwise it falls to the page and the next key press is a shortcut.
+  const editButton = useRef<HTMLButtonElement>(null);
+  const discardButton = useRef<HTMLButtonElement>(null);
+  const backTo = (event: Event, button: HTMLButtonElement | null) => {
+    if (!button?.isConnected) return; // decided: the receipt has taken the panel's place
+    event.preventDefault();
+    button.focus();
+  };
+
   const saving = useRef(false);
   const decide = async (decision: "approve" | "edit" | "reject") => {
     if (saving.current) return;
@@ -287,6 +297,7 @@ export function ReviewPanel({
             {approveLabel(sending, review.isPending)}
           </Button>
           <Button
+            ref={editButton}
             onClick={() => {
               // Start from the report as it is now: it may have arrived after this panel did, and
               // an empty summary box would read as "no summary" (lines kept keep their sources).
@@ -297,7 +308,12 @@ export function ReviewPanel({
           >
             Edit before sending
           </Button>
-          <Button variant="danger" onClick={() => setDiscarding(true)} disabled={review.isPending}>
+          <Button
+            ref={discardButton}
+            variant="danger"
+            onClick={() => setDiscarding(true)}
+            disabled={review.isPending}
+          >
             Discard draft
           </Button>
         </div>
@@ -391,7 +407,16 @@ export function ReviewPanel({
       </details>
 
       <Dialog open={editing} onOpenChange={setEditing}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent
+          className="max-w-2xl"
+          // The dialog itself takes focus, so its title is read first and the report's title is
+          // not selected for the first key press to replace (nor a phone's keyboard opened).
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            (event.currentTarget as HTMLElement | null)?.focus();
+          }}
+          onCloseAutoFocus={(event) => backTo(event, editButton.current)}
+        >
           <DialogHeader>
             <DialogTitle>Edit the report before sending</DialogTitle>
             <DialogDescription>
@@ -485,7 +510,7 @@ export function ReviewPanel({
       </Dialog>
 
       <Dialog open={discarding} onOpenChange={setDiscarding}>
-        <DialogContent>
+        <DialogContent onCloseAutoFocus={(event) => backTo(event, discardButton.current)}>
           <DialogHeader>
             <DialogTitle>Discard this draft?</DialogTitle>
             <DialogDescription>

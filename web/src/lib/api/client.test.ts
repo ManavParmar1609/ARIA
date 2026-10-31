@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { UNREACHABLE } from "@/lib/unreachable";
+
 import { apiFetch } from "./client";
 
 function answer(response: Response) {
@@ -39,6 +41,30 @@ describe("API errors", () => {
     await expect(apiFetch("/api/v1/runs", { method: "POST", body: "{}" })).rejects.toMatchObject({
       detail: expect.stringContaining("(8 MB)"),
     });
+  });
+
+  it("says busy for a rate limit, but passes on a refusal that says what to do", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ detail: "rate limit exceeded" }, { status: 429 })),
+    );
+    await expect(apiFetch("/api/v1/runs")).rejects.toThrow(
+      "ARIA is busy right now. Wait a moment and try again.",
+    );
+    const mine = "You already have 3 triages waiting or running. Start another when one is ready.";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ detail: mine }, { status: 429 })),
+    );
+    await expect(apiFetch("/api/v1/runs")).rejects.toThrow(mine);
+  });
+
+  it("says a server that does not answer may be starting", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("Bad Gateway", { status: 502 })),
+    );
+    await expect(apiFetch("/api/v1/runs")).rejects.toThrow(UNREACHABLE);
   });
 
   it("keeps an explanation the API wrote", async () => {

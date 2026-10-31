@@ -164,6 +164,20 @@ def _is_unit_key(query: str) -> bool:
     return any(kind.pattern.search(query) for kind in load_flow_settings().kinds)
 
 
+# Failure modes as people write them (the console's own list, web/src/lib/failure-modes.ts); the
+# rest read fine with spaces for underscores.
+_MODE_WORDS = {
+    "auth_failures": "authentication failures",
+    "bruteforce": "brute-force attempts",
+    "dns_resolution": "DNS resolution",
+    "hdfs_lease_renewal": "HDFS lease renewal",
+    "mod_jk_worker_error": "mod_jk worker errors",
+    "psu_failure": "PSU failure",
+    "resourcemanager_unreachable": "ResourceManager unreachable",
+    "unfinished_work": "work that stops partway",
+}
+
+
 def candidate_hypotheses(inputs: InvestigationInputs, *, limit: int = 3) -> list[NewHypothesis]:
     """Plausible causes to test: work the parser saw stop partway, similar incidents, and the
     window's own signal."""
@@ -183,10 +197,10 @@ def candidate_hypotheses(inputs: InvestigationInputs, *, limit: int = 3) -> list
         if not incident.applies_to(inputs.system, batch.features.components):
             continue
         seen.add(incident.failure_mode)
-        label = incident.failure_mode.replace("_", " ")
+        label = _MODE_WORDS.get(incident.failure_mode, incident.failure_mode.replace("_", " "))
         out.append(
             NewHypothesis(
-                statement=f'{label.capitalize()}, as in the past incident "{clip(headline(incident.title), 80)}"',
+                statement=f'{label[:1].upper()}{label[1:]}, as in the past incident "{clip(headline(incident.title), 80)}"',
                 failure_mode=incident.failure_mode,
                 component=_component_for(incident, batch, component),
             )

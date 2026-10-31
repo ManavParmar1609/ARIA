@@ -2692,6 +2692,13 @@
             "type": "array",
             "title": "Follow Ups"
           },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notes"
+          },
           "evidence": {
             "items": {
               "$ref": "#/components/schemas/Evidence"
@@ -5026,6 +5033,17 @@
                 "type": "null"
               }
             ]
+          },
+          "max_body_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Body Bytes"
           }
         },
         "type": "object",

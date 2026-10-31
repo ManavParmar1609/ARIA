@@ -14,18 +14,30 @@ export interface Decision {
 const ORDER = ["SEV1", "SEV2", "SEV3", "SEV4"];
 const bySeverity = (a: string, b: string) => ORDER.indexOf(a) - ORDER.indexOf(b);
 
-/** One sentence for how the severity was settled. */
-export function decisionPhrase(d: Decision): string {
+/**
+ * One sentence for how the severity was settled. Given the run's status, a request to confirm
+ * becomes what came of it once a person has reviewed the incident.
+ */
+export function decisionPhrase(d: Decision, status?: string): string {
+  const approved = status === "published";
+  const ended = approved || status === "rejected";
+  const plans = ended ? "planned" : "plans";
+  const ask = (verb: "confirm" | "decide") =>
+    !ended ? ` Please ${verb}.` : approved ? " A reviewer confirmed it." : "";
   switch (d.decided_by) {
     case "human":
-      return "Set by a reviewer.";
+      return d.prediction_set.includes(d.severity)
+        ? `A reviewer chose ${d.severity} from the short list.`
+        : `A reviewer set ${d.severity}, outside ARIA's short list.`;
     case "rules":
-      return "Set by a rule.";
+      // A safety rule settled it or the rules and a confident model named the same level; a
+      // floor the model disagreed with is worded by the panel, which knows the rule.
+      return "Set by the rules, and the model agrees.";
     case "model":
       return "Confident: decided by the model.";
   }
   if (d.set_empty) {
-    return `No level was likely enough, so ARIA plans for ${d.severity}. Please decide.`;
+    return `No level was likely enough, so ARIA ${plans} for ${d.severity}.${ask("decide")}`;
   }
   const set = [...new Set(d.prediction_set)].sort(bySeverity);
   if (set.length > 1) {
@@ -34,10 +46,10 @@ export function decisionPhrase(d: Decision): string {
       return `Could be ${list}. A language model chose ${d.severity} from that list.`;
     }
     const worst = set[0] === d.severity ? `${d.severity}, the most serious of them` : d.severity;
-    return `Could be ${list}. ARIA plans for ${worst}. Please confirm.`;
+    return `Could be ${list}. ARIA ${plans} for ${worst}.${ask("confirm")}`;
   }
   if (d.decided_by === "llm") return `A language model chose ${d.severity}.`;
-  return `Probably ${d.severity}, but ARIA is not sure enough to decide alone. Please confirm.`;
+  return `Only ${d.severity} is on the short list, but ARIA was not sure enough of it to decide alone.${ask("confirm")}`;
 }
 
 const SHORT: Record<string, string> = {

@@ -1,10 +1,10 @@
 "use client";
 
-import { LevelChip, SeverityBadge, SeverityScale } from "@/components/aria/severity";
+import { LevelChip, SeverityScale } from "@/components/aria/severity";
 import { decisionPhrase } from "@/lib/decision";
 import { SEVERITIES, type SeverityAssessment } from "@/lib/api/types";
 import { percent } from "@/lib/format";
-import { LEVEL_RESPONSE } from "@/lib/levels";
+import { LEVEL_RESPONSE, orList } from "@/lib/levels";
 import { cn } from "@/lib/utils";
 
 import { Citations } from "./evidence";
@@ -17,10 +17,13 @@ import { Citations } from "./evidence";
 export function SeverityPanel({
   assessment,
   shortListHeld,
+  status,
 }: {
   assessment: SeverityAssessment;
   /** How often lists like this held the right level on the published test incidents. */
   shortListHeld?: number | null;
+  /** The run's status: once a person has reviewed it, "please confirm" becomes what they did. */
+  status?: string;
 }) {
   const coverage = Math.round((1 - assessment.alpha) * 100);
   // A window unlike the ones the model learned from (or no model loaded): the probabilities are
@@ -40,7 +43,9 @@ export function SeverityPanel({
       : null;
   const how = lifted
     ? `Set by a safety rule: “${lifted.title}” keeps it at ${assessment.floor} or worse.`
-    : decisionPhrase(assessment);
+    : decisionPhrase(assessment, status);
+  const set = assessment.prediction_set;
+  const overruled = assessment.decided_by === "human" && !set.includes(assessment.severity);
   const maxScore = Math.max(1, ...SEVERITIES.map((s) => assessment.rule_scores[s] ?? 0));
   return (
     // overflow-clip: the stamp starts large, and a transform still counts as overflow; clipped to
@@ -62,13 +67,15 @@ export function SeverityPanel({
         />
         <p className="text-sm">{LEVEL_RESPONSE[assessment.severity]}</p>
       </div>
-      <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
-        Short list:
-        {assessment.prediction_set.length ? (
-          assessment.prediction_set.map((s) => <SeverityBadge key={s} severity={s} size="sm" />)
+      {/* In words, not badges: the level is already shown twice on this screen. */}
+      <p className="text-sm">
+        <span className="font-medium">Short list: </span>
+        {set.length ? (
+          orList(set)
         ) : (
-          <span className="font-normal text-muted-foreground">no level was likely enough</span>
+          <span className="text-muted-foreground">no level was likely enough</span>
         )}
+        {overruled ? `. A reviewer set ${assessment.severity}, outside it.` : null}
       </p>
       {/* What the short list means, in view: how often such lists held the right level, which is
           not how sure ARIA is of its first choice (item 16). */}
@@ -92,17 +99,32 @@ export function SeverityPanel({
             <span className="text-muted-foreground">
               {lifted
                 ? rulesOnly
-                  ? `On their own, the rule scores put ${percent(assessment.probabilities[modelTop] ?? 0)} on ${modelTop}; the floor is there for cases the scores miss.`
-                  : `On its own, the model put ${percent(assessment.probabilities[modelTop] ?? 0)} on ${modelTop}; the floor is there for cases the model has not learned.`
-                : rulesOnly
-                  ? "The bars are rule scores, not a calibrated confidence."
-                  : assessment.set_empty
-                    ? `No level is likely enough for the ${coverage}% short list on its own; ${assessment.severity} is the most likely, at ${percent(assessment.confidence)}.`
-                    : `The model gives ${assessment.severity} ${percent(assessment.confidence)}.`}
+                  ? `On their own, the rule scores put ${percent(assessment.probabilities[modelTop] ?? 0)} on ${modelTop}; the safety rule is there for cases the scores miss.`
+                  : `On its own, the model put ${percent(assessment.probabilities[modelTop] ?? 0)} on ${modelTop}; the safety rule is there for cases the model has not learned.`
+                : assessment.decided_by === "human"
+                  ? ""
+                  : rulesOnly
+                    ? "The bars are rule scores, not a calibrated confidence."
+                    : assessment.set_empty
+                      ? `No level is likely enough for the ${coverage}% short list on its own; ${assessment.severity} is the most likely, at ${percent(assessment.confidence)}.`
+                      : assessment.decided_by === "fallback" && set.length === 1
+                        ? `The model gives ${assessment.severity} ${percent(assessment.confidence)}, short of the confidence ARIA needs to decide alone.`
+                        : `The model gives ${assessment.severity} ${percent(assessment.confidence)}.`}
               {assessment.auditable
                 ? ` No language model was involved, so the decision can be checked from ${rulesOnly ? "the rules" : "the rules and the model"} alone.`
                 : ""}
             </span>
+          </p>
+          <p className="leading-relaxed text-muted-foreground">
+            How the pieces fit: the rules score what the logs show, and a safety rule can set the
+            lowest level allowed.{" "}
+            {rulesOnly
+              ? "Here the calibrated model was not used, so the rule scores stand in for its likelihoods."
+              : "The calibrated model weighs the whole window, rule scores included, and gives each level a likelihood."}{" "}
+            The short list keeps the levels that can&apos;t be ruled out, never below a safety
+            rule&apos;s level. When one level is left and a safety rule set it, or the model is
+            confident in it, ARIA decides alone; otherwise a language model chooses from the list,
+            or ARIA plans for the most serious level on it, and a person confirms.
           </p>
           <SeverityScale
             probabilities={assessment.probabilities}
@@ -116,9 +138,19 @@ export function SeverityPanel({
           />
           {assessment.rule_hits.length > 0 ? (
             <div className="grid gap-2">
-              <p className="font-medium">
-                {assessment.rule_hits.length} {assessment.rule_hits.length === 1 ? "rule" : "rules"}{" "}
-                matched; on their own they suggest {assessment.rule_severity}
+              <p>
+                <span className="font-medium">
+                  {assessment.rule_hits.length}{" "}
+                  {assessment.rule_hits.length === 1 ? "rule" : "rules"} matched.
+                </span>{" "}
+                <span className="text-muted-foreground">
+                  On their own they point to {assessment.rule_severity}: the most serious level
+                  whose score is high enough to count (if none is, the highest score), so one strong
+                  rule for a serious level outweighs several weaker ones for a lesser level.{" "}
+                  {rulesOnly
+                    ? "Here they also made the short list."
+                    : "Their view is one of the model's inputs, not the result."}
+                </span>
               </p>
               <ul className="grid gap-2">
                 {assessment.rule_hits.map((hit) => (
@@ -139,13 +171,30 @@ export function SeverityPanel({
                       </span>
                       <Citations ids={hit.evidence_ids} />
                     </p>
-                    {hit.detail ? (
-                      <p className="font-mono text-xs text-muted-foreground">{hit.detail}</p>
-                    ) : null}
                   </li>
                 ))}
               </ul>
-              <div className="grid grid-cols-4 gap-1.5 pt-1" aria-label="Rule score per level">
+              {assessment.rule_hits.some((hit) => hit.detail) ? (
+                <details className="text-xs">
+                  <summary className="w-fit cursor-pointer py-1 text-muted-foreground hover:text-heading">
+                    The exact conditions each rule checked
+                  </summary>
+                  <ul className="grid gap-1.5 pt-1">
+                    {assessment.rule_hits.map((hit) =>
+                      hit.detail ? (
+                        <li key={hit.rule_id} className="grid gap-0.5">
+                          <span>{hit.title}</span>
+                          <span className="font-mono break-words text-muted-foreground">
+                            {hit.detail}
+                          </span>
+                        </li>
+                      ) : null,
+                    )}
+                  </ul>
+                </details>
+              ) : null}
+              <p className="pt-1 text-xs text-muted-foreground">Rule score per level</p>
+              <div className="grid grid-cols-4 gap-1.5">
                 {SEVERITIES.map((s) => (
                   <div key={s} className="grid gap-1">
                     <div className="h-1.5 rounded-full bg-sunken">
@@ -168,8 +217,8 @@ export function SeverityPanel({
           )}
           <p className="text-xs text-faint">
             {rulesOnly
-              ? `Rules ${assessment.model_version.slice("rules-only:".length)}, model not used`
-              : `Model ${assessment.model_version}`}
+              ? `Rules version ${assessment.model_version.slice("rules-only:".length)}; the calibrated model was not used`
+              : `Calibrated model version ${assessment.model_version}`}
           </p>
         </div>
       </details>

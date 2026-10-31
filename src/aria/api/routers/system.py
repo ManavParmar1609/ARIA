@@ -130,6 +130,7 @@ async def settings_view(state: State, viewer: ViewerDep) -> SettingsOut:
         visitor_keys=accepted_kinds(state),
         visitor_scope=settings.visitor_scope,
         shared_model=shared,
+        max_body_bytes=settings.max_body_bytes,
     )
 
 

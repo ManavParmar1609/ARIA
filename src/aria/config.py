@@ -333,6 +333,9 @@ class Settings(BaseSettings):
     # that names its visitor (X-Visitor-Id) gets rate_limit_per_minute of its own, and this caps
     # each address. 0 keeps one allowance per address.
     rate_limit_site_per_minute: int = Field(default=0, ge=0)
+    # On a shared demo, the triages one visitor may have waiting or running at once (0: no limit),
+    # so one visitor's pile of pastes cannot hold up everyone else's next triage.
+    max_active_runs_per_visitor: int = Field(default=0, ge=0)
     # Largest request body the API reads; 20,000 lines of 2,000 characters fit with room to spare.
     max_body_bytes: int = Field(default=48 * 1024 * 1024, ge=1024)
     # For a shared public demo with no API keys: each visitor sees only the incidents they started

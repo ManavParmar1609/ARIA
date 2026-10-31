@@ -756,6 +756,42 @@ def test_a_question_about_history_hears_only_of_incidents_that_match_it() -> Non
     assert len(rank("Has this happened before?", store.all())) == 2
 
 
+def test_one_shared_word_does_not_make_an_unrelated_record_an_answer() -> None:
+    """Words match whole: "run" is not "runbook", and a past incident must mention at least half
+    of what the question is about, so "killed" alone does not tie a pod to a kernel panic."""
+    from aria.api.ask import notes, rank
+
+    store = EvidenceStore()
+    store.add(
+        EvidenceKind.INCIDENT,
+        "Past incident inc-1: Kernel panics on 5 compute nodes (SEV1, bgl)",
+        source="memory.search",
+        detail="Failure mode: kernel_panic\nResolution: Drain the nodes; killed jobs restart.",
+    )
+    store.add(
+        EvidenceKind.RUNBOOK,
+        "Runbook zk-quorum: ZooKeeper quorum connection loss",
+        source="mcp.get_runbook",
+        detail="1. Restore connectivity between the peers.",
+    )
+    items = store.all()
+    assert rank("Was a Kubernetes pod OOM killed?", items) == []
+    assert rank("Did the payment database run out of disk space?", items) == []
+    kernel = rank("Which kernel panics killed jobs?", items)
+    assert [item.kind for item in kernel] == [EvidenceKind.INCIDENT]
+    # What the answer cannot say, said: subjects no source mentions, and anything about now.
+    assert notes("Did a kernel panic kill jobs during the deploy?", kernel, run_scoped=False) == [
+        "Nothing below mentions “deploy”."
+    ]
+    now = notes("Is this still happening?", [], run_scoped=True)
+    assert now == [
+        (
+            "ARIA can't see your systems as they are now. It knows only the logs this triage "
+            "read and its records."
+        )
+    ]
+
+
 def test_offline_answers_find_evidence_from_plain_questions() -> None:
     from aria.api.ask import _plain, rank
 

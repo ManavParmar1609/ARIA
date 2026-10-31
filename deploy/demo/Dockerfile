@@ -40,9 +40,11 @@ RUN useradd --create-home --uid 1000 aria
 # answers only their own runs and questions, sending them to that provider, and is held in memory
 # while they run, never stored. Each visitor sees only the incidents they started, plus the seeded
 # examples, which nobody can change or delete. Each visitor has a rate limit of their own, and
-# the site's limit caps them all, since every console visitor arrives through one proxy. A request
-# may carry at most 4 MB, which holds the 20,000 lines a run reads at about 200 characters each.
-# Runs go one at a time, so a few large ones arriving together stay inside a free plan's 512 MB.
+# the site's limit caps them all, since every console visitor arrives through one proxy. Runs go
+# one at a time, and a visitor may have 3 waiting or running, so nobody's pile holds up the next
+# visitor for long. A request may carry at most 1 MB (about 5,000 log lines of ordinary length):
+# a run's memory grows with its lines, and pastes this size, even many arriving together, keep
+# the API inside a free plan's 512 MB, where 20,000-line ones did not.
 # With a model key set on the service (GEMINI_API_KEY, say), a visitor without a key of their own
 # gets 5 model-written runs and answers a day, and everyone together 100; past that, offline.
 ENV PYTHONUNBUFFERED=1 \
@@ -58,7 +60,8 @@ ENV PYTHONUNBUFFERED=1 \
     ARIA_WORKER_CONCURRENCY=1 \
     ARIA_RATE_LIMIT_PER_MINUTE=120 \
     ARIA_RATE_LIMIT_SITE_PER_MINUTE=1800 \
-    ARIA_MAX_BODY_BYTES=4194304 \
+    ARIA_MAX_BODY_BYTES=1048576 \
+    ARIA_MAX_ACTIVE_RUNS_PER_VISITOR=3 \
     ARIA_DATABASE_URL=sqlite:////home/aria/demo/aria.db \
     ARIA_DATA_DIR=/home/aria/demo/data \
     ARIA_MODELS_DIR=/home/aria/demo/models

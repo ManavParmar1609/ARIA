@@ -210,6 +210,8 @@ class AskResponse(BaseModel):
     answer: list[ClaimOut]
     insufficient_evidence: bool
     follow_ups: list[str] = Field(default_factory=list)
+    # What the answer cannot say: that ARIA can't see systems now, or subjects no source mentions.
+    notes: list[str] = Field(default_factory=list)
     evidence: list[Evidence]
     answered_by: Literal["llm", "retrieval"]
     model: str | None = None
@@ -351,6 +353,8 @@ class SettingsOut(BaseModel):
     # The server's own model for visitors without a key, and this visitor's share of it today;
     # None when the server has no model of its own (its work runs offline).
     shared_model: SharedModelOut | None = None
+    # The largest request the API reads, so the console can say so before sending a paste.
+    max_body_bytes: int | None = None
 
 
 class ModelKeyCheck(BaseModel):

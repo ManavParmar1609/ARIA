@@ -54,7 +54,7 @@ def loghub_dir(data_dir: Path) -> Path:
     return full if full.is_dir() else FIXTURE_LINES
 
 
-_PLURAL_AFTER_ONE = re.compile(r"\b1 ((?:[\w/-]+ )*?)(node|host|peer)s\b")
+_PLURAL_AFTER_ONE = re.compile(r"\b1 ((?:[\w/-]+ )*?)(node|host|peer|client)s\b")
 
 
 def _counted(template: str, nodes: int) -> str:

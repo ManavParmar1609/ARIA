@@ -2,6 +2,8 @@
 // which forward it to the API with the signed-in key (see src/app/api/v1/[...path]/route.ts), so
 // no key ever reaches page JavaScript.
 
+import { UNREACHABLE } from "@/lib/unreachable";
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -13,6 +15,11 @@ export class ApiError extends Error {
 
   get needsSignIn(): boolean {
     return this.status === 401;
+  }
+
+  /** The server did not answer (asleep, restarting, or the connection dropped). */
+  get unreachable(): boolean {
+    return this.status === 0 || this.status === 502 || this.status === 503 || this.status === 504;
   }
 }
 
@@ -33,8 +40,14 @@ function tooLarge(body: unknown): string {
 }
 
 function describe(status: number, body: unknown): string {
-  // A busy server's own words ("rate limit exceeded") say nothing a visitor can act on.
-  if (status === 429) return "ARIA is busy right now. Wait a moment and try again.";
+  // A busy server's own words ("rate limit exceeded") say nothing a visitor can act on; a
+  // refusal that says what to do (a visitor's triages already waiting) is passed on.
+  if (status === 429) {
+    const detail = body && typeof body === "object" && "detail" in body ? body.detail : null;
+    return typeof detail === "string" && detail.startsWith("You ")
+      ? detail
+      : "ARIA is busy right now. Wait a moment and try again.";
+  }
   if (status === 413) return tooLarge(body);
   if (body && typeof body === "object" && "detail" in body) {
     const detail = (body as { detail: unknown }).detail;
@@ -46,9 +59,7 @@ function describe(status: number, body: unknown): string {
     }
   }
   if (status === 401) return "Sign in with an API key to use the console.";
-  if (status === 502 || status === 503 || status === 504) {
-    return "The ARIA API is not reachable. Check that it is running.";
-  }
+  if (status === 502 || status === 503 || status === 504) return UNREACHABLE;
   if (status >= 500) {
     return "The ARIA API hit an unexpected error. Try again; if it keeps failing, its log says why.";
   }

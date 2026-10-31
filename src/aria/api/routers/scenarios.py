@@ -18,7 +18,7 @@ from aria.api.schemas import (
     links_for,
 )
 from aria.api.state import AppState, app_state
-from aria.api.visitors import ViewerDep
+from aria.api.visitors import ViewerDep, make_room
 from aria.config import get_app_config, get_settings
 from aria.contracts.inputs import SampleRef, TriageRequest
 from aria.contracts.run import RunStatus
@@ -142,6 +142,7 @@ async def run_scenario(
     """Build a sample on this server and triage it as a run; follow it on ``links.stream``."""
     body = body or SampleRunRequest()
     check_provider(state, body.options.provider, visitor)
+    await make_room(state, viewer)
     options = body.options
     if not may_use_model(state, visitor, viewer.tag, options.use_llm):
         options = offline(options)
