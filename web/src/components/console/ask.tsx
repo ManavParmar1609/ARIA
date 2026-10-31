@@ -67,11 +67,20 @@ export function sourceNumbers(answer: Pick<AskResponse, "answer">): Map<string, 
 }
 
 /** What a source is called in the list: a past incident by its own title, the rest as recorded. */
+// Rules and runbooks are titled with their IDs ("Rule R12 (floor SEV2): ...", "Runbook
+// hdfs-disk-full: ..."); a source list names them by what they are about.
+const RULE_TITLE = /^Rule \S+ \((?:score|floor) SEV\d\): (.+)$/s;
+const RUNBOOK_TITLE = /^Runbook \S+: (.+)$/s;
+
 export function sourceName(evidence: Evidence): string {
   const data = (evidence.data ?? {}) as Record<string, unknown>;
   if (evidence.kind === "incident" && typeof data.title === "string" && data.title) {
     return data.synthetic ? `${data.title} (built from a sample)` : data.title;
   }
+  const rule = evidence.kind === "rule" ? RULE_TITLE.exec(evidence.title) : null;
+  if (rule?.[1]) return `Rule: ${rule[1]}`;
+  const runbook = evidence.kind === "runbook" ? RUNBOOK_TITLE.exec(evidence.title) : null;
+  if (runbook?.[1]) return `Runbook: ${runbook[1]}`;
   return evidence.title;
 }
 

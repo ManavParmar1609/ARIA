@@ -357,10 +357,10 @@ def _scores(by: str, shown: str, data: JsonDict) -> str | None:
         return None
     top = max(scores, key=lambda level: scores[level])
     if by == "Rule-score":
-        return f"The severity rules score {top} highest ({scores[top]:.2f})."
+        return f"The severity rules give {top} the most weight ({scores[top]:.0%})."
     listed = [str(level) for level in data.get("prediction_set") or []]
     short = f"; its short list of likely levels is {_levels(listed)}" if listed else ""
-    return f"The severity model finds {top} most likely ({scores[top]:.2f}){short}."
+    return f"The severity model finds {top} most likely ({scores[top]:.0%}){short}."
 
 
 def check_answer(output: AnswerOutput, known: dict[str, Evidence]) -> list[str]:

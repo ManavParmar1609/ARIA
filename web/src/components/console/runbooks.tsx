@@ -12,6 +12,7 @@ import type { RunbookStep } from "@/lib/api/types";
 import { systemName } from "@/lib/systems";
 import { cn } from "@/lib/utils";
 import { useDocumentTitle } from "@/lib/document-title";
+import { failureName } from "@/lib/failure-modes";
 
 // Risk is quiet text, not a badge: the calm budget keeps badges for what needs a decision. It
 // keeps to ink and the danger red; the severity hues mean severity only.
@@ -34,22 +35,10 @@ function Risk({ risk }: { risk: string }) {
   );
 }
 
-// Failure modes as people write them; the rest read fine with spaces for underscores.
-const FAILURE_NAMES: Record<string, string> = {
-  dns_resolution: "DNS resolution",
-  hdfs_lease_renewal: "HDFS lease renewal",
-  mod_jk_worker_error: "mod_jk worker errors",
-  psu_failure: "PSU failure",
-  resourcemanager_unreachable: "ResourceManager unreachable",
-  unfinished_work: "work that stops partway",
-};
-
 /** What a runbook covers, in words: "HDFS, for block serve exceptions" or "Any system". */
 function covers(rb: { systems: string[]; failure_modes: string[] }): string {
   const systems = rb.systems.includes("*") ? "Any system" : rb.systems.map(systemName).join(", ");
-  const modes = rb.failure_modes
-    .filter((f) => f !== "*")
-    .map((f) => FAILURE_NAMES[f] ?? f.replaceAll("_", " "));
+  const modes = rb.failure_modes.filter((f) => f !== "*").map(failureName);
   return modes.length ? `${systems}, for ${modes.join(", ")}` : systems;
 }
 

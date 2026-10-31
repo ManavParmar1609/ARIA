@@ -42,7 +42,7 @@ import { Activity } from "./activity";
 import { Deliveries } from "./deliveries";
 import { EvidencePanel, EvidenceProvider } from "./evidence";
 import { ExpertCheck } from "./expert-check";
-import { History } from "./history";
+import { History, checkpointName } from "./history";
 import { RunProgress } from "./progress";
 import { LiveDraft, ReportView } from "./report-view";
 import { ExampleNote } from "./example-note";
@@ -89,7 +89,10 @@ function Header({
       {assessment ? <p className="text-base">{shortListText(assessment, run.status)}</p> : null}
       <p className="text-sm text-muted-foreground">
         {/* A fork says so once, with a link to the run it came from (below). */}
-        {systemName(run.system)}, {run.parent_run_id ? "" : `${triggerLabel(run.trigger)}, `}
+        {systemName(run.system)},{" "}
+        {run.parent_run_id
+          ? ""
+          : `${run.example ? "an example every visitor sees" : triggerLabel(run.trigger)}, `}
         <time dateTime={run.created_at} title={absoluteTime(run.created_at)}>
           {relativeTime(run.created_at)}
         </time>
@@ -241,6 +244,15 @@ function RunSkeleton() {
   );
 }
 
+// Runs that ended with no rating, so the severity panel says so instead of waiting for one.
+const ENDED_UNRATED = new Set(["failed", "rejected", "published"]);
+
+/** The step an earlier view stops before, in the history list's words: "before “Rate severity”". */
+function earlierStep(next: string[]): string {
+  const name = checkpointName({ next, interrupted: false });
+  return name.charAt(0).toLowerCase() + name.slice(1);
+}
+
 export function RunView({
   runId,
   shortListHeld,
@@ -389,8 +401,7 @@ export function RunView({
           >
             <span className="flex items-center gap-2">
               <HistoryIcon aria-hidden className="size-4" />
-              You are looking at this incident as it was earlier
-              {viewing.next.length ? `, before ${viewing.next.join(" and ")}` : ""}.
+              You are looking at this incident as it was earlier: {earlierStep(viewing.next)}.
             </span>
             <Button size="sm" onClick={() => setCheckpoint(null)}>
               Back to now
@@ -467,7 +478,19 @@ export function RunView({
             {severity ? (
               <SeverityPanel assessment={severity} shortListHeld={shortListHeld} />
             ) : (
-              <Skeleton className="h-64 w-full" />
+              <section
+                aria-labelledby="severity-title"
+                className="grid gap-2 rounded-lg bg-raised p-5"
+              >
+                <h2 id="severity-title" className="text-base font-medium">
+                  How serious
+                </h2>
+                <p className="max-w-prose text-sm text-muted-foreground">
+                  {ENDED_UNRATED.has(detail.status)
+                    ? "This triage ended before ARIA rated it."
+                    : "ARIA rates the incident once it has read the logs."}
+                </p>
+              </section>
             )}
             <EvidencePanel />
           </div>

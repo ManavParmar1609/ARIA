@@ -103,7 +103,7 @@ function Configuration({ view }: { view: SettingsView }) {
       </Section>
       <Section
         id="set-budgets"
-        title="Budgets per run"
+        title="Budgets for each triage"
         intro="When a triage reaches a limit, the model steps stop and ARIA finishes without a model."
       >
         <Pairs
@@ -129,7 +129,7 @@ function Configuration({ view }: { view: SettingsView }) {
             ["Quarantine prompt injection", onOff(g.detect_injection)],
             ["Content-safety model", onOff(g.safety_model)],
             ["Longest line kept", `${String(g.max_line_chars)} characters`],
-            ["Most lines per run", Number(g.max_lines).toLocaleString("en")],
+            ["Most lines in one triage", Number(g.max_lines).toLocaleString("en")],
           ]}
         />
       </Section>
@@ -137,7 +137,7 @@ function Configuration({ view }: { view: SettingsView }) {
         <Pairs
           items={[
             ["Short-list coverage", `${Math.round((1 - alpha) * 100)}%`],
-            ["Similar incidents per run", r.k],
+            ["Similar incidents in one triage", r.k],
             ["Candidates before reranking", r.candidates],
             ["Candidates when widened", r.widen_candidates],
             ["Retrieval attempts", r.max_attempts],

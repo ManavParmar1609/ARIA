@@ -113,6 +113,11 @@ def _ids(*items: Evidence | None) -> list[str]:
     return seen[:8]
 
 
+def _count(n: int, noun: str) -> str:
+    """A count with its noun in the right number: "1 node", "3 nodes"."""
+    return f"{n} {noun}" if n == 1 else f"{n} {noun}s"
+
+
 def _claim(text: str, *items: Evidence | None) -> ClaimOut | None:
     ids = _ids(*items)
     return ClaimOut(text=clip(text, 600), evidence_ids=ids) if ids else None
@@ -307,12 +312,12 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
     if top is not None:
         template, template_ev = top
         kind = "error" if template.error_like else "new warning" if template.novel else "warning"
-        on_nodes = f" on {template.nodes} nodes" if template.nodes else ""
+        on_nodes = f" on {_count(template.nodes, 'node')}" if template.nodes else ""
         real = _example(ctx, template)
         if real is not None:  # one real line reads better than the pattern it was mined into
             summary.append(
                 _claim(
-                    f"Most frequent {kind}, {template.count} lines{on_nodes}, like this one: "
+                    f"Most frequent {kind}, {_count(template.count, 'line')}{on_nodes}, like this one: "
                     f'"{clip(_quoted(real), 160)}".',
                     template_ev,
                     real,
@@ -321,7 +326,8 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
         else:
             summary.append(
                 _claim(
-                    f'Most frequent {kind}: "{clip(template.template, 160)}" ({template.count} lines{on_nodes}).',
+                    f'Most frequent {kind}: "{clip(template.template, 160)}" '
+                    f"({_count(template.count, 'line')}{on_nodes}).",
                     template_ev,
                 )
             )

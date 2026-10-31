@@ -48,4 +48,11 @@ describe("modelHint", () => {
   it("keeps the offline promise where no keys are taken", () => {
     expect(modelHint([], null)).toContain("nothing leaves the server");
   });
+
+  it("describes the switch as it is set", () => {
+    const off = modelHint(["claude"], "claude", null, false);
+    expect(off).toMatch(/^Off: /);
+    expect(off).not.toContain("your own Claude key");
+    expect(modelHint(["claude"], "claude", null, true)).not.toContain("Off:");
+  });
 });

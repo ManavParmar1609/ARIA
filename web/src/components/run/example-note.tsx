@@ -49,8 +49,8 @@ export function ExampleNote({ runId }: { runId: string }) {
         This is an example
       </h2>
       <p className="max-w-prose text-sm text-muted-foreground">
-        Every visitor sees it, so it stays as it is. To approve, edit or reject the report yourself,
-        make your own copy. Only you can see it.
+        Every visitor sees it, so it stays as it is. To approve, edit or discard the report
+        yourself, make your own copy. Only you can see it.
       </p>
       <Button
         variant="primary"

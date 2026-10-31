@@ -72,7 +72,7 @@ visitor ──▶ Vercel: landing page, console, /api/* proxy ──▶ Render: 
    | Name | Value | Why |
    |---|---|---|
    | `ARIA_API_URL` | Your Render address, such as `https://aria-api.onrender.com` | Where the console's server finds the API |
-   | `ARIA_PUBLIC_DEMO` | `1` | Tells visitors, beside the log box, that other visitors can see their runs |
+   | `ARIA_PUBLIC_DEMO` | `1` | Tells visitors, beside the log box, that the demo runs on a shared server, so they paste only logs they could share |
 
 5. Choose **Deploy**. When it finishes, open the address Vercel gives you, such as
    `https://aria.vercel.app`.

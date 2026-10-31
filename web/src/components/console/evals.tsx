@@ -71,7 +71,8 @@ function Section({
       {headline ? <p className="max-w-prose leading-relaxed">{headline}</p> : null}
       <details className="group">
         <summary className="flex min-h-6 w-fit cursor-pointer items-center text-sm font-medium text-muted-foreground hover:text-heading">
-          Show details
+          <span className="group-open:hidden">Show details</span>
+          <span className="hidden group-open:inline">Hide details</span>
         </summary>
         <div className="grid gap-5 pt-5">
           {intro ? <p className="max-w-prose text-sm text-muted-foreground">{intro}</p> : null}

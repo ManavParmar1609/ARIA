@@ -108,8 +108,8 @@ export function History({
     <div className="grid gap-4">
       <p className="max-w-prose text-sm text-muted-foreground">
         ARIA keeps a checkpoint after every step. View the incident as it was at any of them, or
-        copy it from one into a new incident (a fork), for example to try it again with a model or
-        without investigation.
+        copy it from one into a new incident, for example to try it again with a model or without
+        investigation.
       </p>
       <ol className="grid gap-1.5">
         {items.map((cp) => {
@@ -153,7 +153,7 @@ export function History({
                 {cp.next.length > 0 && !cp.next.includes("__start__") ? (
                   <Button size="sm" onClick={() => setForking(cp)}>
                     <GitForkIcon aria-hidden />
-                    Fork
+                    Copy from here
                   </Button>
                 ) : null}
               </div>
@@ -165,10 +165,10 @@ export function History({
       <Dialog open={forking !== null} onOpenChange={(open) => !open && setForking(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Fork a new run from this checkpoint</DialogTitle>
+            <DialogTitle>Copy this incident from an earlier step</DialogTitle>
             <DialogDescription>
-              {forking ? checkpointName(forking) : ""}. The original run is not changed, and the new
-              run waits for its own review.
+              {forking ? checkpointName(forking) : ""}. The original incident stays as it is, and
+              the copy waits for its own review.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
@@ -184,7 +184,7 @@ export function History({
               />
             </div>
             <div className="flex items-center justify-between gap-4">
-              <Label htmlFor={`${id}-llm`}>Use an LLM if one is configured</Label>
+              <Label htmlFor={`${id}-llm`}>Use a language model if one is set up</Label>
               <Switch id={`${id}-llm`} checked={useLlm} onCheckedChange={setUseLlm} />
             </div>
             <div className="flex items-center justify-between gap-4">
@@ -200,7 +200,7 @@ export function History({
           <DialogFooter>
             <Button onClick={() => setForking(null)}>Cancel</Button>
             <Button variant="primary" onClick={startFork} disabled={fork.isPending}>
-              {fork.isPending ? "Forking" : "Start the fork"}
+              {fork.isPending ? "Starting" : "Start the copy"}
             </Button>
           </DialogFooter>
         </DialogContent>

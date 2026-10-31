@@ -203,7 +203,8 @@ export default function Landing() {
               {data.nLines} real HDFS log lines from Loghub, arranged into an incident, plus one
               planted line that tries to trick ARIA. {writtenBy(data)} Point at or tap a citation
               such as <span className="font-mono text-foreground">E2</span> to see the lines behind
-              a claim.
+              a claim. A sample you run in the console is a fresh incident built from lines like
+              these, so its rating can differ.
             </>
           }
         >

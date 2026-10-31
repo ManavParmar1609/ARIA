@@ -123,7 +123,7 @@ def review_interrupt(interrupt_id: str, payload: dict[str, Any]) -> Interrupt:
         id=interrupt_id,
         reason="review",
         message=payload.get("error")
-        or "Review the incident report: approve it, edit it, or reject it.",
+        or "Review the incident report: approve it, edit it first, or discard it.",
         response_schema=ReviewRequest.model_json_schema(),
         metadata=payload,
     )

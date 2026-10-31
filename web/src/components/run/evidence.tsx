@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
   type ReactNode,
 } from "react";
@@ -183,6 +184,24 @@ function revealPanel(panelId: string) {
 // The citation "Back to the claim" hands focus back to; its preview card stays shut for that focus.
 let returning: HTMLElement | null = null;
 
+const HOVER = "(hover: hover) and (pointer: fine)";
+
+function onHoverChange(changed: () => void) {
+  const query = window.matchMedia(HOVER);
+  query.addEventListener("change", changed);
+  return () => query.removeEventListener("change", changed);
+}
+
+/** Whether the pointer can hover. On a touch screen a tap pins the evidence in the panel, and
+ * no preview card opens over the report. */
+function useCanHover(): boolean {
+  return useSyncExternalStore(
+    onHoverChange,
+    () => window.matchMedia(HOVER).matches,
+    () => true,
+  );
+}
+
 /**
  * A citation. Hovering shows the evidence beside it; focusing or hovering also fills the
  * evidence panel (announced to screen readers); a click pins it there.
@@ -192,6 +211,7 @@ export function EvidenceChip({ id, label }: { id: string; label?: string }) {
   const [preview, setPreview] = useState(false);
   // After a click pins the evidence, the card stays shut until the pointer or focus leaves.
   const quiet = useRef(false);
+  const canHover = useCanHover();
   const evidence = byId.get(id);
   const button = (
     <button
@@ -238,7 +258,7 @@ export function EvidenceChip({ id, label }: { id: string; label?: string }) {
       {label ?? id}
     </button>
   );
-  if (!evidence) return button;
+  if (!evidence || !canHover) return button;
   return (
     <HoverCard
       open={preview}
@@ -296,7 +316,13 @@ export function Citations({
 function show(value: unknown): string {
   const flat = (v: unknown) => v === null || typeof v !== "object";
   const num = (v: unknown) =>
-    typeof v === "number" && !Number.isInteger(v) ? String(+v.toFixed(3)) : String(v);
+    typeof v === "boolean"
+      ? v
+        ? "yes"
+        : "no"
+      : typeof v === "number" && !Number.isInteger(v)
+        ? String(+v.toFixed(3))
+        : String(v);
   if (Array.isArray(value)) {
     return value.every(flat) ? value.map(num).join(", ") : JSON.stringify(value);
   }
@@ -309,6 +335,19 @@ function show(value: unknown): string {
   return num(value);
 }
 
+// Field names a reader would not guess; the rest read fine with spaces for underscores.
+const FIELD_NAMES: Record<string, string> = {
+  novel: "new to this system",
+  synthetic: "built from a sample",
+  error_like: "looks like an error",
+  template_id: "pattern",
+  duration_s: "duration, seconds",
+  prediction_set: "short list",
+  set_empty: "short list empty",
+  coverage_target: "short list target",
+  conformal: "calibrated short list",
+};
+
 function DataTable({ data }: { data: Record<string, unknown> }) {
   const entries = Object.entries(data).filter(
     ([, v]) => v !== null && v !== "" && !(Array.isArray(v) && v.length === 0),
@@ -319,7 +358,7 @@ function DataTable({ data }: { data: Record<string, unknown> }) {
       {entries.slice(0, 14).map(([key, value]) => (
         <div key={key} className="contents">
           <dt className="truncate text-muted-foreground">
-            {key.replace(/^n_/, "").replaceAll("_", " ")}
+            {FIELD_NAMES[key] ?? key.replace(/^n_/, "").replaceAll("_", " ")}
           </dt>
           <dd className="min-w-0 font-mono break-words">{show(value)}</dd>
         </div>

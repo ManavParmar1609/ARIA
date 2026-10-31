@@ -71,25 +71,31 @@ export function logsHint(problem: string | null, publicDemo: boolean, keys = fal
     : `One event per line. Your logs stay with your incident until you delete it, with IP and e-mail addresses pseudonymised and secrets redacted.${model}`;
 }
 
-/** What the model switch does here: whose model answers when it is on, and what off means. */
+/** What the model switch does here, as it is set: whose model answers while it is on, and what
+ * writes the triage while it is off. */
 export function modelHint(
   kinds: string[],
   savedProvider: string | null,
   shared?: SharedModel | null,
+  on = true,
 ): string {
-  const off = "Off: rules, the calibrated model and the grounded template only.";
+  if (!on) {
+    return "Off: rules, the calibrated model and the grounded template write this triage. Faster, and nothing leaves the server.";
+  }
   const access = modelAccess(savedProvider, kinds, shared);
   if (access.kind === "own") {
-    return `On: your own ${modelKeyLabel(savedProvider ?? "")} key answers first. ${off}`;
+    return `On: your own ${modelKeyLabel(savedProvider ?? "")} key answers first.`;
   }
   if (access.kind === "shared") {
     return access.left == null
-      ? `On: the site's key answers. ${off}`
-      : `On: the site's key answers (shared, limited: ${access.left} left today). ${off}`;
+      ? "On: the site's key answers."
+      : `On: the site's key answers (shared, limited: ${access.left} left today).`;
   }
   if (access.usedUp) return accessSentence(access, kinds.length > 0);
-  if (kinds.length > 0) return `${off} To use a model, add your own key in Settings.`;
-  return `${off} Faster, and nothing leaves the server.`;
+  if (kinds.length > 0) {
+    return "No model answers here yet, so this triage runs offline. To use a model, add your own key in Settings.";
+  }
+  return "No model is set up on this server, so this triage runs offline. Faster, and nothing leaves the server.";
 }
 
 /** New triage: pick a sample, or paste your own logs. The open tab stays in the address. */
@@ -147,6 +153,7 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
     settings?.visitor_keys ?? [],
     savedKey?.provider ?? null,
     settings?.shared_model,
+    useLlm,
   );
 
   const lines = useMemo(() => text.split(/\r?\n/).filter((l) => l.trim()), [text]);
@@ -160,9 +167,9 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
     lines.length === 0
       ? "Paste at least one log line, or pick a sample on the Samples tab."
       : lines.length > MAX_LINES
-        ? `ARIA reads at most ${MAX_LINES.toLocaleString("en")} lines per run; this has ${lines.length.toLocaleString("en")}.`
+        ? `ARIA reads at most ${MAX_LINES.toLocaleString("en")} lines in one triage; this has ${lines.length.toLocaleString("en")}.`
         : bytes > MAX_BODY_BYTES
-          ? `These lines come to ${(bytes / 1024 / 1024).toFixed(1)} MB; the console sends at most ${MAX_BODY_BYTES / 1024 / 1024} MB per run. Send fewer lines, or use the API or the CLI.`
+          ? `These lines come to ${Math.ceil((bytes / 1024 / 1024) * 10) / 10} MB, more than the ${MAX_BODY_BYTES / 1024 / 1024} MB the console sends in one triage. Send fewer lines, or split them over several triages.`
           : null;
   const apiError = create.error instanceof ApiError ? create.error.detail : create.error?.message;
 

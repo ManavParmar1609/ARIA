@@ -6,6 +6,7 @@ import { SeverityBadge } from "@/components/aria/severity";
 import { CodeText } from "@/components/ui/code-text";
 import type { RetrievalResult, SimilarIncident } from "@/lib/api/types";
 import { isSeverity } from "@/lib/api/types";
+import { plainResolution } from "@/lib/format";
 
 import { Citations } from "./evidence";
 
@@ -37,7 +38,7 @@ function Incident({ incident, sameFix }: { incident: SimilarIncident; sameFix: b
           "Fixed the same way as the one above."
         ) : (
           <>
-            Fixed by: <CodeText>{incident.resolution}</CodeText>
+            Fixed by: <CodeText>{plainResolution(incident.resolution)}</CodeText>
           </>
         )}
       </p>

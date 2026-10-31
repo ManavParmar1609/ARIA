@@ -473,7 +473,19 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
                     <MenuIcon aria-hidden />
                   </Button>
                 </DialogTrigger>
-                <SheetContent side="left" closeLabel="Close navigation">
+                <SheetContent
+                  side="left"
+                  closeLabel="Close navigation"
+                  // Open on the page being read, so the next Tab or arrow goes somewhere useful.
+                  onOpenAutoFocus={(event) => {
+                    const sheet = event.currentTarget as HTMLElement | null;
+                    const here = sheet?.querySelector<HTMLElement>("nav [aria-current='page']");
+                    if (here) {
+                      event.preventDefault();
+                      here.focus();
+                    }
+                  }}
+                >
                   <DialogTitle className="sr-only">Navigation</DialogTitle>
                   <Link href="/" className="rounded-sm px-1.5" onClick={() => setOpen(false)}>
                     <Wordmark />

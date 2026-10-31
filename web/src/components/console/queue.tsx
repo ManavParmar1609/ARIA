@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { InboxIcon, PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { SeverityBadge } from "@/components/aria/severity";
 import { runTitle } from "@/components/console/run-row";
@@ -112,6 +112,20 @@ export function Queue() {
   const runs = usePages(status);
   const list = runs.data?.runs ?? [];
   const filterId = useId();
+  // After "Load older incidents", focus moves to the first incident it added, so a keyboard
+  // continues down the list instead of starting again at the top.
+  const firstAdded = useRef<number | null>(null);
+  useEffect(() => {
+    const index = firstAdded.current;
+    if (index == null || list.length <= index) return;
+    firstAdded.current = null;
+    const links = document.querySelectorAll<HTMLElement>(`[data-run-index="${index}"]`);
+    [...links].find((link) => link.offsetParent !== null)?.focus();
+  }, [list.length]);
+  const loadOlder = () => {
+    firstAdded.current = list.length;
+    runs.more();
+  };
 
   const setStatus = (value: string) => {
     const next = new URLSearchParams(params.toString());
@@ -203,7 +217,7 @@ export function Queue() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {list.map((run) => (
+                {list.map((run, index) => (
                   <TableRow key={run.id} className="relative hover:bg-raised/60">
                     <TableCell>
                       <SeverityBadge severity={isSeverity(run.severity) ? run.severity : null} />
@@ -212,6 +226,7 @@ export function Queue() {
                       <Link
                         href={`/console/runs/${encodeURIComponent(run.id)}` as never}
                         title={runTitle(run)}
+                        data-run-index={index}
                         className="block truncate font-medium after:absolute after:inset-0 after:content-['']"
                       >
                         {runTitle(run)}
@@ -219,7 +234,7 @@ export function Queue() {
                       <span className="block truncate text-xs text-muted-foreground">
                         {systemName(run.system)},{" "}
                         {run.example ? "an example every visitor sees" : triggerLabel(run.trigger)}
-                        {run.parent_run_id && run.trigger !== "fork" ? ", forked" : ""}
+                        {run.parent_run_id && run.trigger !== "fork" ? ", a copy" : ""}
                       </span>
                     </TableCell>
                     <TableCell>
@@ -228,7 +243,7 @@ export function Queue() {
                     <TableCell className="text-sm">
                       <Decider run={run} />
                     </TableCell>
-                    <TableCell className="text-right text-sm text-muted-foreground">
+                    <TableCell className="text-right text-sm whitespace-nowrap text-muted-foreground">
                       <time dateTime={run.created_at} title={absoluteTime(run.created_at)}>
                         {relativeTime(run.created_at)}
                       </time>
@@ -239,7 +254,7 @@ export function Queue() {
             </Table>
           </div>
           <ul className="grid gap-2 xl:hidden">
-            {list.map((run) => (
+            {list.map((run, index) => (
               <li key={run.id} className="relative rounded-lg bg-raised p-4">
                 <div className="flex items-center justify-between gap-2">
                   <SeverityBadge
@@ -250,6 +265,7 @@ export function Queue() {
                 </div>
                 <Link
                   href={`/console/runs/${encodeURIComponent(run.id)}` as never}
+                  data-run-index={index}
                   className="mt-2 block font-medium wrap-anywhere after:absolute after:inset-0 after:content-['']"
                 >
                   {runTitle(run)}
@@ -261,7 +277,7 @@ export function Queue() {
             ))}
           </ul>
           {runs.data?.next ? (
-            <Button className="justify-self-start" onClick={runs.more} disabled={runs.isFetching}>
+            <Button className="justify-self-start" onClick={loadOlder} disabled={runs.isFetching}>
               {runs.isFetching ? "Loading" : "Load older incidents"}
             </Button>
           ) : null}

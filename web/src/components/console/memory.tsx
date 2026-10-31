@@ -18,7 +18,8 @@ import {
 } from "@/components/ui/select";
 import { useIncidents, useSettingsView } from "@/lib/api/hooks";
 import { isSeverity, type IncidentOut } from "@/lib/api/types";
-import { relativeTime, stripSeverity } from "@/lib/format";
+import { failureName } from "@/lib/failure-modes";
+import { plainResolution, relativeTime, stripSeverity } from "@/lib/format";
 import { systemName } from "@/lib/systems";
 
 const PAGE = 20;
@@ -158,8 +159,14 @@ export function Memory() {
         <>
           <p className="text-sm text-muted-foreground" aria-live="polite">
             {searching
-              ? `The ${shown.length} closest incidents to "${deferred}", by keyword and by meaning, closest first`
-              : `The ${shown.length} most recent incidents`}
+              ? shown.length === 0
+                ? `No incident matches "${deferred}"`
+                : shown.length === 1
+                  ? `The closest incident to "${deferred}", by keyword and by meaning`
+                  : `The ${shown.length} closest incidents to "${deferred}", by keyword and by meaning, closest first`
+              : shown.length === 1
+                ? "The most recent incident"
+                : `The ${shown.length} most recent incidents`}
             {kinds}.
           </p>
           {shown.length === 0 ? (
@@ -192,10 +199,12 @@ export function Memory() {
                       <p>{incident.summary}</p>
                       <p>
                         <span className="font-medium">Resolution: </span>
-                        <span className="text-muted-foreground">{incident.resolution}</span>
+                        <span className="text-muted-foreground">
+                          {plainResolution(incident.resolution)}
+                        </span>
                       </p>
                       <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-faint">
-                        <span>failure mode {incident.failure_mode.replaceAll("_", " ")}</span>
+                        <span>{failureName(incident.failure_mode)}</span>
                         {incident.source === "run" && incident.incident_id.startsWith("inc-") ? (
                           // An approved incident's entry is named after its run: inc-X came from run-X.
                           <Link
@@ -221,7 +230,7 @@ export function Memory() {
                             }
                             className="text-foreground underline decoration-control underline-offset-2"
                           >
-                            runbook {incident.runbook_slug}
+                            open its runbook
                           </Link>
                         ) : null}
                       </p>

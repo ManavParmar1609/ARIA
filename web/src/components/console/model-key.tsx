@@ -105,6 +105,7 @@ export function ModelKeyPanel({ kinds }: { kinds: string[] }) {
           type="password"
           autoComplete="off"
           spellCheck={false}
+          placeholder={chosen ? `${chosen.starts}…` : undefined}
           value={key}
           onChange={(event) => {
             setKey(event.target.value);
@@ -125,7 +126,8 @@ export function ModelKeyPanel({ kinds }: { kinds: string[] }) {
               >
                 {chosen.company}
               </a>
-              . Choose a key you can revoke, with a spending limit.
+              ; it starts with <code>{chosen.starts}</code>. Choose a key you can revoke, with a
+              spending limit.
             </>
           ) : (
             "Choose a key you can revoke, with a spending limit."

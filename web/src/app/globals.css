@@ -256,6 +256,13 @@
   html:has([data-fixed-header]) {
     scroll-padding-top: 6rem;
   }
+  /* On a phone the console's bar stays at the top, so anchors land below it. Zero specificity:
+     a heading that sets its own offset keeps it. */
+  @media (width < 64rem) {
+    :where(#console-main [id]) {
+      scroll-margin-top: 5rem;
+    }
+  }
   html.dark {
     color-scheme: dark;
   }

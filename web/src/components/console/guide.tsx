@@ -189,6 +189,10 @@ export function Guide() {
             them, edit them first, or discard the draft. Afterwards a note says what happened and
             when.
           </p>
+          <p>
+            On a shared demo the examples stay as they are for everyone. Review an incident you
+            started, or open an example and make your own copy.
+          </p>
         </Task>
         <Task
           id="ask"

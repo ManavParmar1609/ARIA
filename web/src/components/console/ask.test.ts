@@ -33,6 +33,19 @@ describe("Ask ARIA's sources", () => {
     expect(sourceName(line)).toBe("line 4: oops");
   });
 
+  it("names rules and runbooks by what they are about, not by their IDs", () => {
+    const rule = {
+      id: "E2",
+      kind: "rule",
+      title: "Rule R12 (floor SEV2): Disk full on a data node",
+      source: "severity.rules",
+      data: {},
+    } as unknown as Evidence;
+    expect(sourceName(rule)).toBe("Rule: Disk full on a data node");
+    const runbook = { ...rule, kind: "runbook", title: "Runbook hdfs-disk-full: HDFS disk full" };
+    expect(sourceName(runbook as Evidence)).toBe("Runbook: HDFS disk full");
+  });
+
   it("tells apart two past incidents with one title by the day each was last seen", () => {
     const twin = (id: string, ts: string) =>
       ({

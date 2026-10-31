@@ -109,6 +109,16 @@ export function stripSeverity(title: string | null | undefined): string {
   return (title ?? "").replace(/^SEV[1-4]\s*·\s*/, "");
 }
 
+/** A past incident's fix as a person reads it: steps a sample's runbook recorded lose the
+ * runbook's ID ("Followed runbook zookeeper-quorum-loss: ..."), and steps that ended in a full
+ * stop read "first; restart", not "first.; Restart". */
+export function plainResolution(text: string | null | undefined): string {
+  return (text ?? "")
+    .replace(/^Followed runbook \S+:\s*/, "")
+    .replace(/\.;\s*(\S)/g, (_, next: string) => `; ${next.toLowerCase()}`)
+    .replace(/\.\.$/, ".");
+}
+
 const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
 
 /** A count as prose writes it: words below ten ("six benchmarks"), digits from ten on. */
