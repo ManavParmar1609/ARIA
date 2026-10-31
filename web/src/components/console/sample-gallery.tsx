@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils";
 // pick where the logs come from first (the choice stays in the address, so Back and sharing
 // work), then a sample, then run it. Each card offers a size only where it changes the result.
 
-const SOURCES = [
+export const SOURCES = [
   { key: "security", name: "Security and sign-ins" },
   { key: "web", name: "Web and cloud" },
   { key: "bigdata", name: "Big-data clusters" },
@@ -157,8 +157,11 @@ function SampleCard({ sample, compact = false }: { sample: Scenario; compact?: b
       </div>
       <p className="text-sm text-muted-foreground">{sample.summary}</p>
       {compact && sample.id === RECORDED ? (
-        <Link href="/#run" className="w-fit text-sm underline underline-offset-4">
-          Watch its recorded run on the home page
+        <Link
+          href="/console/how-it-works/example"
+          className="w-fit text-sm underline underline-offset-4"
+        >
+          Watch its recorded run
         </Link>
       ) : null}
       {compact ? null : <RealLines lines={sample.preview ?? []} title={sample.title} />}
@@ -190,7 +193,7 @@ function SampleCard({ sample, compact = false }: { sample: Scenario; compact?: b
             variant="ghost"
             className="h-auto min-h-8 py-1 whitespace-normal"
           >
-            <Link href="/#run">Watch its recorded run on the home page</Link>
+            <Link href="/console/how-it-works/example">Watch its recorded run</Link>
           </Button>
         ) : null}
       </div>

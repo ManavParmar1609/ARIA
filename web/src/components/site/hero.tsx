@@ -46,36 +46,38 @@ function ReportCard({ data }: { data: Replay }) {
         <div className="grid gap-2">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <LevelChip severity={data.severity} />
-            <span className="text-xs text-muted-foreground">
+            <span className="text-sm text-muted-foreground">
               {p}% likely
               {others.length ? `. Could also be ${others.join(" or ")}` : ""}
             </span>
           </div>
-          <p className="text-lg leading-snug tracking-heading text-heading">{data.title}</p>
+          <p className="text-xl leading-snug tracking-heading text-heading">{data.title}</p>
         </div>
         {open && line ? (
           <div className="grid gap-3 border-t border-rule pt-5">
-            <p className="text-sm leading-relaxed text-foreground">
+            <p className="text-base leading-relaxed text-foreground">
               {open.claim.text}{" "}
-              <span className="rounded-full bg-primary px-2 py-0.5 font-mono text-xs text-primary-foreground">
+              <span className="rounded-full bg-primary px-2 py-0.5 font-mono text-sm text-primary-foreground">
                 {open.evidence.id}
               </span>
             </p>
             <div className="grid gap-1 rounded-md bg-sunken px-3 py-2.5">
-              <span className="text-xs text-muted-foreground">
+              <span className="text-sm text-muted-foreground">
                 {open.evidence.id} cites{" "}
                 {line.lineNo != null ? `log line ${line.lineNo}` : "the log"}
                 {open.evidence.lines.length > 1
                   ? `, one of ${open.evidence.lines.length} like it`
                   : ""}
               </span>
-              <code className="font-mono text-xs leading-relaxed break-all text-foreground">
+              <code className="font-mono text-sm leading-relaxed break-all text-foreground">
                 {line.text}
               </code>
             </div>
+            {/* No count: the card shows a few of the report's claims, and a number here would
+                disagree with the report's own (NV-m8). */}
             {moreClaims > 0 ? (
-              <p className="text-xs text-muted-foreground">
-                {moreClaims} more {moreClaims === 1 ? "claim" : "claims"}, each with its sources
+              <p className="text-sm text-muted-foreground">
+                Every other claim in the report cites its sources too.
               </p>
             ) : null}
           </div>
@@ -86,7 +88,7 @@ function ReportCard({ data }: { data: Replay }) {
           Waiting for a person to approve. Nothing has been sent.
         </p>
       </div>
-      <figcaption className="px-1 text-xs leading-relaxed text-heading/80 dark:text-muted-foreground">
+      <figcaption className="px-1 text-sm leading-relaxed text-heading/80 dark:text-muted-foreground">
         From a recorded triage
         {data.model ? ` with ${data.model.service}` : ""}: {data.nLines} real log lines from a
         Hadoop file system (HDFS) in the public Loghub collection, arranged into an incident.
@@ -105,13 +107,13 @@ const PROOF: { title: string; body: string; href: string; link: string }[] = [
   {
     title: "Every claim cites a log line",
     body: "A check rejects any sentence whose source is missing or whose numbers disagree with it.",
-    href: "#run",
+    href: "/console/how-it-works/example",
     link: "See an example",
   },
   {
     title: "Nothing is sent without you",
     body: "Messages for chat or a status page wait as drafts until a person approves them.",
-    href: "#how-4",
+    href: "/console/how-it-works/steps#how-4",
     link: "See the review step",
   },
 ];
@@ -125,12 +127,12 @@ function ProofTiles() {
           key={tile.title}
           className="grid content-start gap-2 rounded-card border border-rule bg-raised p-6"
         >
-          <h2 className="text-base font-medium text-heading">{tile.title}</h2>
-          <p className="text-sm leading-relaxed text-muted-foreground">{tile.body}</p>
+          <h2 className="text-lg font-medium text-heading">{tile.title}</h2>
+          <p className="text-base leading-relaxed text-muted-foreground">{tile.body}</p>
           <Link
             href={tile.href as never}
             prefetch={false}
-            className="mt-1 inline-flex w-fit items-center gap-1.5 text-sm font-medium text-heading underline decoration-control underline-offset-4 hover:decoration-heading"
+            className="mt-1 inline-flex w-fit items-center gap-1.5 text-base font-medium text-heading underline decoration-control underline-offset-4 hover:decoration-heading"
           >
             {tile.link}
             <ArrowRightIcon aria-hidden className="size-4" />
@@ -155,7 +157,7 @@ export function Hero({ data }: { data: Replay }) {
             <h1 id="hero-title" className="text-hero max-w-[15ch]">
               Turn a wall of logs into a report you can check.
             </h1>
-            <p className="mt-8 max-w-[46ch] text-[0.9375rem] leading-relaxed text-heading xl:mt-auto xl:pt-14">
+            <p className="mt-8 max-w-[44ch] text-lg leading-relaxed text-heading xl:mt-auto xl:pt-14">
               For the person on call: ARIA reads an alert&apos;s logs, rates how serious it is,
               finds what happened before, and drafts the report and the messages. Nothing is sent
               until you approve it.
@@ -164,7 +166,7 @@ export function Hero({ data }: { data: Replay }) {
           <Link
             href="/console/runs/new"
             prefetch={false}
-            className="group/button flex h-16 items-center justify-between rounded-card bg-primary px-7 text-[0.9375rem] font-medium text-primary-foreground transition-colors duration-(--duration-quick) hover:bg-primary-hover sm:h-[4.75rem]"
+            className="group/button flex h-16 items-center justify-between rounded-card bg-primary px-7 text-lg font-medium text-primary-foreground transition-colors duration-(--duration-quick) hover:bg-primary-hover sm:h-[4.75rem]"
           >
             Try it on real logs
             <ArrowRightIcon

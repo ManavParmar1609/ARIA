@@ -417,6 +417,10 @@ test.describe("console at 320 px", () => {
       "/console/guide",
       "/console/guide/connect",
       "/console/ask",
+      "/console/how-it-works",
+      "/console/how-it-works/example",
+      "/console/how-it-works/steps",
+      "/console/how-it-works/questions",
     ]) {
       await page.goto(path);
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();

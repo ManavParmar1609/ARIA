@@ -1,30 +1,34 @@
 import Link from "next/link";
 
-import { Converge } from "@/components/site/line-art";
 import { ArrowCircle, Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import { REPO_URL } from "@/lib/site-data";
 
-// The README's offline quick start, without keys.
-const QUICKSTART = ["make install", "uv run aria db upgrade && uv run aria seed", "make dev"];
+// The README's offline quick start, without keys, from a fresh clone (NV-m11).
+const QUICKSTART = [
+  `git clone ${REPO_URL}.git`,
+  "cd ARIA",
+  "make install",
+  "uv run aria db upgrade && uv run aria seed",
+  "make dev",
+];
 
-/** The last panel: one action, the three commands behind it, and the lines running together. */
+/** The last panel: one action, and the commands to run it yourself. */
 export function Closing() {
   return (
     <section
       aria-labelledby="try-title"
-      className="mx-auto max-w-[75rem] px-3 pt-6 pb-6 sm:px-6 sm:pt-8"
+      className="mx-auto max-w-[75rem] px-3 pb-16 sm:px-6 lg:pb-20"
     >
-      <div className="relative overflow-hidden rounded-card bg-panel-sage px-7 pt-12 pb-0 sm:px-12 sm:pt-16">
-        <div className="relative grid gap-6 lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] lg:items-end lg:gap-12">
+      <div className="relative overflow-hidden rounded-card bg-panel-sage px-7 py-10 sm:px-12 sm:py-14">
+        <div className="relative grid gap-6 lg:grid-cols-2 lg:items-end lg:gap-12">
           <div className="grid gap-5">
-            <span className="tag justify-self-start bg-raised">Try it</span>
-            <h2 id="try-title" className="text-display max-w-[14ch]">
+            <h2 id="try-title" className="text-section max-w-[16ch]">
               Let ARIA take the first look.
             </h2>
-            <p className="max-w-[46ch] text-[0.9375rem] leading-relaxed text-heading">
-              Try it here, or on your own machine with these three commands. It works offline with
-              no key, and with one, a language model investigates and writes.
+            <p className="max-w-[44ch] text-lg leading-relaxed text-heading">
+              Try it here, or on your own machine. It works offline with no key; with one, a
+              language model investigates and writes.
             </p>
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="primary" size="lg">
@@ -42,10 +46,12 @@ export function Closing() {
               sideways scrolling inside the block. */}
           <div className="grid rounded-[12px] bg-raised">
             <div className="flex items-center justify-between gap-3 pt-1.5 pr-1.5 pl-5">
-              <span className="text-xs text-muted-foreground">On your own machine</span>
-              <CopyButton text={QUICKSTART.join("\n")} label="the three commands" />
+              <span className="text-sm text-muted-foreground">
+                On your own machine (Python 3.12 with uv, Node 22 with pnpm)
+              </span>
+              <CopyButton text={QUICKSTART.join("\n")} label="the commands" />
             </div>
-            <pre className="px-5 pt-1 pb-4 text-left text-sm leading-relaxed whitespace-pre-wrap text-foreground">
+            <pre className="px-5 pt-1 pb-4 text-left text-xs leading-relaxed whitespace-pre-wrap text-foreground">
               <code>
                 {QUICKSTART.map((command) => (
                   <span key={command} className="block pl-[2ch] -indent-[2ch]">
@@ -59,7 +65,6 @@ export function Closing() {
             </pre>
           </div>
         </div>
-        <Converge className="mt-12 -mr-12 w-full text-heading sm:mt-14" />
       </div>
     </section>
   );

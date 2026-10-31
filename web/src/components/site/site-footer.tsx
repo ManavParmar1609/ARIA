@@ -11,9 +11,9 @@ const COLUMNS: { title: string; links: { label: string; href: string; internal?:
     title: "Product",
     links: [
       { label: "Console", href: "/console", internal: true },
-      { label: "What it does", href: "#what" },
-      { label: "Example", href: "#run" },
-      { label: "Questions", href: "#faq" },
+      { label: "How ARIA works", href: "/console/how-it-works", internal: true },
+      { label: "An example", href: "/console/how-it-works/example", internal: true },
+      { label: "Questions", href: "/console/how-it-works/questions", internal: true },
     ],
   },
   {

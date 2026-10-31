@@ -8,19 +8,19 @@ import { ArrowCircle } from "@/components/ui/button";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { REPO_URL } from "@/lib/site-data";
 
-// The same names label the sections themselves, so a link and its destination always match.
+// The home page is short; the explanation and the evidence live in the console's pages, and each
+// link names the page it opens.
 export const SECTIONS = [
-  { href: "#what", label: "What it does" },
-  { href: "#run", label: "Example" },
-  { href: "#how", label: "How it works" },
-  { href: "#results", label: "Results" },
-  { href: "#faq", label: "Questions" },
+  { href: "/console/how-it-works", label: "How it works" },
+  { href: "/console/how-it-works/example", label: "Example" },
+  { href: "/console/evals", label: "Test results" },
+  { href: "/console/how-it-works/questions", label: "Questions" },
 ];
 
 /**
- * The navigation, as in the reference: the name on the left, the sections in plain charcoal (a
- * keylime pill marks the one being read), and the console as the forest action on the right.
- * Below the large breakpoint the sections and the theme move into a menu.
+ * The navigation: the name on the left, the pages that explain ARIA in plain charcoal, and the
+ * console as the action on the right. Below the large breakpoint the links and the theme move
+ * into a menu.
  */
 export function SiteHeader() {
   const links = [...SECTIONS, { href: REPO_URL, label: "GitHub" }];

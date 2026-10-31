@@ -3,6 +3,7 @@
 import { ArrowUpRightIcon, EqualIcon, XIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 
+import { leavesSite } from "@/components/site/section-nav";
 import { ThemeSwitch } from "@/components/theme-switch";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { cx } from "@/lib/cx";
@@ -73,9 +74,9 @@ export function SiteMenu({ links }: { links: { href: string; label: string }[] }
                 className="flex h-12 items-center rounded-sm px-3 text-lg text-heading transition-colors duration-(--duration-quick) hover:bg-foreground/6"
               >
                 {link.label}
-                {link.href.startsWith("#") ? null : (
+                {leavesSite(link.href) ? (
                   <ArrowUpRightIcon aria-hidden className="ml-1.5 size-5" />
-                )}
+                ) : null}
               </a>
             </li>
           ))}

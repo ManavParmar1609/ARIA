@@ -12,6 +12,7 @@ import {
   PlusIcon,
   SearchIcon,
   SettingsIcon,
+  SparklesIcon,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -72,6 +73,7 @@ const NAV: { label: string; items: NavItem[] }[] = [
   {
     label: "About ARIA",
     items: [
+      { href: "/console/how-it-works", label: "How ARIA works", icon: SparklesIcon },
       { href: "/console/evals", label: "Test results", icon: FlaskConicalIcon },
       { href: "/console/guide", label: "Guide", icon: CompassIcon },
       { href: "/console/settings", label: "Settings", icon: SettingsIcon },
@@ -323,9 +325,11 @@ function SessionFooter({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-// Pages that need no live API: the evaluation reads the committed results, and the guide is
-// mostly words. They stay readable while the API is down, and before anyone signs in.
+// Pages that need no live API: How ARIA works and the evaluation read recorded files, and the
+// guide is mostly words. They stay readable while the API is down, and before anyone signs in.
 const WITHOUT_API = new Set(["/console/evals", "/console/guide"]);
+const needsNoApi = (pathname: string) =>
+  WITHOUT_API.has(pathname) || /^\/console\/how-it-works(\/|$)/.test(pathname);
 
 /** Once the page's content is in, scroll to the link's #section: it was not there on load. */
 function useHashOnArrival(ready: boolean) {
@@ -431,7 +435,7 @@ function SelfHosting() {
 function Gate({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const session = useSession();
-  const open = WITHOUT_API.has(pathname);
+  const open = needsNoApi(pathname);
   const reachable = !session.isError && Boolean(session.data?.reachable);
   const busy = Boolean(session.data?.busy);
   const signedOut = Boolean(session.data?.authRequired && !session.data.signedIn);

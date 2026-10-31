@@ -18,6 +18,7 @@ import {
   PlusIcon,
   SearchIcon,
   SettingsIcon,
+  SparklesIcon,
   SunIcon,
   TextQuoteIcon,
   UserRoundCheckIcon,
@@ -87,6 +88,13 @@ interface Item {
 
 const PAGES: { href: string; label: string; hint: string; icon: LucideIcon; keywords?: string }[] =
   [
+    {
+      href: "/console/how-it-works",
+      label: "How ARIA works",
+      hint: "What ARIA does, a real incident from start to finish, the four steps and questions",
+      icon: SparklesIcon,
+      keywords: "explain example steps faq questions about overview",
+    },
     {
       href: "/console/runs",
       label: "Incidents",

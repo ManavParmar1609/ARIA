@@ -18,8 +18,8 @@ For a production deployment with API keys, a managed database and monitoring, se
 visitor ──▶ Vercel: landing page, console, /api/* proxy ──▶ Render: ARIA API, seeded demo
 ```
 
-- The landing page needs no API. It shows a recorded run and the published results, so it stays
-  up and fast even while the API sleeps.
+- The home page and the console's How ARIA works need no API. They show a recorded run and the
+  published results, so they stay up and fast even while the API sleeps.
 - The console reaches the API through Vercel's server. The browser never talks to Render
   directly.
 - The API runs the [demo image](../deploy/demo/Dockerfile). It needs no API key and starts from a
@@ -88,8 +88,8 @@ custom domain later, set `ARIA_WEB_URL` to it and redeploy.
 
 ## Step 3: check it as a visitor would
 
-1. The home page loads. In its example incident, pointing at a citation lights up the log lines
-   behind it.
+1. The home page loads. On the console's **How ARIA works**, its example incident lights up the
+   log lines behind a citation when you point at it.
 2. **Open the console** opens **New triage**. **Incidents** lists the examples: two waiting for
    review and one approved.
 3. In **New triage**, choose **Run it** on a sample. The incident page follows the run live; when

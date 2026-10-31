@@ -58,6 +58,7 @@ export const GO_KEYS: { key: string; href: string; label: string }[] = [
   { key: "a", href: "/console/ask", label: "Ask ARIA" },
   { key: "l", href: "/console/memory", label: "Incident library" },
   { key: "r", href: "/console/runbooks", label: "Runbooks" },
+  { key: "w", href: "/console/how-it-works", label: "How ARIA works" },
   { key: "t", href: "/console/evals", label: "Test results" },
   { key: "h", href: "/console/guide", label: "Guide" },
   { key: "s", href: "/console/settings", label: "Settings" },

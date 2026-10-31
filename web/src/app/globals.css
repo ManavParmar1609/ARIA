@@ -179,12 +179,14 @@
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* The reference's scale: 12 (the floor; it shows 10 and 11), 14, 15, 18, 20, 23, 28, 40, 56, 74. */
-  --text-xs: 0.75rem;
-  --text-xs--line-height: 1.1rem;
-  --text-sm: 0.875rem;
-  --text-sm--line-height: 1.35rem;
-  --text-base: 0.9375rem;
-  --text-base--line-height: 1.5rem;
+  /* Raised a step after owner feedback that the text was too small (round 8): body copy is
+     16 px, small print 15 px and the smallest labels 13 px. */
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.2rem;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.45rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.6rem;
   --text-lg: 1.125rem;
   --text-lg--line-height: 1.6rem;
   --text-xl: 1.25rem;
@@ -369,7 +371,7 @@
   }
   /* The subhead under a heading: 15 to 18 px. */
   .text-lead {
-    font-size: clamp(0.9375rem, 0.3vw + 0.875rem, 1.125rem);
+    font-size: clamp(1.0625rem, 0.3vw + 1rem, 1.25rem);
     line-height: 1.55;
     color: var(--muted-foreground);
   }

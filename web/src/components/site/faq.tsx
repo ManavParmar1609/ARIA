@@ -83,10 +83,9 @@ const QUESTIONS: { q: string; a: ReactNode }[] = [
 
 export function Faq() {
   return (
-    <div className="grid gap-10">
-      <div className="grid max-w-3xl gap-3">
-        <span className="tag justify-self-start">Questions</span>
-        <h2 id="faq-title" className="text-display">
+    <div className="grid gap-8">
+      <div className="grid max-w-3xl gap-2">
+        <h2 id="faq-title" className="text-section">
           What people ask first
         </h2>
         <p className="text-lead">
@@ -101,12 +100,12 @@ export function Faq() {
         {QUESTIONS.map(({ q, a }) => (
           <div
             key={q}
-            className="grid gap-3 border-b border-rule py-8 lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] lg:gap-16 lg:py-10"
+            className="grid gap-2 border-b border-rule py-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-12"
           >
-            <dt className="font-display text-[1.75rem] leading-[1.25] font-light tracking-[-0.01em] text-heading sm:text-[2.125rem]">
+            <dt className="font-display text-[1.375rem] leading-snug font-light tracking-[-0.01em] text-balance text-heading sm:text-[1.625rem]">
               {q}
             </dt>
-            <dd className="text-[0.9375rem] leading-relaxed text-foreground lg:pt-2">{a}</dd>
+            <dd className="text-base leading-relaxed text-foreground lg:pt-1">{a}</dd>
           </div>
         ))}
       </dl>
