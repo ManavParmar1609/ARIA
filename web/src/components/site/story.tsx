@@ -171,9 +171,8 @@ export function StepsPart() {
   );
 }
 
-/** Part 4: four findings from the tests, one where ARIA falls short, led by what they mean for
- * the person on call, so a figure such as "the best standard detector did the same" reads as the
- * match it is. */
+/** Part 4: findings from the tests, led by what they mean for the person on call, so a figure such
+ * as "the best standard detector did the same" reads as the match it is. */
 export function ResultsPart() {
   const datasets = realData();
   const data = evaluation();
@@ -185,12 +184,12 @@ export function ResultsPart() {
       id="results"
       tinted
       title="What the tests show"
-      intro={`ARIA is tested on ${nDatasets} public, labelled datasets, each against a simpler method. The four findings below include one where it falls short.`}
+      intro={`ARIA is tested on ${nDatasets} public, labelled datasets, each against a simpler method. Each finding below links to its test, and Test results also shows where ARIA falls short.`}
     >
       <p className="max-w-[62ch] text-lg leading-relaxed font-medium text-heading">
-        {resultsInShort(data, real, datasets)}
+        {resultsInShort(data, real)}
       </p>
-      <ResultsRow data={data} real={real} more={datasets} />
+      <ResultsRow data={data} real={real} />
     </Part>
   );
 }

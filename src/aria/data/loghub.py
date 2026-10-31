@@ -7,15 +7,11 @@ full datasets and from users parse into the same fields as the structured 2k sam
 from __future__ import annotations
 
 import csv
-import io
 import re
-import zipfile
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TextIO
 
 CANONICAL_LEVELS = ("DEBUG", "INFO", "WARN", "ERROR", "FATAL")
 _LEVEL_MAP = {
@@ -110,15 +106,6 @@ SYSTEMS: dict[str, SystemSpec] = {
             node_field="Node",
             labelled=True,
             description="BlueGene/L supercomputer (LLNL)",
-        ),
-        SystemSpec(
-            "thunderbird",
-            r"<Label> <Timestamp> <Date> <User> <Month> <Day> <Time> <Location> <Component>(\[<PID>\])?: <Content>",
-            2005,
-            node_field="Location",
-            level_field=None,
-            labelled=True,
-            description="Thunderbird supercomputer (Sandia)",
         ),
         SystemSpec(
             "hdfs",
@@ -227,7 +214,6 @@ SYSTEMS: dict[str, SystemSpec] = {
 # Loghub directory names differ in case from ARIA's system ids.
 LOGHUB_DIRS = {
     "BGL": "bgl",
-    "Thunderbird": "thunderbird",
     "HDFS": "hdfs",
     "Hadoop": "hadoop",
     "Spark": "spark",
@@ -289,7 +275,7 @@ def parse_timestamp(system: str, fields: dict[str, str]) -> datetime | None:
     year = spec.default_year if spec else 2020
     get = fields.get
     match system:
-        case "bgl" | "thunderbird":
+        case "bgl":
             return _epoch(get("Timestamp", ""))
         case "hpc":
             return _epoch(get("Time", ""))
@@ -571,22 +557,8 @@ def iter_structured_csv(system: str, path: Path, limit: int | None = None) -> It
             yield record_from_fields(system, line_no, row)
 
 
-@contextmanager
-def _open_text(path: Path, member: str | None) -> Iterator[TextIO]:
-    if member is None:
-        with path.open(encoding="utf-8", errors="replace") as handle:
-            yield handle
-        return
-    with zipfile.ZipFile(path) as archive, archive.open(member) as raw:
-        yield io.TextIOWrapper(raw, encoding="utf-8", errors="replace")
-
-
-def iter_raw_log(
-    system: str, path: Path, limit: int | None = None, *, member: str | None = None
-) -> Iterator[LogRecord]:
-    """Read a raw Loghub log; ``member`` reads one file inside the zip at ``path`` as it streams,
-    so a log larger than the disk's free space never has to be extracted."""
-    with _open_text(path, member) as handle:
+def iter_raw_log(system: str, path: Path, limit: int | None = None) -> Iterator[LogRecord]:
+    with path.open(encoding="utf-8", errors="replace") as handle:
         for i, line in enumerate(handle):
             if limit is not None and i >= limit:
                 return
@@ -615,13 +587,6 @@ def format_raw_line(record: LogRecord) -> str:
             return (
                 f"{record.label or '-'} {int(ts.timestamp())} {ts:%Y.%m.%d} {node} {stamp} {node} "
                 f"{get('Type', 'RAS')} {get('Component', 'KERNEL')} {get('Level', 'INFO')} {msg}"
-            )
-        case "thunderbird":
-            user = node.split("/", 1)[0]
-            pid = f"[{f['PID']}]" if f.get("PID") else ""
-            return (
-                f"{record.label or '-'} {int(ts.timestamp())} {ts:%Y.%m.%d} {user} {ts:%b} {ts.day} "
-                f"{ts:%H:%M:%S} {node} {get('Component', 'kernel')}{pid}: {msg}"
             )
         case "hdfs":
             return f"{ts:%y%m%d} {ts:%H%M%S} {get('Pid', '143')} {get('Level', 'INFO')} {get('Component', 'dfs.DataNode')}: {msg}"

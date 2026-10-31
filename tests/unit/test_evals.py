@@ -507,9 +507,8 @@ def test_the_data_paragraph_names_only_the_real_sources_measured() -> None:
     assert "Every other number comes from semi-synthetic" in text
     [unmeasured] = report._unmeasured(results["real"])
     assert unmeasured.startswith(
-        "- No results on contiguous BGL windows, contiguous Thunderbird windows, the Hadoop jobs, "
-        "the OpenStack fault-injection runs, LogChunks' failed CI builds, the UCI incident log or "
-        "the cloud post-mortems are "
+        "- No results on contiguous BGL windows, the Hadoop jobs, the OpenStack fault-injection "
+        "runs, LogChunks' failed CI builds, the UCI incident log or the cloud post-mortems are "
     )
 
 
@@ -643,9 +642,9 @@ def test_the_full_bgl_benchmark_labels_windows_by_tags_it_never_shows_the_parser
     seen: list[str] = []
     real_features = bgl._features
 
-    def spy(system: str, window_lines: Any, known: Any) -> WindowFeatures:
+    def spy(window_lines: Any, known: Any) -> WindowFeatures:
         seen.extend(window_lines)
-        return real_features(system, window_lines, known)
+        return real_features(window_lines, known)
 
     monkeypatch.setattr(bgl, "_features", spy)
     result = bgl.summarize(
@@ -677,88 +676,23 @@ def test_the_full_bgl_benchmark_labels_windows_by_tags_it_never_shows_the_parser
     text = "\n".join(report._bgl(result))
     assert "## Real logs, a supercomputer's alert tags" in text
     assert "| The commonest label |" in text
-    assert "Real severity" in "\n".join(report._bgl_summary(result))
-    assert "missing" in bgl.summarize(
-        engine=SeverityEngine.load(get_app_config().severity),
-        known=(),
-        pool=set(),
-        bgl_dir=tmp_path / "nothing",
-    )
-
-
-def test_thunderbird_windows_stream_from_its_zip_and_use_their_own_rubric(
-    tmp_path: Path, builder: ScenarioBuilder
-) -> None:
-    import zipfile
-
-    from aria.evals import bgl
-    from aria.severity.training import known_templates
-
-    def line(tag: str, ts: datetime, node: str, component: str, message: str) -> str:
-        return (
-            f"{tag} {int(ts.timestamp())} {ts:%Y.%m.%d} {node} {ts:%b} {ts.day} {ts:%H:%M:%S} "
-            f"{node}/{node} {component}: {message}"
-        )
-
-    start = datetime(2005, 11, 10, 0, 0, tzinfo=UTC)
-    lines = [
-        line(
-            "-",
-            start + timedelta(seconds=30 * i),
-            "tbird-admin1",
-            "postfix/postdrop[10896]",
-            "warning: unable to look up public/pickup: No such file or directory",
-        )
-        for i in range(20)
-    ]
-    later = start + timedelta(minutes=40)
-    lines += [
-        line(
-            "EXT_FS",
-            later + timedelta(seconds=5 * i),
-            f"an{300 + i % 3}",
-            "kernel",
-            "EXT3-fs error (device sda5) in start_transaction: Journal has aborted",
-        )
-        for i in range(12)
-    ]
-    lines.append(
-        line("CPU", later + timedelta(minutes=1), "bn257", "kernel", "Losing some ticks...")
-    )
-    with zipfile.ZipFile(tmp_path / "Thunderbird.zip", "w") as archive:
-        archive.writestr("Thunderbird/Thunderbird_full.log", "\n".join(lines) + "\n")
-
-    engine = SeverityEngine.load(get_app_config().severity)
-    result = bgl.summarize(
-        engine=engine,
-        known=known_templates(builder, "thunderbird"),
-        pool=set(),
-        bgl_dir=tmp_path,
-        log=bgl.THUNDERBIRD,
-    )
-    assert (result["system"], result["windows"], result["alert_lines"]) == ("thunderbird", 2, 13)
-    # Twelve journal aborts on three nodes are major alerts, and one lost tick is minor: SEV3.
-    assert result["labels"] == {"SEV3": 1, "SEV4": 1}
-    text = "\n".join(report._bgl(result, "thunderbird"))
-    assert "## Real logs, a second supercomputer's alert tags" in text
-    # No window was labelled SEV1-2, so the summary says so instead of "0 of the 0".
-    summary = "\n".join(report._bgl_summary(result, "a second supercomputer"))
-    assert "no window was labelled SEV1-2" in summary
-    assert "0 of the 0" not in summary
+    assert "Loghub's 2,000-line BGL sample" in text
+    # The rules behind the pages on quiet windows are named, with how many windows each paged.
     paged = {
         **result,
         "rules_on_paged_quiet_windows": [["errors_spread", 3], ["storage_failures", 2]],
     }
     assert "`errors_spread` (3 windows) and `storage_failures` (2 windows)" in "\n".join(
-        report._bgl(paged, "thunderbird")
+        report._bgl(paged)
     )
-    assert "Loghub's 2,000-line Thunderbird sample" in text
+    assert "Real severity" in "\n".join(report._bgl_summary(result))
     missing = bgl.summarize(
-        engine=engine, known=(), pool=set(), bgl_dir=tmp_path / "none", log=bgl.THUNDERBIRD
+        engine=SeverityEngine.load(get_app_config().severity),
+        known=(),
+        pool=set(),
+        bgl_dir=tmp_path / "nothing",
     )
-    assert missing == {
-        "missing": "download it with: aria data download --source loghub2-thunderbird"
-    }
+    assert missing == {"missing": "download it with: aria data download --source loghub-bgl"}
 
 
 def test_logchunks_cleans_build_logs_as_a_terminal_shows_them_and_finds_the_chunk() -> None:

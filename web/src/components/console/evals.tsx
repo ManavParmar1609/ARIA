@@ -44,8 +44,6 @@ import {
   severityResult,
   severityVerdict,
   TestQuestions,
-  thunderbirdResult,
-  thunderbirdVerdict,
   ticketsResult,
   ticketsVerdict,
 } from "@/components/console/test-questions";
@@ -473,17 +471,7 @@ function MethodTable({
  * incidents, cloud post-mortems and injection benchmarks.
  */
 function MoreRealSections({ more, data }: { more: RealData; data: Evaluation }) {
-  const {
-    bgl,
-    thunderbird: tb,
-    builds,
-    hadoop,
-    openstack,
-    tickets,
-    gitlab,
-    postmortems,
-    injection,
-  } = more;
+  const { bgl, builds, hadoop, openstack, tickets, gitlab, postmortems, injection } = more;
   const n = (x: number) => x.toLocaleString("en");
   const sev = (m: typeof bgl.aria) => [
     pct(m.accuracy),
@@ -571,55 +559,6 @@ function MoreRealSections({ more, data }: { more: RealData; data: Evaluation }) 
             : " the rules and model together did at least as well as the rules alone"}
           . {pct(bgl.overlapShare, 0)} of these lines carry a message that also appears in the
           2,000-line sample the scenarios are built from.
-        </p>
-      </Section>
-
-      <Section
-        id="ev-thunderbird"
-        title="A second supercomputer's alarm tags"
-        what={`The same test on ${Math.round(tb.days / 7)} weeks of the Thunderbird cluster's log, which nothing was tuned on.`}
-        verdict={thunderbirdVerdict(more)}
-        headline={thunderbirdResult(more)}
-        intro={
-          <>
-            {n(tb.lines)} Thunderbird lines over {Math.round(tb.days)} days, cut into{" "}
-            {n(tb.windows)} {tb.windowMin}-minute windows; {n(tb.alertLines)} of the lines carry an
-            alert tag from the machine&apos;s administrators, and each window&apos;s label comes
-            from those tags. ARIA rates each window from its lines alone; the tags are removed
-            first.
-          </>
-        }
-        source={tb.citation}
-      >
-        <MethodTable
-          label="Severity on the Thunderbird windows, by method"
-          head={["Method", "Right level (accuracy)", "Quiet windows paged"]}
-          rows={[
-            {
-              name: "ARIA (rules, model and policy)",
-              cells: [pct(tb.aria.accuracy), `${n(tb.aria.quietPaged)} of ${n(tb.quiet)}`],
-              strong: true,
-            },
-            {
-              name: "The rules alone",
-              cells: [pct(tb.rules.accuracy), `${n(tb.rules.quietPaged)} of ${n(tb.quiet)}`],
-            },
-            {
-              name: "Keyword categories",
-              cells: [pct(tb.keyword.accuracy), `${n(tb.keyword.quietPaged)} of ${n(tb.quiet)}`],
-            },
-            {
-              name: "The commonest label",
-              cells: [pct(tb.majority.accuracy), `${n(tb.majority.quietPaged)} of ${n(tb.quiet)}`],
-            },
-          ]}
-        />
-        <p className="max-w-prose text-sm text-muted-foreground">
-          The rules that fired most often on the quiet windows ARIA paged:{" "}
-          {tb.pagedBy
-            .map(([rule, windows]) => `${rule.replaceAll("_", " ")} (${n(windows)} windows)`)
-            .join(", ")}
-          .
         </p>
       </Section>
 
@@ -1357,7 +1296,6 @@ function contents(real: boolean, more: boolean): TocItem[] {
     ...(more
       ? [
           { id: "ev-bgl", label: "BlueGene/L alarm tags" },
-          { id: "ev-thunderbird", label: "Thunderbird alarm tags" },
           { id: "ev-hadoop", label: "Hadoop jobs" },
           { id: "ev-openstack", label: "OpenStack bugs" },
           { id: "ev-builds", label: "Failed CI builds" },

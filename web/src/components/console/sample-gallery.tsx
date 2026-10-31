@@ -65,7 +65,6 @@ const DATA_SOURCES: DataSource[] = [
     about: "The service that keeps a cluster's servers in agreement",
   },
   { system: "bgl", group: "hpc", about: "A supercomputer at Lawrence Livermore" },
-  { system: "thunderbird", group: "hpc", about: "A supercomputer at Sandia" },
   { system: "hpc", group: "hpc", about: "A computing cluster at Los Alamos" },
   { system: "android", group: "desktop", about: "An Android phone's system log" },
   { system: "mac", group: "desktop", about: "A Mac's system log" },

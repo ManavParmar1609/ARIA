@@ -501,7 +501,6 @@ const auroc = (d: { auroc: number; auroc_ci95: number[] }) => ({
 export function realData() {
   const {
     bgl,
-    thunderbird,
     hadoop,
     openstack,
     uci_tickets: tickets,
@@ -527,10 +526,7 @@ export function realData() {
     random: retrieval(b.methods.random),
     commonest: retrieval(b.methods.commonest_label),
   });
-  // Thunderbird's labels hold no SEV1 or SEV2, so recall is keyed by the levels each log has.
-  const severity = (
-    m: Omit<(typeof bgl.methods)["aria_policy"], "recall"> & { recall: Record<string, number> },
-  ) => ({
+  const severity = (m: (typeof bgl.methods)["aria_policy"]) => ({
     accuracy: m.accuracy,
     accuracyCi: m.accuracy_ci95,
     macroF1: m.macro_f1,
@@ -574,25 +570,6 @@ export function realData() {
       targetCoverage: bgl.conformal.target_coverage,
       autoDecided: bgl.automation.auto_decided,
       overlapShare: bgl.overlap_with_training_sample.share,
-    },
-    thunderbird: {
-      citation: thunderbird.citation,
-      lines: thunderbird.lines,
-      days: thunderbird.days,
-      alertLines: thunderbird.alert_lines,
-      windows: thunderbird.windows,
-      windowMin: thunderbird.window_min,
-      labels: thunderbird.labels as Record<string, number>,
-      quiet: (thunderbird.labels as Record<string, number>).SEV4 ?? 0,
-      aria: severity(thunderbird.methods.aria_policy),
-      rules: severity(thunderbird.methods.rules_only),
-      keyword: severity(thunderbird.methods.keyword),
-      majority: severity(thunderbird.methods.majority_class),
-      coverage: thunderbird.conformal.coverage,
-      targetCoverage: thunderbird.conformal.target_coverage,
-      autoDecided: thunderbird.automation.auto_decided,
-      /** The rules that fired most often on the quiet windows ARIA paged on, with their counts. */
-      pagedBy: thunderbird.rules_on_paged_quiet_windows as [string, number][],
     },
     builds: {
       citation: logchunks.citation,

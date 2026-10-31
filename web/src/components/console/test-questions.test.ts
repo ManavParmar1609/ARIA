@@ -23,7 +23,6 @@ import {
   resultsInShort,
   severityVerdict,
   shortfallLines,
-  thunderbirdVerdict,
   ticketsVerdict,
   unsureAnswer,
 } from "./test-questions";
@@ -38,13 +37,12 @@ describe("the four questions on Test results", () => {
     const answer = unsureAnswer(
       [
         { name: "Built samples", phrase: "built samples", value: 0.91 },
-        { name: "BlueGene/L", value: 0.89 },
-        { name: "Thunderbird", value: 0.06 },
+        { name: "BlueGene/L", value: 0.06 },
       ],
       0.9,
     );
     expect(answer).toBe(
-      "On built samples and BlueGene/L, yes: its short list of likely levels held the right one about as often as promised, 90 times in 100. On Thunderbird, no: there the list held the right level only 6 times in 100, so ARIA was confidently wrong.",
+      "On built samples, yes: its short list of likely levels held the right one about as often as promised, 90 times in 100. On BlueGene/L, no: there the list held the right level only 6 times in 100, so ARIA was confidently wrong.",
     );
     expect(unsureAnswer([{ name: "A", value: 0.95 }], 0.9)).toMatch(/^Yes\./);
   });
@@ -113,7 +111,6 @@ describe("what each test result means for the person on call", () => {
     const verdicts = [
       hdfsVerdict(real),
       bglVerdict(more.bgl),
-      thunderbirdVerdict(more),
       hadoopVerdict(more),
       openstackVerdict(more),
       buildsVerdict(more),
@@ -126,7 +123,7 @@ describe("what each test result means for the person on call", () => {
       endToEndVerdict(data),
       readingVerdict(data),
       liveVerdict(data),
-      resultsInShort(data, real, more),
+      resultsInShort(data, real),
     ];
     for (const verdict of verdicts) {
       expect(verdict).not.toMatch(/undefined|NaN|null|Infinity/);
@@ -153,20 +150,13 @@ describe("what each test result means for the person on call", () => {
       detectors: [{ ...best, flagged: 120, falseAlarms: 2 }],
     } as typeof real;
     expect(hdfsVerdict(beaten)).toMatch(/does better\.$/);
-    expect(resultsInShort(evaluation(), beaten, realData())).toContain(
+    expect(resultsInShort(evaluation(), beaten)).toContain(
       "on a real cluster, though not as well as the best standard detector,",
     );
   });
 
   it("reads well when a share is nothing at all", () => {
     const more = realData();
-    const quiet = {
-      ...more,
-      thunderbird: { ...more.thunderbird, aria: { ...more.thunderbird.aria, quietPaged: 0 } },
-    } as typeof more;
-    expect(thunderbirdVerdict(quiet)).toBe(
-      "Calm on a machine it has never seen: no quiet stretches raised a false alarm.",
-    );
     const perfect = {
       ...more.bgl,
       aria: { ...more.bgl.aria, severeMissed: 0, quietPaged: 0 },

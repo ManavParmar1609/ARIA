@@ -206,17 +206,6 @@ failure_modes:
       technology: "Proxifier"
       source: "web"
       summary: "Clients fail to connect through a proxy server: one is a nuisance, many is an outage."
-  thunderbird.dns_resolution:
-    system: thunderbird
-    title: "Name resolution failures on {nodes} Thunderbird nodes"
-    match: "failed to resolve data source name|unqualified host name"
-    runbook: dns-resolution
-    severity: {base: SEV3, escalate: [{nodes_at_least: 20, to: SEV2}]}
-    card:
-      title: "Servers can't look up names"
-      technology: "Thunderbird"
-      source: "hpc"
-      summary: "Name-resolution failures leave nodes unable to find the services they depend on."
 
   # --- benign noise: error-level lines that need no action ---------------------------------------
   mac.cocoa_scripting_noise:

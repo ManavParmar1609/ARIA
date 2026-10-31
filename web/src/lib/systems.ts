@@ -15,7 +15,6 @@ export const SYSTEM_NAMES: Record<string, string> = {
   openstack: "OpenStack",
   proxifier: "Proxifier",
   spark: "Spark",
-  thunderbird: "Thunderbird",
   windows: "Windows",
   zookeeper: "ZooKeeper",
 };

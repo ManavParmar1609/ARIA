@@ -2,7 +2,6 @@
 const FAILURE_NAMES: Record<string, string> = {
   auth_failures: "authentication failures",
   bruteforce: "brute-force attempts",
-  dns_resolution: "DNS resolution",
   hdfs_lease_renewal: "HDFS lease renewal",
   mod_jk_worker_error: "mod_jk worker errors",
   psu_failure: "PSU failure",
