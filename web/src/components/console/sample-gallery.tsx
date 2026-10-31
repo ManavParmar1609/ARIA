@@ -307,7 +307,9 @@ export function SampleGallery() {
     }
   });
 
-  if (scenarios.isPending) {
+  // Both lists, or neither: a real incident arriving after the samples would push every card
+  // below it down the page.
+  if (scenarios.isPending || real.isPending) {
     return (
       <div className="grid gap-4" aria-busy="true" aria-label="Loading the samples">
         <Skeleton className="h-6 w-56" />
