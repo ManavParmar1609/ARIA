@@ -143,6 +143,13 @@ The floor is 14 px for text; labels drawn inside a chart may go to 12 px.
   right, a hairline between rows. Every answer is visible.
 - **Console.** A cream sidebar panel on the warm canvas, with keylime for the active item; cards
   are cream, and the main action is forest.
+- **Ask ARIA.** A chat in one centred column, about 46rem wide.
+  - Your questions sit on the right in forest bubbles. ARIA's answers sit on the left on cream
+    cards beside its round mark; on a phone the mark sits above the card, with ARIA's name.
+  - Bubbles have 18 px corners, with a tighter 6 px corner on the speaker's side.
+  - Each answer ends with its sources as small cards that open their records, a copy button and
+    the time.
+  - The question box is docked at the foot of the screen, with a round forest send button.
 
 ## Motion
 
@@ -152,13 +159,15 @@ transform, opacity and the stroke dash offset animate, and everything stops unde
 to stop it (WCAG 2.2.2).
 
 - **Line art.** Each drawing's strokes draw in once as it comes into view.
-- **The six chosen animations:**
+- **The seven chosen animations:**
   - the hero entrance: the report card rises into place once;
   - the sliding nav pill;
   - numbers that roll into view;
   - the severity stamp and the prediction-set bracket;
   - the highlight that sweeps across cited evidence;
-  - the dot bloom on ghost buttons.
+  - the dot bloom on ghost buttons;
+  - a new chat message fading up into place once (while ARIA answers, three dots pulse; with
+    reduced motion they are the words "ARIA is thinking…").
 
 ## Icons and illustration
 

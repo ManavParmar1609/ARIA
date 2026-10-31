@@ -289,35 +289,73 @@ test.describe("console", () => {
     await expectAccessible(page, "memory");
   });
 
-  test("answers a question with numbered sources and keeps suggestions in view", async ({
+  test("chats about past incidents with numbered sources, and keeps questions to try in view", async ({
     page,
   }) => {
     await page.goto("/console/ask");
-    await page.getByLabel("Your question").fill("How was ZooKeeper quorum loss fixed before?");
-    await page.getByRole("button", { name: "Ask ARIA" }).click();
-    const answer = page.getByRole("list", { name: "Answers" }).locator(":scope > li").first();
-    const first = answer.getByRole("button", { name: /^Source 1: Past incident, / }).first();
-    await expect(first).toBeVisible();
-    await expect(answer.getByRole("heading", { name: "Sources" })).toBeVisible();
-    // A screen reader hears that the answer came, and how much it holds.
+    // A first visit opens on a greeting, with questions to try.
+    await expect(page.getByText("What would you like to know?")).toBeVisible();
+    await expectAccessible(page, "ask, new chat");
+    const box = page.getByLabel("Your question");
+    const conversation = page.getByRole("log", { name: "Conversation" });
+    await box.fill("How was ZooKeeper quorum loss fixed before?");
+    await box.press("Enter");
+    const exchange = conversation.getByRole("article").last();
     await expect(
-      page
-        .getByRole("status")
-        .filter({ hasText: /^ARIA answered: \d+ points?, from \d+ sources?\.$/ }),
+      exchange.getByRole("heading", {
+        name: "You asked: How was ZooKeeper quorum loss fixed before?",
+      }),
+    ).toBeVisible();
+    const first = exchange.getByRole("button", { name: /^Source 1: Past incident, / }).first();
+    await expect(first).toBeVisible();
+    await expect(exchange.getByRole("heading", { name: "Sources" })).toBeVisible();
+    // The box is ready for the next question.
+    await expect(box).toBeFocused();
+    await expect(box).toHaveValue("");
+    // A screen reader hears the answer as it arrives, led by how much it holds.
+    await expect(
+      exchange.getByText(/^ARIA answered: \d+ points?, from \d+ sources?\.$/),
     ).toHaveCount(1);
-    // A citation opens its source in the list beneath the answer.
+    // Each source opens its record: a past incident in the library, or on its own page when ARIA
+    // triaged it (as it did the sample published above). A citation opens what its source says.
+    await expect(exchange.getByRole("link", { name: /^1 Past incident/ })).toHaveAttribute(
+      "href",
+      /^\/console\/(memory\?q=|runs\/run-)/,
+    );
     await first.click();
-    await expect(answer.locator("details[open]").first()).toContainText("Resolution:");
+    await expect(exchange.getByRole("region", { name: "Source 1" })).toContainText("Resolution:");
     await expect(
       page.getByRole("button", { name: /^Have we seen ZooKeeper lose quorum before/ }),
     ).toBeVisible();
     await expectAccessible(page, "ask");
 
-    await page.getByLabel("Your question").fill("What is the weather in Lisbon today?");
-    await page.getByRole("button", { name: "Ask ARIA" }).click();
-    const nothing = "Nothing in ARIA's records answers this.";
-    await expect(page.getByRole("list", { name: "Answers" }).getByText(nothing)).toBeVisible();
-    await expect(page.getByRole("status").filter({ hasText: nothing })).toHaveCount(1);
+    await box.fill("What is the weather in Lisbon today?");
+    await page.getByRole("button", { name: "Send question" }).click();
+    await expect(conversation.getByText("Nothing in ARIA's records answers this.")).toBeVisible();
+    await expect(box).toBeFocused();
+
+    // New chat clears the conversation.
+    await page.getByRole("button", { name: "New chat" }).click();
+    await expect(conversation.getByRole("article")).toHaveCount(0);
+    await expect(page.getByText("What would you like to know?")).toBeVisible();
+    await expect(box).toBeFocused();
+  });
+
+  test("asks about one incident from its page", async ({ page }) => {
+    await page.goto("/console/runs?status=published");
+    await page
+      .getByRole("row", { name: /ZooKeeper/ })
+      .getByRole("link")
+      .click();
+    await page.getByRole("link", { name: "Ask about this incident" }).click();
+    await expect(page).toHaveURL(/\/console\/ask\?run=run-/);
+    // About names the incident, and the questions to try are about it.
+    await expect(page.getByRole("combobox", { name: "About" })).toContainText(/ZooKeeper/i);
+    await page.getByRole("button", { name: "What did the investigation find?" }).click();
+    const exchange = page.getByRole("log", { name: "Conversation" }).getByRole("article").last();
+    await expect(exchange.getByText(/^About: .*ZooKeeper/i)).toBeVisible();
+    await expect(exchange.getByRole("button", { name: /^Source 1: / }).first()).toBeVisible();
+    await expectAccessible(page, "ask about one incident");
   });
 
   test("triages in chat over AG-UI and answers the review interrupt", async ({ page }) => {
