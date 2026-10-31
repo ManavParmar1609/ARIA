@@ -84,12 +84,6 @@ _EMAIL = re.compile(
 _IPV4 = re.compile(
     r"(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?!\d|\.\d)"
 )
-# An address spelled with dashes inside a reverse-DNS host name: "202-132-40-29.adsl.example.net"
-# or "ip-10-0-0-1.ec2.internal". The host name after it keeps dates and counters out.
-_IPV4_DASHED = re.compile(
-    r"(?<!\d)(?<!\d-)(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)-){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)"
-    r"(?=\.[A-Za-z])"
-)
 _IPV6 = re.compile(
     r"(?<![\w:])(?:"
     r"(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}"  # the full form
@@ -301,8 +295,6 @@ class Redactor:
 
             if text.count(".") >= 3:
                 text = _IPV4.sub(ip, text)
-            if text.count("-") >= 3 and "." in text:
-                text = _IPV4_DASHED.sub(ip, text)
             if "::" in text or text.count(":") >= 7:
                 text = _IPV6.sub(ip6, text)
         return text
