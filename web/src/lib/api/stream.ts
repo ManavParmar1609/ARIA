@@ -44,21 +44,35 @@ interface Held extends Timeline {
 const empty = (key: string): Held => ({ key, events: [], liveText: {}, state: "connecting" });
 
 /**
- * A run's events. A finished run is read once over REST; a live one over server-sent events,
- * which replay what is stored and then follow the run (EventSource resumes from the last event id
- * after a dropped connection, so nothing is missed or repeated).
+ * A run's events. A run at work is followed over server-sent events, which replay what is stored
+ * and then follow the run (EventSource resumes from the last event id after a dropped connection,
+ * so nothing is missed or repeated). The stream ends when the run pauses for review: nothing
+ * happens until a person decides, and a browser holds only six connections to a server, so six
+ * incidents left open on review would stop a seventh page from loading. A paused or finished run
+ * is read over REST instead, again whenever its status moves on (`status`), so the steps after a
+ * review decision arrive too. Events are kept per run across these modes and merged by sequence
+ * number, so switching never empties the trace.
  */
-export function useRunTimeline(runId: string, mode: "live" | "stored" | "off"): Timeline {
+export function useRunTimeline(
+  runId: string,
+  mode: "live" | "stored" | "off",
+  status?: string,
+): Timeline {
   const client = useQueryClient();
   const live = mode === "live";
-  const key = `${runId}:${mode}`;
+  const key = runId;
+  // Stored events are read again when the run's status changes; live ones need no prompt.
+  const version = live ? "" : (status ?? "");
   const [held, setHeld] = useState<Held>(() => empty(key));
   const refreshTimer = useRef<number | undefined>(undefined);
+  // The sequence numbers already held for this run, across modes and reconnections.
+  const seenFor = useRef<{ key: string; seqs: Set<number> }>({ key, seqs: new Set() });
 
   useEffect(() => {
     if (mode === "off") return;
     let cancelled = false;
-    const seen = new Set<number>();
+    if (seenFor.current.key !== key) seenFor.current = { key, seqs: new Set() };
+    const seen = seenFor.current.seqs;
     // Updates for this run only; a stale callback from a previous run starts from empty.
     const update = (change: (current: Held) => Held) =>
       setHeld((current) => change(current.key === key ? current : empty(key)));
@@ -102,7 +116,8 @@ export function useRunTimeline(runId: string, mode: "live" | "stored" | "off"): 
       };
     }
 
-    const source = new EventSource(`/api/v1/runs/${encodeURIComponent(runId)}/stream`);
+    // Ends at the review pause on the server's side too (`until=review`).
+    const source = new EventSource(`/api/v1/runs/${encodeURIComponent(runId)}/stream?until=review`);
     let finished = false;
     source.onopen = () => update((current) => ({ ...current, state: "live" }));
     source.onerror = () => {
@@ -137,7 +152,9 @@ export function useRunTimeline(runId: string, mode: "live" | "stored" | "off"): 
         return;
       }
       add([event]);
-      if (event.kind === "run_finished") {
+      // The run is over, or waits for a person: stop here rather than let the browser reconnect.
+      // What follows the pause arrives over REST once the run's status says it is paused.
+      if (event.kind === "run_finished" || event.kind === "interrupt") {
         finished = true;
         source.close();
         update((current) => ({ ...current, state: "closed" }));
@@ -149,7 +166,7 @@ export function useRunTimeline(runId: string, mode: "live" | "stored" | "off"): 
       window.clearTimeout(refreshTimer.current);
       source.close();
     };
-  }, [client, key, runId, live, mode]);
+  }, [client, key, runId, live, mode, version]);
 
   const current = held.key === key ? held : empty(key);
   return { events: current.events, liveText: current.liveText, state: current.state };

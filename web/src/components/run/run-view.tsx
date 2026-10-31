@@ -63,6 +63,7 @@ import { AgentTeam } from "./team";
 import { WhatHappened } from "./what-happened";
 
 const ACTIVE = new Set(["queued", "running", "awaiting_review"]);
+const WORKING = new Set(["queued", "running"]);
 
 /** The parts of a run's state that the steps a playback has shown would have produced. */
 function reached(values: RunStateValues, passed: ReadonlySet<string>): RunStateValues {
@@ -349,8 +350,10 @@ export function RunView({
     storeTab(runId, next);
   };
   const status = run.data?.status;
-  const mode = !run.data ? "off" : ACTIVE.has(run.data.status) ? "live" : "stored";
-  const timeline = useRunTimeline(runId, mode);
+  // Followed live only while ARIA works: a paused or finished run is read once, and again when
+  // its status moves on (stream.ts says why).
+  const mode = !run.data ? "off" : WORKING.has(run.data.status) ? "live" : "stored";
+  const timeline = useRunTimeline(runId, mode, status);
   const progress = usePacedSteps(runId, timeline.events, status);
   // Fetched alongside the run, not after it; a queued run has no state yet.
   const state = useRunState(runId, checkpoint, status !== "queued");
@@ -668,7 +671,7 @@ export function RunView({
                       : timeline.state === "reconnecting"
                         ? "Reconnecting to the live updates."
                         : timeline.state === "closed"
-                          ? "The run finished."
+                          ? "Live updates ended."
                           : "Connecting to the live updates."}
                   </p>
                 ) : null}
