@@ -20,7 +20,7 @@ const STATUS: Record<string, { label: string; className: string; icon: typeof Ci
     icon: UserRoundCheckIcon,
   },
   published: { label: "Published", className: "text-ok", icon: CircleCheckIcon },
-  rejected: { label: "Rejected", className: "text-muted-foreground", icon: CircleXIcon },
+  rejected: { label: "Discarded", className: "text-muted-foreground", icon: CircleXIcon },
   failed: { label: "Failed", className: "text-danger", icon: OctagonAlertIcon },
 };
 

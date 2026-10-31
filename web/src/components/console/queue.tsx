@@ -29,7 +29,7 @@ import {
   type RunStatus as Status,
   type RunSummary,
 } from "@/lib/api/types";
-import { absoluteTime, duration, percent, relativeTime } from "@/lib/format";
+import { absoluteTime, relativeTime } from "@/lib/format";
 import { systemName, triggerLabel } from "@/lib/systems";
 import { cn } from "@/lib/utils";
 
@@ -38,7 +38,7 @@ const FILTERS: { value: Status | "all"; label: string }[] = [
   { value: "awaiting_review", label: "Waiting for review" },
   { value: "running", label: "Running" },
   { value: "published", label: "Published" },
-  { value: "rejected", label: "Rejected" },
+  { value: "rejected", label: "Discarded" },
   { value: "failed", label: "Failed" },
 ];
 
@@ -47,7 +47,7 @@ const EMPTY: Record<string, string> = {
   awaiting_review: "Nothing is waiting for review.",
   running: "Nothing is running right now.",
   published: "No published reports yet.",
-  rejected: "No rejected reports.",
+  rejected: "No discarded drafts.",
   failed: "No failed triages.",
 };
 
@@ -84,16 +84,17 @@ function usePages(status: Status | "all") {
   return { ...query, more };
 }
 
-function Confidence({ run }: { run: RunSummary }) {
-  if (run.confidence == null) return <span className="text-faint">—</span>;
-  return (
-    <span className="grid gap-0.5">
-      <span>{decidedByLabel(run.decided_by)}</span>
-      <span className="tabular text-xs text-muted-foreground">
-        {percent(run.confidence)} confident
-      </span>
-    </span>
-  );
+/** Who settled the level. "Needs your call" holds only while the run waits for a person. */
+function decider(run: RunSummary): string {
+  if (run.decided_by !== "fallback") return decidedByLabel(run.decided_by);
+  if (run.status === "published") return "Confirmed by a reviewer";
+  if (run.status === "rejected") return "ARIA was unsure";
+  return decidedByLabel(run.decided_by);
+}
+
+function Decider({ run }: { run: RunSummary }) {
+  if (!run.decided_by) return <span className="text-faint">—</span>;
+  return <span>{decider(run)}</span>;
 }
 
 export function Queue() {
@@ -191,7 +192,6 @@ export function Queue() {
                   <TableHead>Incident</TableHead>
                   <TableHead className="w-36">Status</TableHead>
                   <TableHead className="w-52">Decided by</TableHead>
-                  <TableHead className="w-28 text-right">Time to review</TableHead>
                   <TableHead className="w-32 text-right">Started</TableHead>
                 </TableRow>
               </TableHeader>
@@ -219,10 +219,7 @@ export function Queue() {
                       <RunStatus status={run.status} />
                     </TableCell>
                     <TableCell className="text-sm">
-                      <Confidence run={run} />
-                    </TableCell>
-                    <TableCell className="tabular text-right text-sm">
-                      {duration(run.latency_ms) || <span className="text-faint">—</span>}
+                      <Decider run={run} />
                     </TableCell>
                     <TableCell className="text-right text-sm text-muted-foreground">
                       <time dateTime={run.created_at} title={absoluteTime(run.created_at)}>
@@ -253,14 +250,13 @@ export function Queue() {
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   {run.example ? <ExampleTag /> : null}
                   {systemName(run.system)}, {relativeTime(run.created_at)}
-                  {run.latency_ms != null ? `, review after ${duration(run.latency_ms)}` : ""}
                 </p>
               </li>
             ))}
           </ul>
           {runs.data?.next ? (
             <Button className="justify-self-start" onClick={runs.more} disabled={runs.isFetching}>
-              {runs.isFetching ? "Loading" : "Load older runs"}
+              {runs.isFetching ? "Loading" : "Load older incidents"}
             </Button>
           ) : null}
         </>

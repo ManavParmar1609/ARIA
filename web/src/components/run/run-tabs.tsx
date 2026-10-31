@@ -2,22 +2,13 @@
 
 import { useMemo, useState } from "react";
 
-import { SeverityBadge } from "@/components/aria/severity";
-import type { Evidence, GuardReport, ParsedBatch, RetrievalResult } from "@/lib/api/types";
-import { isSeverity } from "@/lib/api/types";
+import type { Evidence, GuardReport, ParsedBatch } from "@/lib/api/types";
 import { percent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-import { Citations, EvidenceChip, KIND_LABEL, useEvidence } from "./evidence";
+import { Citations, EvidenceChip, KIND_LABEL, sourceLabel, useEvidence } from "./evidence";
 
 /** All evidence the run collected, filterable by kind. */
-// Where a past incident in memory came from, as the incident library names it.
-const SOURCE: Record<string, string> = {
-  curated: "built from a sample",
-  run: "from an approved incident",
-  memory: "from memory",
-};
-
 export function EvidenceTable({ evidence, cited }: { evidence: Evidence[]; cited: Set<string> }) {
   const [kind, setKind] = useState<string>("all");
   const { active, pin } = useEvidence();
@@ -60,7 +51,7 @@ export function EvidenceTable({ evidence, cited }: { evidence: Evidence[]; cited
             <button type="button" onClick={() => pin(e.id)} className="min-w-0 text-left">
               <span className="block truncate">{e.title}</span>
               <span className="block text-xs text-muted-foreground">
-                {KIND_LABEL[e.kind] ?? e.kind}, from {e.source}
+                {KIND_LABEL[e.kind] ?? e.kind}, from {sourceLabel(e.source)}
                 {cited.has(e.id) ? ", cited in the report" : ""}
               </span>
             </button>
@@ -156,8 +147,10 @@ export function Templates({ batch }: { batch: ParsedBatch }) {
         {Math.round(f.duration_s / 60)} minutes ({f.events_per_min.toFixed(1)} a minute).{" "}
         {f.error_events} errors ({percent(f.error_ratio, 1)})
         {f.level_counts.WARN ? ` and ${f.level_counts.WARN} warnings` : ""}
-        {f.distinct_nodes ? ` across ${f.distinct_nodes} nodes` : ""}.{" "}
-        {batch.shards > 1 ? `Parsed by ${batch.shards} parsers at once` : "Parsed in one pass"}
+        {f.distinct_nodes
+          ? ` across ${f.distinct_nodes} ${f.distinct_nodes === 1 ? "server" : "servers"}`
+          : ""}
+        . {batch.shards > 1 ? `Parsed by ${batch.shards} parsers at once` : "Parsed in one pass"}
         {batch.template_history ? `, judged against ${batch.template_history} known templates` : ""}
         .
       </p>
@@ -200,63 +193,6 @@ export function Templates({ batch }: { batch: ParsedBatch }) {
         ))}
       </ul>
       <Guard guard={batch.guard} raw={batch.n_raw_lines} />
-    </div>
-  );
-}
-
-/** Past incidents retrieval found, with how they matched, and each retrieval attempt. */
-export function Similar({ retrieval }: { retrieval: RetrievalResult }) {
-  return (
-    <div className="grid gap-5">
-      {retrieval.incidents.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No similar incident was found in memory.</p>
-      ) : (
-        <ol className="grid gap-2">
-          {retrieval.incidents.map((incident, i) => (
-            <li key={incident.incident_id} className="grid gap-1.5 rounded-lg bg-raised p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="tabular text-xs text-faint">#{i + 1}</span>
-                <SeverityBadge
-                  severity={isSeverity(incident.severity) ? incident.severity : null}
-                  size="sm"
-                />
-                <span className="font-medium">{incident.title}</span>
-                {incident.evidence_id ? <Citations ids={[incident.evidence_id]} /> : null}
-              </div>
-              <p className="text-sm text-muted-foreground">{incident.resolution}</p>
-              <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-faint">
-                <span>failure mode {incident.failure_mode.replaceAll("_", " ")}</span>
-                <span className="tabular">keyword match {incident.lexical_score.toFixed(2)}</span>
-                <span className="tabular">meaning match {incident.dense_score.toFixed(2)}</span>
-                {incident.rerank_score != null ? (
-                  <span className="tabular">rerank {incident.rerank_score.toFixed(2)}</span>
-                ) : null}
-                {incident.components?.length ? (
-                  <span>components {incident.components.slice(0, 3).join(", ")}</span>
-                ) : null}
-                <span>{SOURCE[incident.source] ?? incident.source}</span>
-              </p>
-            </li>
-          ))}
-        </ol>
-      )}
-      {retrieval.attempts.length ? (
-        <div className="grid gap-2">
-          <h3 className="font-sans text-sm font-semibold">Retrieval attempts</h3>
-          <ol className="grid gap-1.5 text-xs">
-            {retrieval.attempts.map((a) => (
-              <li key={a.attempt} className="grid gap-0.5 rounded-sm bg-sunken p-2">
-                <span className="text-muted-foreground">
-                  Attempt {a.attempt}
-                  {a.widened ? " (widened)" : ""}: {a.candidates} candidates, grade{" "}
-                  {a.grade.toFixed(2)}
-                </span>
-                <span className="font-mono break-words">{a.query}</span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      ) : null}
     </div>
   );
 }

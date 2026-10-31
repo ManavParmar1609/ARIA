@@ -340,7 +340,7 @@ export function AguiChat() {
                           disabled={running}
                           onClick={() => void answer(item, "reject")}
                         >
-                          Reject
+                          Discard the draft
                         </Button>
                       </div>
                     )}

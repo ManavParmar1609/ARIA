@@ -200,7 +200,7 @@ function chains(routing: Record<string, string[]>): [string, string[]][] {
 const DECISION: Record<string, string> = {
   approve: "Approved",
   edit: "Edited",
-  reject: "Rejected",
+  reject: "Discarded",
 };
 
 function Learning({ view }: { view: FeedbackView }) {

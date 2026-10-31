@@ -1,11 +1,18 @@
 "use client";
 
+import { ChevronRightIcon } from "lucide-react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useId, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 
-import { AguiChat } from "@/components/console/agui-chat";
 import { PageHeader } from "@/components/console/states";
-import { Citations, EvidencePanel, EvidenceProvider } from "@/components/run/evidence";
+import {
+  Citations,
+  EvidenceProvider,
+  KIND_LABEL,
+  LogLines,
+  useEvidence,
+} from "@/components/run/evidence";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,16 +23,28 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError } from "@/lib/api/client";
-import { useAsk, useRuns } from "@/lib/api/hooks";
-import type { AskResponse } from "@/lib/api/types";
+import { useAsk, useRun, useRuns } from "@/lib/api/hooks";
+import type { AskResponse, Evidence } from "@/lib/api/types";
 import { stripSeverity } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
-const SUGGESTIONS = [
+// Ask ARIA has one job: questions about ARIA's records, answered with their sources (items 21 to
+// 23). It says what it can answer, keeps good questions in view, numbers each answer's sources in
+// the order they are cited and names them in a list underneath.
+
+const ABOUT_ALL = "all";
+
+const LIBRARY_QUESTIONS = [
   "Have we seen ZooKeeper lose quorum before, and how was it fixed?",
   "What does the runbook say to do first when DataNodes fail to serve blocks?",
   "Which past incidents involved SSH brute-force attempts on many hosts?",
+];
+
+const INCIDENT_QUESTIONS = [
+  "What did the investigation find?",
+  "Which errors appeared most often?",
+  "What should I check first?",
 ];
 
 interface Turn {
@@ -34,6 +53,101 @@ interface Turn {
   runId: string | null;
   answer?: AskResponse;
   error?: string;
+}
+
+/** Each cited source's number: 1 for the first one the answer cites, and so on. */
+export function sourceNumbers(answer: Pick<AskResponse, "answer">): Map<string, string> {
+  const numbers = new Map<string, string>();
+  for (const claim of answer.answer) {
+    for (const id of claim.evidence_ids ?? []) {
+      if (!numbers.has(id)) numbers.set(id, String(numbers.size + 1));
+    }
+  }
+  return numbers;
+}
+
+/** What a source is called in the list: a past incident by its own title, the rest as recorded. */
+export function sourceName(evidence: Evidence): string {
+  const data = (evidence.data ?? {}) as Record<string, unknown>;
+  if (evidence.kind === "incident" && typeof data.title === "string" && data.title) {
+    return data.synthetic ? `${data.title} (built from a sample)` : data.title;
+  }
+  return evidence.title;
+}
+
+/** The answer's sources, numbered as cited. A citation clicked above opens its source here. */
+function Sources({ id, numbers }: { id: string; numbers: ReadonlyMap<string, string> }) {
+  const { byId, active, pinned, linesFor } = useEvidence();
+  const rows = useRef(new Map<string, HTMLDetailsElement>());
+  useEffect(() => {
+    const row = pinned ? rows.current.get(pinned) : undefined;
+    if (row) row.open = true;
+  }, [pinned]);
+  return (
+    <section id={id} aria-labelledby={`${id}-title`} className="grid gap-1.5">
+      <h3 id={`${id}-title`} className="text-sm font-medium">
+        Sources
+      </h3>
+      <ol className="grid">
+        {[...numbers].map(([eid, n]) => {
+          const evidence = byId.get(eid);
+          if (!evidence) return null;
+          const data = (evidence.data ?? {}) as Record<string, unknown>;
+          const runbook = typeof data.runbook === "string" ? data.runbook : null;
+          const lines = linesFor(eid);
+          return (
+            <li key={eid}>
+              <details
+                ref={(el) => {
+                  if (el) rows.current.set(eid, el);
+                  else rows.current.delete(eid);
+                }}
+                className={cn(
+                  "group rounded-md px-2 transition-colors duration-(--duration-quick)",
+                  active === eid && "bg-highlight/60",
+                )}
+              >
+                <summary className="grid cursor-pointer grid-cols-[1.25rem_minmax(0,1fr)_1rem] items-start gap-2 py-1.5 text-sm leading-6 [&::-webkit-details-marker]:hidden">
+                  <span className="tabular font-mono text-xs leading-6 text-muted-foreground">
+                    {n}
+                  </span>
+                  <span className="min-w-0 wrap-anywhere">
+                    <span className="text-muted-foreground">
+                      {KIND_LABEL[evidence.kind] ?? evidence.kind}:
+                    </span>{" "}
+                    {sourceName(evidence)}
+                  </span>
+                  <ChevronRightIcon
+                    aria-hidden
+                    className="mt-1 size-4 text-muted-foreground transition-transform duration-(--duration-quick) group-open:rotate-90 motion-reduce:transition-none"
+                  />
+                </summary>
+                <div className="grid gap-2 pb-3 pl-7 text-xs leading-5">
+                  {evidence.detail ? (
+                    <p className="wrap-anywhere whitespace-pre-wrap text-muted-foreground">
+                      {evidence.detail}
+                    </p>
+                  ) : null}
+                  {lines.length ? <LogLines lines={lines} limit={4} wrap /> : null}
+                  {runbook ? (
+                    <Link
+                      href={`/console/runbooks/${encodeURIComponent(runbook)}` as never}
+                      className="w-fit underline underline-offset-4 hover:text-heading"
+                    >
+                      Open the runbook
+                    </Link>
+                  ) : null}
+                  {!evidence.detail && !lines.length && !runbook ? (
+                    <p className="text-muted-foreground">Recorded by {evidence.source}.</p>
+                  ) : null}
+                </div>
+              </details>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
 }
 
 function Answer({ turn }: { turn: Turn }) {
@@ -49,33 +163,45 @@ function Answer({ turn }: { turn: Turn }) {
     return (
       <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
         <span aria-hidden className="block size-2 animate-pulse-dot rounded-full bg-primary" />
-        Searching the incident library and runbooks
+        Searching ARIA&apos;s records
       </p>
     );
   }
+  if (answer.answer.length === 0) {
+    return (
+      <div role="status" className="grid gap-1 text-sm">
+        <p>Nothing in ARIA&apos;s records answers this.</p>
+        <p className="text-muted-foreground">
+          {turn.runId
+            ? "Try: ask about the logs, the investigation or what to check first, or pick a question above."
+            : "Try: name a system, a part or a kind of failure, such as “ZooKeeper quorum loss”, or pick a question above."}
+        </p>
+      </div>
+    );
+  }
+  const numbers = sourceNumbers(answer);
+  const panelId = `${turn.id}-sources`;
   return (
-    <EvidenceProvider evidence={answer.evidence} events={[]}>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <div className="grid content-start gap-3">
-          {answer.insufficient_evidence ? (
-            <p className="rounded-md bg-sev3/12 p-3 text-sm">
-              ARIA did not find enough evidence to answer that confidently. What it found is below.
-            </p>
-          ) : null}
-          <ul className="grid gap-2.5">
-            {answer.answer.map((claim, i) => (
-              <li key={i} className="leading-relaxed">
-                {claim.text} <Citations ids={claim.evidence_ids ?? []} />
-              </li>
-            ))}
-          </ul>
-          <p className="text-xs text-faint">
-            {answer.answered_by === "llm"
-              ? `Written by ${answer.model ?? "the LLM"} from the evidence.`
-              : "Assembled from retrieved evidence, without an LLM."}
+    <EvidenceProvider evidence={answer.evidence} events={[]} panelId={panelId}>
+      <div className="grid gap-4">
+        {answer.insufficient_evidence ? (
+          <p className="rounded-md bg-sev3/12 p-3 text-sm">
+            ARIA found only part of an answer. What it found is below.
           </p>
-        </div>
-        <EvidencePanel className="self-start" />
+        ) : null}
+        <ul className="grid gap-2.5">
+          {answer.answer.map((claim, i) => (
+            <li key={i} className="leading-relaxed">
+              {claim.text} <Citations ids={claim.evidence_ids ?? []} labels={numbers} />
+            </li>
+          ))}
+        </ul>
+        <Sources id={panelId} numbers={numbers} />
+        <p className="text-xs text-faint">
+          {answer.answered_by === "llm"
+            ? `Written by ${answer.model ?? "a language model"} from these sources.`
+            : "Put together from ARIA's records, without a language model."}
+        </p>
       </div>
     </EvidenceProvider>
   );
@@ -87,19 +213,24 @@ function Questions() {
   const runs = useRuns("all", 30);
   // An incident page's "Ask about this incident" opens here with that incident chosen.
   const linked = useSearchParams().get("run");
+  const linkedRun = useRun(linked ?? "", Boolean(linked));
+  // A link to an incident this visitor can't see (or that was deleted) falls back to all.
+  const missing = Boolean(linked) && linkedRun.isError;
   const [question, setQuestion] = useState("");
-  const [runId, setRunId] = useState<string>(linked ?? "none");
+  const [chosen, setAbout] = useState<string>(linked ?? ABOUT_ALL);
+  const about = missing && chosen === linked ? ABOUT_ALL : chosen;
   const [turns, setTurns] = useState<Turn[]>([]);
   const counter = useRef(0);
+  const suggestions = about === ABOUT_ALL ? LIBRARY_QUESTIONS : INCIDENT_QUESTIONS;
 
   const send = (text: string) => {
     const q = text.trim();
     if (q.length < 3 || ask.isPending) return;
     counter.current += 1;
     const turn: Turn = {
-      id: `q${counter.current}`,
+      id: `${id}-q${counter.current}`,
       question: q,
-      runId: runId === "none" ? null : runId,
+      runId: about === ABOUT_ALL ? null : about,
     };
     setTurns((list) => [turn, ...list]);
     setQuestion("");
@@ -127,7 +258,7 @@ function Questions() {
           e.preventDefault();
           send(question);
         }}
-        className="grid gap-3"
+        className="grid gap-4"
       >
         <div className="grid grid-cols-[minmax(0,1fr)] gap-3 md:grid-cols-[minmax(0,1fr)_16rem]">
           <div className="grid gap-1.5">
@@ -137,19 +268,21 @@ function Questions() {
               value={question}
               maxLength={1000}
               onChange={(e) => setQuestion(e.target.value)}
-              placeholder="What happened last time HDFS DataNodes failed to serve blocks?"
+              placeholder="How was the last ZooKeeper quorum loss fixed?"
             />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor={`${id}-run`}>About a run</Label>
-            <Select value={runId} onValueChange={setRunId}>
-              <SelectTrigger id={`${id}-run`}>
+            <Label htmlFor={`${id}-about`}>About</Label>
+            <Select value={about} onValueChange={setAbout}>
+              <SelectTrigger id={`${id}-about`}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">Any incident</SelectItem>
-                {linked && !runs.data?.runs.some((run) => run.id === linked) ? (
-                  <SelectItem value={linked}>This incident</SelectItem>
+                <SelectItem value={ABOUT_ALL}>All past incidents</SelectItem>
+                {linked && !missing && !runs.data?.runs.some((run) => run.id === linked) ? (
+                  <SelectItem value={linked}>
+                    {stripSeverity(linkedRun.data?.title ?? "") || "This incident"}
+                  </SelectItem>
                 ) : null}
                 {(runs.data?.runs ?? []).map((run) => (
                   <SelectItem key={run.id} value={run.id}>
@@ -158,46 +291,48 @@ function Questions() {
                 ))}
               </SelectContent>
             </Select>
+            {missing ? (
+              <p className="text-xs text-muted-foreground">
+                The incident in the link isn&apos;t available here, so questions go to all past
+                incidents.
+              </p>
+            ) : null}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <Button
-            type="submit"
-            variant="primary"
-            disabled={question.trim().length < 3 || ask.isPending}
-          >
-            Ask ARIA
-          </Button>
-          <p className="text-sm text-muted-foreground">
-            Answers come only from the incident library, runbooks and the chosen incident&apos;s
-            evidence, and every statement cites what it rests on.
-          </p>
-        </div>
+        <Button
+          type="submit"
+          variant="primary"
+          className="justify-self-start"
+          disabled={question.trim().length < 3 || ask.isPending}
+        >
+          Ask ARIA
+        </Button>
       </form>
 
-      {turns.length === 0 ? (
-        <section aria-labelledby={`${id}-try`} className="grid gap-2">
-          <h2 id={`${id}-try`} className="font-sans text-sm font-semibold">
-            Not sure what to ask? Try one of these
-          </h2>
-          <ul className="flex flex-wrap gap-2">
-            {SUGGESTIONS.map((s) => (
-              <li key={s} className="min-w-0">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  // Questions are long: let them wrap on a phone rather than widen the page.
-                  className="h-auto min-h-9 py-1.5 text-left whitespace-normal"
-                  onClick={() => send(s)}
-                >
-                  {s}
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : (
-        <ol className="grid gap-8">
+      <section aria-labelledby={`${id}-try`} className="grid gap-2">
+        <h2 id={`${id}-try`} className="font-sans text-sm font-medium">
+          Try one of these
+        </h2>
+        <ul className="flex flex-wrap gap-2">
+          {suggestions.map((s) => (
+            <li key={s} className="min-w-0">
+              <Button
+                size="sm"
+                variant="secondary"
+                // Questions are long: let them wrap on a phone rather than widen the page.
+                className="h-auto min-h-9 py-1.5 text-left whitespace-normal"
+                disabled={ask.isPending}
+                onClick={() => send(s)}
+              >
+                {s}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {turns.length ? (
+        <ol aria-label="Answers" className="grid max-w-3xl gap-8">
           {turns.map((turn) => (
             <li key={turn.id} className="grid gap-3 border-t border-rule pt-6">
               <h2 className="text-xl tracking-heading wrap-anywhere">{turn.question}</h2>
@@ -205,7 +340,7 @@ function Questions() {
             </li>
           ))}
         </ol>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -215,20 +350,9 @@ export function Ask() {
     <div className="grid gap-6">
       <PageHeader
         title="Ask ARIA"
-        description="Ask about past incidents and runbooks, or triage logs in a chat."
+        description="Ask about one incident, or about the past incidents and runbooks ARIA knows. Answers link to what they use. ARIA can't see live systems."
       />
-      <Tabs defaultValue="ask">
-        <TabsList aria-label="Ask ARIA modes">
-          <TabsTrigger value="ask">Ask about incidents</TabsTrigger>
-          <TabsTrigger value="chat">Triage in chat</TabsTrigger>
-        </TabsList>
-        <TabsContent value="ask">
-          <Questions />
-        </TabsContent>
-        <TabsContent value="chat">
-          <AguiChat />
-        </TabsContent>
-      </Tabs>
+      <Questions />
     </div>
   );
 }

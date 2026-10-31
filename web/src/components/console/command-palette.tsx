@@ -105,9 +105,9 @@ const PAGES: { href: string; label: string; hint: string; icon: LucideIcon; keyw
     {
       href: "/console/ask",
       label: "Ask ARIA",
-      hint: "Questions about past incidents and runbooks",
+      hint: "Questions about an incident, past incidents and runbooks",
       icon: MessageSquareTextIcon,
-      keywords: "chat question agui",
+      keywords: "question answer sources",
     },
     {
       href: "/console/memory",
@@ -140,9 +140,9 @@ const PAGES: { href: string; label: string; hint: string; icon: LucideIcon; keyw
     {
       href: "/console/guide/connect",
       label: "Connect ARIA to your systems",
-      hint: "Alerts, the command line, other agents, message channels",
+      hint: "Alerts, the command line, other agents, message channels, triage in chat",
       icon: PlugIcon,
-      keywords: "alertmanager grafana webhook a2a agui mcp cli slack teams integrations",
+      keywords: "alertmanager grafana webhook a2a agui chat mcp cli slack teams integrations",
     },
     {
       href: "/console/settings",

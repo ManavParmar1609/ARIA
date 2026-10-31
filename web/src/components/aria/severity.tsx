@@ -2,6 +2,7 @@ import { type CSSProperties } from "react";
 
 import { SEVERITIES, SEVERITY_MEANING, type Severity } from "@/lib/api/types";
 import { cx } from "@/lib/cx";
+import { LEVEL_WORD } from "@/lib/levels";
 
 export const SEVERITY_BG: Record<Severity, string> = {
   SEV1: "bg-sev1",
@@ -10,12 +11,8 @@ export const SEVERITY_BG: Record<Severity, string> = {
   SEV4: "bg-sev4",
 };
 
-const SHORT: Record<Severity, string> = {
-  SEV1: "Critical",
-  SEV2: "High",
-  SEV3: "Moderate",
-  SEV4: "Low",
-};
+const short = (severity: Severity) =>
+  `${LEVEL_WORD[severity].charAt(0).toUpperCase()}${LEVEL_WORD[severity].slice(1)}`;
 
 /**
  * Severity as a small tag: the colour strip carries the level and the text says it, so the
@@ -64,8 +61,51 @@ export function SeverityBadge({
         {severity}
       </span>
       {withMeaning ? (
-        <span className="text-sm text-muted-foreground">{SHORT[severity]}</span>
+        <span className="text-sm text-muted-foreground">{short(severity)}</span>
       ) : null}
+    </span>
+  );
+}
+
+/**
+ * The level and its word in one chip, "SEV2 · high": the answer an incident page leads with.
+ * The colour carries the level and the text says it, so it never depends on colour alone.
+ */
+export function LevelChip({
+  severity,
+  stamp = false,
+  className,
+}: {
+  severity: Severity | null | undefined;
+  /** Land like a rubber stamp when it appears (globals.css: .sev-stamp). */
+  stamp?: boolean;
+  className?: string;
+}) {
+  if (!severity) {
+    return (
+      <span
+        className={cx(
+          "inline-flex h-7 items-center rounded-sm border border-dashed border-control px-2.5 text-sm font-medium text-faint",
+          className,
+        )}
+      >
+        Not rated yet
+      </span>
+    );
+  }
+  return (
+    <span
+      title={SEVERITY_MEANING[severity]}
+      className={cx(
+        "tabular inline-flex h-7 items-center gap-1.5 rounded-sm border border-sev-edge px-2.5 text-sm font-medium whitespace-nowrap text-sev-ink",
+        SEVERITY_BG[severity],
+        stamp && "sev-stamp",
+        className,
+      )}
+    >
+      {severity}
+      <span aria-hidden>·</span>
+      {LEVEL_WORD[severity]}
     </span>
   );
 }

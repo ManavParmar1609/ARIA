@@ -26,10 +26,10 @@ const servers = {
   options: [2, 6, 24].map((n) => ({ value: n, label: `${n} servers` })),
 };
 const rate = {
-  question: "How fast?",
+  question: "How fast do the problem lines come?",
   unit: "per_minute" as const,
   default: 12,
-  options: [12, 60].map((n) => ({ value: n, label: `${n} a minute` })),
+  options: [12, 60].map((n) => ({ value: n, label: `${n} lines a minute` })),
 };
 
 describe("sampleOf", () => {
@@ -61,7 +61,7 @@ describe("biggerRun", () => {
 
   it("offers a faster rate where the sample has no servers to choose", () => {
     const sample = { id: "hdfs.block_serve_exceptions", servers: null, rate: 12 };
-    expect(biggerRun(card({ rate }), sample)?.label).toBe("Run it faster, at 60 a minute");
+    expect(biggerRun(card({ rate }), sample)?.label).toBe("Run it faster, at 60 lines a minute");
   });
 
   it("offers nothing at the largest size, or for a sample without sizes", () => {
@@ -75,7 +75,7 @@ describe("sizeWords", () => {
   it("names the size in the card's words", () => {
     expect(sizeWords({ id: "x", servers: 6, rate: null })).toBe("on 6 servers");
     expect(sizeWords({ id: "x", servers: 1, rate: null })).toBe("on 1 server");
-    expect(sizeWords({ id: "x", servers: null, rate: 60 })).toBe("at 60 a minute");
+    expect(sizeWords({ id: "x", servers: null, rate: 60 })).toBe("at 60 lines a minute");
     expect(sizeWords(null)).toBe("");
   });
 });

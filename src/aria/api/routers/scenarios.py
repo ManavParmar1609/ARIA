@@ -66,10 +66,12 @@ def _choice(
     def label(n: int) -> str:
         if unit == "servers":
             return f"{n} server" if n == 1 else f"{n} servers"
-        return f"{n} a minute"
+        return f"{n} lines a minute"
 
     return SizeChoiceOut(
-        question="How many servers?" if unit == "servers" else "How fast?",
+        question="How many servers?"
+        if unit == "servers"
+        else "How fast do the problem lines come?",
         unit=unit,
         default=choice.default,
         options=[SizeOptionOut(value=n, label=label(n)) for n in choice.values],

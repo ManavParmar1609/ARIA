@@ -15,7 +15,7 @@ import {
 import { useMemo, type ReactNode } from "react";
 
 import type { Hypothesis, RunEvent, RunStateValues, SeverityAssessment } from "@/lib/api/types";
-import { duration, listed, writtenOffline } from "@/lib/format";
+import { listed, writtenOffline } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import { Citations } from "./evidence";
@@ -59,31 +59,26 @@ const pct = (p: number | undefined) => `${Math.round(100 * (p ?? 0))}%`;
 function progress(events: RunEvent[], nodes: string[]) {
   let started = false;
   let paused = false;
-  let took = 0;
   const running: Record<string, number> = {};
-  const since: Record<string, number> = {};
-  const settle = (node: string, t: number) => {
+  const settle = (node: string) => {
     running[node] = Math.max(0, (running[node] ?? 0) - 1);
-    if (running[node] === 0) took += t - (since[node] ?? t);
   };
   for (const e of events) {
     const node = e.node ?? "";
     if (!nodes.includes(node)) continue;
-    const t = new Date(e.ts ?? 0).getTime();
     if (e.kind === "node_started") {
       started = true;
       paused = false; // a review resumes by starting its node again
-      if (!running[node]) since[node] = t;
       running[node] = (running[node] ?? 0) + 1;
     } else if (e.kind === "node_finished") {
-      settle(node, t);
+      settle(node);
     } else if (e.kind === "interrupt") {
       paused = true; // the node stops here until a person answers
-      settle(node, t);
+      settle(node);
     }
   }
   const working = Object.values(running).some((count) => count > 0);
-  return { started, working, paused, took };
+  return { started, working, paused };
 }
 
 function severityLine(sev: SeverityAssessment): ReactNode[] {
@@ -150,7 +145,7 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
       if (redacted) parser.push(`Redacted or pseudonymised ${n(redacted)} secrets and addresses.`);
       if (batch.guard.injections?.length) {
         parser.push(
-          `Quarantined ${n(batch.guard.injections.length)} lines that read like prompt injection.`,
+          `Quarantined ${n(batch.guard.injections.length)} ${batch.guard.injections.length === 1 ? "line that reads" : "lines that read"} like prompt injection.`,
         );
       }
       const kind = flows?.examples[0]?.kind ?? Object.keys(flows?.checked ?? {})[0];
@@ -167,7 +162,9 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
         parser.push(`Followed ${n(checked)} ${kind}s from start to finish: each one finished.`);
       }
       if (f.error_events) {
-        parser.push(`${n(f.error_events)} error lines, on ${n(f.error_nodes)} nodes.`);
+        parser.push(
+          `${n(f.error_events)} error ${f.error_events === 1 ? "line" : "lines"}, on ${n(f.error_nodes)} ${f.error_nodes === 1 ? "server" : "servers"}.`,
+        );
       }
     }
 
@@ -251,10 +248,12 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
     const you: ReactNode[] = [];
     if (review) {
       you.push(
-        `${review.decision === "approve" ? "Approved" : review.decision === "reject" ? "Rejected" : "Edited"} by ${review.reviewer && review.reviewer !== "anonymous" ? review.reviewer : "a reviewer"}.`,
+        `${review.decision === "approve" ? "Approved" : review.decision === "reject" ? "Discarded" : "Edited and approved"} by ${review.reviewer && review.reviewer !== "anonymous" ? review.reviewer : "a reviewer"}.`,
       );
     } else if (report) {
-      you.push("Waiting for you: approve, edit first, or reject. Nothing has been sent.");
+      you.push(
+        "Waiting for you: approve, edit before sending, or discard the draft. Nothing has been sent.",
+      );
     }
 
     return [
@@ -363,7 +362,7 @@ export function AgentTeam({ values, events }: { values: RunStateValues; events: 
                     <CircleIcon aria-hidden className="size-3.5" />
                   )}
                   {state === "done"
-                    ? `Done${p.took > 0 ? ` in ${duration(p.took)}` : ""}`
+                    ? "Done"
                     : state === "working"
                       ? "Working"
                       : state === "yours"

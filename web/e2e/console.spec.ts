@@ -25,14 +25,24 @@ test.describe("console", () => {
 
     await expect(page).toHaveURL(/\/console\/runs\/run-/);
     await expect(page.getByRole("heading", { name: "Waiting for your review" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Severity", exact: true })).toBeVisible();
+    // The answer first: the level and its word, then the short list in words.
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(
+      page.getByText(
+        /^(Only SEV\d is likely\.|Probably SEV\d\. ARIA isn't sure enough to decide alone, so please confirm\.|Could be SEV\d.*ARIA plans for SEV\d\.( Please confirm\.)?)$/,
+      ),
+    ).toBeVisible();
+    // Four panels, one question each.
+    for (const name of ["What happened", "How serious", "Seen before", "The report"]) {
+      await expect(page.getByRole("heading", { level: 2, name, exact: true })).toBeVisible();
+    }
+    await expect(
+      page.getByRole("list", { name: "Run progress" }).getByRole("listitem"),
+    ).toHaveCount(8);
     await expect(page.getByText(/Validated: \d+ claims, 100% cited/)).toBeVisible();
 
-    // hover-to-evidence: a citation in the report fills the evidence panel
-    const citation = page
-      .locator("article")
-      .getByRole("button", { name: /^Evidence E\d+: Log template/ })
-      .first();
+    // hover-to-evidence: a citation fills the evidence panel
+    const citation = page.getByRole("button", { name: /^Evidence E\d+: Log template/ }).first();
     await citation.hover();
     await expect(page.locator("#evidence-panel")).toContainText("Log template");
     await expectAccessible(page, "run view, awaiting review");
@@ -62,14 +72,17 @@ test.describe("console", () => {
       "href",
       /\/console\/ask\?run=run-/,
     );
-    await page.getByRole("tab", { name: "Event log" }).click();
+    // Once finished, the progress folds into one line.
+    await expect(page.getByText(/^ARIA finished in /)).toBeVisible();
+    await page.getByRole("tab", { name: "What ARIA did" }).click();
+    await page.getByText(/^Every event \(\d+\)$/).click();
     await expect(page.getByText(/Review: approve by/)).toBeVisible();
     await expect(page.getByText(/Run finished: published/)).toBeVisible();
 
     // time travel: view the run as it was before the review, then come back
     await page.getByRole("tab", { name: "History and forks" }).click();
     await page
-      .locator("li", { hasText: "Paused before review" })
+      .locator("li", { hasText: "Paused at “Your review”" })
       .getByRole("button", { name: "View" })
       .click();
     await expect(page.getByText(/as it was at a past checkpoint/)).toBeVisible();
@@ -210,23 +223,31 @@ test.describe("console", () => {
     await expectAccessible(page, "memory");
   });
 
-  test("answers a question with citations", async ({ page }) => {
+  test("answers a question with numbered sources and keeps suggestions in view", async ({
+    page,
+  }) => {
     await page.goto("/console/ask");
     await page.getByLabel("Your question").fill("How was ZooKeeper quorum loss fixed before?");
     await page.getByRole("button", { name: "Ask ARIA" }).click();
+    const answer = page.getByRole("list", { name: "Answers" }).locator(":scope > li").first();
+    const first = answer.getByRole("button", { name: /^Source 1: Past incident, / }).first();
+    await expect(first).toBeVisible();
+    await expect(answer.getByRole("heading", { name: "Sources" })).toBeVisible();
+    // A citation opens its source in the list beneath the answer.
+    await first.click();
+    await expect(answer.locator("details[open]").first()).toContainText("Resolution:");
     await expect(
-      page
-        .locator("ol li")
-        .first()
-        .getByRole("button", { name: /^Evidence E\d+/ })
-        .first(),
+      page.getByRole("button", { name: /^Have we seen ZooKeeper lose quorum before/ }),
     ).toBeVisible();
     await expectAccessible(page, "ask");
+
+    await page.getByLabel("Your question").fill("What is the weather in Lisbon today?");
+    await page.getByRole("button", { name: "Ask ARIA" }).click();
+    await expect(page.getByText("Nothing in ARIA's records answers this.")).toBeVisible();
   });
 
   test("triages in chat over AG-UI and answers the review interrupt", async ({ page }) => {
-    await page.goto("/console/ask");
-    await page.getByRole("tab", { name: /Triage in chat/ }).click();
+    await page.goto("/console/guide/connect");
     await page.getByRole("button", { name: /Sample: ssh brute-force attempts/i }).click();
     await page.getByRole("button", { name: "Triage in chat" }).click();
     await expect(page.getByText(/Review the incident report/)).toBeVisible();
@@ -247,15 +268,19 @@ test.describe("console", () => {
       await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
       await expectAccessible(page, path);
       if (path === "/console/evals") {
-        // The long evaluation page opens with a link to each section.
-        await page
-          .getByRole("navigation", { name: "On this page" })
-          .getByRole("link", { name: "GitLab.com incidents" })
-          .click();
-        await expect(page).toHaveURL(/#ev-gitlab$/);
-        await expect(
-          page.getByRole("heading", { level: 2, name: /Similar past incidents, on GitLab/ }),
-        ).toBeInViewport();
+        // Four plain questions first, then one closed card per test.
+        for (const question of [
+          "Does it say when it isn't sure?",
+          "Does it catch serious problems without crying wolf?",
+          "Does it find the right past incident?",
+          "Where does it fall short, and why?",
+        ]) {
+          await expect(page.getByRole("heading", { level: 2, name: question })).toBeVisible();
+        }
+        const card = page.getByRole("region", { name: "GitLab.com's incidents" });
+        await expect(card.getByRole("table").first()).toBeHidden();
+        await card.getByText("Show details").click();
+        await expect(card.getByRole("table").first()).toBeVisible();
       }
     }
     // Reviews from the earlier tests feed the recalibration queue.
@@ -307,7 +332,7 @@ test.describe("console", () => {
 
     await page.getByRole("button", { name: "Triage it: SSH brute-force attempts" }).click();
     await expect(page).toHaveURL(/\/console\/runs\/run-/);
-    await expect(page.getByRole("heading", { name: "Severity", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "How serious", exact: true })).toBeVisible();
     await page.getByRole("link", { name: "How to read this" }).click();
     await expect(page).toHaveURL(/\/console\/guide#read-a-run$/);
     await expect(page.getByRole("heading", { name: "How to read a run" })).toBeVisible();
@@ -345,14 +370,13 @@ test.describe("console at 320 px", () => {
       "/console/runbooks",
       "/console/settings",
       "/console/guide",
+      "/console/guide/connect",
       "/console/ask",
     ]) {
       await page.goto(path);
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       await expectNoSidewaysScroll(page, path);
     }
-    await page.getByRole("tab", { name: /Triage in chat/ }).click();
-    await expectNoSidewaysScroll(page, "ask, chat");
 
     // On a phone the queue is a list of cards rather than a table.
     await page.goto("/console/runs?status=published");
@@ -360,14 +384,9 @@ test.describe("console at 320 px", () => {
       .getByRole("link", { name: /ZooKeeper/ })
       .first()
       .click();
-    await expect(page.getByRole("heading", { name: "Severity", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "How serious", exact: true })).toBeVisible();
     await expectNoSidewaysScroll(page, "run view");
-    for (const tab of [
-      "Evidence",
-      "Logs and templates",
-      "Similar incidents",
-      "History and forks",
-    ]) {
+    for (const tab of ["What ARIA did", "Evidence", "Logs", "History and forks"]) {
       await page.getByRole("tab", { name: new RegExp(tab) }).click();
       await expectNoSidewaysScroll(page, `run view, ${tab}`);
     }
@@ -396,7 +415,7 @@ test.describe("console in the dark theme", () => {
       .getByRole("row", { name: /ZooKeeper/ })
       .getByRole("link")
       .click();
-    await expect(page.getByRole("heading", { name: "Severity", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "How serious", exact: true })).toBeVisible();
     await expectAccessible(page, "run view, dark");
     // The severity stamp is still landing when the page opens. Freeze it at a few frames, so a
     // stamp that dims its label fails here every time, not only when axe happens to catch it.

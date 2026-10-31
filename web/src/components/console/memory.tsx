@@ -35,6 +35,12 @@ function seen(incident: IncidentOut): string {
   return [systemName(incident.system), count].filter(Boolean).join(", ");
 }
 
+// Where a library entry came from, in the words "Seen before" uses on the incident page.
+const SOURCE_WORDS: Record<string, string> = {
+  curated: "built from a sample",
+  memory: "from the library",
+};
+
 /** What ARIA remembers: past incidents it searches when a new one comes in. */
 export function Memory() {
   const id = useId();
@@ -187,8 +193,24 @@ export function Memory() {
                       </p>
                       <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-faint">
                         <span>failure mode {incident.failure_mode.replaceAll("_", " ")}</span>
-                        <span>source {incident.source}</span>
-                        <span className="font-mono">{incident.incident_id}</span>
+                        {incident.source === "run" && incident.incident_id.startsWith("inc-") ? (
+                          // An approved incident's entry is named after its run: inc-X came from run-X.
+                          <Link
+                            href={
+                              `/console/runs/run-${encodeURIComponent(incident.incident_id.slice(4))}` as never
+                            }
+                            className="text-foreground underline decoration-control underline-offset-2"
+                          >
+                            from an approved incident: open it
+                          </Link>
+                        ) : (
+                          <>
+                            <span>
+                              {SOURCE_WORDS[incident.source] ?? `source ${incident.source}`}
+                            </span>
+                            <span className="font-mono">{incident.incident_id}</span>
+                          </>
+                        )}
                         {incident.runbook_slug ? (
                           <Link
                             href={

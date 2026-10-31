@@ -72,8 +72,8 @@ async def test_the_samples_are_listed_by_where_their_logs_come_from(
     assert all(s["benign"] and s["servers"] is None and s["rate"] is None for s in noise)
     hdfs = next(s for s in listed if s["id"] == "hdfs.block_serve_exceptions")
     assert hdfs["servers"] is None  # HDFS logs name no servers
-    assert hdfs["rate"]["question"] == "How fast?"
-    assert hdfs["rate"]["options"][-1]["label"].endswith(" a minute")
+    assert hdfs["rate"]["question"] == "How fast do the problem lines come?"
+    assert hdfs["rate"]["options"][-1]["label"].endswith(" lines a minute")
 
 
 async def test_a_sample_starts_as_a_run_at_the_size_asked_for(client: httpx.AsyncClient) -> None:

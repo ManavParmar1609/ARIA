@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { EmptyState, ErrorState, LoadingRows, PageHeader } from "@/components/console/states";
 import { Button } from "@/components/ui/button";
+import { CodeText } from "@/components/ui/code-text";
 import { useRunbook, useRunbooks } from "@/lib/api/hooks";
 import { ApiError } from "@/lib/api/client";
 import type { RunbookStep } from "@/lib/api/types";
@@ -89,7 +90,7 @@ export function Runbooks() {
                 <Risk risk={rb.risk} />
               </div>
               <p className="line-clamp-2 text-sm text-muted-foreground">
-                <Text>{rb.when_to_use}</Text>
+                <CodeText>{rb.when_to_use}</CodeText>
               </p>
               <p className="text-xs text-faint">{covers(rb)}</p>
             </li>
@@ -101,22 +102,6 @@ export function Runbooks() {
 }
 
 /** Runbook text uses Markdown backticks for commands; show those as code. */
-function Text({ children }: { children: string }) {
-  return (
-    <>
-      {children.split("`").map((part, i) =>
-        i % 2 === 1 ? (
-          <code key={i} className="rounded-xs bg-sunken px-1 py-0.5 text-[0.85em]">
-            {part}
-          </code>
-        ) : (
-          part
-        ),
-      )}
-    </>
-  );
-}
-
 function Steps({ title, steps }: { title: string; steps: RunbookStep[] }) {
   if (steps.length === 0) return null;
   return (
@@ -130,7 +115,7 @@ function Steps({ title, steps }: { title: string; steps: RunbookStep[] }) {
             </span>
             <div className="grid gap-1">
               <p className="leading-relaxed">
-                <Text>{step.text}</Text>
+                <CodeText>{step.text}</CodeText>
               </p>
               {/* Most steps are low risk; only the ones to think twice about are tagged. */}
               {step.risk !== "low" ? <Risk risk={step.risk} /> : null}
@@ -185,7 +170,7 @@ export function RunbookDetail({ slug }: { slug: string }) {
       </nav>
       <PageHeader
         title={rb.title}
-        description={<Text>{rb.when_to_use}</Text>}
+        description={<CodeText>{rb.when_to_use}</CodeText>}
         actions={<Risk risk={rb.risk} />}
       >
         <p className="text-sm text-muted-foreground">{covers(rb)}</p>
@@ -197,7 +182,7 @@ export function RunbookDetail({ slug }: { slug: string }) {
         <section className="grid gap-2">
           <h2 className="text-xl tracking-heading">Escalate</h2>
           <p className="leading-relaxed text-muted-foreground">
-            <Text>{rb.escalate}</Text>
+            <CodeText>{rb.escalate}</CodeText>
           </p>
         </section>
       ) : null}

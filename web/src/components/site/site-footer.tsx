@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { Wordmark } from "@/components/aria/wordmark";
-import { EVAL_DOC_URL, REPO_URL } from "@/lib/site-data";
+import { REPO_URL } from "@/lib/site-data";
 
 const DOCS = `${REPO_URL}/blob/main/docs`;
 const ADR = `${DOCS}/adr`;
@@ -19,7 +19,7 @@ const COLUMNS: { title: string; links: { label: string; href: string; internal?:
   {
     title: "Evidence",
     links: [
-      { label: "Test results", href: EVAL_DOC_URL },
+      { label: "Test results", href: "/console/evals", internal: true },
       { label: "Model card", href: `${DOCS}/model-card.md` },
       { label: "Data card", href: `${DOCS}/data-card.md` },
       { label: "Threat model", href: `${DOCS}/threat-model.md` },

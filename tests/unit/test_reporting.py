@@ -647,3 +647,73 @@ def test_offline_answers_read_as_sentences_without_ids() -> None:
         "(SEV3; 4x on hdfs)"
     )
     assert not any("syn-" in t or t.startswith("H1") for t in texts)
+
+
+def test_offline_answers_say_a_shared_fix_once_and_cite_every_incident() -> None:
+    from aria.api.ask import _claims, _clip
+
+    store = EvidenceStore()
+    fix = "Followed runbook zookeeper-quorum-loss: Restore connectivity between peers first."
+    same = [
+        store.add(
+            EvidenceKind.INCIDENT,
+            f"Past incident syn-zk-{n}: ZooKeeper quorum connection loss across {n} peers",
+            source="memory.search",
+            data={
+                "title": f"ZooKeeper quorum connection loss across {n} peers",
+                "resolution": fix,
+                "source": "curated",
+                "synthetic": True,
+            },
+        )
+        for n in (2, 30, 8)
+    ]
+    other = store.add(
+        EvidenceKind.INCIDENT,
+        "Past incident inc-1: SSH brute force",
+        source="memory.search",
+        data={
+            "title": "SSH brute force",
+            "resolution": "Block the addresses.",
+            "source": "curated",
+        },
+    )
+    claims = _claims(store.all())
+    assert [claim.evidence_ids for claim in claims] == [same, [other]]
+    assert claims[0].text == (
+        "Three similar past incidents (built from samples), such as ZooKeeper quorum connection "
+        f"loss across 2 peers, were resolved the same way: {fix}"
+    )
+    assert claims[1].text == (
+        "A similar past incident, SSH brute force, was resolved this way: Block the addresses."
+    )
+    assert _clip("restore connectivity first, then restart", 24) == "restore connectivity…"
+
+
+def test_offline_answers_find_evidence_from_plain_questions() -> None:
+    from aria.api.ask import _plain, rank
+
+    store = EvidenceStore()
+    hypothesis = store.add(
+        EvidenceKind.HYPOTHESIS,
+        "H1 supported: Brute force from one address",
+        source="investigator",
+        data={"id": "H1", "status": "supported"},
+    )
+    template = store.add(
+        EvidenceKind.TEMPLATE, "16x Failed password for root from <*>", source="parser"
+    )
+    single = store.add(EvidenceKind.TEMPLATE, "1x POSSIBLE BREAK-IN ATTEMPT <*>", source="parser")
+    runbook = store.add(
+        EvidenceKind.RUNBOOK, "Runbook ssh-bruteforce: SSH brute-force attempts", source="runbooks"
+    )
+    items = store.all()
+    assert rank("What did the investigation find?", items)[0].id == hypothesis
+    assert rank("Which errors appeared most often?", items)[0].id == template
+    assert rank("What should I check first?", items)[0].id == runbook
+    assert rank("What is the weather today?", items) == []
+    by_id = {item.id: item for item in items}
+    assert (
+        _plain(by_id[single])
+        == 'One log line has a pattern of its own: "POSSIBLE BREAK-IN ATTEMPT …"'
+    )

@@ -3,10 +3,9 @@
 import { CircleCheckIcon, CircleAlertIcon, ShieldAlertIcon } from "lucide-react";
 import Link from "next/link";
 
-import { SeverityBadge } from "@/components/aria/severity";
+import { CodeText } from "@/components/ui/code-text";
 import type { Claim, IncidentReport } from "@/lib/api/types";
-import { isSeverity } from "@/lib/api/types";
-import { clockTime, percent, stripSeverity, writtenOffline } from "@/lib/format";
+import { percent, stripSeverity, writtenOffline } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import { Citations } from "./evidence";
@@ -21,7 +20,7 @@ function ClaimList({ claims }: { claims: Claim[] }) {
         >
           <span aria-hidden className="mt-2.5 block size-1.5 rounded-full bg-control" />
           <p>
-            {claim.text} <Citations ids={claim.evidence_ids ?? []} />
+            <CodeText>{claim.text}</CodeText> <Citations ids={claim.evidence_ids ?? []} />
           </p>
         </li>
       ))}
@@ -45,9 +44,18 @@ const RISK: Record<string, string> = {
   high: "text-danger",
 };
 
-/** The cited report. Each claim carries its citations; nothing in it is uncited. */
-/** The report as published. `titleHidden` keeps its heading for screen readers only, for a page
- * whose own heading already says the same thing. */
+const STATUS: Record<string, string> = {
+  draft: "draft, nothing sent yet",
+  published: "published",
+  rejected: "discarded",
+};
+
+/**
+ * The report as it will be published (or was): ARIA's conclusions, next steps and open
+ * questions, each claim with its sources. When it happened, and the incidents seen before, are
+ * the panels above it. `titleHidden` drops the report's own title when the page's heading
+ * already says the same thing.
+ */
 export function ReportView({
   report,
   titleHidden = false,
@@ -58,17 +66,23 @@ export function ReportView({
   const validation = report.validation;
   const ok = validation?.ok ?? false;
   return (
-    <article aria-labelledby="report-title" className="grid gap-8 wrap-anywhere">
-      <header className="grid gap-3">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground">
+    <article
+      aria-labelledby="report-title"
+      className="grid gap-7 rounded-lg bg-raised p-5 wrap-anywhere"
+    >
+      <header className="grid gap-2">
+        <h2 id="report-title" className="text-base font-medium">
+          The report
+        </h2>
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
           <span>
-            Report v{report.version ?? 1}, {report.status ?? "draft"}
+            Version {report.version ?? 1}, {STATUS[report.status ?? "draft"] ?? report.status}
           </span>
           <span>
             written by{" "}
             {writtenOffline(report)
               ? "ARIA's evidence template (offline mode)"
-              : `the LLM (${report.model ?? "model"})`}
+              : `a language model (${report.model ?? "model"})`}
           </span>
           <span
             className={cn(
@@ -85,13 +99,10 @@ export function ReportView({
               ? `Validated: ${validation?.checked_claims ?? 0} claims, ${percent(validation?.citation_coverage ?? 0)} cited`
               : "Failed validation"}
           </span>
-        </div>
-        <h2
-          id="report-title"
-          className={cn("text-2xl leading-tight tracking-heading", titleHidden && "sr-only")}
-        >
-          {stripSeverity(report.title)}
-        </h2>
+        </p>
+        {titleHidden ? null : (
+          <p className="text-xl leading-tight tracking-heading">{stripSeverity(report.title)}</p>
+        )}
         {!ok && validation?.issues?.length ? (
           <ul className="grid gap-1 rounded-lg bg-danger/10 p-4 text-sm">
             {validation.issues.map((issue, i) => (
@@ -117,31 +128,6 @@ export function ReportView({
           <ClaimList claims={report.suspected_cause} />
         </Section>
       ) : null}
-      {report.timeline?.length ? (
-        <Section title="Timeline">
-          <ol className="grid gap-2 border-l border-rule pl-4">
-            {report.timeline.map((entry, i) => (
-              <li key={i} className="relative grid gap-0.5 leading-relaxed">
-                <span
-                  aria-hidden
-                  className="absolute top-2 -left-[1.3rem] block size-2 rounded-full border border-control bg-background"
-                />
-                {entry.ts ? (
-                  <time
-                    dateTime={entry.ts}
-                    className="tabular font-mono text-xs text-muted-foreground"
-                  >
-                    {clockTime(entry.ts)}
-                  </time>
-                ) : null}
-                <p>
-                  {entry.text} <Citations ids={entry.evidence_ids ?? []} />
-                </p>
-              </li>
-            ))}
-          </ol>
-        </Section>
-      ) : null}
       {report.actions?.length ? (
         <Section title="Next steps">
           <ol className="grid gap-3">
@@ -152,7 +138,7 @@ export function ReportView({
                 </span>
                 <div>
                   <p>
-                    {action.text} <Citations ids={action.evidence_ids ?? []} />
+                    <CodeText>{action.text}</CodeText> <Citations ids={action.evidence_ids ?? []} />
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     <span className={RISK[action.risk ?? "low"]}>{action.risk ?? "low"} risk</span>
@@ -174,37 +160,6 @@ export function ReportView({
               </li>
             ))}
           </ol>
-        </Section>
-      ) : null}
-      {report.similar_incidents?.length ? (
-        <Section title="Similar past incidents">
-          <ul className="grid gap-2">
-            {report.similar_incidents.map((incident, i, all) => (
-              <li key={incident.incident_id} className="grid gap-1 rounded-lg bg-raised p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <SeverityBadge
-                    severity={isSeverity(incident.severity) ? incident.severity : null}
-                    size="sm"
-                  />
-                  <span className="font-medium">{incident.title}</span>
-                  {incident.evidence_id ? <Citations ids={[incident.evidence_id]} /> : null}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {/* The same fix, card after card, says nothing new: write it once. */}
-                  {i > 0 && all[i - 1]?.resolution === incident.resolution
-                    ? "Fixed the same way as the one above."
-                    : incident.resolution}
-                </p>
-                <p className="text-xs text-faint">
-                  seen {incident.occurrences} {incident.occurrences === 1 ? "time" : "times"}
-                  {incident.mttr_minutes != null
-                    ? `, resolved in about ${Math.round(incident.mttr_minutes)} min`
-                    : ""}
-                  {incident.source === "curated" ? ", built from a sample" : ""}
-                </p>
-              </li>
-            ))}
-          </ul>
         </Section>
       ) : null}
       {report.open_questions?.length ? (

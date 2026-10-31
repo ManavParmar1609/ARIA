@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { AguiChat } from "@/components/console/agui-chat";
 import { PageHeader } from "@/components/console/states";
 
 // For people who run ARIA themselves: the ways alerts, logs and other tools reach it, and where
@@ -64,17 +65,24 @@ export function Connect() {
           </pre>
         </section>
       ))}
+      <section aria-labelledby="agui-title" className="grid gap-3">
+        <h2 id="agui-title" className="font-sans text-lg font-semibold">
+          Try it: follow a triage over AG-UI
+        </h2>
+        <AguiChat />
+      </section>
       <section aria-labelledby="model-title" className="grid gap-3">
         <h2 id="model-title" className="font-sans text-lg font-semibold">
           Use a language model
         </h2>
         <p className="max-w-prose text-muted-foreground">
-          ARIA triages offline by default. To have a model investigate and write the report, add
-          your own Claude, Gemini, OpenAI or NVIDIA key in{" "}
+          ARIA triages offline by default. To have a model investigate and write the report, give
+          the server a Claude, Gemini, OpenAI or NVIDIA key; the settings are listed in{" "}
+          <code>.env.example</code>. Where a server also accepts visitors&apos; own keys,{" "}
           <Link href="/console/settings" className="underline underline-offset-4">
             Settings
-          </Link>
-          .
+          </Link>{" "}
+          has a place for yours.
         </p>
       </section>
     </div>

@@ -41,6 +41,18 @@ def terms(text: str) -> set[str]:
     return {t for t in _TERM.findall(text.lower()) if t not in _STOP}
 
 
+# The everyday words for each kind of evidence, so that a question in plain words ("what did the
+# investigation find?", "has this happened before?") reaches it without a model.
+_KIND_WORDS: dict[EvidenceKind, str] = {
+    EvidenceKind.HYPOTHESIS: "investigation investigated cause caused find found why",
+    EvidenceKind.INCIDENT: "similar before previous history happened fixed resolved",
+    EvidenceKind.RUNBOOK: "fix steps first check should",
+    EvidenceKind.TEMPLATE: "pattern patterns errors often most",
+    EvidenceKind.FEATURE: "errors servers nodes long many",
+    EvidenceKind.RULE: "serious severity",
+}
+
+
 def rank(
     question: str, evidence: Sequence[Evidence], *, limit: int = MAX_EVIDENCE
 ) -> list[Evidence]:
@@ -48,7 +60,8 @@ def rank(
     wanted = terms(question)
     scored = []
     for position, item in enumerate(evidence):
-        text = f"{item.title} {item.detail} {item.source} {item.kind}".lower()
+        words = _KIND_WORDS.get(item.kind, "")
+        text = f"{item.title} {item.detail} {item.source} {item.kind} {words}".lower()
         hits = sum(1 for term in wanted if term in text)
         if hits:
             scored.append((-hits, position, item))
@@ -88,8 +101,58 @@ def _fallback(ranked: Sequence[Evidence]) -> AnswerOutput:
             insufficient_evidence=True,
             follow_ups=["Name a run, or ask about a system, component or failure mode."],
         )
-    claims = [ClaimOut(text=_plain(item)[:400], evidence_ids=[item.id]) for item in ranked[:3]]
-    return AnswerOutput(answer=claims, insufficient_evidence=False, follow_ups=[])
+    return AnswerOutput(answer=_claims(ranked), insufficient_evidence=False, follow_ups=[])
+
+
+def _claims(ranked: Sequence[Evidence], *, limit: int = 3) -> list[ClaimOut]:
+    """One statement per finding, in rank order. Past incidents that were fixed the same way share
+    one statement that cites them all, rather than repeating the fix once for each."""
+    groups: dict[str, list[Evidence]] = {}
+    for item in ranked:
+        data = item.data or {}
+        fixed = item.kind is EvidenceKind.INCIDENT and data.get("title") and data.get("resolution")
+        key = f"{data.get('source') == 'run'}:{data['resolution']}" if fixed else item.id
+        if key in groups or len(groups) < limit:
+            groups.setdefault(key, []).append(item)
+    return [
+        ClaimOut(text=_clip(_plain_group(items), 400), evidence_ids=[item.id for item in items])
+        for items in groups.values()
+    ]
+
+
+_WORDS = ("two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven")
+
+
+def _plain_group(items: Sequence[Evidence]) -> str:
+    """Several past incidents with one fix, said once: how many, one example, and the fix."""
+    if len(items) == 1:
+        return _plain(items[0])
+    data = items[0].data or {}
+    count = _WORDS[len(items) - 2] if len(items) - 2 < len(_WORDS) else str(len(items))
+    samples = sum(1 for item in items if (item.data or {}).get("synthetic"))
+    built = (
+        " (built from samples)"
+        if samples == len(items)
+        else " (some built from samples)"
+        if samples
+        else ""
+    )
+    if data.get("source") == "run":
+        return (
+            f"{count.capitalize()} similar past incidents, such as {data['title']}, were triaged "
+            f"by ARIA; the reviewers approved the same next steps: {data['resolution']}"
+        )
+    return (
+        f"{count.capitalize()} similar past incidents{built}, such as {data['title']}, were "
+        f"resolved the same way: {data['resolution']}"
+    )
+
+
+def _clip(text: str, limit: int) -> str:
+    """At most ``limit`` characters, cut at a word with an ellipsis rather than mid-word."""
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rsplit(" ", 1)[0].rstrip(" ,;:") + "…"
 
 
 _HYPOTHESIS = re.compile(r"^H\d+ (?P<status>\w+): (?P<statement>.+)$", re.DOTALL)
@@ -124,6 +187,8 @@ def _plain(item: Evidence) -> str:
         return f'Line {found["n"]} of the log reads: "{found["line"]}"'
     if item.kind is EvidenceKind.TEMPLATE and (found := _TEMPLATE.match(item.title)):
         pattern = found["pattern"].replace("<*>", "…")
+        if found["count"] == "1":
+            return f'One log line has a pattern of its own: "{pattern}"'
         return f'{found["count"]} log lines follow one pattern: "{pattern}"'
     return item.title
 

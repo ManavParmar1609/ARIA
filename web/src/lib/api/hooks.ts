@@ -137,10 +137,11 @@ export function useRuns(status: RunStatus | "all" = "all", limit = 50) {
 
 const ACTIVE: ReadonlySet<string> = new Set(["queued", "running"]);
 
-export function useRun(id: string) {
+export function useRun(id: string, enabled = true) {
   return useQuery({
     queryKey: keys.run(id),
     queryFn: () => apiFetch<RunDetail>(runPath(id)),
+    enabled,
     refetchInterval: (query) => (ACTIVE.has(query.state.data?.status ?? "") ? 4_000 : false),
   });
 }

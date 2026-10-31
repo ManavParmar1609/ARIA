@@ -24,19 +24,23 @@ import { useFork, useHistory } from "@/lib/api/hooks";
 import { isSeverity, type Checkpoint } from "@/lib/api/types";
 import { clockTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { NODE_LABEL } from "@/lib/steps";
 
-function describe(cp: Checkpoint): string {
+import { stepLabel } from "./progress";
+
+/** A checkpoint, named by the steps the progress strip shows: "Before “Rate severity”". */
+export function checkpointName(cp: Pick<Checkpoint, "next" | "interrupted">): string {
   if (cp.next.length === 0) return "The end of the run";
   if (cp.next.includes("__start__")) return "The input, before anything ran";
-  // Parallel shards repeat one step: "parse (3 in parallel)", not "parse and parse and parse".
+  // Parallel parts repeat one step: "“Read the logs” (3 parts at once)", not the step three times.
   const counts = new Map<string, number>();
-  for (const n of cp.next) counts.set(n, (counts.get(n) ?? 0) + 1);
-  const next = [...counts].map(([n, k]) => {
-    const label = (NODE_LABEL[n] ?? n).toLowerCase();
-    return k > 1 ? `${label} (${k} in parallel)` : label;
-  });
-  if (cp.interrupted) return `Paused before ${next.join(" and ")}`;
+  for (const n of cp.next) {
+    const label = stepLabel(n);
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  const next = [...counts].map(([label, k]) =>
+    k > 1 ? `“${label}” (${k} parts at once)` : `“${label}”`,
+  );
+  if (cp.interrupted) return `Paused at ${next.join(" and ")}`;
   return `Before ${next.join(" and ")}`;
 }
 
@@ -122,7 +126,7 @@ export function History({
                       step {cp.step}
                     </span>
                   ) : null}
-                  {describe(cp)}
+                  {checkpointName(cp)}
                 </p>
                 <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   {cp.created_at ? (
@@ -160,8 +164,8 @@ export function History({
           <DialogHeader>
             <DialogTitle>Fork a new run from this checkpoint</DialogTitle>
             <DialogDescription>
-              {forking ? describe(forking) : ""}. The original run is not changed, and the new run
-              waits for its own review.
+              {forking ? checkpointName(forking) : ""}. The original run is not changed, and the new
+              run waits for its own review.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">

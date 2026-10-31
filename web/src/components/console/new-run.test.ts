@@ -13,6 +13,11 @@ describe("logsHint", () => {
     expect(hint).toContain("shared server");
   });
 
+  it("mentions a model key only where the server accepts one", () => {
+    expect(logsHint(null, true)).not.toContain("model key");
+    expect(logsHint(null, true, true)).toContain("If you add a model key");
+  });
+
   it("names what is wrong with the lines first", () => {
     const problem = "Paste at least one log line, or pick a sample on the Samples tab.";
     expect(logsHint(problem, true)).toBe(problem);

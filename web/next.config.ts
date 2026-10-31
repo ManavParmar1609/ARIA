@@ -45,10 +45,11 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
-  // Browsers still ask for /favicon.ico now and then, even with the icon declared: send them to
-  // the mark instead of a 404.
-  async redirects() {
-    return [{ source: "/favicon.ico", destination: "/icon.svg", permanent: true }];
+  // Browsers still ask for /favicon.ico now and then, even with the icon declared: serve them the
+  // mark instead of a 404. A rewrite, not a redirect: upgrade-insecure-requests sends a redirect's
+  // target over HTTPS, which fails on a plain-HTTP run (a local demo, the end-to-end tests).
+  async rewrites() {
+    return [{ source: "/favicon.ico", destination: "/icon.svg" }];
   },
 };
 

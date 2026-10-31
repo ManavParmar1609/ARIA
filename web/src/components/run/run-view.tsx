@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Suspense, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { TagStrip } from "@/components/aria/severity";
+import { LevelChip } from "@/components/aria/severity";
 import { runTitle } from "@/components/console/run-row";
 import { useDocumentTitle } from "@/lib/document-title";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/console/states";
@@ -27,81 +27,87 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError } from "@/lib/api/client";
 import { useDeleteRun, useRun, useRunState, useSession, useSettingsView } from "@/lib/api/hooks";
 import { useRunTimeline } from "@/lib/api/stream";
-import { isSeverity, type ReviewPrompt, type RunDetail } from "@/lib/api/types";
-import { absoluteTime, duration, relativeTime, stripSeverity, writtenOffline } from "@/lib/format";
+import {
+  isSeverity,
+  type ReviewPrompt,
+  type RunDetail,
+  type SeverityAssessment,
+} from "@/lib/api/types";
+import { absoluteTime, relativeTime, stripSeverity, writtenOffline } from "@/lib/format";
+import { shortListText } from "@/lib/levels";
 import { systemName, triggerLabel } from "@/lib/systems";
 
-import { Activity, GraphProgress } from "./activity";
+import { Activity } from "./activity";
 import { Deliveries } from "./deliveries";
 import { EvidencePanel, EvidenceProvider } from "./evidence";
 import { ExpertCheck } from "./expert-check";
 import { History } from "./history";
+import { RunProgress } from "./progress";
 import { LiveDraft, ReportView } from "./report-view";
 import { ExampleNote } from "./example-note";
 import { Receipt, type ReceiptFacts } from "./receipt";
 import { ReviewPanel } from "./review-panel";
-import { SampleNext, sampleOf } from "./sample-next";
-import { EvidenceTable, Similar, Templates } from "./run-tabs";
+import { HarmlessNote, SampleNext, sampleOf } from "./sample-next";
+import { EvidenceTable, Templates } from "./run-tabs";
+import { SeenBefore } from "./seen-before";
 import { SeverityPanel } from "./severity-panel";
 import { AgentTeam } from "./team";
+import { WhatHappened } from "./what-happened";
 
 const ACTIVE = new Set(["queued", "running", "awaiting_review"]);
 
+/** The answer first (item 14): the level and its word, the title, and the short list of levels
+ * it could be; then where the incident came from. */
 function Header({
   run,
-  severity,
-  offline,
+  assessment,
 }: {
   run: RunDetail;
-  severity: string | null | undefined;
-  /** The deterministic offline provider served the run: its calls are not LLM use. */
-  offline: boolean;
+  assessment: SeverityAssessment | undefined;
 }) {
-  const sev = isSeverity(severity) ? severity : null;
-  const budget = (run.budget ?? {}) as Record<string, unknown>;
-  const llmCalls = Number(budget.llm_calls ?? 0);
+  const level = assessment?.severity ?? run.severity;
   return (
-    <header className="flex overflow-hidden rounded-lg bg-raised">
-      <TagStrip severity={sev} className="w-16 sm:w-20" />
-      <div className="grid min-w-0 flex-1 gap-2 p-4 sm:p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <h1 className="min-w-0 text-xl leading-snug tracking-heading wrap-anywhere sm:text-2xl">
-            {runTitle(run)}
-          </h1>
-          <RunStatus status={run.status} />
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {/* A fork says so once, with a link to the run it came from (below). */}
-          {systemName(run.system)}, {run.parent_run_id ? "" : `${triggerLabel(run.trigger)}, `}
-          <time dateTime={run.created_at} title={absoluteTime(run.created_at)}>
-            {relativeTime(run.created_at)}
-          </time>
-          {run.parent_run_id ? (
-            <>
-              , forked from{" "}
-              <Link
-                href={`/console/runs/${encodeURIComponent(run.parent_run_id)}` as never}
-                className="underline decoration-control underline-offset-2"
-              >
-                {run.parent_run_id}
-              </Link>
-            </>
-          ) : null}
-        </p>
-        <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-faint">
-          {run.latency_ms != null ? (
-            <span>report ready after {duration(run.latency_ms)}</span>
-          ) : null}
-          <span>
-            {llmCalls && !offline
-              ? `${llmCalls} model calls, ${((run.tokens_in ?? 0) + (run.tokens_out ?? 0)).toLocaleString("en")} tokens`
-              : "offline mode: no LLM"}
-          </span>
-          {budget.tool_calls ? <span>{String(budget.tool_calls)} tool calls</span> : null}
-        </p>
+    <header className="grid gap-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <LevelChip severity={isSeverity(level) ? level : null} />
+        <RunStatus status={run.status} />
       </div>
+      <h1 className="text-2xl leading-tight tracking-heading wrap-anywhere sm:text-3xl">
+        {runTitle(run)}
+      </h1>
+      {assessment ? <p className="text-base">{shortListText(assessment, run.status)}</p> : null}
+      <p className="text-sm text-muted-foreground">
+        {/* A fork says so once, with a link to the run it came from (below). */}
+        {systemName(run.system)}, {run.parent_run_id ? "" : `${triggerLabel(run.trigger)}, `}
+        <time dateTime={run.created_at} title={absoluteTime(run.created_at)}>
+          {relativeTime(run.created_at)}
+        </time>
+        {run.parent_run_id ? (
+          <>
+            , forked from{" "}
+            <Link
+              href={`/console/runs/${encodeURIComponent(run.parent_run_id)}` as never}
+              className="underline decoration-control underline-offset-2"
+            >
+              {run.parent_run_id}
+            </Link>
+          </>
+        ) : null}
+      </p>
     </header>
   );
+}
+
+/** Model and tool use in words, for the progress line. */
+function workFacts(run: RunDetail, offline: boolean): string {
+  const budget = (run.budget ?? {}) as Record<string, unknown>;
+  const llmCalls = Number(budget.llm_calls ?? 0);
+  const tools = Number(budget.tool_calls ?? 0);
+  const model =
+    llmCalls && !offline
+      ? `${llmCalls} model calls, ${((run.tokens_in ?? 0) + (run.tokens_out ?? 0)).toLocaleString("en")} tokens`
+      : "offline: no language model";
+  return tools ? `${model}, ${tools} tool ${tools === 1 ? "call" : "calls"}` : model;
 }
 
 function DeleteRun({ runId }: { runId: string }) {
@@ -120,9 +126,9 @@ function DeleteRun({ runId }: { runId: string }) {
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Delete this run?</DialogTitle>
+          <DialogTitle>Delete this incident?</DialogTitle>
           <DialogDescription>
-            The run, its report, events, checkpoints and the incident it added to memory are
+            The incident, its report, its steps and what it added to the incident library are
             removed. This cannot be undone.
           </DialogDescription>
         </DialogHeader>
@@ -151,7 +157,7 @@ function DeleteRun({ runId }: { runId: string }) {
               });
             }}
           >
-            {remove.isPending ? "Deleting" : "Delete the run"}
+            {remove.isPending ? "Deleting" : "Delete the incident"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -159,8 +165,9 @@ function DeleteRun({ runId }: { runId: string }) {
   );
 }
 
-/** Where the incident sits: the incidents list, then its title (its ID until the title loads). */
-function Crumbs({ runId, title }: { runId: string; title?: string | null }) {
+/** Where the incident sits: the incidents list, then its title, or "New incident" until ARIA has
+ * named it. */
+function Crumbs({ title }: { title?: string | null }) {
   return (
     <nav aria-label="Breadcrumb" className="text-sm text-muted-foreground">
       <Link href="/console/runs" className="hover:text-foreground">
@@ -169,37 +176,41 @@ function Crumbs({ runId, title }: { runId: string; title?: string | null }) {
       <span aria-hidden className="px-2 text-faint">
         /
       </span>
-      <span aria-current="page" className={title ? undefined : "font-mono text-xs"}>
-        {title || runId}
-      </span>
+      <span aria-current="page">{title || "New incident"}</span>
     </nav>
   );
 }
 
-/** The run page's shape while it loads: header, progress rail, report and side panels. */
+/** The run page's shape while it loads: header, progress, then the panels. */
 function RunSkeleton() {
   return (
-    <div role="status" className="grid gap-6">
-      <span className="sr-only">Loading the run</span>
-      <Skeleton className="h-8 w-64 max-w-full" />
-      <Skeleton className="h-32 w-full" />
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(min(9.5rem,45%),1fr))] gap-1.5">
-        {Array.from({ length: 11 }, (_, i) => (
-          <Skeleton key={i} className="h-8" />
-        ))}
+    <div role="status" className="grid gap-8">
+      <span className="sr-only">Loading the incident</span>
+      <div className="grid gap-3">
+        <Skeleton className="h-7 w-40" />
+        <Skeleton className="h-9 w-[32rem] max-w-full" />
+        <Skeleton className="h-5 w-72 max-w-full" />
       </div>
+      <Skeleton className="h-24 w-full" />
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] xl:gap-8">
-        <Skeleton className="h-[40rem] w-full" />
-        <div className="grid content-start gap-4">
-          <Skeleton className="h-[26rem] w-full" />
-          <Skeleton className="h-28 w-full" />
+        <Skeleton className="h-[32rem] w-full" />
+        <div className="grid content-start gap-6">
+          <Skeleton className="h-64 w-full" />
+          <Skeleton className="h-40 w-full" />
         </div>
       </div>
     </div>
   );
 }
 
-export function RunView({ runId }: { runId: string }) {
+export function RunView({
+  runId,
+  shortListHeld,
+}: {
+  runId: string;
+  /** How often the short list held the right level on the published test incidents. */
+  shortListHeld?: number | null;
+}) {
   const run = useRun(runId);
   const settings = useSettingsView().data;
   const shared = settings?.visitor_scope ?? false;
@@ -208,7 +219,7 @@ export function RunView({ runId }: { runId: string }) {
   const [decided, setDecided] = useState(false);
   useDocumentTitle(run.data ? runTitle(run.data) : null);
   const [checkpoint, setCheckpoint] = useState<string | null>(null);
-  const [tab, setTab] = useState("team");
+  const [tab, setTab] = useState("work");
   const status = run.data?.status;
   const mode = !run.data ? "off" : ACTIVE.has(run.data.status) ? "live" : "stored";
   const timeline = useRunTimeline(runId, mode);
@@ -247,7 +258,7 @@ export function RunView({ runId }: { runId: string }) {
     }
     return (
       <div className="grid gap-6">
-        <Crumbs runId={runId} />
+        <Crumbs />
         <ErrorState
           title="This run could not be loaded"
           error={run.error}
@@ -293,7 +304,7 @@ export function RunView({ runId }: { runId: string }) {
     <EvidenceProvider evidence={evidence} events={events}>
       <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
         <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-3 gap-y-1">
-          <Crumbs runId={detail.id} title={detail.title} />
+          <Crumbs title={detail.title ? runTitle(detail) : null} />
           <div className="flex flex-wrap gap-1.5">
             <Button asChild size="sm" variant="ghost">
               <Link href="/console/guide#read-a-run">
@@ -329,9 +340,7 @@ export function RunView({ runId }: { runId: string }) {
           </div>
         </div>
 
-        <Header run={detail} severity={severity?.severity ?? detail.severity} offline={offline} />
-
-        <GraphProgress events={timeline.events} finalStatus={detail.status} />
+        <Header run={detail} assessment={severity} />
 
         {viewing ? (
           <div
@@ -356,34 +365,73 @@ export function RunView({ runId }: { runId: string }) {
           />
         ) : null}
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] xl:gap-8">
-          <div className="grid min-w-0 content-start gap-6">
-            {detail.example && !viewing && (prompt || (terminal && detail.status !== "failed")) ? (
-              <ExampleNote runId={detail.id} />
-            ) : prompt && !viewing ? (
-              <ReviewPanel
-                runId={detail.id}
-                prompt={prompt}
-                actions={values?.actions ?? []}
-                report={report}
-                onDecided={() => setDecided(true)}
-              />
-            ) : receipt ? (
-              <Receipt
-                runId={detail.id}
-                facts={receipt}
-                comment={review?.comment}
-                focusOnMount={decided}
-              />
-            ) : null}
-            {detail.deliveries?.length && !viewing ? (
-              <Deliveries
-                runId={detail.id}
-                deliveries={detail.deliveries}
-                ended={terminal}
-                readOnly={detail.example}
-              />
-            ) : null}
+        {sample && !viewing ? (
+          <HarmlessNote sample={sample} severity={severity?.severity ?? detail.severity} />
+        ) : null}
+
+        {detail.example && !viewing && (prompt || (terminal && detail.status !== "failed")) ? (
+          <ExampleNote runId={detail.id} />
+        ) : prompt && !viewing ? (
+          <ReviewPanel
+            runId={detail.id}
+            prompt={prompt}
+            actions={values?.actions ?? []}
+            report={report}
+            onDecided={() => setDecided(true)}
+          />
+        ) : receipt ? (
+          <Receipt
+            runId={detail.id}
+            facts={receipt}
+            comment={review?.comment}
+            focusOnMount={decided}
+          />
+        ) : null}
+        {detail.deliveries?.length && !viewing ? (
+          <Deliveries
+            runId={detail.id}
+            deliveries={detail.deliveries}
+            ended={terminal}
+            readOnly={detail.example}
+          />
+        ) : null}
+
+        <RunProgress
+          events={timeline.events}
+          status={detail.status}
+          latencyMs={detail.latency_ms}
+          facts={workFacts(detail, offline)}
+        />
+
+        {/* Four panels, one question each (item 13). On a wide screen the severity and the past
+            incidents sit beside the other two, and stay in view while the report scrolls. */}
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] xl:grid-rows-[auto_auto_1fr] xl:gap-x-8">
+          <div className="min-w-0 xl:col-start-1 xl:row-start-1">
+            {values?.batch ? (
+              <WhatHappened batch={values.batch} timeline={report?.timeline ?? []} />
+            ) : detail.status === "queued" ? (
+              <EmptyState title="Waiting for a worker">
+                The run is queued and starts as soon as a worker is free.
+              </EmptyState>
+            ) : (
+              <LoadingRows rows={4} label="Reading the logs" />
+            )}
+          </div>
+          <div className="grid min-w-0 [scrollbar-width:thin] content-start gap-6 xl:sticky xl:top-6 xl:col-start-2 xl:row-span-3 xl:row-start-1 xl:max-h-[calc(100dvh-3rem)] xl:self-start xl:overflow-y-auto">
+            {severity ? (
+              <SeverityPanel assessment={severity} shortListHeld={shortListHeld} />
+            ) : (
+              <Skeleton className="h-64 w-full" />
+            )}
+            <EvidencePanel />
+          </div>
+          <div className="min-w-0 xl:col-start-1 xl:row-start-2">
+            <SeenBefore
+              incidents={report?.similar_incidents ?? values?.retrieval?.incidents ?? []}
+              retrieval={values?.retrieval}
+            />
+          </div>
+          <div className="min-w-0 xl:col-start-1 xl:row-start-3">
             {report ? (
               <ReportView
                 report={report}
@@ -394,67 +442,58 @@ export function RunView({ runId }: { runId: string }) {
             ) : state.isPending && status !== "queued" ? (
               <LoadingRows rows={4} label="Loading the report" />
             ) : (
-              <EmptyState
-                title={detail.status === "queued" ? "Waiting for a worker" : "No report yet"}
-              >
-                {detail.status === "queued"
-                  ? "The run is queued and starts as soon as a worker is free."
-                  : "ARIA writes the report after it has rated severity, recalled similar incidents and investigated."}
+              <EmptyState title="No report yet">
+                ARIA writes the report after it has rated the severity, looked for similar incidents
+                and investigated.
               </EmptyState>
             )}
-            {detail.trigger === "replay" ? <ExpertCheck runId={detail.id} /> : null}
-            {sample && terminal && detail.status !== "failed" && !viewing ? (
-              // It reads ?compare= from the address.
-              <Suspense fallback={null}>
-                <SampleNext
-                  runId={detail.id}
-                  sample={sample}
-                  severity={severity?.severity ?? detail.severity}
-                />
-              </Suspense>
-            ) : null}
           </div>
-          <aside className="grid min-w-0 [scrollbar-width:thin] content-start gap-4 xl:sticky xl:top-6 xl:max-h-[calc(100dvh-3rem)] xl:self-start xl:overflow-y-auto">
-            {severity ? (
-              <SeverityPanel assessment={severity} />
-            ) : (
-              <Skeleton className="h-64 w-full" />
-            )}
-            <EvidencePanel />
-          </aside>
         </div>
+
+        {detail.trigger === "replay" ? <ExpertCheck runId={detail.id} /> : null}
+        {sample && terminal && detail.status !== "failed" && !viewing ? (
+          // It reads ?compare= from the address.
+          <Suspense fallback={null}>
+            <SampleNext
+              runId={detail.id}
+              sample={sample}
+              severity={severity?.severity ?? detail.severity}
+            />
+          </Suspense>
+        ) : null}
 
         <Tabs value={tab} onValueChange={setTab} className="mt-2">
           <TabsList aria-label="Run details">
-            <TabsTrigger value="team">How the agents worked</TabsTrigger>
-            <TabsTrigger value="activity">Event log</TabsTrigger>
+            <TabsTrigger value="work">What ARIA did</TabsTrigger>
             <TabsTrigger value="evidence">Evidence ({evidence.length})</TabsTrigger>
-            <TabsTrigger value="logs">Logs and templates</TabsTrigger>
-            <TabsTrigger value="similar">
-              Similar incidents ({values?.retrieval?.incidents.length ?? 0})
-            </TabsTrigger>
+            <TabsTrigger value="logs">Logs</TabsTrigger>
             <TabsTrigger value="history">History and forks</TabsTrigger>
           </TabsList>
-          <TabsContent value="team">
+          <TabsContent value="work" className="grid gap-6">
             {values ? (
               <AgentTeam values={values} events={timeline.events} />
             ) : (
               <LoadingRows rows={3} label="Loading what the agents did" />
             )}
-          </TabsContent>
-          <TabsContent value="activity">
-            {mode === "live" ? (
-              <p className="mb-2 text-xs text-muted-foreground" role="status">
-                {timeline.state === "live"
-                  ? "Live: following the run as it happens."
-                  : timeline.state === "reconnecting"
-                    ? "Reconnecting to the run's event stream."
-                    : timeline.state === "closed"
-                      ? "The run finished."
-                      : "Connecting to the run's event stream."}
-              </p>
-            ) : null}
-            <Activity events={timeline.events} offline={offline} titles={messageTitles} />
+            <details className="text-sm">
+              <summary className="w-fit cursor-pointer font-medium">
+                Every event ({timeline.events.length})
+              </summary>
+              <div className="grid gap-2 pt-3">
+                {mode === "live" ? (
+                  <p className="text-xs text-muted-foreground" role="status">
+                    {timeline.state === "live"
+                      ? "Live: following the run as it happens."
+                      : timeline.state === "reconnecting"
+                        ? "Reconnecting to the run's event stream."
+                        : timeline.state === "closed"
+                          ? "The run finished."
+                          : "Connecting to the run's event stream."}
+                  </p>
+                ) : null}
+                <Activity events={timeline.events} offline={offline} titles={messageTitles} />
+              </div>
+            </details>
           </TabsContent>
           <TabsContent value="evidence">
             {evidence.length ? (
@@ -468,13 +507,6 @@ export function RunView({ runId }: { runId: string }) {
               <Templates batch={values.batch} />
             ) : (
               <p className="text-sm text-muted-foreground">The logs have not been parsed yet.</p>
-            )}
-          </TabsContent>
-          <TabsContent value="similar">
-            {values?.retrieval ? (
-              <Similar retrieval={values.retrieval} />
-            ) : (
-              <p className="text-sm text-muted-foreground">Retrieval has not run yet.</p>
             )}
           </TabsContent>
           <TabsContent value="history">

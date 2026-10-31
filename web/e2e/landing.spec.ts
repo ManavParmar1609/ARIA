@@ -83,8 +83,8 @@ test.describe("landing page", () => {
       await expect(real.getByRole("heading", { level: 4, name })).toBeVisible();
     }
     await real.getByRole("link", { name: /Replay it yourself/ }).click();
-    await expect(page).toHaveURL(/\/console\/guide$/);
-    await expect(page.getByRole("heading", { name: "Replay a real incident" })).toBeVisible();
+    await expect(page).toHaveURL(/\/console\/runs\/new\?source=bigdata$/);
+    await expect(page.getByRole("button", { name: /^Replay it: / }).first()).toBeVisible();
   });
 
   test("reaches every section from the menu on a phone", async ({ page }) => {

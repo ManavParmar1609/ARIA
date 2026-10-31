@@ -61,12 +61,14 @@ function Toggle({
   );
 }
 
-/** The hint under the log box: what is wrong with the lines, else what happens to them. */
-export function logsHint(problem: string | null, publicDemo: boolean): string {
+/** The hint under the log box: what is wrong with the lines, else what happens to them. A model
+ * key is mentioned only where this server accepts visitors' own keys. */
+export function logsHint(problem: string | null, publicDemo: boolean, keys = false): string {
   if (problem) return problem;
+  const model = keys ? " If you add a model key, they are sent to that model too." : "";
   return publicDemo
-    ? "One event per line. Your logs stay with your incident, and only you see it, but this public demo runs on a shared server: paste only logs you could share. Add a model key and they are sent to that model too."
-    : "One event per line. Your logs stay with your incident until you delete it, with IP and e-mail addresses pseudonymised and secrets redacted. Add a model key and they are sent to that model too.";
+    ? `One event per line. Your logs stay with your incident, and only you see it, but this public demo runs on a shared server: paste only logs you could share.${model}`
+    : `One event per line. Your logs stay with your incident until you delete it, with IP and e-mail addresses pseudonymised and secrets redacted.${model}`;
 }
 
 /** What the model switch does here: whose model answers when it is on, and what off means. */
@@ -201,7 +203,11 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
             id={`${id}-logs-hint`}
             className={touched && problem ? "text-sm text-danger" : "text-sm text-muted-foreground"}
           >
-            {logsHint(touched ? problem : null, publicDemo)}
+            {logsHint(
+              touched ? problem : null,
+              publicDemo,
+              (settings?.visitor_keys ?? []).length > 0,
+            )}
           </p>
         </div>
 

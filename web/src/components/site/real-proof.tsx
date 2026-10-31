@@ -128,7 +128,7 @@ export function RealProof({ data }: { data: RealLogs }) {
           </p>
           <div className="flex flex-wrap gap-3">
             <Button asChild variant="primary" size="md">
-              <Link href="/console/guide">Replay it yourself</Link>
+              <Link href="/console/runs/new?source=bigdata">Replay it yourself</Link>
             </Button>
             <Button asChild variant="ghost" size="md">
               <a href={`${EVAL_DOC_URL}#real-logs-expert-labels`}>How it was measured</a>

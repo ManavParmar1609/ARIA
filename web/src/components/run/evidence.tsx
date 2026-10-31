@@ -17,6 +17,28 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/p
 import type { Evidence, LogEvent } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
+const SOURCE_LABEL: Record<string, string> = {
+  parser: "the log parser",
+  "parser.flows": "the log parser",
+  guardrail: "the injection guard",
+  "severity.rules": "the severity rules",
+  "severity.model": "the severity model",
+  "severity.ticket_model": "the ticket model",
+  scenario_policy: "the sample's policy",
+  investigator: "the investigation",
+  reviewer: "the review",
+  curated: "the incident library",
+  run: "an approved incident",
+  "memory.search": "the incident library",
+  "memory.feedback": "reviewers' past corrections",
+  "mcp.search_incidents": "the incident library",
+  "mcp.ticket_history": "the ticket history",
+  "mcp.get_runbook": "the runbooks",
+};
+
+/** Where evidence came from, in words: "the severity rules" rather than "severity.rules". */
+export const sourceLabel = (source: string) => SOURCE_LABEL[source] ?? source;
+
 export const KIND_LABEL: Record<string, string> = {
   log: "Log line",
   template: "Log template",
@@ -40,6 +62,8 @@ interface EvidenceState {
   pinned: string | null;
   /** The citation that pinned the evidence, so a phone reader can get back to the claim. */
   origin: HTMLElement | null;
+  /** The element that shows a pinned citation: the evidence panel, or an answer's sources. */
+  panelId: string;
   hover: (id: string | null) => void;
   pin: (id: string | null, from?: HTMLElement | null) => void;
   linesFor: (id: string) => LogEvent[];
@@ -54,10 +78,12 @@ const Ctx = createContext<EvidenceState | null>(null);
 export function EvidenceProvider({
   evidence,
   events,
+  panelId = "evidence-panel",
   children,
 }: {
   evidence: Evidence[];
   events: LogEvent[];
+  panelId?: string;
   children: ReactNode;
 }) {
   const [hovered, setHovered] = useState<string | null>(null);
@@ -94,11 +120,12 @@ export function EvidenceProvider({
       active: hovered ?? pinned,
       pinned,
       origin,
+      panelId,
       hover: setHovered,
       pin,
       linesFor,
     }),
-    [byId, events, hovered, pinned, origin, pin, linesFor],
+    [byId, events, hovered, pinned, origin, panelId, pin, linesFor],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -114,7 +141,7 @@ function EvidencePreview({ evidence, lines }: { evidence: Evidence; lines: LogEv
     <div className="grid gap-2">
       <p className="text-xs text-muted-foreground">
         <span className="font-mono text-foreground">{evidence.id}</span>{" "}
-        {KIND_LABEL[evidence.kind] ?? evidence.kind}, from {evidence.source}
+        {KIND_LABEL[evidence.kind] ?? evidence.kind}, from {sourceLabel(evidence.source)}
       </p>
       <p className="text-sm leading-snug font-medium wrap-anywhere">{evidence.title}</p>
       {evidence.detail ? (
@@ -133,8 +160,8 @@ function EvidencePreview({ evidence, lines }: { evidence: Evidence; lines: LogEv
  * its own, just far enough to show the panel, so the page stays put; in one column the panel sits
  * below the report, so the page scrolls to it.
  */
-function revealPanel() {
-  const panel = document.getElementById("evidence-panel");
+function revealPanel(panelId: string) {
+  const panel = document.getElementById(panelId);
   if (!panel) return;
   const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches
     ? "auto"
@@ -160,8 +187,8 @@ let returning: HTMLElement | null = null;
  * A citation. Hovering shows the evidence beside it; focusing or hovering also fills the
  * evidence panel (announced to screen readers); a click pins it there.
  */
-export function EvidenceChip({ id }: { id: string }) {
-  const { byId, active, pinned, hover, pin, linesFor } = useEvidence();
+export function EvidenceChip({ id, label }: { id: string; label?: string }) {
+  const { byId, active, pinned, panelId, hover, pin, linesFor } = useEvidence();
   const [preview, setPreview] = useState(false);
   // After a click pins the evidence, the card stays shut until the pointer or focus leaves.
   const quiet = useRef(false);
@@ -173,10 +200,10 @@ export function EvidenceChip({ id }: { id: string }) {
       aria-pressed={pinned === id}
       aria-label={
         evidence
-          ? `Evidence ${id}: ${KIND_LABEL[evidence.kind] ?? evidence.kind}, ${evidence.title}`
+          ? `${label ? `Source ${label}` : `Evidence ${id}`}: ${KIND_LABEL[evidence.kind] ?? evidence.kind}, ${evidence.title}`
           : `Evidence ${id} (missing)`
       }
-      aria-controls="evidence-panel"
+      aria-controls={panelId}
       onMouseEnter={() => hover(id)}
       onMouseLeave={() => {
         hover(null);
@@ -197,7 +224,7 @@ export function EvidenceChip({ id }: { id: string }) {
         pin(pinned === id ? null : id, event.currentTarget);
         quiet.current = true; // the panel shows it now; a card on top would repeat it
         setPreview(false);
-        requestAnimationFrame(() => revealPanel());
+        requestAnimationFrame(() => revealPanel(panelId));
       }}
       className={cn(
         "inline-flex h-6 items-center rounded-xs border px-1.5 align-baseline font-mono text-xs transition-colors duration-(--duration-quick)",
@@ -208,7 +235,7 @@ export function EvidenceChip({ id }: { id: string }) {
             : "border-control text-muted-foreground hover:border-foreground hover:text-foreground"),
       )}
     >
-      {id}
+      {label ?? id}
     </button>
   );
   if (!evidence) return button;
@@ -230,13 +257,37 @@ export function EvidenceChip({ id }: { id: string }) {
   );
 }
 
-export function Citations({ ids, className }: { ids: string[]; className?: string }) {
+/** How many citations a claim shows before "+N": two read as sources, more as noise. */
+const SHOWN_CITATIONS = 2;
+
+export function Citations({
+  ids,
+  labels,
+  className,
+}: {
+  ids: string[];
+  /** Short names to show instead of the ids, such as an answer's source numbers. */
+  labels?: ReadonlyMap<string, string>;
+  className?: string;
+}) {
+  const [all, setAll] = useState(false);
   if (ids.length === 0) return null;
+  const hidden = all ? 0 : Math.max(0, ids.length - SHOWN_CITATIONS);
   return (
     <span className={cn("inline-flex flex-wrap gap-1 align-baseline", className)}>
-      {ids.map((id) => (
-        <EvidenceChip key={id} id={id} />
+      {ids.slice(0, ids.length - hidden).map((id) => (
+        <EvidenceChip key={id} id={id} label={labels?.get(id)} />
       ))}
+      {hidden ? (
+        <button
+          type="button"
+          onClick={() => setAll(true)}
+          aria-label={`Show ${hidden} more ${hidden === 1 ? "source" : "sources"}`}
+          className="inline-flex h-6 items-center rounded-xs border border-dashed border-control px-1.5 align-baseline font-mono text-xs text-muted-foreground hover:border-foreground hover:text-foreground"
+        >
+          +{hidden}
+        </button>
+      ) : null}
     </span>
   );
 }
@@ -282,9 +333,12 @@ export function LogLines({
   limit = 12,
   wrap = false,
   sweep = false,
+  more = true,
 }: {
   lines: LogEvent[];
   limit?: number;
+  /** Say how many lines are past the limit (off for a single example line). */
+  more?: boolean;
   /** Wrap long lines instead of scrolling (inside hover cards, where nothing can take focus). */
   wrap?: boolean;
   /** Sweep one pass of the highlight across the lines as they appear (globals.css: .thread-pass). */
@@ -320,8 +374,7 @@ export function LogLines({
       ))}
     </ol>
   );
-  const frame =
-    "rounded-sm border border-rule bg-sunken py-1.5 font-mono text-[0.6875rem] leading-5";
+  const frame = "rounded-sm border border-rule bg-sunken py-1.5 font-mono text-xs leading-5";
   return (
     <div className="grid gap-1">
       {wrap ? (
@@ -336,7 +389,7 @@ export function LogLines({
           {list}
         </div>
       )}
-      {lines.length > limit ? (
+      {more && lines.length > limit ? (
         <p className="text-xs text-muted-foreground">
           and {(lines.length - limit).toLocaleString("en")} more lines like these
         </p>
@@ -347,8 +400,10 @@ export function LogLines({
 
 /** The evidence behind whatever citation the reader is pointing at. */
 export function EvidencePanel({ className }: { className?: string }) {
-  const { active, pinned, origin, byId, pin, linesFor } = useEvidence();
+  const { active, pinned, origin, panelId, byId, pin, linesFor } = useEvidence();
   const evidence = active ? byId.get(active) : undefined;
+  // In one column the panel sits above later citations, so it opens only on a click there:
+  // appearing on hover or focus would push the citation being read down the page.
   // In one column the page scrolled down to this panel; this takes the reader back up.
   const backToClaim = () => {
     if (!origin?.isConnected) return;
@@ -359,10 +414,14 @@ export function EvidencePanel({ className }: { className?: string }) {
   };
   return (
     <section
-      id="evidence-panel"
+      id={panelId}
       aria-label="Evidence"
       aria-live="polite"
-      className={cn("grid min-w-0 content-start gap-3 rounded-lg bg-raised p-4 sm:p-5", className)}
+      className={cn(
+        "grid min-w-0 content-start gap-3 rounded-lg bg-raised p-4 sm:p-5",
+        !(evidence && pinned) && "max-xl:hidden",
+        className,
+      )}
     >
       {evidence ? (
         <>
@@ -370,7 +429,7 @@ export function EvidencePanel({ className }: { className?: string }) {
             <div className="grid min-w-0 gap-1">
               <p className="text-xs text-muted-foreground">
                 <span className="font-mono text-foreground">{evidence.id}</span>{" "}
-                {KIND_LABEL[evidence.kind] ?? evidence.kind}, from {evidence.source}
+                {KIND_LABEL[evidence.kind] ?? evidence.kind}, from {sourceLabel(evidence.source)}
               </p>
               <h3 className="font-sans text-sm leading-snug font-semibold wrap-anywhere">
                 {evidence.title}

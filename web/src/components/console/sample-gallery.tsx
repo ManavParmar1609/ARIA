@@ -3,7 +3,7 @@
 import { LoaderCircleIcon, PlayIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { EmptyState, ErrorState } from "@/components/console/states";
@@ -62,7 +62,9 @@ function SizePicker({
           <label
             key={option.value}
             className={cn(
-              "inline-flex h-8 cursor-pointer items-center rounded-sm px-3 text-sm ring-1 ring-rule ring-inset has-focus-visible:ring-2 has-focus-visible:ring-foreground",
+              // The radio itself is hidden, so its label shows keyboard focus: an outline clear of
+              // the fill, visible on the selected choice too.
+              "inline-flex h-8 cursor-pointer items-center rounded-sm px-3 text-sm ring-1 ring-rule ring-inset has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-ring",
               value === option.value
                 ? "bg-foreground text-background ring-foreground"
                 : "text-muted-foreground hover:bg-sunken",
@@ -146,14 +148,14 @@ function SampleCard({ sample, compact = false }: { sample: Scenario; compact?: b
         </h3>
         <p className="text-xs text-muted-foreground">
           {sample.technology}
-          {sample.benign ? ", needs no action" : ""}
+          {sample.benign ? ", harmless: a test of whether ARIA stays calm" : ""}
           {sample.tricky ? ", one line tries to trick ARIA" : ""}
         </p>
       </div>
       <p className="text-sm text-muted-foreground">{sample.summary}</p>
       {compact && sample.id === RECORDED ? (
         <Link href="/#run" className="w-fit text-sm underline underline-offset-4">
-          Watch the recorded run
+          Watch its recorded run on the home page
         </Link>
       ) : null}
       {compact ? null : <RealLines lines={sample.preview ?? []} />}
@@ -179,7 +181,7 @@ function SampleCard({ sample, compact = false }: { sample: Scenario; compact?: b
         </Button>
         {sample.id === RECORDED && !compact ? (
           <Button asChild size="sm" variant="ghost">
-            <Link href="/#run">Watch the recorded run</Link>
+            <Link href="/#run">Watch its recorded run on the home page</Link>
           </Button>
         ) : null}
       </div>
@@ -245,15 +247,7 @@ function RealIncidentCard({ incident }: { incident: RealIncident }) {
   );
 }
 
-function SourceFilter({
-  current,
-  counts,
-  real,
-}: {
-  current: Source;
-  counts: Record<string, number>;
-  real: number;
-}) {
+function SourceFilter({ current }: { current: Source }) {
   const params = useSearchParams();
   const pathname = usePathname();
   const href = (key: Source) => {
@@ -263,17 +257,9 @@ function SourceFilter({
     const qs = next.toString();
     return `${pathname}${qs ? `?${qs}` : ""}`;
   };
-  const all = Object.values(counts).reduce((a, b) => a + b, 0) + real;
-  const chips: { key: Source; name: string; count: string }[] = [
-    { key: "all", name: "All", count: String(all) },
-    ...SOURCES.map((s) => ({
-      key: s.key,
-      name: s.name,
-      count:
-        s.key === "bigdata" && real
-          ? `${counts[s.key] ?? 0} + ${real} real`
-          : String(counts[s.key] ?? 0),
-    })),
+  const chips: { key: Source; name: string }[] = [
+    { key: "all", name: "All" },
+    ...SOURCES.map((s) => ({ key: s.key, name: s.name })),
   ];
   return (
     <nav aria-label="Where the logs come from">
@@ -292,14 +278,6 @@ function SourceFilter({
               )}
             >
               {chip.name}
-              <span
-                className={cn(
-                  "tabular",
-                  current === chip.key ? "opacity-80" : "text-muted-foreground",
-                )}
-              >
-                {chip.count}
-              </span>
             </Link>
           </li>
         ))}
@@ -315,6 +293,18 @@ export function SampleGallery() {
   const raw = params.get("source");
   const source: Source = isSource(raw) ? raw : "all";
   const [showAll, setShowAll] = useState<Source | null>(null);
+  const list = useRef<HTMLUListElement>(null);
+  const revealFrom = useRef<number | null>(null);
+  useEffect(() => {
+    const index = revealFrom.current;
+    if (index == null) return;
+    revealFrom.current = null;
+    const heading = list.current?.children[index]?.querySelector("h3");
+    if (heading instanceof HTMLElement) {
+      heading.tabIndex = -1;
+      heading.focus();
+    }
+  });
 
   if (scenarios.isPending) {
     return (
@@ -347,10 +337,9 @@ export function SampleGallery() {
     );
   }
 
-  const counts: Record<string, number> = {};
-  for (const s of samples) counts[s.source] = (counts[s.source] ?? 0) + 1;
   const headline = samples.filter((s) => s.headline);
-  // Under "All", the cards featured above are not repeated; a chosen source lists all of its own.
+  // Under "All", the featured cards above are not repeated below. A chosen source shows only its
+  // own full cards, with their sizes, and hides the featured row, so no card appears twice.
   const featured = new Set(headline.map((s) => s.id));
   const listed =
     source === "all"
@@ -365,7 +354,7 @@ export function SampleGallery() {
 
   return (
     <div className="grid gap-12">
-      {headline.length || reals.length ? (
+      {source === "all" && (headline.length || reals.length) ? (
         <section aria-labelledby="start-title" className="grid gap-4">
           <h2 id="start-title" className="text-xl tracking-heading">
             Start with one of these
@@ -391,8 +380,8 @@ export function SampleGallery() {
             incident. Runs from samples are marked as samples, and each waits for your review.
           </p>
         </div>
-        <SourceFilter current={source} counts={counts} real={reals.length} />
-        <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <SourceFilter current={source} />
+        <ul ref={list} className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {listedReals.map((incident) => (
             <RealIncidentCard key={incident.id} incident={incident} />
           ))}
@@ -401,7 +390,13 @@ export function SampleGallery() {
           ))}
         </ul>
         {hidden > 0 ? (
-          <Button className="justify-self-start" onClick={() => setShowAll(source)}>
+          <Button
+            className="justify-self-start"
+            onClick={() => {
+              revealFrom.current = listedReals.length + cards.length;
+              setShowAll(source);
+            }}
+          >
             Show {hidden} more
           </Button>
         ) : null}

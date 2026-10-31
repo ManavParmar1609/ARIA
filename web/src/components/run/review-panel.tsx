@@ -32,6 +32,7 @@ import {
   type Severity,
 } from "@/lib/api/types";
 import { stripSeverity } from "@/lib/format";
+import { orList } from "@/lib/levels";
 import { cn } from "@/lib/utils";
 
 const KIND: Record<string, string> = {
@@ -294,8 +295,10 @@ export function ReviewPanel({
         <p className="flex gap-2 rounded-md bg-sev3/12 p-2.5 text-sm">
           <TriangleAlertIcon aria-hidden className="mt-0.5 size-4 shrink-0 text-sev3-fg" />
           <span>
-            ARIA was unsure about the severity ({prompt.prediction_set.join(" or ")}). Check it
-            before approving, or change it with Edit before sending.
+            {prompt.prediction_set.length > 1
+              ? `ARIA isn't sure whether this is ${orList(prompt.prediction_set)}.`
+              : `ARIA isn't sure enough of ${prompt.severity} to decide alone.`}{" "}
+            Check the severity before approving, or change it with Edit before sending.
           </span>
         </p>
       ) : null}

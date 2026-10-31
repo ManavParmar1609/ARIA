@@ -32,6 +32,38 @@ export function sampleOf(request: Record<string, unknown> | undefined): SampleRe
   };
 }
 
+/**
+ * A harmless sample says what the right answer was, and whether ARIA got it: a level above SEV4
+ * is a false alarm, said plainly rather than left for the reader to spot.
+ */
+export function HarmlessNote({
+  sample,
+  severity,
+}: {
+  sample: SampleRef;
+  severity: string | null | undefined;
+}) {
+  const card = useScenarios().data?.find((s) => s.id === sample.id);
+  if (!card?.benign || !isSeverity(severity)) return null;
+  if (severity === "SEV4") {
+    return (
+      <p className="rounded-md bg-ok/10 p-3 text-sm">
+        This sample is harmless noise, and ARIA rated it SEV4, as it should.
+      </p>
+    );
+  }
+  return (
+    <p className="rounded-md bg-sev3/12 p-3 text-sm">
+      This sample is harmless noise, so the right level is SEV4. ARIA rated it {severity}: a false
+      alarm. The rules that matched are under How serious, in How ARIA decided, and{" "}
+      <Link href="/console/evals#q-limits" className="underline underline-offset-4">
+        Test results
+      </Link>{" "}
+      lists where ARIA falls short.
+    </p>
+  );
+}
+
 export interface BiggerRun {
   servers: number | null;
   rate: number | null;
@@ -54,11 +86,11 @@ export function biggerRun(card: Scenario | undefined, sample: SampleRef): Bigger
   return null;
 }
 
-/** "on 6 servers" or "at 60 a minute": the size a sample ran at, in the card's words. */
+/** "on 6 servers" or "at 60 lines a minute": the size a sample ran at, in the card's words. */
 export function sizeWords(sample: SampleRef | null): string {
   if (sample?.servers != null)
     return sample.servers === 1 ? "on 1 server" : `on ${sample.servers} servers`;
-  if (sample?.rate != null) return `at ${sample.rate} a minute`;
+  if (sample?.rate != null) return `at ${sample.rate} lines a minute`;
   return "";
 }
 
