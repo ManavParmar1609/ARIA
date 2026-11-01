@@ -23,9 +23,13 @@ Around every request to a provider:
   never multiplies into several requests against the same limit. The graph's node retry policy
   retries database and tool-server connection errors, never a provider call: the router turns
   every provider failure into a fallback before it can reach a node.
-* **Stops.** A refusal is never repaired on the same provider. Structured output cut short by
-  ``max_tokens`` is asked for once more with twice the budget, never repaired; a second cut
-  moves on to the next provider.
+* **Stops.** A refusal or content filter raises ``ModelRefusalError``, and structured output
+  cut short by ``max_tokens`` raises ``OutputTruncatedError``: the clients raise them, and the
+  router checks every reply again, so neither is ever parsed. Both are failures like any other
+  and end at the next provider or the caller's deterministic path. A refusal is never repaired
+  on the same provider; a cut is asked for once more with twice the budget, never repaired.
+  Neither rests the provider, and the tokens either was billed are counted. Text cut short is
+  still an answer, marked ``finish_reason == "length"``.
 * **The response cache** answers repeats of a deterministic request (temperature 0) to a real
   model from memory, so they spend none of its limits.
 
@@ -60,11 +64,13 @@ from aria.llm.base import (
     LLMResult,
     Message,
     NoProviderAvailableError,
+    OutputTruncatedError,
     ProviderError,
     RateLimit,
     StructuredOutputError,
     TokenCallback,
     Usage,
+    check_stop,
     estimate_tokens,
 )
 from aria.llm.budget import BudgetGuard
@@ -196,6 +202,14 @@ class _Reply:
     error: ProviderError | None = None
     skipped: Refusal | None = None  # not sent: the provider had no room for it
     latency_ms: float = 0.0  # of a failed call
+
+    @property
+    def spent(self) -> Usage | None:
+        """What the call cost: the answer's usage, or what a declined reply or one cut short
+        still billed. None for a call that failed before the provider answered."""
+        if self.usage is not None:
+            return self.usage
+        return self.error.usage if self.error is not None else None
 
 
 def _validation_errors(exc: Exception) -> list[str]:
@@ -448,8 +462,18 @@ class LLMRouter:
                     on_token=on_token,
                     attempts=attempts,
                 )
-                if reply.usage is None:  # failed, declined or not sent: next provider
-                    if budget is not None and reply.error is not None:
+                if reply.usage is None:  # failed, declined, cut short or not sent
+                    spent = reply.spent
+                    if spent is not None:  # the provider answered, and billed the answer
+                        total = _add(total, spent)
+                        if budget is not None:
+                            budget.record_llm(
+                                spent,
+                                task=task,
+                                provider=name,
+                                model=getattr(provider, "model", ""),
+                            )
+                    elif budget is not None and reply.error is not None:
                         budget.record_failure(
                             task=task,
                             provider=name,
@@ -457,25 +481,22 @@ class LLMRouter:
                             latency_ms=float(attempts[-1].get("latency_ms", 0.0)),
                             error=str(attempts[-1].get("error", "")),
                         )
-                    break
+                    if isinstance(reply.error, OutputTruncatedError):
+                        # Cut short: never parsed, and a repair would be cut short too. Ask
+                        # once more with a larger budget; after a second cut, the next
+                        # provider, which keeps the larger budget.
+                        attempts[-1]["repair"] = repair
+                        larger = min(max_tokens * 2, LONGER_REPLY_CAP)
+                        if not longer and larger > max_tokens:
+                            longer, max_tokens = True, larger
+                            continue
+                    break  # anything else: the next provider
                 usage = reply.usage
                 total = _add(total, usage)
                 if budget is not None:
                     budget.record_llm(
                         usage, task=task, provider=name, model=getattr(provider, "model", "")
                     )
-                if usage.finish_reason == "length":
-                    # Cut short: a repair would be cut short too. Ask once more with a larger
-                    # budget; after a second cut, the next provider.
-                    attempts.append(
-                        {"provider": name, "ok": False, "repair": repair, "stop": "length"}
-                    )
-                    log.info("llm.length_stop", provider=name, task=task, budget=max_tokens)
-                    larger = min(max_tokens * 2, LONGER_REPLY_CAP)
-                    if longer or larger <= max_tokens:
-                        break  # never the same request again with the same budget
-                    longer, max_tokens = True, larger
-                    continue
                 try:
                     value = schema.model_validate(extract_json(reply.text))
                     errors = validator(value) if validator else []
@@ -544,6 +565,14 @@ class LLMRouter:
                 model=model if model_field != "chat_model" else None,
             )
             if reply.usage is None:
+                spent = reply.spent  # a declined reply is still billed
+                if budget is not None and spent is not None:
+                    budget.record_llm(
+                        spent,
+                        task=role,
+                        provider=name,
+                        model=str(model or getattr(provider, "model", "")),
+                    )
                 continue
             model_name = str(model or getattr(provider, "model", ""))
             if budget is not None:
@@ -644,7 +673,8 @@ class LLMRouter:
             )
             if ticket is not None:
                 # What the provider reported replaces the estimate; without a report it stands.
-                reported = reply.usage
+                # A declined reply or one cut short is billed too, so its report counts.
+                reported = reply.spent
                 tokens = reported.total_tokens if reported and not reported.estimated else None
                 self.ledger.settle(ticket, tokens=tokens)
             error = reply.error
@@ -661,10 +691,12 @@ class LLMRouter:
                 }
                 if error.refused:
                     record["refused"] = True
+                if isinstance(error, OutputTruncatedError):
+                    record["stop"] = "length"
                 if error.limit is not None:
                     record["limit"] = error.limit.kind
                 attempts.append(record)
-                return _Reply(error=error)
+                return _Reply(error=error, latency_ms=reply.latency_ms)
             if (
                 key is not None
                 and reply.usage is not None
@@ -715,6 +747,9 @@ class LLMRouter:
                 if model is not None:
                     kwargs["model"] = model
                 text, usage = await provider.chat(conversation, **kwargs)
+                # The clients check how a reply ended; this checks again, so a client that
+                # hands back a refusal, or JSON cut short, still never has it parsed.
+                check_stop(provider.name, usage, structured=json_schema is not None)
             except (ProviderError, httpx.HTTPError) as exc:
                 mark_error(span, exc)
                 error = (
@@ -736,9 +771,13 @@ class LLMRouter:
 
     def _failed(self, name: str, error: ProviderError, *, keyed: bool) -> None:
         """Rest a provider after a failure: a limit in the ledger (this server's own keys) and
-        the breaker, a refusal nowhere (the model declined; the provider is fine)."""
+        the breaker; a refusal or a reply cut short nowhere (the model answered; the provider
+        is fine)."""
         if error.refused:
             log.info("llm.declined", provider=name)
+            return
+        if isinstance(error, OutputTruncatedError):
+            log.info("llm.length_stop", provider=name, reason=error.reason)
             return
         breaker = self.breaker(name)
         wait = error.retry_after

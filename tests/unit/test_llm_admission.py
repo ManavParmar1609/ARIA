@@ -15,6 +15,7 @@ import pytest
 from pydantic import BaseModel, SecretStr
 
 from aria.config import (
+    BudgetConfig,
     LLMConfig,
     ProviderConfig,
     ProviderKind,
@@ -26,10 +27,14 @@ from aria.graph.workflow import TRANSIENT
 from aria.llm.base import (
     LLMError,
     Message,
+    ModelRefusalError,
     NoProviderAvailableError,
+    OutputTruncatedError,
     ProviderError,
+    StructuredOutputError,
     Usage,
 )
+from aria.llm.budget import BudgetGuard
 from aria.llm.cache import ResponseCache, cache_key
 from aria.llm.fake import FakeProvider
 from aria.llm.quota import QuotaLedger
@@ -187,7 +192,13 @@ async def test_an_answer_cut_short_is_asked_for_once_more_with_twice_the_budget(
     assert result.value.choice == "b"
     assert [c["max_tokens"] for c in gemini.calls] == [700, 1_400]
     assert gemini.calls[1]["messages"] == MESSAGES  # the same request, not a repair
-    assert result.attempts[0] == {"provider": "gemini", "ok": False, "repair": 0, "stop": "length"}
+    first = result.attempts[0]
+    assert {k: first[k] for k in ("provider", "ok", "repair", "stop")} == {
+        "provider": "gemini",
+        "ok": False,
+        "repair": 0,
+        "stop": "length",
+    }
 
 
 async def test_an_answer_cut_short_twice_moves_on_without_a_repair() -> None:
@@ -198,6 +209,50 @@ async def test_an_answer_cut_short_twice_moves_on_without_a_repair() -> None:
     assert result.provider == "gemini-lite"
     assert len(gemini.calls) == 2
     assert lite.calls[0]["max_tokens"] == 1_400  # the larger budget carries on
+
+
+async def test_a_reply_cut_short_is_never_parsed_even_when_it_is_valid_json() -> None:
+    """The router checks how every reply ended itself, so a client that hands back JSON cut
+    short (and one that passes the provider's own word for it) never has it parsed."""
+    gemini = Model("gemini", ('{"choice": "x"}', "length"), ('{"choice": "y"}', "max_tokens"))
+    lite = Model("gemini-lite")
+    llm = router(config(), gemini, lite)
+    result = await llm.structured("default", "pick", MESSAGES, Pick, max_tokens=700)
+    assert (result.provider, result.value.choice) == ("gemini-lite", "a")
+    assert [a.get("stop") for a in result.attempts[:2]] == ["length", "length"]
+    assert llm.breaker("gemini").failures == 0  # a long answer is no fault of the provider
+
+
+async def test_a_cut_or_a_refusal_ends_on_the_deterministic_path_with_its_cost_counted() -> None:
+    """Typed stops are failures like any other: when no provider is left the caller hears a
+    StructuredOutputError (an LLMError) and takes its deterministic path. The tokens each
+    declined or cut-short reply was billed still count against the run's budget."""
+    cut = OutputTruncatedError("gemini: cut short", usage=Usage(input_tokens=40, output_tokens=700))
+    gemini = Model("gemini", cut, cut)
+    llm = router(config(), gemini)
+    budget = BudgetGuard(BudgetConfig())
+    with pytest.raises(StructuredOutputError) as info:
+        await llm.structured("adjudicator", "pick", MESSAGES, Pick, budget=budget, max_tokens=700)
+    assert isinstance(info.value, LLMError)
+    assert [c["max_tokens"] for c in gemini.calls] == [700, 1_400]
+    assert [a["stop"] for a in info.value.attempts] == ["length", "length"]
+    assert (budget.usage.tokens_in, budget.usage.tokens_out) == (80, 1_400)
+    assert llm.breaker("gemini").failures == 0
+
+    declined = ModelRefusalError(
+        "gemini: declined",
+        reason="content_filter",
+        usage=Usage(input_tokens=40, finish_reason="content_filter"),
+    )
+    refusing = Model("gemini", declined, '{"choice": "never asked"}')
+    llm = router(config(), refusing)
+    budget = BudgetGuard(BudgetConfig())
+    with pytest.raises(StructuredOutputError) as info:
+        await llm.structured("adjudicator", "pick", MESSAGES, Pick, budget=budget)
+    assert len(refusing.calls) == 1  # neither repaired nor asked again
+    assert info.value.attempts[0]["refused"] is True
+    assert budget.usage.tokens_in == 40
+    assert budget.calls[-1]["stop"] == "refusal"  # the run's call list says what happened
 
 
 async def test_a_refusal_is_never_repaired_on_the_same_provider() -> None:

@@ -10,8 +10,10 @@ request against the provider's limits (aria.llm.quota) before it goes:
 * If a provider rejects the configured structured-output mode, the client steps down
   (json_schema -> guided_json -> json_object -> prompt), remembers what it will try next, and
   raises with ``resend`` set: the router admits the same request again in the new mode.
-* A reply cut short by ``max_tokens`` says so (``Usage.finish_reason == "length"``), and a model
-  that declines (a refusal or a content filter) raises with ``refused`` set.
+* A model that declines (a refusal, or ``finish_reason == "content_filter"`` and Gemini's like)
+  raises ``ModelRefusalError``. JSON cut short by ``max_tokens`` (``finish_reason == "length"``)
+  raises ``OutputTruncatedError`` and is never parsed; text cut short is returned with
+  ``Usage.finish_reason == "length"``.
 """
 
 from __future__ import annotations
@@ -21,13 +23,22 @@ import json
 import re
 import time
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 import httpx
 from pydantic import SecretStr
 
 from aria.config import ProviderConfig, ProviderKind, StructuredOutputMode
-from aria.llm.base import Message, ProviderError, TokenCallback, Usage, estimate_tokens
+from aria.llm.base import (
+    Message,
+    ProviderError,
+    TokenCallback,
+    Usage,
+    check_stop,
+    estimate_tokens,
+    finish_reason,
+)
 from aria.llm.ratelimit import classify, retry_after_seconds
 
 _AZURE_SCOPE = "https://cognitiveservices.azure.com/.default"
@@ -43,18 +54,25 @@ _SCHEMA_WORDS = re.compile(
     r"structured output|response_mime_type",
     re.IGNORECASE,
 )
-# Finish reasons that mean the reply was withheld: OpenAI's and, lower-cased, Gemini's own.
-_REFUSALS = frozenset(
-    {"content_filter", "refusal", "safety", "prohibited_content", "recitation", "blocklist", "spii"}
-)
 
 
-def _stop(reason: Any) -> str | None:
-    """A provider's finish reason in ARIA's words: "length" when the reply ran out of tokens."""
-    if not reason:
-        return None
-    reason = str(reason).lower()
-    return "length" if reason in ("length", "max_tokens") else reason
+@dataclass
+class _Answer:
+    """One reply as it arrived: its text, usage block, finish reason, any refusal, and the
+    response's id and model."""
+
+    text: str = ""
+    usage: dict[str, Any] | None = None
+    finish: str | None = None
+    refusal: str = ""
+    response_id: str | None = None
+    model: str | None = None
+    parts: list[str] = field(default_factory=list)
+
+
+def _string(value: Any) -> str | None:
+    """A short identifier from a reply (its id or model), or None when it gave none."""
+    return value[:200] if isinstance(value, str) and value else None
 
 
 def _merge_system(messages: list[dict[str, str]]) -> list[dict[str, str]]:
@@ -246,11 +264,10 @@ class OpenAICompatibleProvider:
 
     async def _read_stream(
         self, response: httpx.Response, on_token: TokenCallback | None
-    ) -> tuple[str, dict[str, Any] | None, str | None, str]:
-        """The streamed reply: its text, usage, finish reason and any refusal it carried."""
-        parts: list[str] = []
-        usage: dict[str, Any] | None = None
-        finish: str | None = None
+    ) -> _Answer:
+        """The streamed reply: its text, usage, finish reason, any refusal it carried, and the
+        response's id and model (every chunk repeats them)."""
+        answer = _Answer()
         refusal: list[str] = []
         try:
             async for line in response.aiter_lines():
@@ -267,23 +284,26 @@ class OpenAICompatibleProvider:
                 if not isinstance(chunk, dict):
                     continue
                 if chunk.get("usage"):
-                    usage = chunk["usage"]
+                    answer.usage = chunk["usage"]
+                answer.response_id = _string(chunk.get("id")) or answer.response_id
+                answer.model = _string(chunk.get("model")) or answer.model
                 for choice in chunk.get("choices") or []:
                     if not isinstance(choice, dict):
                         continue
                     delta = choice.get("delta")
                     delta = delta if isinstance(delta, dict) else {}
-                    finish = choice.get("finish_reason") or finish
+                    answer.finish = choice.get("finish_reason") or answer.finish
                     if delta.get("refusal"):
                         refusal.append(str(delta["refusal"]))
                     content = delta.get("content")
                     if content:
-                        parts.append(content)
+                        answer.parts.append(content)
                         if on_token is not None:
                             on_token(content)
         finally:
             await response.aclose()
-        return "".join(parts), usage, finish, "".join(refusal)
+        answer.text, answer.refusal = "".join(answer.parts), "".join(refusal)
+        return answer
 
     async def chat(
         self,
@@ -315,9 +335,7 @@ class OpenAICompatibleProvider:
             model=model,
         )
         try:
-            text, raw_usage, finish, refusal = await self._chat_once(
-                payload, model=model, stream=stream, on_token=on_token
-            )
+            answer = await self._chat_once(payload, model=model, stream=stream, on_token=on_token)
         except ProviderError as exc:
             schema_rejected = (
                 exc.status in (400, 422)
@@ -328,22 +346,24 @@ class OpenAICompatibleProvider:
                 self.mode = _STEP_DOWN[self.mode]  # remember what this endpoint accepts
                 exc.resend = True
             raise
-        if refusal or (finish or "").lower() in _REFUSALS:
-            detail = refusal[:200] or f"finish reason {finish}"
-            msg = f"{self.name}: the model declined the request ({detail})"
-            raise ProviderError(msg, refused=True)
         usage = Usage(
-            latency_ms=round((time.perf_counter() - started) * 1000, 1), finish_reason=_stop(finish)
+            latency_ms=round((time.perf_counter() - started) * 1000, 1),
+            finish_reason=finish_reason(answer.finish),
+            response_id=answer.response_id,
+            response_model=answer.model,
         )
-        if raw_usage:
-            usage.input_tokens = int(raw_usage.get("prompt_tokens") or 0)
-            usage.output_tokens = int(raw_usage.get("completion_tokens") or 0)
+        if answer.usage:
+            usage.input_tokens = int(answer.usage.get("prompt_tokens") or 0)
+            usage.output_tokens = int(answer.usage.get("completion_tokens") or 0)
         else:
             usage.input_tokens = sum(estimate_tokens(m.content) for m in messages)
-            usage.output_tokens = estimate_tokens(text)
+            usage.output_tokens = estimate_tokens(answer.text)
             usage.estimated = True
         usage.cost_usd = self._cost(usage)
-        return text, usage
+        # A refusal or content filter, or JSON cut short, raises a typed error that carries
+        # what the call cost; neither reply is ever returned as an answer.
+        check_stop(self.name, usage, structured=json_schema is not None, refusal=answer.refusal)
+        return answer.text, usage
 
     async def _chat_once(
         self,
@@ -352,8 +372,8 @@ class OpenAICompatibleProvider:
         model: str,
         stream: bool,
         on_token: TokenCallback | None,
-    ) -> tuple[str, dict[str, Any] | None, str | None, str]:
-        """Send the request once: text, usage, finish reason and any refusal."""
+    ) -> _Answer:
+        """Send the request once: text, usage, finish reason, any refusal, id and model."""
         response = await self._post(self._url("chat/completions", model), payload, stream=stream)
         if stream:
             try:
@@ -373,14 +393,18 @@ class OpenAICompatibleProvider:
         except ValueError as exc:
             msg = f"{self.name}: the reply is not JSON"
             raise ProviderError(msg, retryable=True) from exc
-        choices = (body.get("choices") or []) if isinstance(body, dict) else []
+        body = body if isinstance(body, dict) else {}
+        choices = body.get("choices") or []
         choice = choices[0] if choices and isinstance(choices[0], dict) else {}
         message = choice.get("message") or {}
-        return (
-            str(message.get("content") or ""),
-            body.get("usage") if isinstance(body, dict) else None,
-            choice.get("finish_reason"),
-            str(message.get("refusal") or ""),
+        usage = body.get("usage")
+        return _Answer(
+            text=str(message.get("content") or ""),
+            usage=usage if isinstance(usage, dict) else None,
+            finish=choice.get("finish_reason"),
+            refusal=str(message.get("refusal") or ""),
+            response_id=_string(body.get("id")),
+            model=_string(body.get("model")),
         )
 
     # --- embeddings, reranking, discovery ------------------------------------------------------

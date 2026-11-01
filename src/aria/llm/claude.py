@@ -14,8 +14,10 @@ As with ARIA's other client, each ``chat`` sends one request: the SDK's own retr
 the router's fallback to the next provider is ARIA's one retry layer and every request must be
 counted against the limits first. A 429 with ``retry-after`` is a rate limit; one without, or a
 message saying when access returns, is the organisation's spend limit, which holds until then
-(aria.llm.ratelimit). A refusal is never repaired on Claude, and a reply cut short by
-``max_tokens`` says so.
+(aria.llm.ratelimit). A refusal (``stop_reason == "refusal"``) raises ``ModelRefusalError`` and
+is never repaired on Claude. JSON cut short (``max_tokens`` or
+``model_context_window_exceeded``) raises ``OutputTruncatedError`` and is never parsed; text cut
+short is returned with ``finish_reason == "length"``.
 """
 
 from __future__ import annotations
@@ -29,7 +31,14 @@ import anthropic
 from pydantic import SecretStr
 
 from aria.config import ProviderConfig, ProviderKind, StructuredOutputMode
-from aria.llm.base import Message, ProviderError, TokenCallback, Usage
+from aria.llm.base import (
+    Message,
+    ProviderError,
+    TokenCallback,
+    Usage,
+    check_stop,
+    finish_reason,
+)
 from aria.llm.ratelimit import classify, retry_after_seconds
 
 _RETRYABLE = frozenset({408, 409, 429})
@@ -178,19 +187,23 @@ class ClaudeProvider:
             raise error from exc
         except anthropic.AnthropicError as exc:
             raise self._error(exc) from exc
-        if final.stop_reason == "refusal":
-            details = getattr(final, "stop_details", None)
-            category = getattr(details, "category", None) or "unspecified"
-            msg = f"{self.name}: the model declined the request ({category})"
-            raise ProviderError(msg, refused=True)
         text = "".join(block.text for block in final.content if block.type == "text")
         usage = Usage(
             input_tokens=final.usage.input_tokens,
             output_tokens=final.usage.output_tokens,
             latency_ms=round((time.perf_counter() - started) * 1000, 1),
-            finish_reason="length" if final.stop_reason == "max_tokens" else final.stop_reason,
+            # "max_tokens" and "model_context_window_exceeded" both read "length".
+            finish_reason=finish_reason(final.stop_reason),
+            response_id=final.id or None,
+            response_model=str(final.model or "") or None,
         )
         usage.cost_usd = self._cost(usage)
+        refusal = ""
+        if final.stop_reason == "refusal":
+            details = getattr(final, "stop_details", None)
+            refusal = str(getattr(details, "category", None) or "unspecified")
+        # A refusal, or JSON cut short, raises a typed error that carries what it cost.
+        check_stop(self.name, usage, structured=json_schema is not None, refusal=refusal)
         return text, usage
 
     async def list_models(self) -> list[str]:
