@@ -9,11 +9,13 @@ from pathlib import Path
 import pytest
 
 from aria.config import (
+    CommsConfig,
     GuardrailConfig,
     LLMConfig,
     ProviderConfig,
     ProviderKind,
     RetrievalConfig,
+    Settings,
     SeverityConfig,
 )
 from aria.contracts.base import Claim, EvidenceKind, Severity
@@ -35,6 +37,7 @@ from aria.reporting.grounding import (
     validate_report,
 )
 from aria.reporting.markdown import render_markdown, render_postmortem
+from aria.reporting.outbound import DraftPolicy, screen
 from aria.reporting.writer import ReportWriter
 from aria.retrieval.memory import IncidentMemory
 from aria.retrieval.retriever import Retriever, build_query
@@ -468,6 +471,97 @@ async def test_comms_are_proposals_and_leaky_polish_is_rejected(builder: Scenari
     assert "R02" not in status.body  # the leaky polish was dropped for the deterministic draft
     assert "status_page" in outcome.rejected
     assert outcome.polished_by == "llm/aria-fake-1"
+
+
+async def test_drafts_keep_only_allowed_links_and_recipients_and_list_what_they_lost(
+    builder: ScenarioBuilder,
+) -> None:
+    ctx = await _context(builder)
+    report = (
+        await ReportWriter(None, RUNBOOKS).write(ctx, report_id="rep-8", use_llm=False)
+    ).report
+    run_url = "https://aria.example.com/console/runs/run-r1"
+    drafts = deterministic_drafts(report, service="BlueGene/L compute", run_url=run_url)
+    polished = {k: v.model_dump() for k, v in drafts.items()}
+    polished["responders"]["body"] = (
+        "Fix it with [the runbook](https://evil.example/fix) or www.evil-help.com, see "
+        "https://wiki.example.com/kernel and ping @channel, @oncall-bgl and attacker@evil.example."
+        f"\nReport: {run_url}"
+    )
+    polished["responders"]["title"] = "[SEV1] Kernel panics: act at status-help.com now"
+    policy = DraftPolicy(
+        link_hosts=frozenset({"aria.example.com", "wiki.example.com"}),
+        recipients=frozenset({"@oncall-bgl"}),
+    )
+    outcome = await draft_comms(
+        report,
+        service="BlueGene/L compute",
+        run_url=run_url,
+        router=_router(FakeProvider(script={"comms": [json.dumps(polished)]}), "comms"),
+        policy=policy,
+    )
+    slack = next(a for a in outcome.actions if a.kind == "slack")
+    sent = f"{slack.title}\n{slack.body}\n{slack.payload['text']}"
+    for gone in ("evil.example", "evil-help.com", "status-help.com", "@channel", "attacker@"):
+        assert gone not in sent
+    for kept in (run_url, "https://wiki.example.com/kernel", "@oncall-bgl", "the runbook"):
+        assert kept in slack.body
+    assert slack.removed == [
+        "link to status-help[.]com",
+        "link to evil[.]example",
+        "link to www[.]evil-help[.]com",
+        "recipient attacker@evil[.]example",
+        "recipient @channel",
+    ]
+    assert "[link removed]" in slack.title  # the reviewer sees where something was taken out
+    others = [a for a in outcome.actions if a.kind != "slack"]
+    assert all(not a.removed for a in others)  # nothing to take out of the untouched drafts
+
+
+async def test_log_text_never_becomes_a_link_or_recipient_in_a_draft(
+    builder: ScenarioBuilder,
+) -> None:
+    """The deterministic drafts quote the report, which quotes logs: a URL, an address or a
+    mention in a log line is taken out like a model's would be, with nothing configured."""
+    ctx = await _context(builder)
+    report = (
+        await ReportWriter(None, RUNBOOKS).write(ctx, report_id="rep-9", use_llm=False)
+    ).report
+    quoted = report.summary[0].model_copy(
+        update={
+            "text": "Line 4 says: login at https://evil.example/sso, mail ops@evil.example, @here"
+        }
+    )
+    report = report.model_copy(update={"summary": [quoted, *report.summary[1:]]})
+    outcome = await draft_comms(report, service="BlueGene/L compute", run_url="http://aria/r/1")
+    slack = next(a for a in outcome.actions if a.kind == "slack")
+    assert "evil" not in slack.body
+    assert "@here" not in slack.body
+    assert "http://aria/r/1" in slack.body  # the run's own link stays
+    assert slack.removed == [
+        "link to evil[.]example",
+        "recipient ops@evil[.]example",
+        "recipient @here",
+    ]
+
+
+def test_the_draft_policy_allows_aria_and_the_configured_hosts_and_recipients() -> None:
+    settings = Settings(
+        console_url="https://aria.example.com", public_base_url="https://api.aria.example.com"
+    )
+    comms = CommsConfig.model_validate(
+        {"link_hosts": " Wiki.Example.com, ", "recipients": "@OnCall,#incidents"}
+    )
+    policy = DraftPolicy.for_settings(settings, comms)
+    assert policy.allows_host("aria.example.com")
+    assert policy.allows_host("api.aria.example.com")
+    assert policy.allows_host("docs.wiki.example.com")  # a subdomain counts as its host
+    assert not policy.allows_host("example.com")
+    assert not policy.allows_host("evilaria.example.com.attacker.io")
+    assert policy.allows_recipient("@oncall")
+    assert policy.allows_recipient("#incidents")
+    assert not policy.allows_recipient("@channel")
+    assert screen("java.io.IOException at hdfs.py on dn-7.hdfs.prod", policy).removed == []
 
 
 SAFE = json.dumps({"User Safety": "safe", "Response Safety": "safe"})

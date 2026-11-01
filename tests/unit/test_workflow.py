@@ -1050,6 +1050,36 @@ async def test_a_service_label_that_is_not_a_name_never_reaches_a_message(
             assert raw not in text
 
 
+async def test_what_a_draft_lost_is_listed_for_the_reviewer_never_kept_silently(
+    env: Env,
+) -> None:
+    """A model that slips a link and a mention into the responders' message: both are taken
+    out before review, and the review and the run's notes say what was removed."""
+
+    def slipped(ctx: dict[str, Any]) -> dict[str, Any]:
+        drafts = dict(ctx["drafts"])
+        responders = dict(drafts["responders"])
+        responders["body"] = (
+            "Apply the fix at https://evil.example/fix and ping @channel.\n"
+            + responders["body"][:1_000]
+        )
+        return {**drafts, "responders": responders}
+
+    env.services.router.provider("fake").responders["comms"] = slipped
+    outcome = await env.runner.start(kernel_panic(env))
+    assert outcome.interrupt is not None
+    review = {a["audience"]: a for a in outcome.interrupt["actions"]}
+    assert review["responders"]["removed"] == ["link to evil[.]example", "recipient @channel"]
+    assert review["stakeholders"]["removed"] == []
+    stored = repo.run_actions(env.services.engine, outcome.run_id)
+    body = next(row["body"] for row in stored if row["id"] == review["responders"]["action_id"])
+    assert "evil.example" not in body
+    assert "@channel" not in body
+    assert body.startswith("Apply the fix at [link removed] and ping [recipient removed].")
+    notes = (await env.runner.snapshot(outcome.run_id)).values["notes"]
+    assert "removed from the responders draft: link to evil[.]example; recipient @channel" in notes
+
+
 def test_updates_outside_the_team_carry_no_links_or_phone_numbers() -> None:
     from aria.reporting.comms import is_service_name
     from aria.reporting.grounding import validate_external_text

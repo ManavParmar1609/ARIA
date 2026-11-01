@@ -354,6 +354,15 @@ investigation:
   max_steps: 6
   max_hypotheses: 4
 
+# Message drafts. A draft may link only to ARIA's own console and API (the hosts of
+# ARIA_CONSOLE_URL and ARIA_PUBLIC_BASE_URL, where reports and runbooks live) and to the hosts
+# listed here, and may address only the recipients listed here (@handles, #channels or e-mail
+# addresses), whoever wrote it: a model, a log line or an alert label. Anything else is taken out
+# of the draft before review and listed for the reviewer. Both take comma-separated values.
+comms:
+  link_hosts: ${ARIA_DRAFT_LINK_HOSTS:-}
+  recipients: ${ARIA_DRAFT_RECIPIENTS:-}
+
 triggers:
   alert_group_window_s: 300
   # Periodic log scan (off at 0): tail these files and open a run on an error burst. Sources are

@@ -90,6 +90,7 @@ from aria.reporting.comms import AUDIENCE, action_id, draft_comms, is_service_na
 from aria.reporting.composer import SYSTEM_NAMES, ReportContext
 from aria.reporting.grounding import validate_report
 from aria.reporting.markdown import render_markdown
+from aria.reporting.outbound import DraftPolicy
 from aria.reporting.review import apply_review
 from aria.reporting.writer import ReportWriter
 from aria.retrieval import runlog
@@ -205,6 +206,12 @@ def run_link(settings: Settings, run_id: str) -> str:
     if settings.console_url:
         return f"{settings.console_url.rstrip('/')}/console/runs/{run_id}"
     return f"{settings.public_base_url.rstrip('/')}/api/v1/runs/{run_id}"
+
+
+def draft_policy(services: Services) -> DraftPolicy:
+    """What a message draft may link to and address: ARIA's own console and API, plus the hosts
+    and recipients ``comms`` in config/aria.yaml lists."""
+    return DraftPolicy.for_settings(services.settings, services.config.comms)
 
 
 def ticket_floor(
@@ -821,10 +828,17 @@ async def comms(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
         budget=guard,
         use_llm=run_plan.use_llm,
         safety_check=services.config.guardrails.safety_model,
+        policy=draft_policy(services),
     )
     await _db(repo.save_actions, services.engine, state["run_id"], outcome.actions)
     notes = [
         f"comms draft for {key} dropped: {'; '.join(p)}" for key, p in outcome.rejected.items()
+    ]
+    # Never kept silently: what the drafts lost is said in the run's notes and the review.
+    notes += [
+        f"removed from the {action.audience} draft: {'; '.join(action.removed)}"
+        for action in outcome.actions
+        if action.removed
     ]
     return {
         "actions": [action.model_dump(mode="json") for action in outcome.actions],
@@ -852,7 +866,11 @@ def review_payload(state: TriageState) -> Json:
         "valid": incident.validation.ok,
         "generated_by": incident.generated_by,
         "actions": [
-            {k: a[k] for k in ("action_id", "kind", "audience", "title")}
+            {
+                **{k: a[k] for k in ("action_id", "kind", "audience", "title")},
+                # What was taken out of the draft (links, recipients), for the reviewer.
+                "removed": list(a.get("removed") or []),
+            }
             for a in state.get("actions", [])
         ],
         "decisions": ["approve", "edit", "reject"],
@@ -1037,7 +1055,13 @@ async def publish(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
     run_url = run_link(services.settings, run_id)
     proposed = [OutboundAction.model_validate(raw) for raw in state.get("actions", [])]
     if (incident.title, incident.severity) != (drafted.title, drafted.severity):
-        proposed = redraft(proposed, incident, service=service_name(request), run_url=run_url)
+        proposed = redraft(
+            proposed,
+            incident,
+            service=service_name(request),
+            run_url=run_url,
+            policy=draft_policy(services),
+        )
     actions: list[OutboundAction] = []
     for proposal in proposed:
         if proposal.action_id not in approved:
