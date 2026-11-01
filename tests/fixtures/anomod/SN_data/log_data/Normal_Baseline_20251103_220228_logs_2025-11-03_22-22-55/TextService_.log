@@ -1,0 +1,4 @@
+[2025-Nov-03 22:03:12.674325] <info>: (TextService.cpp:65:main) Starting the text-service server...
+[2025-Nov-03 22:05:03.997532] <info>: (TextHandler.h:45:ComposeText) Received ComposeText request [req_id=644931833795737216, text length=16]
+[2025-Nov-03 22:05:03.999145] <info>: (TextHandler.h:77:ComposeText) Extracted mentions and urls [req_id=644931833795737216, mention count=0, url count=0]
+[2025-Nov-03 22:05:04.003181] <info>: (TextHandler.h:105:operator()) ComposeUrls to url-shorten-service succeeded [req_id=644931833795737216, url count=0]

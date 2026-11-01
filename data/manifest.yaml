@@ -257,3 +257,14 @@ sources:
     license: CC BY 4.0 on Zenodo; MIT in the authors' repository (both permissive; the Zenodo licence applies)
     citation: "L. Pham, H. Zhang, H. Ha, F. Salim, X. Zhang. RCAEval: A Benchmark for Root Cause Analysis of Microservice Systems with Telemetry Data. WWW 2025 Companion. Zenodo, DOI 10.5281/zenodo.14590730."
     description: RCAEval's RE3 suite. 90 code-level faults injected into three microservice shops (Sock Shop, Online Boutique and Train Ticket, 30 each), each with every service's logs from before and after the fault and the service it was injected into. Kept zipped; the root-cause evaluation reads each case's logs from inside the zips (src/aria/evals/rcaeval.py).
+
+  anomod:
+    kind: zenodo
+    record: "18342898"
+    files: [AnoMod.zip]
+    checksums:
+      AnoMod.zip: md5:30c5835190c3550c5efc34d6be4f9238
+    extract: false
+    license: CC BY 4.0 (the Zenodo record's licence)
+    citation: "K. Ping, H. B. Mazhar, Y. Wang, Y. Song, M. V. Mäntylä. AnoMod: A Dataset for Anomaly Detection and Root Cause Analysis in Microservice Systems. MSR 2026. Zenodo, DOI 10.5281/zenodo.18342898."
+    description: AnoMod. 24 anomalies injected into two microservice systems (SocialNetwork and Train Ticket), six of each of four kinds (performance, service, database and code), plus a normal run of each system, with every service's logs, metrics, traces, API responses and code coverage. Kept zipped (3.1 GB unpacked); the evaluation reads only the logs, from inside the zip (src/aria/evals/anomod.py).

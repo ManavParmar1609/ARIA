@@ -1,0 +1,5 @@
+[2025-Nov-04 00:01:54.614440] <info>: (UserHandler.h:944:GetMachineId) MAC address = 02:42:ac:1c:00:1a
+[2025-Nov-04 00:01:54.614691] <info>: (UserService.cpp:70:main) machine_id = 165
+[2025-Nov-04 00:01:55.777272] <info>: (UserService.cpp:101:main) Starting the user-service server ...
+[2025-Nov-04 00:03:50.405057] <error>: (UserHandler.h:190:RegisterUserWithId) Failed to insert user j1 to MongoDB: E11000 duplicate key error collection: user.user index: user_id_1 dup key: { user_id: 444 }
+[2025-Nov-04 00:03:55.783354] <error>: (UserHandler.h:190:RegisterUserWithId) Failed to insert user j1 to MongoDB: E11000 duplicate key error collection: user.user index: user_id_1 dup key: { user_id: 444 }

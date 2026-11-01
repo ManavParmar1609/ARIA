@@ -212,6 +212,48 @@ def _rcaeval(s: Mapping[str, Any]) -> list[str]:
     ]
 
 
+def _anomod(s: Mapping[str, Any]) -> list[str]:
+    title = "### Anomalies at four levels in two microservice systems"
+    if (gone := _missing(title, s)) is not None:
+        return gone
+    aria, base = s["aria"], s["baselines"]
+    normal = _join([f"{_SYSTEMS.get(k, k)} {v}" for k, v in aria["normal_severity"].items()])
+    random = base["naming_random_expected"]
+    return [
+        title,
+        "",
+        (
+            f"{s['anomalous']} anomalies injected at four levels (performance, service, database "
+            f"and code) into SocialNetwork and Train Ticket, plus {s['normal']} normal runs. "
+            f"Source: {s['source']}; {s['citation']} Each run's newest log lines, up to the "
+            f"per-run cap of {s['line_cap']:,}, are triaged offline, end to end."
+        ),
+        "",
+        (
+            f"ARIA flagged {_share(aria['anomalous_flagged'])} anomalous runs and paged "
+            f"{_share(aria['anomalous_paged'])}; a rule that flags any run with an error line flagged "
+            f"{_share(base['any_error_line']['anomalous_flagged'])}. The normal runs: {normal} (too few "
+            "to estimate a false-alarm rate)."
+        ),
+        "",
+        "| Level | Runs | Flagged (95% CI) | " + " | ".join(_LEVELS) + " |",
+        "|---|---|---|" + "---|" * len(_LEVELS),
+        *(
+            f"| {level.capitalize()} | {v['runs']} | {_share(v['flagged'])} | "
+            + " | ".join(str(v["severity"].get(sev, 0)) for sev in _LEVELS)
+            + " |"
+            for level, v in s["by_level"].items()
+        ),
+        "",
+        "| Names the targeted service | First suspect | Among the first three |",
+        "|---|---|---|",
+        f"| ARIA | {_naming(aria['naming'])}",
+        f"| Most error lines | {_naming(base['naming_most_errors'])}",
+        f"| A service at random (expected) | {_pct(random['top1'])} | {_pct(random['top3'])} |",
+        "",
+    ]
+
+
 def render(results: Mapping[str, Any]) -> list[str]:
     """The new-domain sections from a results document."""
     domains = results.get("domains") or {}
@@ -236,6 +278,7 @@ def render(results: Mapping[str, Any]) -> list[str]:
     renderers = {
         "ait-ads": _ait,
         "rcaeval": _rcaeval,
+        "anomod": _anomod,
     }
     for name, renderer in renderers.items():
         if isinstance(domains.get(name), Mapping):

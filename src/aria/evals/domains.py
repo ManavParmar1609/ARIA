@@ -18,16 +18,18 @@ from pathlib import Path
 from typing import Any
 
 from aria.config import get_settings
+from aria.data import anomod as anomod_data
 from aria.data import rcaeval as rcaeval_data
 from aria.data.scenarios import LinePools, ScenarioBuilder
-from aria.evals import ait_ads, rcaeval
+from aria.evals import ait_ads, anomod, rcaeval
 from aria.evals.pipeline import EvalEnvironment
 
-SUITES = ("ait-ads", "rcaeval")
+SUITES = ("ait-ads", "rcaeval", "anomod")
 # The manifest source each suite reads.
 SOURCES = {
     "ait-ads": "ait-ads",
     "rcaeval": "rcaeval-re3",
+    "anomod": "anomod",
 }
 # Suites that triage cases end to end, with what lists their cases and what triages a share.
 Triage = Callable[[EvalEnvironment, Sequence[int], Path], Awaitable[list[dict[str, Any]]]]
@@ -38,10 +40,17 @@ _PIPELINE: dict[str, tuple[Callable[[Path], int], Triage, Callable[..., dict[str
         rcaeval.summarize,
         rcaeval_data.RCAEVAL_DIR,
     ),
+    "anomod": (
+        lambda root: len(anomod_data.find_cases(root)),
+        anomod.triage,
+        anomod.summarize,
+        anomod_data.ANOMOD_DIR,
+    ),
 }
 _MISSING = {
     "ait-ads": ait_ads.MISSING,
     "rcaeval": rcaeval.MISSING,
+    "anomod": anomod.MISSING,
 }
 
 
