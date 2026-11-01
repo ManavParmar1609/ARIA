@@ -207,6 +207,9 @@ export type paths = {
         /**
          * Incidents
          * @description Past incidents: hybrid search when ``q`` is given, else the most recent.
+         *
+         *     ``offset`` skips that many, so a client can page through the whole library: a page shorter
+         *     than ``limit`` is the last one.
          */
         get: operations["incidents_api_v1_incidents_get"];
         put?: never;
@@ -2403,6 +2406,7 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                offset?: number;
                 q?: string | null;
                 system?: string | null;
             };

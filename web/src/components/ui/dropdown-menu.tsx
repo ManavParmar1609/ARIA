@@ -1,5 +1,6 @@
 "use client";
 
+import { CheckIcon } from "lucide-react";
 import { DropdownMenu as MenuPrimitive } from "radix-ui";
 import { type ComponentProps } from "react";
 
@@ -49,4 +50,32 @@ export function DropdownMenuRadioItem({
       {children}
     </MenuPrimitive.RadioItem>
   );
+}
+
+/** An option that is on or off; the box shows its edge either way, so it reads as a checkbox. */
+export function DropdownMenuCheckboxItem({
+  className,
+  children,
+  ...props
+}: ComponentProps<typeof MenuPrimitive.CheckboxItem>) {
+  return (
+    <MenuPrimitive.CheckboxItem className={cn(item, "pl-8", className)} {...props}>
+      <span
+        aria-hidden
+        className="absolute left-2 flex size-4 items-center justify-center rounded-xs border border-control"
+      >
+        <MenuPrimitive.ItemIndicator>
+          <CheckIcon className="size-3 text-heading!" strokeWidth={2.5} />
+        </MenuPrimitive.ItemIndicator>
+      </span>
+      {children}
+    </MenuPrimitive.CheckboxItem>
+  );
+}
+
+export function DropdownMenuSeparator({
+  className,
+  ...props
+}: ComponentProps<typeof MenuPrimitive.Separator>) {
+  return <MenuPrimitive.Separator className={cn("my-1 h-px bg-rule", className)} {...props} />;
 }

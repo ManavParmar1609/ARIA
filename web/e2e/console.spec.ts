@@ -279,8 +279,39 @@ test.describe("console", () => {
     await expectAccessible(page, "runbook");
   });
 
-  test("searches incident memory by meaning", async ({ page }) => {
+  test("sums up the incident library, filters it from a chart and searches it", async ({
+    page,
+  }) => {
     await page.goto("/console/memory");
+    // Figures and charts sum up the whole library; each chart's title says what it shows.
+    await expect(page.getByText("incidents in the library", { exact: true })).toBeVisible();
+    const levels = page.getByRole("region", { name: /SEV\d/ });
+    await expect(levels.getByRole("heading", { level: 3 })).toHaveText(
+      /^(SEV\d is the most common level|Most incidents here are SEV\d|SEV\d and SEV\d are the most common levels)$/,
+    );
+    await expectAccessible(page, "library");
+
+    // Pressing a level filters the whole page by it, and the address keeps the filter.
+    await levels.getByRole("button", { name: /^SEV1 critical/ }).click();
+    await expect(page).toHaveURL(/\/console\/memory\?sev=SEV1$/);
+    await expect(page.getByText(/^incidents? match(es)? your filters$/)).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /^SEV1 critical \d+ incidents?$/ }),
+    ).toHaveAttribute("aria-pressed", "true");
+    const systems = page.getByRole("region", { name: /most incidents|comes? from/ });
+    await systems.getByRole("button", { name: /^BlueGene\/L/ }).click();
+    await expect(page).toHaveURL(/\?sev=SEV1&system=bgl$/);
+    await expectAccessible(page, "library, two filters");
+    // Back undoes the last filter, and one press clears the rest.
+    await page.goBack();
+    await expect(page).toHaveURL(/\/console\/memory\?sev=SEV1$/);
+    await page.getByRole("button", { name: "Clear filters" }).click();
+    await expect(page).toHaveURL(/\/console\/memory$/);
+
+    // Every chart can be read as a table.
+    await levels.getByRole("button", { name: /^Show as a table/ }).click();
+    await expect(levels.getByRole("table", { name: "Incidents by severity level" })).toBeVisible();
+
     await page
       .getByRole("searchbox", { name: "Search", exact: true })
       .fill("quorum lost between peers");
@@ -522,6 +553,11 @@ test.describe("console at 320 px", () => {
       await page.getByRole("tab", { name: new RegExp(tab) }).click();
       await expectNoSidewaysScroll(page, `run view, ${tab}`);
     }
+
+    // The library's filters and charts reflow too, with filters on.
+    await page.goto("/console/memory?sev=SEV1&sev=SEV2&system=bgl");
+    await expect(page.getByRole("heading", { level: 2, name: "At a glance" })).toBeVisible();
+    await expectNoSidewaysScroll(page, "incident library, filtered");
   });
 });
 
@@ -529,7 +565,7 @@ test.describe("console on a phone", () => {
   test("meets WCAG 2.2 AA at 375 px", async ({ page }) => {
     // The phone header shows the wordmark where the sidebar was: its name must include "ARIA".
     await page.setViewportSize({ width: 375, height: 800 });
-    for (const path of ["/console", "/console/runs", "/console/guide"]) {
+    for (const path of ["/console", "/console/runs", "/console/guide", "/console/memory"]) {
       await page.goto(path);
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       await expectAccessible(page, `${path} at 375 px`);
@@ -562,5 +598,9 @@ test.describe("console in the dark theme", () => {
     }
     await page.goto("/console/evals");
     await expectAccessible(page, "evaluation, dark");
+    // The library's charts, with a filter on: pressed levels and greyed bars keep their contrast.
+    await page.goto("/console/memory?sev=SEV1&system=bgl");
+    await expect(page.getByText(/^incidents? match(es)? your filters$/)).toBeVisible();
+    await expectAccessible(page, "incident library, filtered, dark");
   });
 });
