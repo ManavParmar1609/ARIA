@@ -1,4 +1,9 @@
-import type { NoveltyReason, Severity, SeverityAssessment } from "@/lib/api/types";
+import {
+  SEVERITIES,
+  type NoveltyReason,
+  type Severity,
+  type SeverityAssessment,
+} from "@/lib/api/types";
 
 // Severity in words a newcomer can act on: each level's name, the same one the report's first line
 // uses, and what teams usually do about it (item 16).
@@ -45,6 +50,23 @@ export const NOVELTY_WORDS: Record<NoveltyReason, string> = {
 export function orList(levels: readonly string[]): string {
   if (levels.length <= 1) return levels[0] ?? "";
   return `${levels.slice(0, -1).join(", ")} or ${levels.at(-1)}`;
+}
+
+const rank = (level: string) => (SEVERITIES as readonly string[]).indexOf(level);
+
+/**
+ * The levels ARIA could not rule out and the one it plans for, when there are several: "ARIA is
+ * torn between SEV2 and SEV3 and plans for SEV2". The API says the same (`severity_text` on a
+ * review, `summary` on the severity step). Null for a set of one level, which keeps the bare
+ * level. Once a person has decided (`ended`), it says what ARIA had planned.
+ */
+export function tornText(severity: string, set: readonly string[], ended = false): string | null {
+  const levels = [...new Set(set)].sort((a, b) => rank(a) - rank(b));
+  if (levels.length < 2) return null;
+  const between = `${levels.slice(0, -1).join(", ")} and ${levels.at(-1)}`;
+  return ended
+    ? `ARIA was torn between ${between} and planned for ${severity}`
+    : `ARIA is torn between ${between} and plans for ${severity}`;
 }
 
 /**

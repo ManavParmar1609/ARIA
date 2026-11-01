@@ -34,8 +34,14 @@ from aria.db.engine import get_engine, init_db, session_scope
 from aria.db.models import ActionRow, FeedbackRow, LogEventRow
 from aria.evidence import EvidenceStore
 from aria.graph import workflow
-from aria.graph.runner import RunBusyError, RunNotFoundError, RunStateError, TriageRunner
-from aria.graph.workflow import run_salt
+from aria.graph.runner import (
+    RunBusyError,
+    RunNotFoundError,
+    RunStateError,
+    TriageRunner,
+    summarize,
+)
+from aria.graph.workflow import review_lead, run_salt
 from aria.notify import sign
 from aria.parsing.parser import parse_lines
 from aria.retrieval.memory import IncidentMemory, run_incident_id
@@ -43,6 +49,7 @@ from aria.retrieval.runbooks import load_runbooks
 from aria.retrieval.seed import incident_from_scenario
 from aria.security.redaction import Redactor
 from aria.services import Services
+from aria.severity.policy import level_words
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "loghub"
 SEEDED = ("bgl.kernel_panic", "openssh.bruteforce", "hdfs.block_serve_exceptions")
@@ -133,6 +140,9 @@ async def test_run_pauses_for_review_then_publishes_a_cited_report(env: Env) -> 
     assert {"tool_call", "checkpoint", "interrupt"} <= set(kinds)
     finished = {e.node: e.payload for e in events if e.kind == "node_finished"}
     assert finished["severity"]["severity"] == outcome.interrupt["severity"]
+    # The event log and the review state the level in the same words, set and all.
+    stated = level_words(outcome.interrupt["severity"], outcome.interrupt["prediction_set"])
+    assert finished["severity"]["summary"] == outcome.interrupt["severity_text"] == stated
 
     run = repo.get_run(engine, run_id)
     assert run is not None
@@ -176,6 +186,22 @@ async def test_run_pauses_for_review_then_publishes_a_cited_report(env: Env) -> 
     assert signatures
     assert not signatures & {item.value["template"] for item in learned}  # incidents stay new
     assert repo.list_events(engine, run_id)[-1].kind == "run_finished"
+
+
+def test_a_wider_set_is_stated_as_what_aria_is_torn_between_in_the_log_and_the_review() -> None:
+    torn = {"severity": "SEV2", "prediction_set": ["SEV2", "SEV3"], "decided_by": "fallback"}
+    assert (
+        summarize("severity", {"severity": torn})["summary"]
+        == "ARIA is torn between SEV2 and SEV3 and plans for SEV2"
+    )
+    single = {"severity": "SEV2", "prediction_set": ["SEV2"], "decided_by": "model"}
+    assert summarize("severity", {"severity": single})["summary"] == "SEV2"
+
+    prompt = {**torn, "severity_text": level_words("SEV2", ["SEV2", "SEV3"])}
+    assert review_lead(prompt) == "ARIA is torn between SEV2 and SEV3 and plans for SEV2. "
+    # One level, or a prompt stored before these words existed: the prompt reads as it did.
+    assert review_lead({**single, "severity_text": "SEV2"}) == ""
+    assert review_lead(torn) == ""
 
 
 async def test_live_subscribers_get_tokens_that_the_log_does_not_keep(env: Env) -> None:

@@ -526,6 +526,58 @@ def list_feedback(engine: Engine, *, limit: int = 50) -> list[dict[str, Any]]:
         ]
 
 
+def review_decisions(engine: Engine, *, limit: int = 2_000) -> list[dict[str, Any]]:
+    """People's review decisions, newest first, with the moments that time them.
+
+    Each is a ``review`` feedback row, so only people's reviews of shared runs: unattended
+    publishing and visitors' own runs record none. ``paused_at`` is when the run first paused for
+    review (its first ``interrupt`` event) and ``decided_at`` when the decision was applied (its
+    report's ``reviewed_at``, else the review's own time). Either is None where it is unknown.
+    """
+    paused = (
+        select(func.min(RunEventRow.ts))
+        .where(RunEventRow.run_id == FeedbackRow.run_id, RunEventRow.kind == "interrupt")
+        .correlate(FeedbackRow)
+        .scalar_subquery()
+    )
+    reviewed = (
+        select(func.max(ReportRow.reviewed_at))
+        .where(ReportRow.run_id == FeedbackRow.run_id)
+        .correlate(FeedbackRow)
+        .scalar_subquery()
+    )
+    stmt = (
+        select(
+            FeedbackRow.run_id,
+            FeedbackRow.author,
+            FeedbackRow.value["decision"].as_string(),
+            FeedbackRow.value["from"].as_string(),
+            FeedbackRow.value["to"].as_string(),
+            FeedbackRow.created_at,
+            paused,
+            reviewed,
+        )
+        .where(FeedbackRow.field == "review")
+        .order_by(FeedbackRow.id.desc())
+        .limit(limit)
+    )
+    with session_scope(engine) as session:
+        return [
+            {
+                "run_id": run_id,
+                "reviewer": author,
+                "decision": decision,
+                "aria_level": aria,
+                "final_level": final,
+                "paused_at": paused_at,
+                "decided_at": reviewed_at or created_at,
+            }
+            for run_id, author, decision, aria, final, created_at, paused_at, reviewed_at in (
+                session.execute(stmt)
+            )
+        ]
+
+
 def decided_levels(engine: Engine, *, per_system: int = 400) -> dict[str, list[str]]:
     """Each system's decided severity levels on its latest ``per_system`` runs, oldest first.
 

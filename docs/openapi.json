@@ -2090,6 +2090,52 @@
         }
       }
     },
+    "/api/v1/reviewers": {
+      "get": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Reviewers",
+        "description": "How each person reviews: how often they approve a report without editing it, how often\nthey set a level other than ARIA's, and the median time from a run pausing for review to\ntheir decision. From the newest ``limit`` reviews ARIA keeps; reviews of a visitor's own\nruns on a shared demo are not kept, so they are not counted.",
+        "operationId": "reviewers_api_v1_reviewers_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "default": 2000,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewersOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/blind-check": {
       "get": {
         "tags": [
@@ -3387,6 +3433,113 @@
         ],
         "title": "ClaimOut"
       },
+      "DataTermsOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "company": {
+            "type": "string",
+            "title": "Company"
+          },
+          "service": {
+            "type": "string",
+            "title": "Service"
+          },
+          "providers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Providers"
+          },
+          "uses": {
+            "items": {
+              "$ref": "#/components/schemas/DataUseOut"
+            },
+            "type": "array",
+            "title": "Uses"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/TermsSourceOut"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "verified": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "company",
+          "service",
+          "providers",
+          "uses",
+          "sources"
+        ],
+        "title": "DataTermsOut",
+        "description": "A model provider's own terms about the prompts ARIA sends it (``llm.data_terms``)."
+      },
+      "DataUseOut": {
+        "properties": {
+          "account": {
+            "type": "string",
+            "title": "Account"
+          },
+          "improves_models": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Improves Models"
+          },
+          "keeps_prompts": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keeps Prompts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "account"
+        ],
+        "title": "DataUseOut",
+        "description": "What a provider's terms say about prompts for one kind of account. None: not verified."
+      },
       "Delivery": {
         "properties": {
           "action_id": {
@@ -4670,6 +4823,100 @@
         "title": "ReviewRequest",
         "description": "A reviewer's decision. With API keys, the reviewer is the authenticated key's name."
       },
+      "ReviewerOut": {
+        "properties": {
+          "reviewer": {
+            "type": "string",
+            "title": "Reviewer"
+          },
+          "decisions": {
+            "type": "integer",
+            "title": "Decisions"
+          },
+          "approved_as_is": {
+            "type": "integer",
+            "title": "Approved As Is"
+          },
+          "edited": {
+            "type": "integer",
+            "title": "Edited"
+          },
+          "rejected": {
+            "type": "integer",
+            "title": "Rejected"
+          },
+          "level_changed": {
+            "type": "integer",
+            "title": "Level Changed"
+          },
+          "timed": {
+            "type": "integer",
+            "title": "Timed"
+          },
+          "median_wait_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Wait S"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reviewer",
+          "decisions",
+          "approved_as_is",
+          "edited",
+          "rejected",
+          "level_changed",
+          "timed"
+        ],
+        "title": "ReviewerOut",
+        "description": "How one person decides, over the reviews ARIA keeps."
+      },
+      "ReviewersOut": {
+        "properties": {
+          "reviewers": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewerOut"
+            },
+            "type": "array",
+            "title": "Reviewers"
+          },
+          "decisions": {
+            "type": "integer",
+            "title": "Decisions"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reviewers",
+          "decisions",
+          "limit"
+        ],
+        "title": "ReviewersOut",
+        "description": "Every reviewer's figures, the busiest first, from the newest ``decisions`` reviews."
+      },
       "RunAccepted": {
         "properties": {
           "run_id": {
@@ -5663,6 +5910,20 @@
               }
             ],
             "title": "Max Body Bytes"
+          },
+          "retention": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Retention"
+          },
+          "data_terms": {
+            "items": {
+              "$ref": "#/components/schemas/DataTermsOut"
+            },
+            "type": "array",
+            "title": "Data Terms"
           }
         },
         "type": "object",
@@ -6004,6 +6265,24 @@
         ],
         "title": "SystemDrift",
         "description": "Whether one system's decided levels shifted between its earlier and recent runs."
+      },
+      "TermsSourceOut": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "url"
+        ],
+        "title": "TermsSourceOut"
       },
       "TicketAssessment": {
         "properties": {
