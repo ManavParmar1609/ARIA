@@ -89,6 +89,42 @@ export const GLOSSARY = {
     definition:
       "A new incident that starts again from one of another incident's saved steps, with different options, so you can see what would have changed.",
   },
+  // How Test results scores a test, and what each test was tuned on.
+  paged: {
+    term: "Paged",
+    definition:
+      "Rated SEV1 or SEV2: serious enough to wake the person on call. Flagged means any rating from SEV1 to SEV3, worth a person's look but able to wait.",
+  },
+  auroc: {
+    term: "Ranking score (AUROC)",
+    definition:
+      "How well a score puts the cases that matter above the rest: shown one of each, how often it ranks the right one higher. 0.5 is a coin flip and 1 is never wrong.",
+  },
+  "service-at-fault": {
+    term: "Naming the service at fault",
+    definition:
+      "Pointing to the service a fault was put into. ARIA lists the services it suspects, likeliest first, and a test counts how often the right one comes first, or among the first three.",
+  },
+  interval: {
+    term: "95% interval",
+    definition:
+      "The range a measured rate would most likely fall in on many more cases like these, with 95% confidence. A test with few cases gives a wide range.",
+  },
+  untouched: {
+    term: "Untouched",
+    definition:
+      "A test whose results nobody looked at while ARIA was being changed, so they show how it does on data it was never fitted to.",
+  },
+  "looked-at": {
+    term: "Looked at",
+    definition:
+      "A test whose results people saw while ARIA was being changed, though nothing was chosen by them. Still fair, but no longer untouched.",
+  },
+  tuned: {
+    term: "Tuned",
+    definition:
+      "A test whose data was used to choose a change to ARIA, such as a rule or a threshold. Its results may flatter ARIA, so read them as a check rather than a clean test.",
+  },
   // The four severity levels, most serious first.
   sev1: level("SEV1", "The most serious of ARIA's four severity levels."),
   sev2: level("SEV2", "The second of ARIA's four severity levels."),
