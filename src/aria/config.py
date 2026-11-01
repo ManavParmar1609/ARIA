@@ -394,6 +394,10 @@ class Settings(BaseSettings):
     log_format: Literal["json", "console"] = "console"
     otel_exporter: Literal["none", "console", "otlp", "azure"] = "none"
     otlp_endpoint: str | None = None
+    # Where the otlp exporter sends the GenAI metrics (an OTLP/HTTP /v1/metrics URL). Unset: no
+    # metrics over OTLP, since a traces-only backend such as Phoenix refuses them. Azure Monitor
+    # takes them without it.
+    otlp_metrics_endpoint: str | None = None
     worker_mode: Literal["inprocess", "external"] = "inprocess"
     # Bring the schema to the latest migration when the API starts (containers). Run one API
     # replica while a release migrates, or run `aria db upgrade` as a job instead.
@@ -431,7 +435,13 @@ class Settings(BaseSettings):
     mcp_token: SecretStr | None = None
 
     @field_validator(
-        "api_keys", "pseudonym_key", "mcp_token", "mcp_url", "quota_file", mode="before"
+        "api_keys",
+        "pseudonym_key",
+        "mcp_token",
+        "mcp_url",
+        "quota_file",
+        "otlp_metrics_endpoint",
+        mode="before",
     )
     @classmethod
     def _blank_is_unset(cls, value: Any) -> Any:

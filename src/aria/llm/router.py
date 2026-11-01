@@ -50,6 +50,7 @@ from typing import Any, Literal, TypeVar
 
 import httpx
 import httpx2
+from opentelemetry.trace import Span
 from pydantic import BaseModel, SecretStr, ValidationError
 
 from aria.config import (
@@ -93,7 +94,15 @@ from aria.llm.quota import (
 )
 from aria.llm.visitor import VisitorKey
 from aria.observability.logging import get_logger
-from aria.observability.tracing import capture_content, genai_span, mark_error
+from aria.observability.tracing import (
+    error_type,
+    genai_provider_name,
+    genai_span,
+    mark_error,
+    record_metrics,
+    record_response,
+    server_attributes,
+)
 
 M = TypeVar("M", bound=BaseModel)
 Validator = Callable[[Any], list[str]]
@@ -211,6 +220,46 @@ class _Reply:
         if self.usage is not None:
             return self.usage
         return self.error.usage if self.error is not None else None
+
+
+@dataclass(frozen=True)
+class _Observed:
+    """One model call as telemetry sees it: the GenAI span attributes and client histograms
+    (aria.observability.tracing), with identifiers and counts only."""
+
+    provider: str  # gen_ai.provider.name
+    requested: str  # gen_ai.request.model
+    server: dict[str, Any]  # server.address and server.port
+
+    def record(
+        self, span: Span, usage: Usage | None, started: float, *, error: str | None = None
+    ) -> None:
+        """What the provider reported about its reply (none when it never answered), on the
+        span and the histograms. Counts ARIA estimated go on the span, marked so, but never on
+        the token histogram."""
+        reported = usage is not None and not usage.estimated
+        answered = usage.response_model if usage is not None else None
+        response_model = answered or (self.requested if error is None else None)
+        record_response(
+            span,
+            response_model=response_model,
+            response_id=usage.response_id if usage is not None else None,
+            finish_reasons=[usage.finish_reason] if usage and usage.finish_reason else [],
+            input_tokens=usage.input_tokens if usage is not None else None,
+            output_tokens=usage.output_tokens if usage is not None else None,
+            estimated=usage is not None and usage.estimated,
+        )
+        record_metrics(
+            operation="chat",
+            provider=self.provider,
+            request_model=self.requested,
+            response_model=response_model,
+            duration_s=time.perf_counter() - started,
+            input_tokens=usage.input_tokens if usage is not None and reported else None,
+            output_tokens=usage.output_tokens if usage is not None and reported else None,
+            error=error,
+            server=self.server,
+        )
 
 
 def _validation_errors(exc: Exception) -> list[str]:
@@ -725,16 +774,28 @@ class LLMRouter:
     ) -> _Reply:
         """Send one request. Any failure comes back as a ProviderError, never raised: a client
         that lets a transport error through is caught here, so it never reaches a graph node's
-        retry policy and multiplies into more requests."""
+        retry policy and multiplies into more requests.
+
+        Each call is one GenAI client span and one record on the GenAI client histograms
+        (aria.observability.tracing): identifiers, counts and finish reasons, never text."""
         breaker = self.breaker(provider.name)
+        cfg = self.config.providers.get(provider.name)
+        base_url = cfg.base_url if cfg is not None else None
+        requested = str(model or provider.model)
         span_attrs = {
             "gen_ai.request.temperature": temperature,
             "gen_ai.request.max_tokens": max_tokens,
+            "gen_ai.output.type": "json" if json_schema is not None else "text",
             "aria.role": role,
             "aria.task": task,
         }
+        call = _Observed(
+            provider=genai_provider_name(provider.kind, base_url),
+            requested=requested,
+            server=server_attributes(base_url),
+        )
         with genai_span(
-            "chat", kind=provider.kind, model=model or provider.model, attributes=span_attrs
+            "chat", kind=provider.kind, model=requested, base_url=base_url, attributes=span_attrs
         ) as span:
             started = time.perf_counter()
             try:
@@ -760,16 +821,12 @@ class LLMRouter:
                     if isinstance(exc, ProviderError)
                     else ProviderError(f"{provider.name}: {type(exc).__name__}", retryable=True)
                 )
+                # A declined reply or one cut short still says how it ended and what it cost.
+                call.record(span, error.usage, started, error=error_type(exc))
                 return _Reply(error=error, latency_ms=_ms_since(started))
             breaker.success()
             usage.latency_ms = usage.latency_ms or _ms_since(started)
-            span.set_attribute("gen_ai.usage.input_tokens", usage.input_tokens)
-            span.set_attribute("gen_ai.usage.output_tokens", usage.output_tokens)
-            span.set_attribute("gen_ai.response.model", model or provider.model)
-            if usage.finish_reason:
-                span.set_attribute("gen_ai.response.finish_reasons", [usage.finish_reason])
-            if capture_content():
-                span.set_attribute("gen_ai.output.text", text[:4_000])
+            call.record(span, usage, started)
             return _Reply(text, usage)
 
     def _failed(self, name: str, error: ProviderError, *, keyed: bool) -> None:

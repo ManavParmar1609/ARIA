@@ -405,7 +405,11 @@ def worker(
 
     settings = get_settings()
     configure_logging(settings.log_level, settings.log_format)
-    configure_tracing(settings.otel_exporter, endpoint=settings.otlp_endpoint)
+    configure_tracing(
+        settings.otel_exporter,
+        endpoint=settings.otlp_endpoint,
+        metrics_endpoint=settings.otlp_metrics_endpoint,
+    )
 
     async def main() -> None:
         services = await Services.create()
