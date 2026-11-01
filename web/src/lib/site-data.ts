@@ -5,7 +5,9 @@ import evals from "@/data/eval-results.json";
 import live from "@/data/eval-live.json";
 
 import type { Severity } from "./api/types";
+import { readDomains, type NewDomains } from "./domains";
 import { evidenceTitle } from "./evidence-text";
+import { readTuning, type TuningRecord } from "./tuning";
 
 // Everything the landing page quotes comes from three committed files: the offline evaluation
 // (docs/eval-results.json), the live-provider run (docs/eval-live.json) and one recorded run
@@ -768,4 +770,19 @@ export function generalisation(): { system: HeldOutRing; mode: HeldOutRing | nul
   const system = heldOutRing(raw?.leave_one_system_out);
   if (!system) return null;
   return { system, mode: heldOutRing(raw?.leave_one_failure_mode_out) };
+}
+
+// --- new domains (ring C) and the tuning record ------------------------------------------------
+
+/**
+ * The tests on data from fields ARIA was never built for: security alerts, microservice faults,
+ * Kubernetes incidents and Jira priorities (lib/domains.ts). Absent until `make eval` has run them.
+ */
+export function newDomains(): NewDomains | null {
+  return readDomains((evals as unknown as Record<string, unknown>).domains);
+}
+
+/** What each test was tuned on (config/eval_registry.yaml). Absent until `make eval` copies it. */
+export function tuningRecord(): TuningRecord | null {
+  return readTuning((evals as unknown as Record<string, unknown>).registry);
 }

@@ -7,25 +7,29 @@ import { GLOSSARY, glossaryMentions, type GlossaryKey } from "@/lib/glossary";
 import { cx } from "@/lib/cx";
 
 /**
- * A word a newcomer may not know, with its definition one click away: a small card under the
- * word, a dialog named after the term. It is the browser's own popover, so a click outside or
- * Escape closes it and hands focus back to the word. The script moves focus into the card as it
- * opens, so a screen reader reads the definition at once, and closes the card once focus moves
- * past it, so it never covers what Tab reaches next. A browser without CSS anchor positioning
- * opens the card in the middle of the screen instead, over a dimmed page. Each term may appear
- * once per page, or pass a distinct `instance`.
+ * A word or badge with what it means one click away: a small card under it, a dialog named after
+ * its `term`. It is the browser's own popover, so a click outside or Escape closes it and hands
+ * focus back to the word. The script moves focus into the card as it opens, so a screen reader
+ * reads it at once, and closes the card once focus moves past it, so it never covers what Tab
+ * reaches next. A browser without CSS anchor positioning opens the card in the middle of the
+ * screen instead, over a dimmed page. `id` must be unique on the page.
  */
-export function Term({
-  name,
-  instance,
+export function Definable({
+  id,
+  term,
+  definition,
+  className,
   children,
 }: {
-  name: GlossaryKey;
-  instance?: string;
-  children?: ReactNode;
+  id: string;
+  /** The card's title, which names the dialog. */
+  term: string;
+  /** What the card says, which describes the dialog. Spans only: the card may sit in a sentence. */
+  definition: ReactNode;
+  /** The look of the word or badge that opens the card. */
+  className: string;
+  children: ReactNode;
 }) {
-  const entry = GLOSSARY[name];
-  const id = `term-${name}${instance ? `-${instance}` : ""}`;
   // Ties the card to its word for anchor positioning: a dashed ident, so no dots or spaces.
   const anchor = `--${id.replace(/[^\w-]/g, "-")}`;
   // Whether the card is showing, kept from beforetoggle so that closing it never runs twice.
@@ -37,9 +41,9 @@ export function Term({
         popoverTarget={id}
         aria-haspopup="dialog"
         style={{ anchorName: anchor }}
-        className="cursor-help rounded-xs text-inherit underline decoration-primary/70 decoration-dotted underline-offset-[0.2em] transition-colors duration-(--duration-quick) hover:decoration-primary"
+        className={className}
       >
-        {children ?? entry.term.toLowerCase()}
+        {children}
       </button>
       <span
         id={id}
@@ -70,7 +74,7 @@ export function Term({
       >
         <span className="flex items-start justify-between gap-4">
           <span id={`${id}-term`} className="eyebrow block pt-1 text-muted-foreground">
-            {entry.term}
+            {term}
           </span>
           <button
             type="button"
@@ -83,10 +87,36 @@ export function Term({
           </button>
         </span>
         <span id={`${id}-definition`} className="mt-3 block leading-relaxed">
-          {entry.definition}
+          {definition}
         </span>
       </span>
     </>
+  );
+}
+
+/**
+ * A word a newcomer may not know, with its glossary definition one click away (Definable). Each
+ * term may appear once per page, or pass a distinct `instance`.
+ */
+export function Term({
+  name,
+  instance,
+  children,
+}: {
+  name: GlossaryKey;
+  instance?: string;
+  children?: ReactNode;
+}) {
+  const entry = GLOSSARY[name];
+  return (
+    <Definable
+      id={`term-${name}${instance ? `-${instance}` : ""}`}
+      term={entry.term}
+      definition={entry.definition}
+      className="cursor-help rounded-xs text-inherit underline decoration-primary/70 decoration-dotted underline-offset-[0.2em] transition-colors duration-(--duration-quick) hover:decoration-primary"
+    >
+      {children ?? entry.term.toLowerCase()}
+    </Definable>
   );
 }
 

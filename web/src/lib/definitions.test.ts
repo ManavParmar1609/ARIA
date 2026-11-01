@@ -18,6 +18,16 @@ describe("definitionFor", () => {
     expect(definitionFor("Define safety floor")?.term).toBe("Safety floor");
   });
 
+  it("answers the words Test results scores and badges its tests with", () => {
+    expect(definitionFor("What is AUROC?")?.term).toBe("Ranking score (AUROC)");
+    expect(definitionFor("What does paged mean?")?.term).toBe("Paged");
+    expect(definitionFor("What is the service at fault?")?.term).toBe(
+      "Naming the service at fault",
+    );
+    expect(definitionFor("What does looked at mean?")?.term).toBe("Looked at");
+    expect(definitionFor("What does tuned mean?")?.text).toContain("rather than a clean test");
+  });
+
   it("leaves questions about incidents to the search", () => {
     expect(definitionFor("What does the runbook say to do first when DataNodes fail?")).toBeNull();
     expect(definitionFor("Have we seen ZooKeeper lose quorum before?")).toBeNull();
