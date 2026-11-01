@@ -222,6 +222,37 @@ def test_a_detector_reporting_data_leaving_decides_sev2(rules: RuleSet) -> None:
     assert result.scores[Severity.SEV2] >= 2.0
 
 
+@pytest.mark.parametrize(
+    ("category", "floor"),
+    [
+        ("storage_fatal", Severity.SEV3),
+        ("hardware_fatal", Severity.SEV3),
+        ("redundancy_lost", Severity.SEV3),
+        ("backup", Severity.SEV3),
+    ],
+)
+def test_a_fatal_form_reported_in_a_warning_sets_a_floor(
+    rules: RuleSet, category: str, floor: Severity
+) -> None:
+    window = features(
+        level_counts={"INFO": 599, "ERROR": 1},
+        keyword_hits={category: 1},
+        issue_keyword_hits={category: 1},
+    )
+    assert rules.evaluate(feature_space(window)).floor is floor
+    routine = features(keyword_hits={category: 1})  # the same words in an INFO line
+    assert rules.evaluate(feature_space(routine)).floor is None
+
+
+def test_deleting_backups_beside_security_alerts_is_rated_sev1(rules: RuleSet) -> None:
+    alone = features(keyword_hits={"recovery_inhibition": 1})
+    assert rules.evaluate(feature_space(alone)).floor is Severity.SEV2
+    attack = features(keyword_hits={"recovery_inhibition": 1, "security": 4})
+    result = rules.evaluate(feature_space(attack))
+    assert result.rule_severity is Severity.SEV1
+    assert result.dimensions == {"security", "integrity"}
+
+
 def _rules_file(tmp_path: Path, *rules: dict[str, Any], **extra: Any) -> Path:
     path = tmp_path / "rules.yaml"
     path.write_text(json.dumps({"rules": list(rules), **extra}), encoding="utf-8")

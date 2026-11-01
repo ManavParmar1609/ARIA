@@ -86,12 +86,22 @@ def test_every_keyword_category_names_its_sources() -> None:
         ("KeeperErrorCode = ConnectionLoss for /brokers/ids", "unavailable"),
         ("x509: certificate has expired or is not yet valid", "tls"),
         ("dial tcp: lookup api.internal: no such host", "dns"),
-        ("vssadmin delete shadows /all /quiet", "backup"),
+        ("vssadmin delete shadows /all /quiet", "recovery_inhibition"),
         ("duplicate charge detected for order 1192", "payment"),
         ("replication lag 412s on replica db-2", "freshness"),
         ("SSO service unavailable: identity provider timed out", "signin"),
         ("IDS: possible data exfiltration via DNS tunneling from 10.1.4.7", "exfiltration"),
         ("beacon to C2 server every 60s from host-12", "exfiltration"),
+        ("cmd.exe /c vssadmin.exe delete shadows /all /quiet", "recovery_inhibition"),
+        ("XFS (sdb1): Corruption detected. Shutting down filesystem", "storage_fatal"),
+        (
+            "EXT4-fs error (device sda1): ext4_find_entry: reading directory lblock 0",
+            "storage_fatal",
+        ),
+        ("{1}[Hardware Error]: event severity: fatal", "hardware_fatal"),
+        ("md/raid1:md0: Operation continuing on 1 devices; array degraded", "redundancy_lost"),
+        ("replication broken on replica db-3: no route to primary", "redundancy_lost"),
+        ("backup job missed for db-2 (last run 3 days ago)", "backup"),
     ],
 )
 def test_version_2_vocabulary_reads_codes_from_outside_loghub(line: str, category: str) -> None:

@@ -38,14 +38,17 @@ The model is one stage of a policy
 ([`src/aria/severity/policy.py`](../src/aria/severity/policy.py)). The stages run in this
 order:
 
-1. **Rules score each severity, and some set a floor.** The rules file holds 32 scoring rules
-   and 7 floor rules. Six floors keep signals at SEV2 or worse: data-integrity errors
+1. **Rules score each severity, and some set a floor.** The rules file holds 34 scoring rules
+   and 11 floor rules. Six floors keep signals at SEV2 or worse: data-integrity errors
    (corruption, data loss, missing blocks), a crashing critical component, a firing critical
    alert, a power-supply fault reported as an error, payment-integrity errors (duplicate charges,
-   ledgers that disagree), and backups or shadow copies removed alongside security alerts (how
-   ransomware prepares, MITRE ATT&CK T1490). The seventh keeps units of work that stopped partway
-   with no error logged (parsing/flows.py) at SEV3 or worse: the model, trained on windows that
-   log their failures, reads such a window as noise. A severity's summed rule weight must reach
+   ledgers that disagree), and commands that delete backups or shadow copies (how ransomware
+   prepares, MITRE ATT&CK T1490; beside security alerts the rules call it SEV1). Five keep signals
+   at SEV3 or worse: backups failing, redundancy gone, a filesystem that shut itself down, a
+   hardware error the firmware calls fatal, and units of work that stopped partway with no error
+   logged (parsing/flows.py), which the model, trained on windows that log their failures, reads
+   as noise. The fatal forms count only in warnings and errors; the same words in routine lines
+   set no floor. A severity's summed rule weight must reach
    its activation threshold, so one decisive SEV1 rule is not outvoted by the weaker SEV2 rules
    that a severe incident also trips. SEV1 also needs two kinds of impact to agree: each SEV1
    rule names the dimensions it shows (an outage, at-risk data, a security exposure, how far it
@@ -104,7 +107,7 @@ Every assessment records the following, and the run view shows all of it:
 
 ## Inputs
 
-The model reads 48 features of one window
+The model reads 52 features of one window
 ([`src/aria/severity/features.py`](../src/aria/severity/features.py)). The parser computes them
 from redacted message text, levels, timestamps, nodes and components, plus any firing alerts.
 Lines quarantined as possible prompt injection are left out first. No feature reads dataset
@@ -115,7 +118,7 @@ labels or BGL alert tags.
 | Volume and spread (16) | Events, error events, events per minute, peak errors per minute, distinct nodes, nodes with errors, templates, novel templates, novel error templates, peak warnings per minute, nodes with warnings, novel warning templates, critical components, firing alerts, critical alerts, warning alerts | log(1 + x) |
 | Ratios (4) | Error ratio, node spread, highest criticality among components logging errors, highest criticality among components logging warnings or errors (the catalog default when those lines name none) | 0 to 1 |
 | Shape (5) | Burst score (capped at 50, divided by 10), persistence in minutes (log scale), shares of WARN, ERROR and FATAL lines | As listed |
-| Keyword categories (18) | Crash, data risk, unavailable, resource, security, hardware, storage, network, degradation, power, and since version 2 TLS, DNS, control plane, backup, payment, freshness, sign-in and data leaving the network ([`config/lexicon.yaml`](../config/lexicon.yaml), which names each one's sources: gRPC status codes, HTTP, Kubernetes reasons, PostgreSQL SQLSTATE, etcd, Linux errno, MITRE ATT&CK and others). They are counted on lines logged at WARN or above or with no level, because at INFO the same words are usually routine. Each rule says which count it reads, and the floors count every line | log(1 + matching lines) |
+| Keyword categories (22) | Crash, data risk, unavailable, resource, security, hardware, storage, network, degradation, power; since version 2 TLS, DNS, control plane, backup, payment, freshness, sign-in and data leaving the network; and since version 2.1 the fatal forms: backups deleted, a filesystem shut down, fatal hardware and redundancy gone ([`config/lexicon.yaml`](../config/lexicon.yaml), which names each one's sources: gRPC status codes, HTTP, Kubernetes reasons, PostgreSQL SQLSTATE, etcd, Linux errno, MITRE ATT&CK and others). They are counted on lines logged at WARN or above or with no level, because at INFO the same words are usually routine. Each rule says which count it reads, and the floors count every line | log(1 + matching lines) |
 | Rules (5) | The rules' smoothed probability for each severity, and the floor rank (0 is a SEV1 floor and 3 a SEV4 floor; 4 means no floor) | 0 to 1; 0 to 4 |
 
 Two of these depend on configuration and history:
@@ -317,11 +320,12 @@ regression.
 ## Limitations
 
 - **Domains with no labelled data.** No dataset ARIA trains on logs TLS, DNS, control-plane,
-  backup, payment, data-freshness, sign-in or data-leaving failures, so the weights of the rules
-  that read those categories are judgement. They sit below SEV2's activation, so each needs a
-  second signal, except a detector reporting data leaving the network, which decides SEV2 on its
-  own. The two new floors (payments, removed backups next to security alerts) follow incident
-  practice, not measurement. The new-domain suites in [evaluation.md](evaluation.md) are the
+  backup, payment, data-freshness, sign-in, data-leaving or the fatal-form failures, so the
+  weights of the rules that read those categories are judgement. They sit below SEV2's
+  activation, so each needs a second signal, except a detector reporting data leaving the
+  network, which decides SEV2 on its own. The floors added for them (payments, deleted backups,
+  failing backups, lost redundancy, filesystem shutdowns, fatal hardware) follow incident
+  practice and the research behind it, not measurement. The new-domain suites in [evaluation.md](evaluation.md) are the
   first test of them.
 - **The data.** Training and test data are semi-synthetic, and every split draws from the same
   pools of real lines. The published numbers are not production accuracy; see the
@@ -339,7 +343,8 @@ regression.
   messages, so the true uncertainty is wider. The changes in rules version 2026.10.3 (keywords
   and criticality read from warning lines, and two keyword patterns narrowed) and in 2026.11.1
   (crash words decisive only in warnings and errors, a service reported unreachable, the new
-  version 2 categories, two floors and the impact dimensions) were chosen on separate validation
+  version 2 categories, two floors and the impact dimensions) and in 2026.11.2 (the fatal forms
+  and their floors) were chosen on separate validation
   seeds, 51–56, without looking at the test seeds. Each candidate had to lower the cost on
   held-out systems without raising it on familiar ones; one that did the first but not the
   second (counting corrected hardware errors apart from failures) was not adopted.

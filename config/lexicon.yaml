@@ -7,8 +7,11 @@
 # Version 2 widens the vocabulary beyond the Loghub systems with code families that mean the same
 # thing in any system, and names the source of each in `sources` below. Words a family uses in
 # upper case with underscores (gRPC's DATA_LOSS) are matched lowercased, as every pattern is.
+# Version 2.1 adds the fatal forms that the generic families blur: a filesystem that shut itself
+# down, a hardware event the firmware calls fatal, redundancy gone, and commands that delete the
+# backups an attacker would need gone (MITRE ATT&CK T1490).
 
-version: 2
+version: 2.1
 
 categories:
   # "Software caused connection abort" is a dropped connection, not a crash.
@@ -29,13 +32,18 @@ categories:
   tls: "x509|certificate (has )?expired|certificate verify failed|(ssl|tls) handshake (failed|failure|error)|handshake failure|bad certificate|unknown (ca|certificate authority)|certificate is not (yet )?valid"
   dns: "nxdomain|servfail|no such host|name resolution|could not resolve|unable to resolve|temporary failure in name resolution|dns (lookup|query|resolution) (failed|error|timed? ?out)"
   control_plane: "etcdserver: (request timed out|no leader|mvcc: database space exceeded)|leader(ship)? (lost|changed)|lost leadership|not (the )?leader|apiserver (unavailable|timeout)|failed to (watch|list) "
-  backup: "backup (failed|failure|error)|snapshot (failed|failure|error)|shadow cop(y|ies) (deleted|delete)|vssadmin delete|restore (failed|failure)|replication (broken|failed|stopped|error)"
+  backup: "backup (failed|failure|error)|snapshot (failed|failure|error)|restore (failed|failure)|backup (job )?(missed|missing|was not run)"
   payment: "duplicate (charge|payment|transaction)|double[- ]charg|charged twice|idempotency (key )?(conflict|violation)|payment (failed|declined|error)|settlement (failed|mismatch)|ledger (mismatch|imbalance)|reconciliation (failed|mismatch)"
   # macOS logs "Request for stale data" routinely, so only data said to be stale, or lagging,
   # counts.
   freshness: "data (is |are )(too )?stale|stale replica|replication lag|lagging behind|schema (mismatch|drift)|unknown column|missing column|(deserializ|deserialis)\\w* (error|failed|failure)|freshness (check|sla) (failed|breach)"
   signin: "(login|sign[- ]?in|sso|identity provider|idp|oauth|token (service|endpoint)) (service )?(unavailable|down|error|timed? ?out)"
   exfiltration: "exfiltrat|dns tunnel(l)?ing|command[- ]and[- ]control|\\bc2 (server|channel|beacon|traffic)|(unusual|suspicious|anomalous) (outbound|egress) (traffic|transfer|connection)|large (outbound|egress) transfer|data (theft|leak(age)?) (detected|suspected)"
+  # --- new in version 2.1: the fatal forms -------------------------------------------------------
+  recovery_inhibition: "vssadmin(\\.exe)?\\s+delete\\s+shadows|wmic(\\.exe)?\\s+shadowcopy\\s+delete|wbadmin(\\.exe)?\\s+delete\\s+(catalog|systemstatebackup)|bcdedit(\\.exe)?\\s.*recoveryenabled\\s+no|shadow cop(y|ies) (deleted|delete)"
+  storage_fatal: "ext[234]-fs error|shutting down filesystem|xfs_do_force_shutdown|filesystem (has been )?shut ?down|remount(ing|ed)? (filesystem )?read-only|journal (has )?abort(ed)?"
+  hardware_fatal: "event severity: fatal|uncorrect(ed|able) (machine check|memory error|ecc)|machine check exception|\\[hardware error\\][^.]*fatal"
+  redundancy_lost: "no redundancy|redundancy (lost|degraded|is lost)|replication (broken|failed|stopped|halted|error)|(raid|array|mirror)[^.]*degraded|degraded (raid|array|mirror)|under-?replicated|insufficient (replicas|redundancy)"
 
 sources:
   crash: ["Linux kernel oops and panic messages", "Kubernetes container states (CrashLoopBackOff)"]
@@ -60,8 +68,12 @@ sources:
   tls: ["X.509 (RFC 5280) validation failures", "TLS 1.3 handshake alerts (RFC 8446)"]
   dns: ["DNS response codes NXDOMAIN and SERVFAIL (RFC 1035, RFC 8914)", "getaddrinfo EAI_AGAIN"]
   control_plane: ["etcd server errors", "Kubernetes API server and leader-election messages"]
-  backup: ["MITRE ATT&CK T1490 Inhibit System Recovery", "database replication status messages"]
+  backup: ["NIST SP 800-61: backup and restore failures", "GitLab.com's January 2017 database post-mortem"]
   payment: ["Payment-provider idempotency and duplicate-charge errors", "ledger reconciliation reports"]
   freshness: ["Replication-lag and schema-drift messages in data pipelines"]
   signin: ["Identity-provider and OAuth 2.0 error responses (RFC 6749)"]
   exfiltration: ["MITRE ATT&CK TA0010 Exfiltration", "MITRE ATT&CK TA0011 Command and Control"]
+  recovery_inhibition: ["MITRE ATT&CK T1490 Inhibit System Recovery: vssadmin, wmic, wbadmin and bcdedit"]
+  storage_fatal: ["Linux ext4 and XFS error and shutdown messages", "Kubernetes node-problem-detector kernel monitor"]
+  hardware_fatal: ["UEFI CPER event severity (fatal, not corrected)", "Linux machine-check exceptions"]
+  redundancy_lost: ["PagerDuty severity levels: no redundancy left", "database replication and RAID status messages", "HDFS under-replicated blocks"]

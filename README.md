@@ -150,8 +150,15 @@ it and checks the console reads it back. `make down` stops it.
    uv run aria providers check gemini
    ```
 
-Every agent role now tries Gemini first: `gemini-3.6-flash`, then `gemini-3.5-flash-lite` when
-the first is busy or reaches its limit, then hosted NIM if its key is set. On the free tier,
+The one key serves a pool of Gemini models, each kept inside its own limits: the strongest leads
+the investigation and the report, and the lighter ones, with larger daily limits, take the critic,
+the message drafts and Ask ARIA. Before each call ARIA checks that model's requests a minute,
+tokens a minute and requests a day, and gives the call to the best model with room; a triage
+reserves its calls before it starts, and when no model has room it is written offline with a note
+saying when the model is back. Copy your key's real limits from AI Studio into `GEMINI_RPM`,
+`GEMINI_TPM` and `GEMINI_RPD` and their `GEMINI_LITE_*`, `GEMINI_LITE_2_*` and `GEMMA_*` twins
+([how](docs/deploy-free.md#keep-your-gemini-key-inside-its-limits);
+[ADR 0016](docs/adr/0016-keep-each-model-on-a-shared-key-inside-its-own-limits.md)). On the free tier,
 Google may use what it is sent to improve its products. ARIA sends only redacted, fenced
 evidence, but use a paid key, a self-hosted NIM or offline mode where even that is not
 acceptable.
@@ -248,17 +255,21 @@ optional content-safety check (`guardrails.safety_model`, off by default) asks
 
 | Step | What it does | Why |
 |---|---|---|
-| Rules | Scoring rules read component criticality, bursts and fatal markers; five floors (data risk, a crashing critical component, a critical alert, a power-supply fault, unfinished work) set a minimum | Transparent: a known-bad pattern is never rated below its floor (SEV2 or SEV3) |
-| Calibrated model | Linear model on window features, temperature-calibrated | Probabilities that mean what they say |
-| Conformal set | Split-conformal (LAC) set at alpha 0.10 | A label set that holds the true severity about 90% of the time on data like the calibration windows (exchangeable), less under a shift |
+| Rules | Scoring rules read bursts, spread, component criticality and keyword families drawn from open vocabularies (gRPC and HTTP status codes, Kubernetes reasons, PostgreSQL SQLSTATE, Linux errno, MITRE ATT&CK). SEV1 needs two kinds of impact to agree, such as an outage and how far it spreads. Floors set a minimum for data at risk, a crashing critical component, a critical alert, a power fault, payment errors, deleted backups, failing backups, lost redundancy, filesystem shutdowns, fatal hardware and unfinished work | Transparent: a known-bad pattern is never rated below its floor (SEV2 or SEV3) |
+| Calibrated model | A linear model on the window's features, temperature-calibrated | Probabilities that mean what they say |
+| Novelty check | A window unlike anything in training (too far from the training data, too many new patterns, or a system the model never saw) goes to a person | The model never extrapolates quietly |
+| Conformal set | One threshold per level, with a tighter promise for SEV1 and SEV2 than for SEV3 and SEV4, sets kept in order, and a certified limit on how often a serious incident is ruled out | The promise holds for each level, not just on average |
 | LLM adjudication | Chooses only between labels already in the set | The LLM cannot invent a severity the evidence rules out |
-| Policy | One label decides alone; otherwise the most severe label in the set, flagged for review | Over-triage beats under-triage when unsure |
+| Policy | One label decides alone; otherwise the most severe label in the set, flagged for review with the reasons | Over-triage beats under-triage when unsure |
 
-Reviewer corrections feed recalibration: `aria train recalibrate` (and a background job, every
-`severity.recalibrate_check_s`) re-fits only the conformal threshold once
-`severity.recalibrate_after` new reviews have gathered. It writes `<version>-recal<n>`, keeps the
-previous file, and running engines reload it. The [model card](docs/model-card.md) has the
-details.
+Blind checks recalibrate it. In Settings, "Check ARIA blind" shows a recent incident without
+ARIA's verdict; the person rates it first, so the rating is not anchored on ARIA's. Each check
+nudges that level's promise in arrival order (adaptive conformal inference), and every 100
+checks of a level replace its calibration with the checks' own. Approvals no longer count,
+because a person approving a report tends to agree with it. A drift monitor compares each
+system's recent mix of levels with its earlier one and says when it has shifted. The
+[model card](docs/model-card.md) and [ADR 0014](docs/adr/0014-promise-coverage-per-level-and-send-unfamiliar-windows-to-a-person.md)
+have the details.
 
 ## Safety controls
 

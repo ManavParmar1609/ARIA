@@ -24,7 +24,7 @@
 # or with no level), n_critical_components, alerts.firing, alerts.critical and alerts.warning.
 # Unknown feature names fail at load time.
 
-version: "2026.11.1"
+version: "2026.11.2"
 
 # A severity is decided without the LLM only when the prediction set is a single class and the
 # calibrated model gives it at least this probability.
@@ -319,19 +319,43 @@ rules:
     weight: 2.0
     when: {feature: issue_keyword_hits.exfiltration, op: ">=", value: 1}
 
+  - id: recovery_inhibition_attack
+    title: Backups deleted alongside security alerts, as ransomware prepares
+    effect: score
+    severity: SEV1
+    weight: 2.5
+    dimensions: [security, integrity]
+    when:
+      all:
+        - {feature: keyword_hits.recovery_inhibition, op: ">=", value: 1}
+        - {feature: keyword_hits.security, op: ">=", value: 1}
+
+  - id: storage_fatal_spread
+    title: Filesystems shutting down on two or more nodes
+    effect: score
+    severity: SEV2
+    weight: 2.0
+    when:
+      all:
+        - {feature: issue_keyword_hits.storage_fatal, op: ">=", value: 1}
+        - {feature: error_nodes, op: ">=", value: 2}
+
+  - id: hardware_fatal_spread
+    title: Fatal hardware errors on two or more nodes
+    effect: score
+    severity: SEV2
+    weight: 2.0
+    when:
+      all:
+        - {feature: issue_keyword_hits.hardware_fatal, op: ">=", value: 1}
+        - {feature: error_nodes, op: ">=", value: 2}
+
   - id: signin_outage
     title: Sign-in or identity services failing, so people cannot log in
     effect: score
     severity: SEV2
     weight: 1.5
     when: {feature: issue_keyword_hits.signin, op: ">=", value: 3}
-
-  - id: backup_failures
-    title: Backups, snapshots or replication failing
-    effect: score
-    severity: SEV3
-    weight: 1.0
-    when: {feature: issue_keyword_hits.backup, op: ">=", value: 1}
 
   - id: stale_data
     title: Data reported stale, lagging or out of schema
@@ -393,13 +417,42 @@ rules:
     severity: SEV2
     when: {feature: issue_keyword_hits.payment, op: ">=", value: 1}
 
-  # Recovery being disabled next to security signals is how ransomware prepares (MITRE ATT&CK
-  # T1490 Inhibit System Recovery).
-  - id: recovery_inhibited_floor
-    title: Backups or shadow copies removed alongside security alerts
+  # Deleting shadow copies or the backup catalog is how ransomware makes sure there is nothing to
+  # restore (MITRE ATT&CK T1490). These commands show up as routine process events, so every line
+  # counts. With security signals beside them they are an attack in progress (see
+  # recovery_inhibition_attack).
+  - id: recovery_inhibition_floor
+    title: Commands that delete backups or shadow copies were run
     effect: floor
     severity: SEV2
-    when:
-      all:
-        - {feature: keyword_hits.backup, op: ">=", value: 1}
-        - {feature: keyword_hits.security, op: ">=", value: 1}
+    when: {feature: keyword_hits.recovery_inhibition, op: ">=", value: 1}
+
+  # Backups that fail leave nothing to restore when the next incident comes (NIST SP 800-61;
+  # GitLab.com's 2017 database outage). Someone should look, but nothing is down yet.
+  - id: backups_failing_floor
+    title: Backups, snapshots or restores failing
+    effect: floor
+    severity: SEV3
+    when: {feature: issue_keyword_hits.backup, op: ">=", value: 1}
+
+  # One more failure and the service is down (PagerDuty rates "no redundancy" above a single
+  # failed node).
+  - id: redundancy_lost_floor
+    title: Redundancy is gone, so one more failure means an outage
+    effect: floor
+    severity: SEV3
+    when: {feature: issue_keyword_hits.redundancy_lost, op: ">=", value: 1}
+
+  # A filesystem that shut itself down, or a hardware event the firmware calls fatal, has lost a
+  # node's function, unlike the generic words in storage and hardware.
+  - id: storage_fatal_floor
+    title: A filesystem shut itself down or went read-only after an error
+    effect: floor
+    severity: SEV3
+    when: {feature: issue_keyword_hits.storage_fatal, op: ">=", value: 1}
+
+  - id: hardware_fatal_floor
+    title: Hardware reported a fatal error
+    effect: floor
+    severity: SEV3
+    when: {feature: issue_keyword_hits.hardware_fatal, op: ">=", value: 1}
