@@ -66,7 +66,7 @@ from aria.severity.model import LinearModel
 from aria.severity.rules import load_rules
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "loghub"
-RULES = load_rules(Path("config/severity_rules.yaml"))
+RULES = load_rules(Path(__file__).resolve().parents[2] / "config" / "severity_rules.yaml")
 SHARED = settings(
     deadline=None,
     suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.too_slow],
