@@ -143,6 +143,27 @@ PATTERNS: tuple[_Pattern, ...] = (
 )
 
 _ZERO_WIDTH = dict.fromkeys(map(ord, "\u200b‌‍⁠﻿"))
+# Letters borrowed from another script that look like Latin ones, folded to the letter the eye
+# (and a model) reads: the Latin confusables of Unicode TR39 for Cyrillic and Greek, plus a few
+# Latin letters drawn without their dot or in another shape. NFKC leaves these alone, so without
+# the fold a line written with them is a different string to the guard and the same line to a
+# reader. The stored line is never changed: only what the guard scans is folded.
+_LOOK_ALIKES = {
+    # Cyrillic
+    "а": "a", "ԁ": "d", "е": "e", "һ": "h", "і": "i", "ј": "j", "о": "o", "р": "p", "ԛ": "q",
+    "ѕ": "s", "у": "y", "ѵ": "v", "ԝ": "w", "с": "c", "х": "x", "ӏ": "l",
+    "А": "A", "В": "B", "Ԁ": "D", "Е": "E", "Н": "H", "І": "I", "Ј": "J", "К": "K", "М": "M",
+    "О": "O", "Р": "P", "Ԛ": "Q", "Ѕ": "S", "Т": "T", "У": "Y", "Ү": "Y", "Ԝ": "W", "С": "C",
+    "Х": "X", "Ӏ": "I",
+    # Greek
+    "α": "a", "ϲ": "c", "ι": "i", "ϳ": "j", "κ": "k", "ν": "v", "ο": "o", "ρ": "p", "τ": "t",
+    "υ": "u", "γ": "y",
+    "Α": "A", "Β": "B", "Ε": "E", "Ζ": "Z", "Η": "H", "Ι": "I", "Κ": "K", "Μ": "M", "Ν": "N",
+    "Ο": "O", "Ρ": "P", "Τ": "T", "Υ": "Y", "Χ": "X",
+    # Latin letters without their dot, or in another shape
+    "ı": "i", "ȷ": "j", "ɡ": "g",
+}  # fmt: skip
+_FOLD: dict[int, str | None] = {**_ZERO_WIDTH, **str.maketrans(_LOOK_ALIKES)}
 _URL_ENCODED = re.compile(r"%[0-9A-Fa-f]{2}|\w\+\w")
 _LEET_TOKEN = re.compile(r"[a-z][0-9@$]|[0-9@$][a-z]")
 _LEET = str.maketrans("0134578@$", "oieastbas")
@@ -150,8 +171,9 @@ _BASE64 = re.compile(r"[A-Za-z0-9+/]{16,}={0,2}")
 
 
 def normalize_for_detection(text: str) -> str:
-    """Undo common evasion: zero-width characters, full-width forms and spacing tricks."""
-    text = unicodedata.normalize("NFKC", text).translate(_ZERO_WIDTH)
+    """Undo common evasion: zero-width characters, full-width forms, letters from other scripts
+    that look like Latin ones, and spacing tricks."""
+    text = unicodedata.normalize("NFKC", text).translate(_FOLD)
     return re.sub(r"\s+", " ", text)
 
 
