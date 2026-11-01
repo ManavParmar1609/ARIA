@@ -318,9 +318,10 @@ def _jira(s: Mapping[str, Any]) -> list[str]:
         title,
         "",
         (
-            f"{s['test_tickets']:,} recent issues from public Jira instances, scored against the "
-            f"priority people set; the {s['reference_tickets']:,} older issues of each instance "
-            f"set the simple baselines. Source: {s['source']}; {s['citation']} ARIA's ticket "
+            f"{s['test_tickets']:,} recent issues from public Jira instances (the newest 30% of "
+            "each), scored against the priority people set; the other "
+            f"{s['reference_tickets']:,} set the simple baselines. Source: {s['source']}; "
+            f"{s['citation']} ARIA's ticket "
             "model was trained on one company's ServiceNow desk and reads a ticket's category, "
             "subcategory, configuration item and open time; Jira has no impact or urgency, so the "
             "model, not the impact x urgency matrix, decides every ticket. Urgent means levels "
