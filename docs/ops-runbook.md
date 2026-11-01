@@ -492,7 +492,7 @@ It answers 409 while the run is queued or running. Nothing deletes old runs auto
 
 ARIA keeps every run until someone deletes it. Nothing is deleted automatically unless you set a retention period.
 
-**Set a period.** Set `ARIA_RETENTION_DAYS` (`retention.days` in `config/aria.yaml`) to the number of days to keep a run after the last thing that happened to it: it was created, paused for review, was reviewed, had a message sent again, or someone rated it blind. Where the EU AI Act's Article 26(6) applies, keep runs at least six months (see [ARIA and the EU AI Act](eu-ai-act.md)).
+**Set a period.** Set `ARIA_RETENTION_DAYS` (`retention.days` in `config/aria.yaml`) to the number of days to keep a run after the last thing that happened to it: it was created, paused for review, was reviewed, had a message sent again, gained an event in its log, or someone rated it blind. Where the EU AI Act's Article 26(6) applies, keep runs at least six months (see [ARIA and the EU AI Act](eu-ai-act.md)).
 
 **Count first.** This prints how many runs are past the period and how many rows of each kind a purge would delete, and deletes nothing:
 

@@ -122,6 +122,7 @@ def age(env: Env, run_id: str, by: timedelta = OLD) -> None:
     then = utcnow() - by
     with session_scope(env.engine) as session:
         session.execute(update(RunRow).where(RunRow.id == run_id).values(updated_at=then))
+        session.execute(update(RunEventRow).where(RunEventRow.run_id == run_id).values(ts=then))
         session.execute(
             update(FeedbackRow).where(FeedbackRow.run_id == run_id).values(created_at=then)
         )
@@ -257,12 +258,15 @@ async def test_runs_at_work_held_or_touched_within_the_period_are_kept(env: Env)
     repo.save_feedback(engine, rated, "blind_check", {"to": "SEV2"}, author="raj")  # rated today
     recent = await published(env, seed=11)
     age(env, recent, timedelta(days=29))
+    logged = (await env.runner.start(kernel_panic(env, seed=12))).run_id
+    age(env, logged)
+    repo.append_event(engine, logged, "guardrail", node="scan", payload={"quarantined": 1})
 
     result = retention.purge(engine, days=30)
 
     assert result.runs == []
     assert result.busy == [busy]
-    for run_id in (queued, busy, rated, recent):
+    for run_id in (queued, busy, rated, recent, logged):
         assert repo.get_run(engine, run_id) is not None
     repo.release_run(engine, busy, "another-process")
     age(env, busy)

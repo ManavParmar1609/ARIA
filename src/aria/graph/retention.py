@@ -6,16 +6,16 @@ happened to it for the whole period:
 
 * its last change (``runs.updated_at``: it was created, paused for review, was reviewed, or had a
   message sent again) is older than the cutoff;
+* nothing joined its event log since the cutoff, whatever the kind of event;
 * no one has reviewed it or rated it blind since the cutoff;
 * it is not queued or running, and no process holds it right then. A run that is held is left
   for the next purge.
 
 Each run goes in a transaction of its own (``purge_run``). What a run owns is written down once,
 in ``owned``, for the purge and for deleting one run by hand. Rows go children first, so every
-foreign key holds whether or not the database cascades.
-Runbooks, the incidents memory was seeded with, the routine log templates ARIA learned from many
-runs, datasets, evaluation runs and other runs (copies of a purged run included) are never
-touched.
+foreign key holds whether or not the database cascades. Runbooks, the incidents memory was seeded
+with, the routine log templates ARIA learned from many runs, datasets, evaluation runs and other
+runs (copies of a purged run included) are never touched.
 """
 
 from __future__ import annotations
@@ -173,13 +173,25 @@ def _run(session: Session, statement: Any) -> int:
 
 
 def _expired(cutoff: datetime) -> ColumnElement[bool]:
-    """Runs nothing has happened to since ``cutoff`` that are not queued or running."""
+    """Runs nothing has happened to since ``cutoff`` that are not queued or running: no change
+    to the run, no event in its log (a burst the scan added to it, a message sent again) and no
+    review or blind check."""
+    logged_since = (
+        select(RunEventRow.id)
+        .where(RunEventRow.run_id == RunRow.id, RunEventRow.ts >= cutoff)
+        .exists()
+    )
     reviewed_since = (
         select(FeedbackRow.id)
         .where(FeedbackRow.run_id == RunRow.id, FeedbackRow.created_at >= cutoff)
         .exists()
     )
-    return and_(RunRow.updated_at < cutoff, RunRow.status.not_in(ACTIVE), ~reviewed_since)
+    return and_(
+        RunRow.updated_at < cutoff,
+        RunRow.status.not_in(ACTIVE),
+        ~logged_since,
+        ~reviewed_since,
+    )
 
 
 def _free(now: datetime) -> ColumnElement[bool]:
