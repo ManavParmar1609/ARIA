@@ -10,8 +10,9 @@ happened to it for the whole period:
 * it is not queued or running, and no process holds it right then. A run that is held is left
   for the next purge.
 
-What a run owns is written down once, in ``owned``, for the purge and for deleting one run by
-hand. Rows go children first, so every foreign key holds whether or not the database cascades.
+Each run goes in a transaction of its own (``purge_run``). What a run owns is written down once,
+in ``owned``, for the purge and for deleting one run by hand. Rows go children first, so every
+foreign key holds whether or not the database cascades.
 Runbooks, the incidents memory was seeded with, the routine log templates ARIA learned from many
 runs, datasets, evaluation runs and other runs (copies of a purged run included) are never
 touched.
@@ -55,8 +56,8 @@ from aria.db.repository import CLAIM_STALE_S
 from aria.retrieval.memory import run_incident_id
 from aria.retrieval.runlog import RUN_DATASET
 
-# Runs a purge reads and deletes at once: few enough that every list of ids it sends stays well
-# inside SQL Server's 2,100 parameters to a statement.
+# Runs a purge reads, or a dry run counts, at once: few enough that every list of ids it sends
+# stays well inside SQL Server's 2,100 parameters to a statement. It deletes them one by one.
 BATCH = 200
 # What a purge leaves in place of the newest feedback row when that row was a purged run's.
 RETIRED = "retired"
@@ -210,30 +211,24 @@ def expired_runs(
         return [(moment, str(run_id)) for moment, run_id in rows]
 
 
-def purge_batch(
-    engine: Engine, run_ids: Sequence[str], cutoff: datetime, owner: str
-) -> tuple[list[str], dict[str, int]]:
-    """Take the runs among ``run_ids`` that are still past ``cutoff`` and free, and delete them
-    with everything they own, in one transaction: either all of it goes or none of it does.
+def purge_run(engine: Engine, run_id: str, cutoff: datetime, owner: str) -> dict[str, int] | None:
+    """Take the run if it is still past ``cutoff`` and free, and delete it with everything it
+    owns, in one transaction: either all of it goes or none of it does.
 
-    Returns the runs deleted and how many rows of each kind went. A review or a drive that comes
-    for one of them meanwhile waits for the transaction, then finds no run.
+    Returns how many rows of each kind went, or None when the run was not taken (a process holds
+    it, or something happened to it meanwhile). A review or a drive that comes for it meanwhile
+    waits for the transaction, then finds no run. One run at a time keeps each transaction as
+    short as deleting one run by hand, so a purge never holds a SQLite database for long.
     """
     now = utcnow()
     with session_scope(engine) as session:
-        _run(
+        taken = _run(
             session,
             update(RunRow)
-            .where(RunRow.id.in_(list(run_ids)), _expired(cutoff), _free(now))
+            .where(RunRow.id == run_id, _expired(cutoff), _free(now))
             .values(claimed_by=owner, claimed_at=now),
         )
-        taken = list(
-            session.scalars(
-                select(RunRow.id).where(RunRow.id.in_(list(run_ids)), RunRow.claimed_by == owner)
-            )
-        )
-        counts = delete_owned(session, taken) if taken else {}
-    return taken, counts
+        return delete_owned(session, [run_id]) if taken == 1 else None
 
 
 @dataclass
@@ -282,9 +277,11 @@ def purge(
                 result.add(count_owned(session, ids))
             result.runs.extend(ids)
             continue
-        taken, counts = purge_batch(engine, ids, cutoff, owner)
-        result.add(counts)
-        result.runs.extend(taken)
-        gone = set(taken)
-        result.busy.extend(run_id for run_id in ids if run_id not in gone)
+        for run_id in ids:
+            counts = purge_run(engine, run_id, cutoff, owner)
+            if counts is None:
+                result.busy.append(run_id)
+            else:
+                result.add(counts)
+                result.runs.append(run_id)
     return result
