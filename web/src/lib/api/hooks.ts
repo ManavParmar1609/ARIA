@@ -30,6 +30,7 @@ import type {
 import type { components } from "./schema";
 
 export type SettingsView = components["schemas"]["SettingsOut"];
+export type CapacityView = components["schemas"]["CapacityOut"];
 export type FeedbackView = components["schemas"]["FeedbackOut"];
 export type RealIncident = components["schemas"]["RealIncidentOut"];
 export type ReplayRequest = components["schemas"]["ReplayRequest"];
@@ -53,6 +54,7 @@ export const keys = {
   runbooks: ["runbooks"] as const,
   runbook: (slug: string) => ["runbooks", slug] as const,
   providers: ["providers"] as const,
+  capacity: ["capacity"] as const,
   settings: ["settings"] as const,
   feedback: ["feedback"] as const,
   blindCheck: ["blind-check"] as const,
@@ -262,6 +264,15 @@ export function useSettingsView() {
     queryKey: keys.settings,
     queryFn: () => apiFetch<SettingsView>(v1("/settings")),
     staleTime: 60_000,
+  });
+}
+
+/** The shared models' room now: each one's minute and day, and when the day starts again. */
+export function useCapacity() {
+  return useQuery({
+    queryKey: keys.capacity,
+    queryFn: () => apiFetch<CapacityView>(v1("/llm/capacity")),
+    refetchInterval: 30_000,
   });
 }
 

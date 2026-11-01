@@ -138,14 +138,54 @@ def test_gemini_comes_after_a_self_hosted_nim_and_before_hosted_nim(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     llm = get_app_config().llm
-    assert all(chain[1:3] == ["gemini", "gemini-lite"] for chain in llm.routing.values())
-    assert all(chain.index("gemini-lite") < chain.index("nim") for chain in llm.routing.values())
+    pool = {"gemini", "gemini-lite", "gemini-lite-2", "gemma"}
+    assert all(set(chain[1:5]) == pool for chain in llm.routing.values())
+    assert all(
+        chain.index(name) < chain.index("nim") for chain in llm.routing.values() for name in pool
+    )
+    # Where quality matters the quality model leads; light work leads with the lite models.
+    for role in ("adjudicator", "investigator", "reporter"):
+        assert llm.routing[role][1] == "gemini"
+    for role in ("comms", "critic", "ask"):
+        assert llm.routing[role][1:4] == ["gemini-lite", "gemini-lite-2", "gemma"]
     assert not llm.providers["gemini"].is_enabled()  # no Gemini key in tests
     monkeypatch.setenv("gemini_api_key", "AIza-test")
     reset_caches()
     providers = get_app_config().llm.providers
-    assert providers["gemini"].is_enabled()
-    assert providers["gemini-lite"].is_enabled()
+    assert all(providers[name].is_enabled() for name in pool)  # one key for the whole pool
+
+
+def test_every_model_in_the_gemini_pool_has_limits_the_owner_can_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    llm = get_app_config().llm
+    for name in ("gemini", "gemini-lite", "gemini-lite-2", "gemma"):
+        limits = llm.providers[name].limits
+        assert limits is not None
+        assert None not in (limits.rpm, limits.tpm, limits.rpd)
+    assert not llm.providers["gemini-lite-2"].verified  # new ids wait for a live check
+    assert not llm.providers["gemma"].verified
+    assert llm.providers["gemma"].structured_output.value == "prompt"
+    monkeypatch.setenv("GEMINI_RPD", "1500")
+    monkeypatch.setenv("GEMMA_TPM", "none")
+    reset_caches()
+    providers = get_app_config().llm.providers
+    assert providers["gemini"].limits is not None
+    assert providers["gemini"].limits.rpd == 1500
+    assert providers["gemma"].limits is not None
+    assert providers["gemma"].limits.tpm is None  # "none" lifts a limit
+
+
+def test_limits_and_quota_settings_are_validated() -> None:
+    from aria.config import ProviderLimits, QuotaConfig
+
+    with pytest.raises(ValidationError):
+        ProviderLimits(rpm=-1)
+    assert ProviderLimits(rpd=0).rpd == 0  # a model with no quota at all
+    with pytest.raises(ValidationError):
+        QuotaConfig(margin=1.0)
+    with pytest.raises(ValidationError):
+        QuotaConfig(timezone="Mars/Olympus_Mons")
 
 
 def test_a_self_hosted_nim_leads_every_chain_once_configured(

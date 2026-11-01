@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import math
 import os
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -13,11 +14,22 @@ from sqlalchemy import text
 from aria import __version__
 from aria.api.keys import VisitorKeyDep, accepted_kinds
 from aria.api.metrics import CONTENT_TYPE
-from aria.api.schemas import Health, Me, ModelKeyCheck, ProviderOut, SettingsOut, SharedModelOut
+from aria.api.schemas import (
+    CapacityOut,
+    Health,
+    Me,
+    ModelKeyCheck,
+    ProviderCapacityOut,
+    ProviderLimitsOut,
+    ProviderOut,
+    SettingsOut,
+    SharedModelOut,
+)
 from aria.api.security import Principal
 from aria.api.state import AppState, app_state, current_principal
 from aria.api.visitors import ViewerDep
 from aria.db.engine import session_scope
+from aria.graph.workflow import expected_llm_calls
 from aria.llm.base import Message, ProviderError
 from aria.notify import channel_env
 
@@ -91,6 +103,57 @@ async def providers(state: State) -> list[ProviderOut]:
     ]
 
 
+def _moment(epoch: float | None) -> datetime | None:
+    return datetime.fromtimestamp(epoch, UTC) if epoch is not None else None
+
+
+@router.get("/api/v1/llm/capacity", response_model=CapacityOut)
+async def capacity(state: State) -> CapacityOut:
+    """The shared models' room now: for each provider with limits (``limits`` in
+    config/aria.yaml), the requests and tokens left this minute and the requests left today,
+    any rest after a refusal, and when the day starts again. Counts and times only, never a key."""
+    services = state.services
+    router, quota = services.router, services.config.llm.quota
+    # Counting the runs left walks the day's requests run by run: off the event loop.
+    pool = await asyncio.to_thread(router.capacity, expected_llm_calls(services.config))
+    providers = []
+    for room in pool.providers:
+        cfg = services.config.llm.providers.get(room.provider)
+        lim = room.limits
+        providers.append(
+            ProviderCapacityOut(
+                name=room.provider,
+                model=cfg.chat_model if cfg is not None else None,
+                set_up=router.is_set_up(room.provider),
+                limits=ProviderLimitsOut(
+                    requests_per_minute=lim.rpm,
+                    tokens_per_minute=lim.tpm,
+                    requests_per_day=lim.rpd,
+                )
+                if lim is not None
+                else None,
+                minute_requests_left=room.minute_requests_left,
+                minute_tokens_left=room.minute_tokens_left,
+                day_requests_left=room.day_requests_left,
+                day_requests_used=room.day_requests_used,
+                day_requests_reserved=room.day_requests_reserved,
+                minute_resets_at=_moment(room.minute_resets_at),
+                held_until=_moment(room.held_until),
+                held_because=room.held_because,
+            )
+        )
+    reset = _moment(pool.next_reset)
+    assert reset is not None  # noqa: S101 - always a moment
+    return CapacityOut(
+        timezone=quota.timezone,
+        margin=quota.margin,
+        day_resets_at=reset,
+        runs_left_today=pool.runs_left,
+        back_at=_moment(pool.back_at),
+        providers=providers,
+    )
+
+
 @router.get("/api/v1/me", response_model=Me)
 async def me(state: State, caller: Caller) -> Me:
     """The caller's key name, and whether this API needs a key at all."""
@@ -105,10 +168,14 @@ async def settings_view(state: State, viewer: ViewerDep) -> SettingsOut:
     share today of the server's own model. No secrets."""
     settings, config = state.services.settings, state.services.config
     shared = None
-    if state.services.router.has_real_llm("reporter"):
+    router = state.services.router
+    if router.has_real_llm("reporter"):
         share = state.allowance.check(viewer.tag or "all")
         shared = SharedModelOut(
-            left=share.left, per_visitor=share.per_visitor, per_day=share.per_day
+            left=share.left,
+            per_visitor=share.per_visitor,
+            per_day=share.per_day,
+            back_at=_moment(router.run_back_at(expected_llm_calls(config))),
         )
     return SettingsOut(
         environment=str(settings.env),

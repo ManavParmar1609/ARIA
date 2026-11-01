@@ -1,14 +1,22 @@
 """One HTTP client for every OpenAI-compatible endpoint: NIM, Azure OpenAI, Gemini, OpenAI, vLLM.
 
 Differences between providers are confined to URL construction, authentication, and how JSON
-output is requested. If a provider rejects the configured structured-output mode, the client
-steps down (json_schema -> guided_json -> json_object -> prompt) and remembers what worked.
+output is requested. Each ``chat`` sends exactly one request, so the router can count every
+request against the provider's limits (aria.llm.quota) before it goes:
+
+* A failed request is not retried here. The router hands the call to the next provider, ARIA's
+  one retry layer, and a refusal for a limit (HTTP 429) is classified (aria.llm.ratelimit) so the
+  router rests the provider for as long as the limit lasts.
+* If a provider rejects the configured structured-output mode, the client steps down
+  (json_schema -> guided_json -> json_object -> prompt), remembers what it will try next, and
+  raises with ``resend`` set: the router admits the same request again in the new mode.
+* A reply cut short by ``max_tokens`` says so (``Usage.finish_reason == "length"``), and a model
+  that declines (a refusal or a content filter) raises with ``refused`` set.
 """
 
 from __future__ import annotations
 
 import asyncio
-import email.utils
 import json
 import re
 import time
@@ -17,15 +25,10 @@ from typing import Any, Literal
 
 import httpx
 from pydantic import SecretStr
-from tenacity import (
-    AsyncRetrying,
-    retry_if_exception,
-    stop_after_attempt,
-    wait_exponential_jitter,
-)
 
 from aria.config import ProviderConfig, ProviderKind, StructuredOutputMode
 from aria.llm.base import Message, ProviderError, TokenCallback, Usage, estimate_tokens
+from aria.llm.ratelimit import classify, retry_after_seconds
 
 _AZURE_SCOPE = "https://cognitiveservices.azure.com/.default"
 _STEP_DOWN = {
@@ -33,32 +36,40 @@ _STEP_DOWN = {
     StructuredOutputMode.GUIDED_JSON: StructuredOutputMode.JSON_OBJECT,
     StructuredOutputMode.JSON_OBJECT: StructuredOutputMode.PROMPT,
 }
+# A 400 or 422 that names how JSON was asked for: step down. Any other is a plain failure, so a
+# request the provider refuses for another reason is not sent three more times.
+_SCHEMA_WORDS = re.compile(
+    r"response_format|json_schema|schema|guided_json|nvext|json[ _]mode|json_object|"
+    r"structured output|response_mime_type",
+    re.IGNORECASE,
+)
+# Finish reasons that mean the reply was withheld: OpenAI's and, lower-cased, Gemini's own.
+_REFUSALS = frozenset(
+    {"content_filter", "refusal", "safety", "prohibited_content", "recitation", "blocklist", "spii"}
+)
 
 
-def _retryable(exc: BaseException) -> bool:
-    return isinstance(exc, ProviderError) and exc.retryable
+def _stop(reason: Any) -> str | None:
+    """A provider's finish reason in ARIA's words: "length" when the reply ran out of tokens."""
+    if not reason:
+        return None
+    reason = str(reason).lower()
+    return "length" if reason in ("length", "max_tokens") else reason
 
 
-# Longer than this and a retry inside the call would only hit the same limit (tenacity's backoff
-# tops out at 8 s), so the router fails over and keeps its breaker open for the wait instead.
-_MAX_WAIT_IN_CALL_S = 8.0
-_RETRY_DELAY = re.compile(r'"retryDelay":\s*"(\d+(?:\.\d+)?)s"')
-
-
-def _retry_after(response: httpx.Response, body: str) -> float | None:
-    """How long the provider asked callers to wait: Retry-After, or Gemini's RetryInfo."""
-    header = response.headers.get("retry-after", "").strip()
-    if header.replace(".", "", 1).isdigit():
-        return float(header)
-    if header:
-        try:
-            when = email.utils.parsedate_to_datetime(header)
-        except (TypeError, ValueError):
-            when = None
-        if when is not None:
-            return max(0.0, when.timestamp() - time.time())
-    match = _RETRY_DELAY.search(body)
-    return float(match.group(1)) if match else None
+def _merge_system(messages: list[dict[str, str]]) -> list[dict[str, str]]:
+    """The conversation with its system messages folded into the first user message, for a
+    model that refuses the system role."""
+    system = [m["content"] for m in messages if m["role"] == "system"]
+    turns = [dict(m) for m in messages if m["role"] != "system"]
+    if not system:
+        return turns
+    preface = "\n\n".join(system)
+    for turn in turns:
+        if turn["role"] == "user":
+            turn["content"] = f"{preface}\n\n{turn['content']}"
+            return turns
+    return [{"role": "user", "content": preface}, *turns]
 
 
 class OpenAICompatibleProvider:
@@ -155,7 +166,7 @@ class OpenAICompatibleProvider:
             response = await self._client.send(request, stream=stream)
         except httpx.TimeoutException as exc:
             # A provider that is too slow now will likely stay slow for the next attempt too,
-            # so the router fails over at once instead of retrying here.
+            # so the router fails over at once.
             raise ProviderError(
                 self._scrub(f"{self.name}: {type(exc).__name__}: {exc}"), timed_out=True
             ) from exc
@@ -164,19 +175,27 @@ class OpenAICompatibleProvider:
                 self._scrub(f"{self.name}: {type(exc).__name__}: {exc}"), retryable=True
             ) from exc
         if response.status_code >= 400:
-            raw = self._scrub((await response.aread()).decode(errors="replace"))
-            await response.aclose()
-            wait = _retry_after(response, raw)
-            retryable = response.status_code in (408, 409, 429) or response.status_code >= 500
-            if wait is not None and wait > _MAX_WAIT_IN_CALL_S:
-                retryable = False
-            raise ProviderError(
-                f"{self.name}: HTTP {response.status_code}: {raw[:500]}",
-                status=response.status_code,
-                retryable=retryable,
-                retry_after=wait,
-            )
+            raise await self._refusal(response)
         return response
+
+    async def _refusal(self, response: httpx.Response) -> ProviderError:
+        """A failed response as the router's error: what the provider said, whether another
+        provider might do better, and which limit it names, if any."""
+        status = response.status_code
+        try:
+            raw = self._scrub((await response.aread()).decode(errors="replace"))
+        except httpx.HTTPError as exc:  # the body broke off: the status still says enough
+            raw = f"(body unreadable: {type(exc).__name__})"
+        finally:
+            await response.aclose()
+        now = time.time()
+        return ProviderError(
+            f"{self.name}: HTTP {status}: {raw[:500]}",
+            status=status,
+            retryable=status in (408, 409, 429) or status >= 500,
+            retry_after=retry_after_seconds(response.headers, raw, now=now),
+            limit=classify(status, raw, response.headers, now=now),
+        )
 
     # --- chat ----------------------------------------------------------------------------------
 
@@ -220,14 +239,19 @@ class OpenAICompatibleProvider:
                     json_schema
                 )
                 msgs.append({"role": "system", "content": hint})
+        if self.config.system_messages == "merge":
+            payload["messages"] = _merge_system(msgs)
         payload.update(self.config.extra_body)
         return payload
 
     async def _read_stream(
         self, response: httpx.Response, on_token: TokenCallback | None
-    ) -> tuple[str, dict[str, Any] | None]:
+    ) -> tuple[str, dict[str, Any] | None, str | None, str]:
+        """The streamed reply: its text, usage, finish reason and any refusal it carried."""
         parts: list[str] = []
         usage: dict[str, Any] | None = None
+        finish: str | None = None
+        refusal: list[str] = []
         try:
             async for line in response.aiter_lines():
                 if not line.startswith("data:"):
@@ -235,18 +259,31 @@ class OpenAICompatibleProvider:
                 data = line[5:].strip()
                 if data == "[DONE]":
                     break
-                chunk = json.loads(data)
+                try:
+                    chunk = json.loads(data)
+                except ValueError as exc:
+                    msg = f"{self.name}: the stream sent a chunk that is not JSON"
+                    raise ProviderError(msg, retryable=True) from exc
+                if not isinstance(chunk, dict):
+                    continue
                 if chunk.get("usage"):
                     usage = chunk["usage"]
                 for choice in chunk.get("choices") or []:
-                    delta = (choice.get("delta") or {}).get("content")
-                    if delta:
-                        parts.append(delta)
+                    if not isinstance(choice, dict):
+                        continue
+                    delta = choice.get("delta")
+                    delta = delta if isinstance(delta, dict) else {}
+                    finish = choice.get("finish_reason") or finish
+                    if delta.get("refusal"):
+                        refusal.append(str(delta["refusal"]))
+                    content = delta.get("content")
+                    if content:
+                        parts.append(content)
                         if on_token is not None:
-                            on_token(delta)
+                            on_token(content)
         finally:
             await response.aclose()
-        return "".join(parts), usage
+        return "".join(parts), usage, finish, "".join(refusal)
 
     async def chat(
         self,
@@ -267,29 +304,37 @@ class OpenAICompatibleProvider:
             on_token is not None or self.config.stream_always
         ) and self.config.supports_streaming
         started = time.perf_counter()
-        while True:
-            payload = self._payload(
-                messages,
-                json_schema=json_schema,
-                schema_name=schema_name,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                stream=stream,
-                mode=self.mode,
-                model=model,
+        payload = self._payload(
+            messages,
+            json_schema=json_schema,
+            schema_name=schema_name,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=stream,
+            mode=self.mode,
+            model=model,
+        )
+        try:
+            text, raw_usage, finish, refusal = await self._chat_once(
+                payload, model=model, stream=stream, on_token=on_token
             )
-            try:
-                text, raw_usage = await self._chat_once(
-                    payload, model=model, stream=stream, on_token=on_token
-                )
-                break
-            except ProviderError as exc:
-                schema_rejected = exc.status in (400, 422) and json_schema is not None
-                if schema_rejected and self.mode in _STEP_DOWN:
-                    self.mode = _STEP_DOWN[self.mode]  # remember what this endpoint accepts
-                    continue
-                raise
-        usage = Usage(latency_ms=round((time.perf_counter() - started) * 1000, 1))
+        except ProviderError as exc:
+            schema_rejected = (
+                exc.status in (400, 422)
+                and json_schema is not None
+                and bool(_SCHEMA_WORDS.search(str(exc)))
+            )
+            if schema_rejected and self.mode in _STEP_DOWN:
+                self.mode = _STEP_DOWN[self.mode]  # remember what this endpoint accepts
+                exc.resend = True
+            raise
+        if refusal or (finish or "").lower() in _REFUSALS:
+            detail = refusal[:200] or f"finish reason {finish}"
+            msg = f"{self.name}: the model declined the request ({detail})"
+            raise ProviderError(msg, refused=True)
+        usage = Usage(
+            latency_ms=round((time.perf_counter() - started) * 1000, 1), finish_reason=_stop(finish)
+        )
         if raw_usage:
             usage.input_tokens = int(raw_usage.get("prompt_tokens") or 0)
             usage.output_tokens = int(raw_usage.get("completion_tokens") or 0)
@@ -307,35 +352,36 @@ class OpenAICompatibleProvider:
         model: str,
         stream: bool,
         on_token: TokenCallback | None,
-    ) -> tuple[str, dict[str, Any] | None]:
-        url = self._url("chat/completions", model)
-        async for attempt in AsyncRetrying(
-            stop=stop_after_attempt(self.config.max_retries + 1),
-            wait=wait_exponential_jitter(multiplier=0.5, max=8),
-            retry=retry_if_exception(_retryable),
-            reraise=True,
-        ):
-            with attempt:
-                response = await self._post(url, payload, stream=stream)
-                if stream:
-                    try:
-                        # Overall deadline, so a model that trickles tokens cannot run forever.
-                        async with asyncio.timeout(self.config.timeout_s):
-                            return await self._read_stream(response, on_token)
-                    except (TimeoutError, httpx.TimeoutException) as exc:
-                        raise ProviderError(
-                            f"{self.name}: stream stalled: {type(exc).__name__}", timed_out=True
-                        ) from exc
-                    except httpx.TransportError as exc:
-                        raise ProviderError(
-                            f"{self.name}: stream broke: {type(exc).__name__}", retryable=True
-                        ) from exc
-                body = response.json()
-                choices = body.get("choices") or []
-                message = choices[0].get("message", {}) if choices else {}
-                return str(message.get("content") or ""), body.get("usage")
-        msg = "unreachable"  # pragma: no cover
-        raise ProviderError(msg)  # pragma: no cover
+    ) -> tuple[str, dict[str, Any] | None, str | None, str]:
+        """Send the request once: text, usage, finish reason and any refusal."""
+        response = await self._post(self._url("chat/completions", model), payload, stream=stream)
+        if stream:
+            try:
+                # Overall deadline, so a model that trickles tokens cannot run forever.
+                async with asyncio.timeout(self.config.timeout_s):
+                    return await self._read_stream(response, on_token)
+            except (TimeoutError, httpx.TimeoutException) as exc:
+                raise ProviderError(
+                    f"{self.name}: stream stalled: {type(exc).__name__}", timed_out=True
+                ) from exc
+            except httpx.TransportError as exc:
+                raise ProviderError(
+                    f"{self.name}: stream broke: {type(exc).__name__}", retryable=True
+                ) from exc
+        try:
+            body = response.json()
+        except ValueError as exc:
+            msg = f"{self.name}: the reply is not JSON"
+            raise ProviderError(msg, retryable=True) from exc
+        choices = (body.get("choices") or []) if isinstance(body, dict) else []
+        choice = choices[0] if choices and isinstance(choices[0], dict) else {}
+        message = choice.get("message") or {}
+        return (
+            str(message.get("content") or ""),
+            body.get("usage") if isinstance(body, dict) else None,
+            choice.get("finish_reason"),
+            str(message.get("refusal") or ""),
+        )
 
     # --- embeddings, reranking, discovery ------------------------------------------------------
 
@@ -371,7 +417,12 @@ class OpenAICompatibleProvider:
 
     async def list_models(self) -> list[str]:
         url = self._url("models", self.model)
-        response = await self._client.get(url, headers=await self._headers())
+        try:
+            response = await self._client.get(url, headers=await self._headers())
+        except httpx.HTTPError as exc:
+            raise ProviderError(
+                self._scrub(f"{self.name}: {type(exc).__name__}: {exc}"), retryable=True
+            ) from exc
         if response.status_code >= 400:
             raise ProviderError(
                 f"{self.name}: HTTP {response.status_code}", status=response.status_code

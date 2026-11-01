@@ -90,8 +90,12 @@ async def adjudicate(
             temperature=0.0,
             max_tokens=700,
         )
-    except NoProviderAvailableError:
-        return Adjudication(None, [], reason="no LLM adjudicator is configured")
+    except NoProviderAvailableError as exc:
+        at_limits = bool(exc.attempts) and all(a.get("skipped") for a in exc.attempts)
+        reason = (
+            "the models were at their limits" if at_limits else "no LLM adjudicator is configured"
+        )
+        return Adjudication(None, [], reason=reason)
     except BudgetExceededError as exc:
         return Adjudication(None, [], reason=f"the run's {exc.reason} budget is spent")
     except LLMError:

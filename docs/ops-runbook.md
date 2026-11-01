@@ -166,8 +166,10 @@ Both are read when a process starts, so restart after a change. `GET /api/v1/set
 | `ARIA_OTEL_CAPTURE_CONTENT` | Record prompt and completion text in traces. Off by default, because that text holds log data. |
 | `ARIA_CONFIG_FILE`, `ARIA_DATA_DIR`, `ARIA_MODELS_DIR`, `ARIA_RUNBOOKS_DIR` | Where the config file, data, offline embeddings and runbooks live |
 | `ARIA_MCP_URL`, `ARIA_MCP_TOKEN` | Have the investigator call tools on a remote MCP endpoint instead of in-process |
-| `GEMINI_API_KEY` (or `gemini_api_key`) | Enables Gemini for every role, ahead of hosted NIM |
-| `GEMINI_CHAT_MODEL`, `GEMINI_LITE_MODEL`, `GEMINI_REASONING_EFFORT`, `GEMINI_BASE_URL` | Override the Gemini models, the reasoning effort (minimal by default) and the endpoint |
+| `GEMINI_API_KEY` (or `gemini_api_key`) | Enables the Gemini pool (four models on the one key) for every role, ahead of hosted NIM |
+| `GEMINI_CHAT_MODEL`, `GEMINI_LITE_MODEL`, `GEMINI_LITE_2_MODEL`, `GEMMA_MODEL`, `GEMINI_REASONING_EFFORT`, `GEMINI_BASE_URL` | Override the pool's models, the reasoning effort (minimal by default) and the endpoint |
+| `GEMINI_RPM`, `GEMINI_TPM`, `GEMINI_RPD`, and the same with `GEMINI_LITE_`, `GEMINI_LITE_2_` or `GEMMA_` in front | Each model's requests a minute, tokens a minute and requests a day, copied from AI Studio's rate-limit page. ARIA keeps under them; `none` lifts one. The defaults are cautious placeholders. |
+| `ARIA_QUOTA_MARGIN`, `ARIA_QUOTA_FILE` | The share of each limit ARIA leaves unused (0.1), and where it keeps its counts between restarts (`llm-quota.json` in `ARIA_DATA_DIR`) |
 | `NVIDIA_API_KEY` | Enables hosted NVIDIA NIM for every role |
 | `NVIDIA_NIM_BASE_URL`, `NVIDIA_NIM_CHAT_MODEL`, `NVIDIA_NIM_REASONING_EFFORT`, `NVIDIA_NIM_FALLBACK_MODEL`, `NVIDIA_NIM_EMBED_MODEL`, `NVIDIA_NIM_SAFETY_MODEL`, `NVIDIA_NIM_RERANK_MODEL`, `NVIDIA_NIM_RERANK_URL` | NIM endpoint and model overrides. Reranking stays off until both rerank variables are set. |
 | `NIM_LOCAL_BASE_URL`, `NIM_LOCAL_CHAT_MODEL`, `NIM_LOCAL_EMBED_MODEL`, `NIM_LOCAL_RERANK_MODEL`, `NIM_LOCAL_RERANK_URL` | A self-hosted NIM, which leads every chain once its URL is set |
@@ -202,6 +204,7 @@ The `config/aria.yaml` settings operators change most often:
 | Web view of the API | `GET /api/ready` on the web app | Forwards the API's `/readyz` |
 | Worker liveness | `aria worker-health --max-age 60` | Exits 1 when the worker has not polled the queue recently. It reads this host's heartbeat file, `worker-<hostname>.heartbeat`, in `ARIA_DATA_DIR`. |
 | Providers | `GET /api/v1/providers` | Each provider's models, circuit-breaker state and last error, without keys |
+| Model limits | `GET /api/v1/llm/capacity` | Each model with limits: requests and tokens left this minute, requests left today, any rest after a refusal, and how many more model-written triages fit today. Counts only, never a key. The console's **Settings** shows it as **The site's models**. |
 
 Two caveats about the worker check:
 
@@ -305,7 +308,7 @@ A provider is enabled when its endpoint and key are set; chains skip disabled pr
 
 | Provider | What to set |
 |---|---|
-| Google Gemini | `GEMINI_API_KEY` (get one at aistudio.google.com). Optionally, the model variables. |
+| Google Gemini | `GEMINI_API_KEY` (get one at aistudio.google.com), and each model's limits from AI Studio's rate-limit page (`GEMINI_RPM` and the like). Optionally, the model variables. |
 | Hosted NVIDIA NIM | `NVIDIA_API_KEY` (keys start with `nvapi-`; get one at build.nvidia.com). Optionally, the model variables. |
 | Self-hosted NIM | `NIM_LOCAL_BASE_URL` and `NIM_LOCAL_CHAT_MODEL` (or the compose `nim` profile) |
 | Azure OpenAI | `AZURE_OPENAI_ENDPOINT`, then `AZURE_OPENAI_API_KEY` or `AZURE_OPENAI_USE_ENTRA=true`, and the deployment names |
@@ -480,11 +483,14 @@ It answers 409 while the run is queued or running. Nothing deletes old runs auto
 **Check.**
 
 - `GET /api/v1/providers` shows `breaker: open` and the `last_error`.
+- `GET /api/v1/llm/capacity` shows a model resting after a refusal for a limit (`held_until`,
+  `held_because`), or with no requests left today.
 - Reports are written by the template, and `/readyz` reports `degraded`.
-- Logs show `llm.provider_error`.
+- Logs show `llm.provider_error`; `llm.daily_quota_used` or `llm.spend_cap` say a model is resting
+  until its limit lifts, and `llm.quota_skip` that ARIA passed over a model with no room.
 - Run `uv run aria providers check <name>`.
 
-**Fix.** Correct the key or the model variable and restart. A breaker that opened after three failures in a row lets one trial request through after 30 seconds; meanwhile the chain falls back to the next provider. Breakers live in memory, so a restart closes them.
+**Fix.** Correct the key or the model variable and restart. A breaker that opened after three failures in a row lets one trial request through after 30 seconds; meanwhile the chain falls back to the next provider. Breakers live in memory, so a restart closes them. A rest after a daily quota or a spending cap is kept in `llm-quota.json` in `ARIA_DATA_DIR` and ends at the next midnight Pacific time; to try a model sooner (say, after raising its cap), stop the API, delete that file and start it again.
 
 ### Runs fall back to rules only
 

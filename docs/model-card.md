@@ -433,8 +433,9 @@ tiny request.
 
 | Role | Provider chain | Default model | Verified |
 |---|---|---|---|
-| Severity adjudicator | `nim-local` → `gemini` → `gemini-lite` → `nim` → `nim-fallback` → `azure` → `openai_compat` (no fake: the policy decides instead) | As for the chat roles below | As below |
-| Investigator, reporter, critic, comms and Ask ARIA | The same chain, ending at the deterministic `fake` provider | `gemini`: `gemini-3.6-flash` (reasoning effort minimal). `gemini-lite`: `gemini-3.5-flash-lite`. `nim`: `openai/gpt-oss-20b` (reasoning effort low). `nim-fallback`: `minimaxai/minimax-m3.1-flash`. `azure`: the deployment named `gpt-5.1`. `openai_compat` and `nim-local`: none set. | `gemini` and `gemini-lite` answered live calls on 2026-10-30, including a full triage. `nim` and `nim-fallback` answered live calls on 2026-10-29. `azure`, `openai_compat` and `nim-local` are not verified. |
+| Severity adjudicator | `nim-local` → `gemini` → `gemini-lite` → `gemini-lite-2` → `gemma` → `nim` → `nim-fallback` → `claude` → `openai` → `azure` → `openai_compat` (no fake: the policy decides instead) | As for the chat roles below | As below |
+| Investigator and reporter | The same chain, ending at the deterministic `fake` provider | `gemini`: `gemini-3.6-flash` (reasoning effort minimal). `gemini-lite`: `gemini-3.5-flash-lite`. `gemini-lite-2`: `gemini-3.1-flash-lite`. `gemma`: `gemma-3-27b-it`, asked for JSON in the prompt, with its instructions folded into the user's turn. `nim`: `openai/gpt-oss-20b` (reasoning effort low). `nim-fallback`: `minimaxai/minimax-m3.1-flash`. `claude`: `claude-opus-5-5`. `openai`: `gpt-6.1-sol`. `azure`: the deployment named `gpt-5.1`. `openai_compat` and `nim-local`: none set. | `gemini` and `gemini-lite` answered live calls on 2026-10-30, including a full triage. `nim` and `nim-fallback` answered live calls on 2026-10-29. `gemini-lite-2`, `gemma`, `claude`, `openai`, `azure`, `openai_compat` and `nim-local` are not verified. |
+| Critic, comms, Ask ARIA and the search's query rewrite | `nim-local` → `gemini-lite` → `gemini-lite-2` → `gemma` → `gemini`, then as above, ending at `fake`: the lite models and Gemma lead, keeping the quality model's daily requests for the investigation and the report | As above | As above |
 | Embeddings | `nim` → `azure` → `local` | `nim`: `nvidia/nemotron-3.5-embed-1b` (2048 dimensions). `azure`: the deployment named `text-embedding-3-small`. `local`: latent semantic analysis (TF-IDF over words and word pairs, reduced to 128 dimensions) fitted by `aria seed` on the incident corpus. | The NIM model answered live calls on 2026-10-29. The Azure deployment is not verified. |
 | Reranking | `nim` | None. Reranking is off until `NVIDIA_NIM_RERANK_MODEL` and `NVIDIA_NIM_RERANK_URL` are set. | Not applicable |
 | Content safety | `nim` | `nvidia/nemotron-3.5-content-safety` | **Listed in NIM's model catalog on 2026-10-29, but not called live**, so its verdict format is unverified. The guardrail is off by default (`guardrails.safety_model: false`). |
@@ -450,6 +451,12 @@ What these models can and cannot do:
   it cannot read, or a safety model it cannot reach, counts as flagged.
 - Per-run budgets cap tokens, cost, latency, steps, tool calls and LLM calls (`budgets` in the
   config). When a budget is spent, the run falls back to the deterministic path.
+- The four Gemini models share one key but have limits of their own: requests a minute, tokens a
+  minute and requests a day (`limits` in the config). ARIA counts every request against them, less
+  a safety margin, before sending it, so no model is asked for more than it allows. A triage
+  reserves its calls across them before it starts; when they do not fit, it runs offline and says
+  until when. Each request is sent once: when it fails, the next provider in the chain takes the
+  call.
 
 ## Versions and where to find them
 

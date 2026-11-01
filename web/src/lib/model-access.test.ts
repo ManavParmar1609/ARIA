@@ -29,6 +29,28 @@ describe("who answers a visitor's runs", () => {
     );
   });
 
+  it("goes offline until the site's models have room again, without spending the share", () => {
+    const busy = modelAccess(null, ["gemini"], {
+      left: 3,
+      per_visitor: 5,
+      back_at: "2026-11-02T08:00:00Z",
+    });
+    expect(busy).toEqual({
+      kind: "offline",
+      label: "Offline",
+      usedUp: false,
+      backAt: "2026-11-02T08:00:00Z",
+    });
+    expect(accessSentence(busy, true)).toMatch(
+      /^Offline until \d{2}:\d{2}: the site's models are at their limits for now, so triages use the rules, .* Add your own key in Settings to use a model\.$/,
+    );
+    expect(accessShort(busy, true)).toMatch(/^Offline until \d{2}:\d{2}$/);
+    // A visitor's own key is theirs alone: the site's limits do not touch it.
+    expect(
+      modelAccess("gemini", ["gemini"], { left: 3, back_at: "2026-11-02T08:00:00Z" }).kind,
+    ).toBe("own");
+  });
+
   it("points at the key form below it on Settings, and says the short version in the sidebar", () => {
     const offline = modelAccess(null, ["gemini"], null);
     expect(accessSentence(offline, true, true)).toMatch(/Add your own key below to use a model\.$/);

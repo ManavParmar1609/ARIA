@@ -9,6 +9,13 @@ against ``max_tokens``), and no temperature, which current models refuse.
 The client is made only once there is a key, and always with that key named explicitly, so the
 SDK never falls back to credentials it finds in the environment or a login profile: a visitor's
 key is the only credential that goes with a visitor's request.
+
+As with ARIA's other client, each ``chat`` sends one request: the SDK's own retries are off, since
+the router's fallback to the next provider is ARIA's one retry layer and every request must be
+counted against the limits first. A 429 with ``retry-after`` is a rate limit; one without, or a
+message saying when access returns, is the organisation's spend limit, which holds until then
+(aria.llm.ratelimit). A refusal is never repaired on Claude, and a reply cut short by
+``max_tokens`` says so.
 """
 
 from __future__ import annotations
@@ -23,6 +30,7 @@ from pydantic import SecretStr
 
 from aria.config import ProviderConfig, ProviderKind, StructuredOutputMode
 from aria.llm.base import Message, ProviderError, TokenCallback, Usage
+from aria.llm.ratelimit import classify, retry_after_seconds
 
 _RETRYABLE = frozenset({408, 409, 429})
 
@@ -55,7 +63,7 @@ class ClaudeProvider:
             self._client = anthropic.AsyncAnthropic(
                 api_key=self._api_key.get_secret_value(),
                 base_url=self.config.base_url,
-                max_retries=self.config.max_retries,
+                max_retries=0,  # the router's fallback is the one retry layer
                 # The read timeout bounds the gap between streamed chunks: a stalled model fails
                 # fast and the router moves on.
                 timeout=anthropic.Timeout(self.config.timeout_s, connect=15.0, read=stall),
@@ -75,13 +83,15 @@ class ClaudeProvider:
             return ProviderError(self._scrub(f"{self.name}: {exc}"), retryable=True)
         if isinstance(exc, anthropic.APIStatusError):
             status = exc.status_code
-            header = exc.response.headers.get("retry-after", "").strip()
-            wait = float(header) if header.replace(".", "", 1).isdigit() else None
+            body = exc.body if isinstance(exc.body, (dict, list)) else {"message": str(exc.message)}
+            raw = self._scrub(json.dumps(body, default=str))
+            now = time.time()
             return ProviderError(
                 self._scrub(f"{self.name}: HTTP {status}: {str(exc.message)[:500]}"),
                 status=status,
                 retryable=status in _RETRYABLE or status >= 500,
-                retry_after=wait,
+                retry_after=retry_after_seconds(exc.response.headers, raw, now=now),
+                limit=classify(status, raw, exc.response.headers, now=now, anthropic=True),
             )
         return ProviderError(self._scrub(f"{self.name}: {type(exc).__name__}: {exc}"))
 
@@ -145,41 +155,40 @@ class ClaudeProvider:
             raise ProviderError(msg)
         client = self._sdk()
         started = time.perf_counter()
-        while True:
-            params = self._params(
-                messages, json_schema=json_schema, max_tokens=max_tokens, model=model
-            )
-            try:
-                async with client.messages.stream(**params) as stream:
-                    async for text in stream.text_stream:
-                        if on_token is not None:
-                            on_token(text)
-                    final = await stream.get_final_message()
-            except anthropic.BadRequestError as exc:
-                # A schema Claude cannot constrain to: ask for it in the prompt instead, and
-                # remember, so later calls skip the refused request.
-                refused = str(exc.message).lower()
-                if (
-                    json_schema is not None
-                    and self.mode is StructuredOutputMode.JSON_SCHEMA
-                    and any(word in refused for word in ("schema", "output_config", "format"))
-                ):
-                    self.mode = StructuredOutputMode.PROMPT
-                    continue
-                raise self._error(exc) from exc
-            except anthropic.AnthropicError as exc:
-                raise self._error(exc) from exc
-            break
+        params = self._params(messages, json_schema=json_schema, max_tokens=max_tokens, model=model)
+        try:
+            async with client.messages.stream(**params) as stream:
+                async for text in stream.text_stream:
+                    if on_token is not None:
+                        on_token(text)
+                final = await stream.get_final_message()
+        except anthropic.BadRequestError as exc:
+            error = self._error(exc)
+            # A schema Claude cannot constrain to: ask for it in the prompt instead, remember,
+            # and let the router send the request again in that form.
+            refused = str(exc.message).lower()
+            if (
+                json_schema is not None
+                and error.limit is None
+                and self.mode is StructuredOutputMode.JSON_SCHEMA
+                and any(word in refused for word in ("schema", "output_config", "format"))
+            ):
+                self.mode = StructuredOutputMode.PROMPT
+                error.resend = True
+            raise error from exc
+        except anthropic.AnthropicError as exc:
+            raise self._error(exc) from exc
         if final.stop_reason == "refusal":
             details = getattr(final, "stop_details", None)
             category = getattr(details, "category", None) or "unspecified"
             msg = f"{self.name}: the model declined the request ({category})"
-            raise ProviderError(msg)
+            raise ProviderError(msg, refused=True)
         text = "".join(block.text for block in final.content if block.type == "text")
         usage = Usage(
             input_tokens=final.usage.input_tokens,
             output_tokens=final.usage.output_tokens,
             latency_ms=round((time.perf_counter() - started) * 1000, 1),
+            finish_reason="length" if final.stop_reason == "max_tokens" else final.stop_reason,
         )
         usage.cost_usd = self._cost(usage)
         return text, usage

@@ -80,6 +80,28 @@
         }
       }
     },
+    "/api/v1/llm/capacity": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Capacity",
+        "description": "The shared models' room now: for each provider with limits (``limits`` in\nconfig/aria.yaml), the requests and tokens left this minute and the requests left today,\nany rest after a refusal, and when the day starts again. Counts and times only, never a key.",
+        "operationId": "capacity_api_v1_llm_capacity_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapacityOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/me": {
       "get": {
         "tags": [
@@ -3163,6 +3185,64 @@
         "title": "CalibrationOut",
         "description": "Where the severity model's calibration stands against the reviews gathered so far."
       },
+      "CapacityOut": {
+        "properties": {
+          "timezone": {
+            "type": "string",
+            "title": "Timezone"
+          },
+          "margin": {
+            "type": "number",
+            "title": "Margin"
+          },
+          "day_resets_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Day Resets At"
+          },
+          "runs_left_today": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runs Left Today"
+          },
+          "back_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Back At"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderCapacityOut"
+            },
+            "type": "array",
+            "title": "Providers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "timezone",
+          "margin",
+          "day_resets_at",
+          "runs_left_today",
+          "back_at",
+          "providers"
+        ],
+        "title": "CapacityOut",
+        "description": "The shared models' room now (``GET /api/v1/llm/capacity``)."
+      },
       "Checkpoint": {
         "properties": {
           "checkpoint_id": {
@@ -4050,6 +4130,172 @@
         ],
         "title": "ModelKeyCheck",
         "description": "What a provider said about a visitor's own key. The key itself is not kept."
+      },
+      "ProviderCapacityOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "set_up": {
+            "type": "boolean",
+            "title": "Set Up"
+          },
+          "limits": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProviderLimitsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "minute_requests_left": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minute Requests Left"
+          },
+          "minute_tokens_left": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minute Tokens Left"
+          },
+          "day_requests_left": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day Requests Left"
+          },
+          "day_requests_used": {
+            "type": "integer",
+            "title": "Day Requests Used"
+          },
+          "day_requests_reserved": {
+            "type": "integer",
+            "title": "Day Requests Reserved"
+          },
+          "minute_resets_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minute Resets At"
+          },
+          "held_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Held Until"
+          },
+          "held_because": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Held Because"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "model",
+          "set_up",
+          "limits",
+          "minute_requests_left",
+          "minute_tokens_left",
+          "day_requests_left",
+          "day_requests_used",
+          "day_requests_reserved",
+          "minute_resets_at",
+          "held_until",
+          "held_because"
+        ],
+        "title": "ProviderCapacityOut",
+        "description": "One shared model's room now. Counts and times only: never a key or a request."
+      },
+      "ProviderLimitsOut": {
+        "properties": {
+          "requests_per_minute": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requests Per Minute"
+          },
+          "tokens_per_minute": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tokens Per Minute"
+          },
+          "requests_per_day": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requests Per Day"
+          }
+        },
+        "type": "object",
+        "title": "ProviderLimitsOut",
+        "description": "A provider's limits as ARIA keeps them: the configured ones less the safety margin."
       },
       "ProviderOut": {
         "properties": {
@@ -5481,11 +5727,23 @@
               }
             ],
             "title": "Per Day"
+          },
+          "back_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Back At"
           }
         },
         "type": "object",
         "title": "SharedModelOut",
-        "description": "This visitor's share today of the server's own model keys (``llm.shared``). None means\nno limit; ``left`` 0 means this visitor's work runs offline until tomorrow (UTC)."
+        "description": "This visitor's share today of the server's own model keys (``llm.shared``). None means\nno limit; ``left`` 0 means this visitor's work runs offline until tomorrow (UTC).\n``back_at`` is set while the shared models themselves are at their limits (``llm.quota``):\nuntil then, everyone's model-written triages run offline."
       },
       "SimilarIncident": {
         "properties": {

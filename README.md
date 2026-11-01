@@ -219,12 +219,16 @@ Providers are switched in [config/aria.yaml](config/aria.yaml), and keys come on
 environment or Key Vault. Each role has a fallback chain, and a provider without a key is skipped.
 A circuit breaker opens on repeated failures, or for as long as a rate-limited provider asks, and
 per-run budgets (tokens, cost, latency, steps, tool and LLM calls) degrade a run to the rules-only
-path rather than failing it.
+path rather than failing it. One Gemini key serves a pool of four models, and ARIA counts every
+request against each model's own limits before sending it, so none is asked for more than it
+allows ([docs/deploy-free.md](docs/deploy-free.md#keep-your-gemini-key-inside-its-limits)).
 
 | Provider | Default models | Status |
 |---|---|---|
 | Google Gemini (`gemini`) | chat `gemini-3.6-flash`, reasoning minimal | Verified with live calls on 2026-10-30, including a full triage |
 | Google Gemini, lighter model (`gemini-lite`) | chat `gemini-3.5-flash-lite` | Verified with live calls on 2026-10-30 |
+| Google Gemini, second lighter model (`gemini-lite-2`) | chat `gemini-3.1-flash-lite` | Not verified with a live call |
+| Google Gemma, on the Gemini key (`gemma`) | chat `gemma-3-27b-it`, JSON asked for in the prompt | Not verified with a live call |
 | NVIDIA NIM, hosted (`nim`) | chat `openai/gpt-oss-20b`; embeddings `nvidia/nemotron-3.5-embed-1b` | Verified with live calls on 2026-10-29 |
 | NVIDIA NIM, second model (`nim-fallback`) | chat `minimaxai/minimax-m3.1-flash` | Verified with live calls on 2026-10-29 |
 | NVIDIA NIM, self-hosted (`nim-local`) | Whatever your NIM container serves | Not verified (needs a GPU) |

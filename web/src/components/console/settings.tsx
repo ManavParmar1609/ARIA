@@ -16,15 +16,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  useCapacity,
   useFeedback,
   useModelKey,
   useProviders,
   useSession,
   useSettingsView,
   useSignOut,
+  type CapacityView,
   type FeedbackView,
   type SettingsView,
 } from "@/lib/api/hooks";
+import { capacitySummary, dayWords, minuteWords, shownModels, stateWords } from "@/lib/capacity";
 import { capitalise, money, percent, relativeTime, reviewerName } from "@/lib/format";
 import { useTheme, type ThemeChoice } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -196,6 +199,54 @@ const ROLE: Record<string, string> = {
   default: "Anything else",
 };
 
+/** The room left on each of the site's models: this minute, today, and any rest. */
+function SiteModels({ capacity }: { capacity: CapacityView }) {
+  const models = shownModels(capacity);
+  if (models.length === 0) {
+    return (
+      <p className="max-w-prose text-sm text-muted-foreground">
+        No limits are set for this server&apos;s models, so ARIA does not count their requests.
+      </p>
+    );
+  }
+  return (
+    <>
+      <p role="status" className="max-w-prose text-sm">
+        {capacitySummary(capacity)}
+      </p>
+      <Table aria-label="Room left on each of the site's models">
+        <TableHeader>
+          <TableRow>
+            <TableHead>Model</TableHead>
+            <TableHead>This minute</TableHead>
+            <TableHead>Today</TableHead>
+            <TableHead>State</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {models.map((m) => (
+            <TableRow key={m.name}>
+              <TableHead scope="row" className="font-mono text-xs">
+                {m.model ?? m.name}
+              </TableHead>
+              <TableCell className="tabular">{minuteWords(m)}</TableCell>
+              <TableCell className="tabular">{dayWords(m)}</TableCell>
+              <TableCell
+                className={cn(
+                  "text-sm",
+                  m.held_until ? "text-sev3-fg" : m.set_up ? "text-ok" : "text-faint",
+                )}
+              >
+                {stateWords(m)}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </>
+  );
+}
+
 /** Roles grouped by the chain they share, so each chain is written once. */
 function chains(routing: Record<string, string[]>): [string, string[]][] {
   const byChain = new Map<string, string[]>();
@@ -309,6 +360,7 @@ export function Settings() {
   const providers = useProviders();
   const view = useSettingsView();
   const feedback = useFeedback();
+  const capacity = useCapacity();
   const savedKey = useModelKey();
   const kinds = view.data?.visitor_keys ?? [];
   const { theme, setTheme } = useTheme();
@@ -317,15 +369,18 @@ export function Settings() {
   // let that one "Try again" reload them all.
   const failed = view.isError
     ? "view"
-    : providers.isError
-      ? "providers"
-      : feedback.isError
-        ? "feedback"
-        : null;
+    : capacity.isError
+      ? "capacity"
+      : providers.isError
+        ? "providers"
+        : feedback.isError
+          ? "feedback"
+          : null;
   const retryAll = () => {
     if (providers.isError) void providers.refetch();
     if (view.isError) void view.refetch();
     if (feedback.isError) void feedback.refetch();
+    if (capacity.isError) void capacity.refetch();
   };
   const failure = (key: string, title: string, error: unknown) =>
     failed === key ? (
@@ -367,6 +422,23 @@ export function Settings() {
           </>
         )}
       </Section>
+
+      {/* Only where the site has a model of its own: its room is what visitors share. */}
+      {view.data?.shared_model ? (
+        <Section
+          id="set-site-models"
+          title="The site's models"
+          intro="The site's key spreads its work over several models, each with limits of its own. ARIA counts every request first and keeps a share of each limit spare, so no model is asked for more than it allows. When all of them are at their limits, triages run offline until there is room again."
+        >
+          {capacity.isPending ? (
+            <LoadingRows rows={2} label="Loading the room left on the site's models" />
+          ) : capacity.isError ? (
+            failure("capacity", "The site's models could not be loaded", capacity.error)
+          ) : (
+            <SiteModels capacity={capacity.data} />
+          )}
+        </Section>
+      ) : null}
 
       <Section id="set-session" title="Your session">
         <div className="flex flex-wrap items-center justify-between gap-4 text-sm">

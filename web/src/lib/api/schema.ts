@@ -301,6 +301,28 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/llm/capacity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Capacity
+         * @description The shared models' room now: for each provider with limits (``limits`` in
+         *     config/aria.yaml), the requests and tokens left this minute and the requests left today,
+         *     any rest after a refusal, and when the day starts again. Counts and times only, never a key.
+         */
+        get: operations["capacity_api_v1_llm_capacity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me": {
         parameters: {
             query?: never;
@@ -1058,6 +1080,27 @@ export type components = {
             /** @example  */
             tenant?: string;
         };
+        /**
+         * CapacityOut
+         * @description The shared models' room now (``GET /api/v1/llm/capacity``).
+         */
+        CapacityOut: {
+            /** Back At */
+            back_at: string | null;
+            /**
+             * Day Resets At
+             * Format: date-time
+             */
+            day_resets_at: string;
+            /** Margin */
+            margin: number;
+            /** Providers */
+            providers: components["schemas"]["ProviderCapacityOut"][];
+            /** Runs Left Today */
+            runs_left_today: number | null;
+            /** Timezone */
+            timezone: string;
+        };
         /** Checkpoint */
         Checkpoint: {
             /** Checkpoint Id */
@@ -1476,6 +1519,47 @@ export type components = {
         } | {
             data: unknown;
         });
+        /**
+         * ProviderCapacityOut
+         * @description One shared model's room now. Counts and times only: never a key or a request.
+         */
+        ProviderCapacityOut: {
+            /** Day Requests Left */
+            day_requests_left: number | null;
+            /** Day Requests Reserved */
+            day_requests_reserved: number;
+            /** Day Requests Used */
+            day_requests_used: number;
+            /** Held Because */
+            held_because: string | null;
+            /** Held Until */
+            held_until: string | null;
+            limits: components["schemas"]["ProviderLimitsOut"] | null;
+            /** Minute Requests Left */
+            minute_requests_left: number | null;
+            /** Minute Resets At */
+            minute_resets_at: string | null;
+            /** Minute Tokens Left */
+            minute_tokens_left: number | null;
+            /** Model */
+            model: string | null;
+            /** Name */
+            name: string;
+            /** Set Up */
+            set_up: boolean;
+        };
+        /**
+         * ProviderLimitsOut
+         * @description A provider's limits as ARIA keeps them: the configured ones less the safety margin.
+         */
+        ProviderLimitsOut: {
+            /** Requests Per Day */
+            requests_per_day?: number | null;
+            /** Requests Per Minute */
+            requests_per_minute?: number | null;
+            /** Tokens Per Minute */
+            tokens_per_minute?: number | null;
+        };
         /** ProviderOut */
         ProviderOut: {
             /** Breaker */
@@ -1990,8 +2074,12 @@ export type components = {
          * SharedModelOut
          * @description This visitor's share today of the server's own model keys (``llm.shared``). None means
          *     no limit; ``left`` 0 means this visitor's work runs offline until tomorrow (UTC).
+         *     ``back_at`` is set while the shared models themselves are at their limits (``llm.quota``):
+         *     until then, everyone's model-written triages run offline.
          */
         SharedModelOut: {
+            /** Back At */
+            back_at?: string | null;
             /** Left */
             left?: number | null;
             /** Per Day */
@@ -2732,6 +2820,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    capacity_api_v1_llm_capacity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapacityOut"];
                 };
             };
         };
