@@ -335,6 +335,55 @@ def seed(
 
 
 @app.command()
+def purge(
+    days: Annotated[
+        int | None,
+        typer.Option(
+            min=1,
+            help="Purge runs nothing has happened to for this many days "
+            "(default: retention.days in config/aria.yaml).",
+        ),
+    ] = None,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Only count what would be deleted.")
+    ] = False,
+) -> None:
+    """Delete runs past the retention period, with everything that belongs only to them."""
+    from aria.config import get_app_config
+    from aria.db.engine import get_engine
+    from aria.graph.retention import purge as purge_runs
+
+    period = days or get_app_config().retention.days
+    if period <= 0:
+        console.print(
+            "Retention is off, so nothing was deleted. Set retention.days in config/aria.yaml "
+            "(ARIA_RETENTION_DAYS), or pass --days."
+        )
+        return
+    _require_database()
+    result = purge_runs(get_engine(), days=period, dry_run=dry_run)
+    when = f"{result.cutoff:%Y-%m-%d %H:%M} UTC"
+    verb = "would be deleted" if dry_run else "deleted"
+    console.print(
+        f"Runs nothing has happened to since {when} ({period} days): {len(result.runs)} {verb}."
+    )
+    if result.runs:
+        table = Table("what", "rows")
+        for kind, count in result.rows.items():
+            table.add_row(kind, f"{count:,}")
+        console.print(table)
+    if result.busy:
+        console.print(
+            f"{len(result.busy)} more past the period are held by a process working on them; "
+            "the next purge takes them."
+        )
+    if result.rows.get("incident memory") and not dry_run:
+        console.print(
+            "Running API and worker processes stop finding the deleted incidents within a minute."
+        )
+
+
+@app.command()
 def mcp(
     transport: Annotated[str, typer.Option(help="stdio or streamable-http")] = "stdio",
     host: str = "127.0.0.1",

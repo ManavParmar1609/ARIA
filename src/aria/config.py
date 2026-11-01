@@ -353,6 +353,31 @@ class CommsConfig(_Strict):
     timeout_s: float = Field(default=10.0, gt=0, le=60)
 
 
+# A purge reads every run's last change: once a minute is the most that is worth doing.
+MIN_PURGE_INTERVAL_S = 60
+
+
+class RetentionConfig(_Strict):
+    """How long ARIA keeps runs. Off by default: with ``days`` at 0, nothing is ever deleted
+    unless someone deletes a run.
+
+    With a period set, a run is purged, with everything that belongs only to it, once nothing has
+    happened to it for ``days`` days (aria.graph.retention): by ``aria purge``, and every
+    ``purge_interval_s`` seconds by the process that executes runs (0: by the command only).
+    """
+
+    days: int = Field(default=0, ge=0, le=36_500)
+    purge_interval_s: int = Field(default=0, ge=0, le=31_536_000)
+
+    @field_validator("purge_interval_s")
+    @classmethod
+    def _not_too_often(cls, value: int) -> int:
+        if 0 < value < MIN_PURGE_INTERVAL_S:
+            msg = f"purge_interval_s: purge at most once a minute ({MIN_PURGE_INTERVAL_S} or more)"
+            raise ValueError(msg)
+        return value
+
+
 class InvestigationConfig(_Strict):
     max_steps: int = Field(default=6, ge=0, le=20)  # tool calls per investigation
     max_rounds: int = Field(default=2, ge=1, le=10)  # decision rounds (one LLM call each)
@@ -369,6 +394,7 @@ class AppConfig(_Strict):
     investigation: InvestigationConfig = Field(default_factory=InvestigationConfig)
     triggers: TriggerConfig = Field(default_factory=TriggerConfig)
     comms: CommsConfig = Field(default_factory=CommsConfig)
+    retention: RetentionConfig = Field(default_factory=RetentionConfig)
 
 
 class Settings(BaseSettings):

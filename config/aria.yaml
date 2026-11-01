@@ -362,3 +362,11 @@ triggers:
   scan_min_burst_score: 3.0
   scan_window_lines: 2000
   scan_sources: ${ARIA_SCAN_SOURCES:-}
+
+# How long ARIA keeps runs. Off at 0 days, so nothing is ever deleted unless an operator sets a
+# period. With one set, a run that nothing has happened to for that many days is purged with
+# everything that belongs only to it (docs/ops-runbook.md#retention-and-purge): by `aria purge`,
+# and every `purge_interval_s` seconds by the process that executes runs (0: by the command only).
+retention:
+  days: ${ARIA_RETENTION_DAYS:-0}
+  purge_interval_s: ${ARIA_PURGE_INTERVAL_S:-0}
