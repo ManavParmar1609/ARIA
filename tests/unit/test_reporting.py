@@ -368,6 +368,83 @@ async def test_the_critic_removes_claims_its_evidence_does_not_support(
     assert outcome.report.validation.ok
 
 
+def _two(writer: FakeProvider, judge: FakeProvider, *, critic: list[str]) -> LLMRouter:
+    """Two real providers: both can write, and ``critic`` lists who may judge, in order."""
+
+    def entry(name: str) -> ProviderConfig:
+        return ProviderConfig(
+            kind=ProviderKind.NVIDIA_NIM,
+            base_url=f"http://{name}/v1",
+            allow_no_key=True,
+            chat_model=name,
+        )
+
+    for model in (writer, judge):
+        model.kind = ProviderKind.NVIDIA_NIM
+    config = LLMConfig(
+        providers={"writer": entry("writer"), "judge": entry("judge")},
+        routing={"reporter": ["writer", "judge"], "critic": critic},
+    )
+    return LLMRouter(config, providers={"writer": writer, "judge": judge})
+
+
+async def test_the_critic_runs_on_another_provider_than_the_writer(
+    builder: ScenarioBuilder,
+) -> None:
+    ctx = await _context(builder)
+    writer, judge = FakeProvider("writer"), FakeProvider("judge")
+    # The critic's own chain leads with the writer; another provider can judge, so it does.
+    router = _two(writer, judge, critic=["writer", "judge"])
+    outcome = await ReportWriter(router, RUNBOOKS).write(ctx, report_id="rep-c1")
+    assert (outcome.provider, outcome.critic, outcome.critic_provider) == (
+        "writer",
+        "llm",
+        "judge",
+    )
+    assert [call["task"] for call in writer.calls] == ["narrative"]
+    assert [call["task"] for call in judge.calls] == ["critic"]
+    # With only one provider, the critic still runs on it, as before.
+    alone = await ReportWriter(_router(FakeProvider(), "reporter", "critic"), RUNBOOKS).write(
+        ctx, report_id="rep-c2"
+    )
+    assert (alone.provider, alone.critic_provider) == ("llm", "llm")
+
+
+async def test_a_critic_that_cannot_judge_tells_the_reviewer_what_to_check(
+    builder: ScenarioBuilder,
+) -> None:
+    ctx = await _context(builder)
+
+    def abstain(_: dict[str, object]) -> dict[str, object]:
+        return {
+            "verdict": "abstain",
+            "issues": [
+                {
+                    "path": "summary[0]",
+                    "problem": "cannot_judge",
+                    "explanation": "the evidence holds no job records; check whether jobs failed",
+                    "suggested_evidence_ids": [],
+                }
+            ],
+            "reviewer_should_check": "whether the panics stopped jobs, which no evidence shows",
+        }
+
+    judge = FakeProvider("judge", responders={"critic": abstain})
+    router = _two(FakeProvider("writer"), judge, critic=["judge"])
+    outcome = await ReportWriter(router, RUNBOOKS).write(ctx, report_id="rep-c3")
+    assert outcome.critic_checks == [
+        "the whole report: whether the panics stopped jobs, which no evidence shows",
+        "summary[0]: the evidence holds no job records; check whether jobs failed",
+    ]
+    issues = {i.code: i for i in outcome.report.validation.issues}
+    assert issues["critic_abstained"].level == "warning"
+    assert "whether the panics stopped jobs" in issues["critic_abstained"].message
+    assert issues["critic_cannot_judge"].path == "summary[0]"
+    assert outcome.report.validation.ok  # abstaining flags; it never fails or removes a claim
+    assert not outcome.removed_claims
+    assert any("the reviewer should check" in note for note in outcome.notes)
+
+
 async def test_the_report_writer_sends_its_draft_fenced(builder: ScenarioBuilder) -> None:
     ctx = await _context(builder)
     first = compose_draft(ctx).summary[0].text

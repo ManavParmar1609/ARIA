@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 
 from aria.agents.investigator import INVESTIGATOR_TOOLS
+from aria.config import ProviderKind, get_app_config
 from aria.contracts.base import EvidenceKind, utcnow
 from aria.contracts.inputs import AlertSignal, RunOptions, TriageRequest
 from aria.contracts.parsing import ParsedBatch
@@ -37,6 +38,9 @@ from aria.graph import workflow
 from aria.graph.checkpoint import SqlCheckpointSaver
 from aria.graph.runner import RunBusyError, RunNotFoundError, RunStateError, TriageRunner
 from aria.graph.workflow import run_salt
+from aria.llm.fake import FakeProvider
+from aria.llm.quota import QuotaLedger
+from aria.llm.router import LLMRouter
 from aria.notify import sign
 from aria.parsing.parser import parse_lines
 from aria.retrieval.memory import IncidentMemory, run_incident_id
@@ -1078,6 +1082,39 @@ async def test_what_a_draft_lost_is_listed_for_the_reviewer_never_kept_silently(
     assert body.startswith("Apply the fix at [link removed] and ping [recipient removed].")
     notes = (await env.runner.snapshot(outcome.run_id)).values["notes"]
     assert "removed from the responders draft: link to evil[.]example; recipient @channel" in notes
+
+
+async def test_a_critic_that_abstains_reaches_the_reviewer(env: Env) -> None:
+    """With the shared models set up, the report is written by one and judged by another; a
+    critic that cannot judge says what the reviewer should check, in the review itself."""
+
+    class Model(FakeProvider):
+        kind = ProviderKind.OPENAI_COMPATIBLE  # a real model, answering ARIA's tasks offline
+
+    def abstain(_: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "verdict": "abstain",
+            "issues": [],
+            "reviewer_should_check": "whether the panics stopped jobs",
+        }
+
+    models = {"gemini": Model("gemini"), "gemini-lite": Model("gemini-lite")}
+    models["gemini-lite"].responders["critic"] = abstain
+    router = LLMRouter(
+        get_app_config().llm, providers={**models, "fake": FakeProvider()}, ledger=QuotaLedger({})
+    )
+    services = await Services.create(router=router)
+    try:
+        outcome = await TriageRunner(services).start(kernel_panic(env))
+    finally:
+        await services.aclose()
+    assert outcome.interrupt is not None
+    assert outcome.interrupt["critic_checks"] == [
+        "the whole report: whether the panics stopped jobs"
+    ]
+    meta = (await env.runner.snapshot(outcome.run_id)).values["report_meta"]
+    assert (meta["provider"], meta["critic_provider"]) == ("gemini", "gemini-lite")
+    assert "critic" not in [c["task"] for c in models["gemini"].calls]
 
 
 def test_updates_outside_the_team_carry_no_links_or_phone_numbers() -> None:

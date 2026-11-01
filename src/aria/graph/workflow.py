@@ -801,6 +801,8 @@ async def report(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
         "provider": outcome.provider,
         "model": outcome.model,
         "critic": outcome.critic,
+        "critic_provider": outcome.critic_provider,
+        "critic_checks": outcome.critic_checks,
         "removed_claims": outcome.removed_claims,
         "fell_back": outcome.fell_back,
         "safety": outcome.safety,
@@ -865,6 +867,8 @@ def review_payload(state: TriageState) -> Json:
         "prediction_set": [str(s) for s in assessment.prediction_set],
         "valid": incident.validation.ok,
         "generated_by": incident.generated_by,
+        # What the report's critic could not judge and asks the reviewer to check instead.
+        "critic_checks": list((state.get("report_meta") or {}).get("critic_checks") or []),
         "actions": [
             {
                 **{k: a[k] for k in ("action_id", "kind", "audience", "title")},

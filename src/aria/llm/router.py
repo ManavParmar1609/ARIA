@@ -398,6 +398,19 @@ class LLMRouter:
         view.config = self.config.model_copy(update={"routing": routing})
         return view
 
+    def without(self, name: str | None) -> LLMRouter:
+        """A view whose chains leave ``name`` out, for a check that should not run on the
+        provider whose work it checks (the report critic). Providers, breakers, the ledger and
+        the cache are shared; a role left with no chain falls back as configured."""
+        if not name:
+            return self
+        routing = {
+            role: [n for n in chain if n != name] for role, chain in self.config.routing.items()
+        }
+        view = copy.copy(self)
+        view.config = self.config.model_copy(update={"routing": routing})
+        return view
+
     def with_key(self, visitor: VisitorKey) -> LLMRouter:
         """A view in which a visitor's own key stands in for this server's key in the providers
         ``visitor_keys`` lists for its kind, which then lead every chain they are in, in that

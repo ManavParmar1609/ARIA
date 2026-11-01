@@ -72,7 +72,10 @@ SYSTEM_PROMPTS: dict[str, str] = {
         "supports it. Flag claims that are unsupported, contradicted by the evidence, "
         "overstated (more certainty or larger numbers than the evidence shows) or missing a "
         "citation they need. Do not rewrite the report. Return 'pass' only if no claim has a "
-        "problem."
+        "problem. Never guess: when you cannot judge a claim from its cited evidence, mark it "
+        "cannot_judge and say in its explanation what the reviewer should check. When you "
+        "cannot judge the report at all, return 'abstain' and say in reviewer_should_check what "
+        "a person should check instead."
     ),
     "comms": (
         "You draft incident communications that a human must approve before anything is sent. "
