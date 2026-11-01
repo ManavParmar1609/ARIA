@@ -363,7 +363,8 @@ def _jira(s: Mapping[str, Any]) -> list[str]:
             (
                 f"{_INSTANCES.get(key, key)}: {block['tickets']:,} tickets ({levels}); the priority "
                 f"changed after the issue opened for {_share(block['changed_after_open'])}. ARIA's "
-                f"conformal set held the true level for {_pct(block['set_coverage'])} of them."
+                f"conformal set held the true level for {_pct(block['set_coverage'])} of the "
+                "tickets."
             ),
             "",
             "| Method | Accuracy (95% CI) | Macro-F1 (95% CI) | Urgent tickets rated 3-4 |",

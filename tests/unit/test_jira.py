@@ -250,6 +250,9 @@ def test_the_suite_scores_the_ticket_model_and_its_baselines_on_the_fixtures(
     text = "\n".join(report_domains._jira(summary))
     assert "### Ticket priority in public issue trackers" in text
     assert "| ARIA's ticket model |" in text
+    # The set's coverage counts every scored ticket, not only those whose priority changed.
+    assert "conformal set held the true level for" in text
+    assert "of the tickets." in text
 
 
 def test_the_suite_says_how_to_get_what_is_missing(tmp_path: Path) -> None:
