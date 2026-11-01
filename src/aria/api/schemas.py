@@ -393,6 +393,10 @@ class CalibrationOut(BaseModel):
     check_interval_s: int
     coverage_before: float | None = None
     coverage_after: float | None = None
+    # Per-level models learn from blind checks, not reviews (ADR 0014).
+    per_level: bool = False
+    blind_checks: int = 0
+    adapted_on: int = 0  # blind checks the loaded model has followed
 
 
 class FeedbackOut(BaseModel):

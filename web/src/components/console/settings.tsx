@@ -224,17 +224,32 @@ function Learning({ view }: { view: FeedbackView }) {
               {c.model_version ?? "none"}
             </span>,
           ],
-          [
-            "Recalibrated on",
-            c.recalibrated ? `${c.reviews_in_model} reviewed incidents` : "Not yet (as trained)",
-          ],
-          ["Reviews since then", `${c.pending} of ${c.recalibrate_after} needed`],
-          [
-            "Coverage on reviewed incidents",
-            c.coverage_before != null && c.coverage_after != null
-              ? `${percent(c.coverage_before)} before, ${percent(c.coverage_after)} after`
-              : "Measured at the first recalibration",
-          ],
+          ...(c.per_level
+            ? ([
+                ["Learns from", "Blind checks, one at a time"],
+                ["Blind checks so far", String(c.blind_checks ?? 0)],
+                [
+                  "Adjusted on",
+                  c.adapted_on
+                    ? `${c.adapted_on} blind ${c.adapted_on === 1 ? "check" : "checks"}`
+                    : "Not yet (as trained)",
+                ],
+              ] as [string, React.ReactNode][])
+            : ([
+                [
+                  "Recalibrated on",
+                  c.recalibrated
+                    ? `${c.reviews_in_model} reviewed incidents`
+                    : "Not yet (as trained)",
+                ],
+                ["Reviews since then", `${c.pending} of ${c.recalibrate_after} needed`],
+                [
+                  "Coverage on reviewed incidents",
+                  c.coverage_before != null && c.coverage_after != null
+                    ? `${percent(c.coverage_before)} before, ${percent(c.coverage_after)} after`
+                    : "Measured at the first recalibration",
+                ],
+              ] as [string, React.ReactNode][])),
           [
             "Checked",
             c.check_interval_s > 0

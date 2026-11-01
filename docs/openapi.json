@@ -3120,6 +3120,21 @@
               }
             ],
             "title": "Coverage After"
+          },
+          "per_level": {
+            "type": "boolean",
+            "title": "Per Level",
+            "default": false
+          },
+          "blind_checks": {
+            "type": "integer",
+            "title": "Blind Checks",
+            "default": 0
+          },
+          "adapted_on": {
+            "type": "integer",
+            "title": "Adapted On",
+            "default": 0
           }
         },
         "type": "object",

@@ -232,6 +232,11 @@ scrape_configs:
 | `aria_reviews_total{decision}` | Review decisions |
 | `aria_time_to_review_seconds` | From the start of a run until its report is ready for review |
 | `aria_info{version}` | The running version |
+| `aria_severity_decisions_total{level,decided_by,calibration}` | Severity decisions by level, by who decided and by the calibration the set came from |
+| `aria_severity_set_size` | How many levels each prediction set kept |
+| `aria_severity_review_reasons_total{reason}` | Why a person was asked to confirm a severity: `outside_training`, `unusual_mix`, `new_patterns`, `empty_set`, `every_level`, `new_system` |
+
+A sudden rise in set sizes or in `unusual_mix` and `new_patterns`, or a change in the mix of levels, is drift worth a look; `GET /api/v1/drift` tests the level mix per system against chance.
 
 Only the API process serves metrics. In `external` mode the counters and the histogram see only what the API process executes, which is reviews and publishing. `aria_runs{status}` reads the database, so it covers every process.
 
@@ -254,7 +259,7 @@ Processes log to standard output. With `ARIA_LOG_FORMAT=json`, each line is one 
 | `llm.provider_error`, `llm.invalid_output` | A provider failed, or returned output that did not validate |
 | `notify.sent`, `notify.failed` | An approved message was delivered, or was not |
 | `scan.started`, `scan.run_opened`, `scan.covered`, `scan.failed` | The log scan |
-| `severity.recalibrated`, `severity.model_reloaded`, `severity.recalibration_failed`, `severity.model_missing` | The severity model |
+| `severity.adapted`, `severity.recalibrated`, `severity.model_reloaded`, `severity.recalibration_failed`, `severity.model_missing` | The severity model |
 | `services.ticket_models_missing` | No ticket model was found at start |
 
 ## Routine operations
@@ -326,7 +331,7 @@ Changing the embedding provider changes the vector space. Memory re-embeds stale
 - **Concurrency.** Set `ARIA_WORKER_CONCURRENCY`, or override it per worker with `aria worker --concurrency N`.
 - **The database.** SQLite serialises writes. For more than a couple of workers, use Azure SQL.
 - **Abandoned runs.** Every process that drives a run, a worker or the API applying a review, claims it first and renews the claim every minute; it lets go when the run pauses or ends. A run whose holder went quiet for 5 minutes is reclaimed by another worker (or, in process, by the API), and a process with every slot busy leaves it to the others. A reclaimed run that had already paused for review, or ended, is recorded as such and let go at once. Two processes never drive one run at once, and each approved message is marked as being sent before it goes out, so it goes out once.
-- **Periodic jobs.** Each worker runs the recalibration job against the shared model file; repeating it is harmless, because the same reviews give the same threshold. Configure the log scan on one worker only, or replicas tailing the same files can open duplicate runs.
+- **Periodic jobs.** Each worker runs the recalibration job against the shared model file; repeating it is harmless, because each blind check is applied once, by its id, whichever worker gets there first. Configure the log scan on one worker only, or replicas tailing the same files can open duplicate runs.
 - **More API replicas.** Run migrations as a separate step (`aria db upgrade`), and set `ARIA_MIGRATE_ON_START=false`. The rate limiter and the A2A task store live in each process's memory, so each replica keeps its own. Alert grouping does not: an alert storm delivered to several replicas at once still opens one group and one run. The database keeps one open group per alert key (a unique index, added by `aria db upgrade`), and every request tries the group's run IDs in the same order, so racing requests end up on the same run.
 
 ### Database migrations
@@ -390,32 +395,34 @@ What else to keep:
 
 ### Recalibration
 
-Approvals and edits record each run's model input and the severity the reviewer settled on. Every `severity.recalibrate_check_s` seconds (600 by default; 0 turns it off), the process that executes runs checks whether `severity.recalibrate_after` new reviews have gathered since the loaded model was calibrated (30 by default, never fewer than 10). If they have, it refits the conformal threshold on every reviewed incident. Coefficients never change.
+Models with per-level calibrations, the ones `make train` writes, learn from **blind checks**: in Settings, "Check ARIA blind" shows a random recent incident without ARIA's level, a person rates it, and the rating is stored with the run's model input. Approvals and edits are still recorded, but no longer recalibrate (see [ADR 0014](adr/0014-promise-coverage-per-level-and-send-unfamiliar-windows-to-a-person.md)). On a server with `ARIA_VISITOR_SCOPE`, visitors' ratings are not stored.
 
-It saves the new model to `severity_log.json` in `ARIA_MODELS_DIR` under a version such as `<trained version>-recal<n>`, and keeps the previous file beside it as `severity_log.<version>.json`. The trained model that ships with the code is never overwritten there: engines read it until the first recalibration. Running engines reload the file when its modification time changes, at the start of each run's severity step, in every container that shares the volume.
+Every `severity.recalibrate_check_s` seconds (600 by default; 0 turns it off), the process that executes runs applies the blind checks it has not seen yet, in the order they arrived: each moves its level's miss rate toward the target, and every 100 further checks of a level replace that level's calibration scores. Coefficients never change.
+
+It saves the model to `severity_log.json` in `ARIA_MODELS_DIR` under a version such as `<trained version>-aci<n>`, and keeps the previous file beside it as `severity_log.<version>.json`. The trained model that ships with the code is never overwritten there: engines read it until the first change. Running engines reload the file when its modification time changes, at the start of each run's severity step, in every container that shares the volume. A model file without per-level calibrations still recalibrates its single threshold on reviews, every `severity.recalibrate_after` of them.
 
 **Watch it.**
 
-- `GET /api/v1/feedback` reports the reviews, the model version, the reviews it was calibrated on, the reviews pending, and the coverage before and after.
-- The console's Settings page shows the same under "Learning from reviews".
-- The log line `severity.recalibrated` records each change.
+- `GET /api/v1/feedback` reports the reviews and the model version; `GET /api/v1/blind-check` reports how many blind checks there are.
+- The log line `severity.adapted` records each change (`severity.recalibrated` for the older single-threshold models).
+- `GET /api/v1/drift` and "Has anything shifted?" in Settings compare each system's recent levels with its earlier ones.
 
 In `external` mode the workers run the job. The API checks the shared model file before it answers `/api/v1/feedback`, so it reports the version the workers wrote.
 
-**Preview a recalibration** without saving it:
+**Preview it** without saving:
 
 ```bash
 uv run aria train recalibrate --dry-run
 ```
 
-It prints the coverage and mean set size before and after. `--min-new-reviews N` overrides the threshold; in compose, run it with `docker compose exec worker aria train recalibrate --dry-run`.
+It prints how many checks would apply, how many the sets missed and the new miss rates; in compose, run it with `docker compose exec worker aria train recalibrate --dry-run`.
 
 **Roll back.**
 
 1. Copy the kept version over the live model in `ARIA_MODELS_DIR`, for example `cp severity_log.<version>.json severity_log.json` (in compose: `docker compose exec worker sh -c 'cd /var/lib/aria/models && cp severity_log.<version>.json severity_log.json'`). Deleting `severity_log.json` there returns to the trained model. Engines pick the change up at the next run.
-2. Then set `severity.recalibrate_check_s: 0` (or raise `recalibrate_after`), and restart. The restored file counts fewer reviews, so the next check would recalibrate again.
+2. Then set `severity.recalibrate_check_s: 0` and restart: the restored file has not seen the later checks, so the next check would apply them again.
 
-In containers, the live model sits on the shared volume, so it survives a recreated container. In a checkout, `ARIA_MODELS_DIR` is `models/`, so a recalibration rewrites the committed model file (the previous version stays beside it).
+In containers, the live model sits on the shared volume, so it survives a recreated container. In a checkout, `ARIA_MODELS_DIR` is `models/`, so a change rewrites the committed model file (the previous version stays beside it).
 
 ### Enable the log scan
 

@@ -18,10 +18,10 @@ It follows the spirit of [Model Cards for Model Reporting](https://arxiv.org/abs
 | Committed version | The `version` field of [`models/severity_log.json`](../models/severity_log.json) |
 | Task | Rate one window of log lines, plus any firing alerts, from SEV1 to SEV4 |
 | Type | Multinomial logistic regression on standardised features, with temperature scaling and split-conformal prediction sets |
-| Output | A calibrated probability for each of the four classes, and a prediction set that targets 90% coverage (alpha 0.1) |
+| Output | A calibrated probability for each of the four classes, and a prediction set that targets coverage per level: 95% for SEV1 and SEV2 (`severity.serious_alpha` 0.05) and 90% for SEV3 and SEV4 (`severity.alpha` 0.1), with a severe-miss guard certified at 5% (`severity.severe_miss_risk`) |
 | Rules version | The `version` in [`config/severity_rules.yaml`](../config/severity_rules.yaml), recorded in the model's metadata |
-| Format | JSON (`aria.linear_model.v1`): coefficients, scaler statistics, temperature, conformal threshold and metadata. Inference is plain numpy, and loading a model file cannot run code. |
-| Code | [`src/aria/severity/`](../src/aria/severity/): `model.py`, `training.py`, `policy.py`, `engine.py` and `recalibration.py` |
+| Format | JSON (`aria.linear_model.v1`): coefficients, scaler statistics, the training range, temperature, each level's calibration scores, the guard, novelty statistics and metadata. Inference is plain numpy, and loading a model file cannot run code. |
+| Code | [`src/aria/severity/`](../src/aria/severity/): `model.py`, `conformal.py`, `training.py`, `policy.py`, `engine.py`, `recalibration.py` and `drift.py` |
 | Training data | **Semi-synthetic** windows built from real Loghub lines ([data card](data-card.md)) |
 | Licence | The code is MIT. The model is trained on Loghub-derived data, and the Loghub terms still apply to it. |
 
@@ -48,25 +48,33 @@ order:
    decisive SEV1 rule is not outvoted by the weaker SEV2 rules that a severe incident also
    trips.
 2. **The model gives calibrated probabilities.** It reads the window's features, including the
-   rules' output. The prediction set holds every class whose probability is at least 1 − q,
-   where q is the conformal threshold. If no class clears it, the set is marked empty and holds
-   the model's most likely class and the rules' class, so the conservative fallback plans for
-   the more serious of the two. (With the most likely class alone, a crash-looping service the
-   rules rated SEV2 came out SEV4.)
+   rules' output. Each level has its own conformal threshold q, and the prediction set holds
+   every level whose probability is at least 1 − q for that level. A set is ordered: one that
+   holds SEV1 and SEV3 also holds SEV2. When neither serious level made the set but their
+   total probability passes the certified guard, the likelier serious level joins it. If no
+   level clears its threshold, the set is marked empty and holds the model's most likely class
+   and the rules' class, so the conservative fallback plans for the more serious of the two.
+   (With the most likely class alone, a crash-looping service the rules rated SEV2 came out
+   SEV4.)
 3. **Floors narrow the set.** They remove every class less severe than the floor.
 4. **A confident one-class set is decided without an LLM.** This happens when the model gives
    the class at least 0.85 (the `gate` in the rules file), or when a floor alone settled it.
    `decided_by` is `rules` when a floor settled it or the rules agree, and `model` otherwise.
    Both are auditable. A window unlike the ones the model learned from is never decided this
    way: when a feature sits more than six training standard deviations from the training mean,
-   as with a handful of lines or an alert with no logs, the model is not used at all. The rules
-   supply the probabilities and the set, as with no model file, the evidence says why, and a
-   person always confirms.
+   or a quarter of the training range past its edge, as with a handful of lines or an alert with
+   no logs, the model is not used at all. The rules supply the probabilities and the set, as
+   with no model file, the evidence says why, and a person always confirms. A person also
+   confirms, though the model is used, when the window's mix of features or its share of new log
+   patterns is further out than all but 1% of held-out windows, when the set is empty or holds
+   every level, or when the model never trained on the window's system. For the two "further
+   out" cases, the levels the rules leave open join the set too.
 5. **Otherwise an LLM may choose, but only within the set.** The severity enum in its JSON
    schema is the set, and its answer is checked again: the class must be in the set and every
    cited evidence ID must exist. `decided_by` is `llm`. These decisions are not auditable, and
-   they are flagged for review when the set holds three or more classes or the model was not
-   used.
+   they are flagged for review when the set holds three or more classes, the model was not
+   used, any reason in step 4 applies, or the LLM picked SEV3 or SEV4 while the set kept a
+   serious level possible.
 6. **Without an LLM, ARIA takes the most severe class in the set.** This applies when no LLM is
    configured, the run's budget is spent, or the LLM's answers fail validation. The severity is
    flagged for review, and `decided_by` is `fallback`. Under-triage costs more than
@@ -132,71 +140,83 @@ Two of these depend on configuration and history:
 - **Calibration.** A single temperature that minimises negative log-likelihood on the
   temperature split ([Guo et al., 2017](https://arxiv.org/abs/1706.04599)). It corrects over-
   and under-confidence without changing which class ranks first.
-- **Conformal prediction.** Split-conformal prediction with the least ambiguous set-valued
-  classifier ([Sadinle et al., 2019](https://arxiv.org/abs/1609.00451)), fitted on the
-  conformal split.
-  - The threshold q is the finite-sample-corrected (1 − alpha) quantile of 1 − p(true class).
-  - With alpha 0.1 ([`config/aria.yaml`](../config/aria.yaml)), the sets hold the true class at
-    least 90% of the time, but only on data exchangeable with the conformal split.
+- **Conformal prediction.** Class-conditional (Mondrian) split-conformal prediction
+  ([Vovk et al., 2005](https://link.springer.com/book/10.1007/b106715); the least ambiguous
+  set-valued classifier of [Sadinle et al., 2019](https://arxiv.org/abs/1609.00451)), fitted on
+  the conformal split ([`conformal.py`](../src/aria/severity/conformal.py)).
+  - Each level's threshold is the ⌈(n + 1)(1 − alpha)⌉-th smallest of 1 − p(level) over the n
+    conformal windows whose truth is that level. With too few windows to promise that, the level
+    is never ruled out.
+  - Alpha is 0.05 for SEV1 and SEV2 and 0.1 for SEV3 and SEV4
+    ([`config/aria.yaml`](../config/aria.yaml)), so a true SEV1 or SEV2 stays in the set at least
+    95% of the time, and the others 90%, but only on data exchangeable with the conformal split.
+  - The model file keeps each level's sorted scores, so a threshold at any alpha can be
+    recomputed without the training data.
+- **Severe-miss guard.** Conformal risk control
+  ([Angelopoulos et al., 2024](https://arxiv.org/abs/2208.02814)) on the loss "a truly serious
+  window's set holds no serious level": the loosest guard whose corrected risk on the conformal
+  split is at most `severity.severe_miss_risk` (0.05). When the per-level sets already meet it,
+  no guard is needed and the calibration records the certificate.
+- **Novelty.** A Mahalanobis distance on standardised features with a shrunk covariance
+  ([Ledoit and Wolf, 2004](https://doi.org/10.1016/S0047-259X(03)00096-4)) fitted on the training
+  windows, and the share of a window's log patterns new to its system, each turned into a
+  conformal p-value against held-out windows. Below 1%, a person confirms.
 - **Version.** `severity-log-<date>-<first 8 hex digits of a SHA-256 of the coefficients>`.
 - **Retraining.** `make train` (or `aria train severity`) writes the model and its training
   report. Without the Loghub samples it stops, unless `--fixtures` asks for a model fit on the
   test fixtures.
 
-## Recalibration on reviewed incidents
+## Recalibration on blind checks
 
 The coverage guarantee holds only on data like the calibration split. A deployment's own
 incidents differ from the semi-synthetic windows, so ARIA recalibrates on them
-([`src/aria/severity/recalibration.py`](../src/aria/severity/recalibration.py)).
+([`src/aria/severity/recalibration.py`](../src/aria/severity/recalibration.py),
+[ADR 0014](adr/0014-promise-coverage-per-level-and-send-unfamiliar-windows-to-a-person.md)).
 
-**What is recorded.** Every human review stores the run's model input (the 40 features) and the
-severity the reviewer settled on:
+**What is recorded.** In Settings, "Check ARIA blind" shows a recent incident, picked at random
+from those decided in the last 500 runs, as its log patterns and counts. Nothing ARIA decided is
+shown. The person rates it, then sees ARIA's level and set. The rating, the run's model input
+(the model's features) and the calibration it used are stored as a blind check. Reviews are
+still recorded, but no longer recalibrate: a person approving a report tends to agree with
+whatever ARIA said. On a shared demo, visitors may try a blind check, but their ratings are not
+stored, so no visitor can skew the model.
 
-- an approval confirms ARIA's severity, and an edit corrects it;
-- a rejection settles nothing and is left out;
-- runs approved automatically, because approval was turned off, are not recorded at all.
+**What it does.** After each blind check, in the order they arrived, the rated level's alpha
+moves toward its target: down by 0.05 × (1 − target) when the set missed the person's level,
+up by 0.05 × target when it held it (adaptive conformal inference,
+[Gibbs and Candès, 2021](https://arxiv.org/abs/2106.00170)). Over any sequence of n checks of a
+level, the share its sets missed exceeds the target by at most (max(alpha, 1 − alpha) + 0.05) /
+(0.05 n). Alpha may dip below zero, meaning "never rule this level out", because clipping it
+would forget misses and break that bound. Every 100 further checks of a level replace its
+calibration scores with the checks' own, and its alpha starts again at the target.
 
-**When it runs.** A background job checks every `severity.recalibrate_check_s` seconds, where
-runs execute: in the API in in-process mode, or in `aria worker` in external mode.
+**When it runs.** A background job checks every `severity.recalibrate_check_s` seconds (600 by
+default; 0 turns it off), where runs execute. `aria train recalibrate [--dry-run]` does the same
+by hand. The model is written atomically to `ARIA_MODELS_DIR`, with the previous file kept
+beside it, and running engines reload it when it changes.
 
-- The default interval is 600 seconds, and 0 turns the job off.
-- It recalibrates once `severity.recalibrate_after` new reviews have gathered since the loaded
-  model was calibrated (default 30, minimum 10).
-- New reviews are counted against the model file's own record, so a model restored from an
-  older file recalibrates again from the shared database.
-- `aria train recalibrate [--min-new-reviews N] [--dry-run]` does the same by hand. With
-  `--dry-run`, it reports the effect without saving anything.
+**What moves and what does not.** Only each level's alpha, and after a batch its scores, move.
+The coefficients, scaler, temperature and novelty statistics stay as trained, so recalibration
+can widen or narrow the sets, and with them how often ARIA asks for review, but cannot change
+which level the model ranks first.
 
-**What it does.**
+**Versions.** An adapted model is named `<trained version>-aci<n>`, where n is the number of
+blind checks it followed. Its metadata gains `trained_version` and an `aci` record: the last
+check applied, the count, the step, the targets and when.
 
-1. It recomputes the conformal threshold on all reviewed incidents, not just the new ones.
-2. It writes the model atomically under a new version to `ARIA_MODELS_DIR` (`models/` in a
-   checkout; the shared `/var/lib/aria/models` volume in containers), and keeps the previous
-   file beside it as `severity_log.<previous version>.json`. The trained model that ships with
-   the code is never overwritten there; engines read it until the first recalibration.
-3. It marks the reviews as used.
-
-Running engines, in every container that shares the volume, reload the file when it changes.
-
-**What moves and what does not.** Only the threshold moves; alpha is taken from the config.
-The coefficients, scaler and temperature stay as trained. So recalibration can widen or narrow
-the prediction sets, and with them how often ARIA asks for review. It cannot change which class
-the model ranks first.
-
-**Versions.**
-
-- A recalibrated model is named `<trained version>-recal<n>`, where n is the number of reviewed
-  incidents it used.
-- Its metadata gains `trained_version`, `recalibrated_from`, `recalibrated_at`, `n_reviewed`,
-  `coverage_before` and `coverage_after`.
-
-**Caveats.** Reviewed incidents are not a random sample, and every approval counts as a
-confirmation. The guarantee is only as good as the reviews.
+**Model files without per-level calibrations** still recalibrate their single threshold on
+reviews, as [ADR 0011](adr/0011-recalibrate-only-the-conformal-threshold-from-reviews.md)
+describes.
 
 **Rolling back.** Copy the kept file back over `severity_log.json` in `ARIA_MODELS_DIR`, or
-delete that file to return to the trained model. Unless
-`recalibrate_check_s` is 0, the job may recalibrate again at its next check if enough reviews
-have gathered. The [ops runbook](ops-runbook.md) has the operational steps.
+delete that file to return to the trained model. The [ops runbook](ops-runbook.md) has the
+operational steps.
+
+**Drift.** `GET /api/v1/drift`, and "Has anything shifted?" in Settings, compare the levels ARIA
+decided on each system's recent runs with its earlier runs (at least 40 runs), by the population
+stability index against the cut-off chance alone passes one time in twenty
+([`drift.py`](../src/aria/severity/drift.py)). `/metrics` counts decisions by level, set sizes
+and each reason a person was asked to confirm.
 
 ## Metrics
 

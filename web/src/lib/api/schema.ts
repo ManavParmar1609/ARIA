@@ -1012,6 +1012,16 @@ export type components = {
          * @description Where the severity model's calibration stands against the reviews gathered so far.
          */
         CalibrationOut: {
+            /**
+             * Adapted On
+             * @default 0
+             */
+            adapted_on?: number;
+            /**
+             * Blind Checks
+             * @default 0
+             */
+            blind_checks?: number;
             /** Check Interval S */
             check_interval_s: number;
             /** Coverage After */
@@ -1022,6 +1032,11 @@ export type components = {
             model_version: string | null;
             /** Pending */
             pending: number;
+            /**
+             * Per Level
+             * @default false
+             */
+            per_level?: boolean;
             /** Recalibrate After */
             recalibrate_after: number;
             /** Recalibrated */

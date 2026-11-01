@@ -63,6 +63,7 @@ async def feedback(state: State, limit: Annotated[int, Query(ge=1, le=500)] = 50
     in_model = reviews_in(model) if model else 0
     meta = model.metadata if model else {}
     config = services.config.severity
+    blind = len(await asyncio.to_thread(repo.feedback_of, engine, "blind_check"))
     return FeedbackOut(
         calibration=CalibrationOut(
             model_version=model.version if model else None,
@@ -75,6 +76,9 @@ async def feedback(state: State, limit: Annotated[int, Query(ge=1, le=500)] = 50
             check_interval_s=config.recalibrate_check_s,
             coverage_before=meta.get("coverage_before"),
             coverage_after=meta.get("coverage_after"),
+            per_level=bool(model and model.calibrations),
+            blind_checks=blind,
+            adapted_on=int((meta.get("aci") or {}).get("checks", 0)),
         ),
         reviews=[
             ReviewOut(
