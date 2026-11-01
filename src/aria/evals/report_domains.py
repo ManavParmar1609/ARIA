@@ -350,12 +350,43 @@ def _jira(s: Mapping[str, Any]) -> list[str]:
     return lines
 
 
-def render(results: Mapping[str, Any]) -> list[str]:
-    """The new-domain sections from a results document."""
-    domains = results.get("domains") or {}
-    if not domains:
+def _hadoop_labels(hadoop: Mapping[str, Any]) -> list[str]:
+    issue = hadoop.get("label_issue")
+    if not isinstance(issue, Mapping):
         return []
-    lines = [
+    without, proposed = issue["without_disputed"], issue["with_proposed_labels"]
+    return [
+        "### The Hadoop jobs whose labels are disputed",
+        "",
+        (
+            f"Loghub issue #56 ({issue['source']}) says {len(issue['jobs'])} of the PageRank jobs "
+            "may be mislabelled, and the maintainer closed it with a warning rather than a fix. "
+            "Without those jobs, ARIA flagged "
+            f"{without['failed_flagged']} of {without['failed']} failed jobs and "
+            f"{without['normal_flagged']} of {without['normal']} healthy ones; with the labels "
+            f"the issue proposes, {proposed['failed_flagged']} of {proposed['failed']} failed "
+            f"and {proposed['normal_flagged']} of {proposed['normal']} healthy."
+        ),
+        "",
+        "| Job | Label in the data | Label the issue proposes | ARIA's severity |",
+        "|---|---|---|---|",
+        *(
+            f"| {j['job']} | {j['label'].replace('_', ' ')} | {j['proposed'].replace('_', ' ')} | "
+            f"{j['severity']} |"
+            for j in issue["jobs"]
+        ),
+        "",
+    ]
+
+
+def render(results: Mapping[str, Any]) -> list[str]:
+    """The new-domain sections, and the Hadoop label note, from a results document."""
+    domains = results.get("domains") or {}
+    hadoop = (results.get("real") or {}).get("hadoop") or {}
+    lines = _hadoop_labels(hadoop) if isinstance(hadoop, Mapping) else []
+    if not domains:
+        return lines
+    lines += [
         "## New domains: data ARIA was never tuned on",
         "",
         (

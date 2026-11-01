@@ -579,6 +579,13 @@ them. The [threat model](threat-model.md) covers what these controls do and do n
 - **One company's incidents.** GitLab.com's incidents come from one SaaS platform's own
   responders, in their own vocabulary, and their titles are often written before the cause is
   known. Its labels name GitLab's services, not the systems the log scenarios cover.
+- **Disputed Hadoop labels.** Loghub issue
+  [#56](https://github.com/logpai/loghub/issues/56) says six PageRank jobs may be mislabelled, and
+  the maintainer closed it with a warning rather than a fix. The Hadoop evaluation keeps the
+  data's labels in its headline, and also scores those jobs apart: ARIA's verdict on each,
+  detection without them, and detection with the issue's proposed labels. The issue writes one
+  job's id as `1445182151478_0015`, which no job has; the evaluation reads it as
+  `1445062781478_0015`, the only job with that number labelled machine down, as the issue says.
 - **Mirrors.** Where a source's home host is blocked (Zenodo, UCI), the copy comes from a public
   repository. A file copy must match the sha256 pinned in the manifest; a repository copy is
   pinned to a commit. The BGL and UCI copies were also compared with independent copies, but
