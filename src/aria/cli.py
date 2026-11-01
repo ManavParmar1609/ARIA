@@ -535,7 +535,10 @@ def triage(
 def eval_run(
     *,
     suite: Annotated[
-        str, typer.Option(help="smoke, severity, pipeline, robustness, parsing, edge, real or all")
+        str,
+        typer.Option(
+            help="smoke, severity, pipeline, robustness, parsing, edge, real, redteam or all"
+        ),
     ] = "smoke",
     gate: Annotated[bool, typer.Option(help="Fail when a threshold is missed (CI).")] = False,
     llm: Annotated[bool, typer.Option(help="Use the configured LLM chain (costs calls).")] = False,
