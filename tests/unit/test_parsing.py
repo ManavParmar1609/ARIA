@@ -12,7 +12,7 @@ from aria.data.loghub import LOGHUB_DIRS, iter_structured_csv
 from aria.data.scenarios import LinePools, ScenarioBuilder
 from aria.evidence import EvidenceStore
 from aria.parsing.catalog import LEXICON_PATH, load_lexicon
-from aria.parsing.drain import WILDCARD, Drain, drain_for, parameters, template_id
+from aria.parsing.drain import POLARITY, WILDCARD, Drain, drain_for, parameters, template_id
 from aria.parsing.features import FeatureInput, burst_score, compute_features
 from aria.parsing.parser import parse_lines
 from aria.parsing.signals import line_rank, signal_components, signal_templates
@@ -62,6 +62,13 @@ def test_a_failure_never_merges_into_a_healthy_template() -> None:
     assert drain.match("Connection to 10.0.0.9 port 22 failed") is failed
 
 
+@pytest.mark.parametrize("word", sorted(POLARITY | {"DEBUG", "INFO", "WARN", "ERROR", "FATAL"}))
+def test_masks_never_hide_a_level_or_failure_word(word: str) -> None:
+    """Masks replace values (addresses, ids, numbers), never the words that carry meaning."""
+    template = Drain().add(f"task 0x1f on 10.0.0.7 took 12 ms: {word} after 3 tries").template
+    assert word in template.split()
+
+
 def test_every_keyword_category_names_its_sources() -> None:
     import yaml
 
@@ -83,10 +90,20 @@ def test_every_keyword_category_names_its_sources() -> None:
         ("duplicate charge detected for order 1192", "payment"),
         ("replication lag 412s on replica db-2", "freshness"),
         ("SSO service unavailable: identity provider timed out", "signin"),
+        ("IDS: possible data exfiltration via DNS tunneling from 10.1.4.7", "exfiltration"),
+        ("beacon to C2 server every 60s from host-12", "exfiltration"),
     ],
 )
 def test_version_2_vocabulary_reads_codes_from_outside_loghub(line: str, category: str) -> None:
     assert load_lexicon()[category].search(line.lower())
+
+
+def test_power_supply_words_need_a_word_of_their_own() -> None:
+    """ "psu" inside a longer word (HealthApp's stepSum, macOS's AppSuggestion) is not hardware."""
+    hardware = load_lexicon()["hardware"]
+    assert hardware.search("psu failure\\ ambient=28")
+    assert not hardware.search("checkinsertstatus stepsum or caloriesum is enough")
+    assert not hardware.search("-[uabestappsuggestionmanager notifybestappchanged:type:]")
 
 
 def test_a_routine_lease_renewer_thread_is_not_degradation() -> None:

@@ -19,9 +19,13 @@ suites:
       not a measure of new systems.
   generalisation:
     ring: B
-    status: untouched
-    since: "2026-10-31"
-    note: Each system and failure mode held out in turn; new in this record.
+    status: tuned
+    since: "2026-11-01"
+    note: >-
+      Each system and failure mode held out in turn. The per-level calibration, the novelty
+      check, lexicon version 2 and the rule changes of 2026-11-01 were chosen on held-out-system
+      folds of validation seeds 51-56; the published folds use the test seeds, never used to
+      choose anything.
   real.hdfs:
     ring: C
     status: seen
@@ -36,8 +40,12 @@ suites:
       rubric are in training, so the report also rates it with a model fitted without BGL.
   real.hadoop:
     ring: C
-    status: seen
-    note: Looked at during development before this record began.
+    status: tuned
+    since: "2026-11-01"
+    note: >-
+      Every healthy job was flagged once the training-range guard sent these fast-logging jobs to
+      the rules. That led to the crash rule reading warnings and errors only; the change was
+      checked on validation seeds and held-out systems, not on these jobs.
   real.openstack:
     ring: C
     status: seen

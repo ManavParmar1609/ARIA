@@ -12,13 +12,19 @@
 #                Noise (SEV4) rules can outvote SEV3-level signals only.
 # effect: floor  the final severity can never be less severe than `severity`.
 #
+# dimensions     the kinds of impact a SEV1 rule shows: availability, integrity, security, spread,
+#                criticality, persistence or alerting. The rules call SEV1 only when the SEV1
+#                rules that fired name at least `sev1_dimensions` of them between them, as an
+#                impact-by-urgency matrix would; otherwise their weight counts towards SEV2. A
+#                rule that decides SEV1 on its own must name that many itself (checked at load).
+#
 # Conditions are {feature, op, value}, combined with all: [...] or any: [...] and nested freely.
 # Features: every numeric WindowFeatures field, level_counts.<LEVEL>, keyword_hits.<category>
 # (see config/lexicon.yaml), issue_keyword_hits.<category> (the same, on lines at WARN or above
 # or with no level), n_critical_components, alerts.firing, alerts.critical and alerts.warning.
 # Unknown feature names fail at load time.
 
-version: "2026.10.3"
+version: "2026.11.1"
 
 # A severity is decided without the LLM only when the prediction set is a single class and the
 # calibrated model gives it at least this probability.
@@ -32,6 +38,9 @@ activation:
   SEV2: 2.0
   SEV3: 1.0
 
+# Impact dimensions SEV1 needs, between the SEV1 rules that fired.
+sev1_dimensions: 2
+
 rules:
   # --- SEV1: widespread outage or data-loss risk ------------------------------------------------
   - id: crash_widespread
@@ -39,6 +48,7 @@ rules:
     effect: score
     severity: SEV1
     weight: 3.0
+    dimensions: [availability, spread]
     when:
       all:
         - {feature: keyword_hits.crash, op: ">=", value: 10}
@@ -49,6 +59,7 @@ rules:
     effect: score
     severity: SEV1
     weight: 2.5
+    dimensions: [criticality, spread]
     when:
       all:
         - {feature: max_component_criticality, op: ">=", value: 0.9}
@@ -59,6 +70,7 @@ rules:
     effect: score
     severity: SEV1
     weight: 2.5
+    dimensions: [availability, spread]
     when:
       all:
         - {feature: peak_errors_per_min, op: ">=", value: 100}
@@ -70,6 +82,7 @@ rules:
     effect: score
     severity: SEV1
     weight: 2.5
+    dimensions: [availability, spread, criticality]
     when:
       all:
         - {feature: keyword_hits.hardware, op: ">=", value: 10}
@@ -81,15 +94,29 @@ rules:
     effect: score
     severity: SEV1
     weight: 1.5
+    dimensions: [alerting]
     when: {feature: alerts.critical, op: ">=", value: 1}
 
   # --- SEV2: major degradation or a failing critical component ---------------------------------
+  # A crash word in a routine INFO line (a speculative task attempt "aborted", a process
+  # "killed" on schedule) is usually not a crash: only lines at WARN or above, or with no level,
+  # are decisive. Routine mentions still count, as moderate.
   - id: crash_signature
-    title: Crash signatures (panic, segfault, abort, kernel terminated)
+    title: Crash signatures (panic, segfault, abort, kernel terminated) in warnings or errors
     effect: score
     severity: SEV2
     weight: 2.0
-    when: {feature: keyword_hits.crash, op: ">=", value: 1}
+    when: {feature: issue_keyword_hits.crash, op: ">=", value: 1}
+
+  - id: crash_words_routine
+    title: Crash words in routine lines
+    effect: score
+    severity: SEV3
+    weight: 1.0
+    when:
+      all:
+        - {feature: keyword_hits.crash, op: ">=", value: 1}
+        - {feature: issue_keyword_hits.crash, op: "==", value: 0}
 
   - id: critical_component_errors
     title: Errors from a critical component
@@ -127,6 +154,13 @@ rules:
       all:
         - {feature: keyword_hits.unavailable, op: ">=", value: 20}
         - {feature: error_nodes, op: ">=", value: 3}
+
+  - id: unavailability_reported
+    title: A service reported unreachable in warnings or errors, three or more times
+    effect: score
+    severity: SEV2
+    weight: 2.0
+    when: {feature: issue_keyword_hits.unavailable, op: ">=", value: 3}
 
   - id: storage_failures
     title: Storage or file-system failures
@@ -226,7 +260,9 @@ rules:
       all:
         - {feature: error_events, op: "==", value: 0}
         - {feature: broken_flows, op: "<", value: 3}
+        - {feature: issue_keyword_hits.unavailable, op: "<", value: 3}
 
+  # A ratio says little about a handful of lines: "errors are rare" needs twenty events behind it.
   - id: low_error_rate
     title: Errors are rare and confined to low-criticality components
     effect: score
@@ -234,10 +270,75 @@ rules:
     weight: 1.5
     when:
       all:
+        - {feature: n_events, op: ">=", value: 20}
         - {feature: error_ratio, op: "<", value: 0.05}
         - {feature: max_component_criticality, op: "<", value: 0.5}
         - {feature: keyword_hits.crash, op: "==", value: 0}
         - {feature: broken_flows, op: "<", value: 3}
+
+  # --- version 2 categories (config/lexicon.yaml names each one's sources) -----------------------
+  # No Loghub system logs these, so their weights are judgement, kept below SEV2's activation:
+  # each needs another SEV2 signal before the rules call SEV2 on its own.
+  - id: tls_failures
+    title: TLS or certificate failures, so clients cannot connect securely
+    effect: score
+    severity: SEV2
+    weight: 1.5
+    when: {feature: issue_keyword_hits.tls, op: ">=", value: 3}
+
+  - id: dns_failures_spread
+    title: Name-resolution failures on three or more nodes
+    effect: score
+    severity: SEV2
+    weight: 1.5
+    when:
+      all:
+        - {feature: issue_keyword_hits.dns, op: ">=", value: 5}
+        - {feature: error_nodes, op: ">=", value: 3}
+
+  - id: dns_failures
+    title: Name-resolution failures
+    effect: score
+    severity: SEV3
+    weight: 1.0
+    when: {feature: issue_keyword_hits.dns, op: ">=", value: 5}
+
+  - id: control_plane_failures
+    title: The cluster's control plane is failing (leader lost, store full, API timing out)
+    effect: score
+    severity: SEV2
+    weight: 1.5
+    when: {feature: issue_keyword_hits.control_plane, op: ">=", value: 3}
+
+  # A detector saying data is leaving, or a command-and-control channel, is a security incident
+  # with data exposure (NIST SP 800-61's information impact), so it decides SEV2 on its own.
+  - id: exfiltration_detected
+    title: A detector reports data leaving the network, or a command-and-control channel
+    effect: score
+    severity: SEV2
+    weight: 2.0
+    when: {feature: issue_keyword_hits.exfiltration, op: ">=", value: 1}
+
+  - id: signin_outage
+    title: Sign-in or identity services failing, so people cannot log in
+    effect: score
+    severity: SEV2
+    weight: 1.5
+    when: {feature: issue_keyword_hits.signin, op: ">=", value: 3}
+
+  - id: backup_failures
+    title: Backups, snapshots or replication failing
+    effect: score
+    severity: SEV3
+    weight: 1.0
+    when: {feature: issue_keyword_hits.backup, op: ">=", value: 1}
+
+  - id: stale_data
+    title: Data reported stale, lagging or out of schema
+    effect: score
+    severity: SEV3
+    weight: 1.0
+    when: {feature: issue_keyword_hits.freshness, op: ">=", value: 3}
 
   # --- floors: severities ARIA must never go below ---------------------------------------------
   - id: data_risk_floor
@@ -283,3 +384,22 @@ rules:
     effect: floor
     severity: SEV3
     when: {feature: broken_flows, op: ">=", value: 3}
+
+  # Money moved twice, or ledgers that disagree, is a data-integrity incident whatever else the
+  # window shows.
+  - id: payment_integrity_floor
+    title: Payment integrity at risk (duplicate charges, ledger mismatches)
+    effect: floor
+    severity: SEV2
+    when: {feature: issue_keyword_hits.payment, op: ">=", value: 1}
+
+  # Recovery being disabled next to security signals is how ransomware prepares (MITRE ATT&CK
+  # T1490 Inhibit System Recovery).
+  - id: recovery_inhibited_floor
+    title: Backups or shadow copies removed alongside security alerts
+    effect: floor
+    severity: SEV2
+    when:
+      all:
+        - {feature: keyword_hits.backup, op: ">=", value: 1}
+        - {feature: keyword_hits.security, op: ">=", value: 1}

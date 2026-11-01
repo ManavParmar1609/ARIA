@@ -18,7 +18,7 @@ categories:
   unavailable: "unavailable|unreachable|\\bdown\\b|no route|connection refused|timed? ?out|cannot open channel|error in contacting|not responding|connectionloss|connection loss|(lost|no) quorum|quorum (lost|loss)|deadline[_ ]exceeded|bad gateway|gateway time-?out|health ?check failed|readiness probe failed|liveness probe failed"
   resource: "out of memory|\\boom\\b|oomkilled|disk full|no space|quota exceeded|too many open files|resource busy|resource[_ ]exhausted|too[_ ]many[_ ]connections|database space exceeded|\\bnospace\\b|\\b(disk|memory)pressure\\b|under (disk|memory) pressure|(disk|memory) pressure (is )?(high|critical)|\\bevicted\\b"
   security: "failed password|authentication failure|authentication failed|invalid user|break-in|unauthori[sz]ed|permission denied|brute|privilege escalation|malware|ransom"
-  hardware: "machine check|parity|\\becc\\b|psu|power supply|\\bfan\\b|temperature|link ?error|hardware|\\bmce\\b|\\bedac\\b"
+  hardware: "machine check|parity|\\becc\\b|\\bpsu\\b|power supply|\\bfan\\b|temperature|link ?error|hardware|\\bmce\\b|\\bedac\\b"
   storage: "mount failed|i/o error|input/output error|lustre|filesystem|file system|\\bdisk\\b|storage interrupt|read-only file system|\\beio\\b"
   network: "packet|tree network|socket|connection reset|broken pipe|link has been severed|connection broken|disconnect|econnreset|epipe"
   # "lease" alone matched Hadoop's routine LeaseRenewer thread; only a lease that went wrong counts.
@@ -35,6 +35,7 @@ categories:
   # counts.
   freshness: "data (is |are )(too )?stale|stale replica|replication lag|lagging behind|schema (mismatch|drift)|unknown column|missing column|(deserializ|deserialis)\\w* (error|failed|failure)|freshness (check|sla) (failed|breach)"
   signin: "(login|sign[- ]?in|sso|identity provider|idp|oauth|token (service|endpoint)) (service )?(unavailable|down|error|timed? ?out)"
+  exfiltration: "exfiltrat|dns tunnel(l)?ing|command[- ]and[- ]control|\\bc2 (server|channel|beacon|traffic)|(unusual|suspicious|anomalous) (outbound|egress) (traffic|transfer|connection)|large (outbound|egress) transfer|data (theft|leak(age)?) (detected|suspected)"
 
 sources:
   crash: ["Linux kernel oops and panic messages", "Kubernetes container states (CrashLoopBackOff)"]
@@ -63,3 +64,4 @@ sources:
   payment: ["Payment-provider idempotency and duplicate-charge errors", "ledger reconciliation reports"]
   freshness: ["Replication-lag and schema-drift messages in data pipelines"]
   signin: ["Identity-provider and OAuth 2.0 error responses (RFC 6749)"]
+  exfiltration: ["MITRE ATT&CK TA0010 Exfiltration", "MITRE ATT&CK TA0011 Command and Control"]

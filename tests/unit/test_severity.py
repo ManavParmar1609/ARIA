@@ -190,6 +190,94 @@ def test_nested_any_all_conditions() -> None:
     assert not node.holds({"error_events": 5, "error_nodes": 3, "node_spread": 0.1})
 
 
+def test_a_lone_critical_alert_is_serious_but_not_sev1(rules: RuleSet) -> None:
+    """One kind of impact (monitoring's own label) is not enough for SEV1 by the rules."""
+    alert = AlertSignal(name="NodeDown", fingerprint="f1", labels={"severity": "critical"})
+    result = rules.evaluate(feature_space(features(), [alert]))
+    assert result.dimensions == {"alerting"}
+    # Its weight counts towards SEV2 instead, and the alert's floor keeps it at SEV2 or above.
+    assert result.scores[Severity.SEV1] == 0
+    assert result.scores[Severity.SEV2] >= 1.5
+    assert result.rule_severity is not Severity.SEV1
+    assert result.floor is Severity.SEV2
+
+
+def test_a_handful_of_quiet_lines_is_not_called_a_low_error_rate(rules: RuleSet) -> None:
+    def hits(window: WindowFeatures) -> set[str]:
+        return {h.rule_id for h in rules.evaluate(feature_space(window)).hits}
+
+    assert "low_error_rate" in hits(features())
+    few = features(n_events=5, level_counts={"INFO": 5}, events_per_min=0.25)
+    assert "low_error_rate" not in hits(few)
+
+
+def test_a_detector_reporting_data_leaving_decides_sev2(rules: RuleSet) -> None:
+    window = features(
+        level_counts={"INFO": 598, "WARN": 2},
+        keyword_hits={"exfiltration": 2},
+        issue_keyword_hits={"exfiltration": 2},
+    )
+    result = rules.evaluate(feature_space(window))
+    assert "exfiltration_detected" in {h.rule_id for h in result.hits}
+    assert result.scores[Severity.SEV2] >= 2.0
+
+
+def _rules_file(tmp_path: Path, *rules: dict[str, Any], **extra: Any) -> Path:
+    path = tmp_path / "rules.yaml"
+    path.write_text(json.dumps({"rules": list(rules), **extra}), encoding="utf-8")
+    return path
+
+
+def _sev1(rule_id: str, weight: float, dimensions: list[str], feature: str) -> dict[str, Any]:
+    return {
+        "id": rule_id,
+        "title": rule_id,
+        "severity": "SEV1",
+        "weight": weight,
+        "dimensions": dimensions,
+        "when": {"feature": feature, "op": ">=", "value": 1},
+    }
+
+
+def test_sev1_needs_two_impact_dimensions_to_agree(tmp_path: Path) -> None:
+    rules = load_rules(
+        _rules_file(
+            tmp_path,
+            _sev1("outage", 1.5, ["availability"], "error_events"),
+            _sev1("outage_again", 1.5, ["availability"], "error_nodes"),
+            _sev1("spread", 1.5, ["spread"], "distinct_nodes"),
+        )
+    )
+    same_kind = rules.evaluate({"error_events": 5, "error_nodes": 2})
+    assert same_kind.rule_severity is Severity.SEV2  # 3.0 of SEV1 weight, one dimension
+    assert same_kind.scores[Severity.SEV2] == 3.0
+    two_kinds = rules.evaluate({"error_events": 5, "distinct_nodes": 9})
+    assert two_kinds.rule_severity is Severity.SEV1
+    assert two_kinds.dimensions == {"availability", "spread"}
+
+
+def test_a_rule_that_decides_sev1_alone_must_name_two_dimensions(tmp_path: Path) -> None:
+    lone = _sev1("outage", 3.0, ["availability"], "error_events")
+    with pytest.raises(ValueError, match="at least 2 impact dimensions"):
+        load_rules(_rules_file(tmp_path, lone))
+    # Below the SEV1 activation a rule needs corroboration anyway, so one dimension is fine.
+    assert load_rules(_rules_file(tmp_path, {**lone, "weight": 1.0})).sev1_dimensions == 2
+    # A rules file can ask for one dimension, which restores the old behaviour.
+    assert load_rules(_rules_file(tmp_path, lone, sev1_dimensions=1)).sev1_dimensions == 1
+
+
+def test_unknown_impact_dimensions_fail_at_load(tmp_path: Path) -> None:
+    rule = _sev1("outage", 3.0, ["availability", "vibes"], "error_events")
+    with pytest.raises(ValueError, match="unknown impact dimensions"):
+        load_rules(_rules_file(tmp_path, rule))
+
+
+def test_every_repo_sev1_rule_names_its_impact(rules: RuleSet) -> None:
+    sev1 = [r for r in rules.rules if r.severity is Severity.SEV1 and r.effect == "score"]
+    assert sev1
+    assert all(r.dimensions for r in sev1)
+
+
 def test_duplicate_rule_ids_are_rejected(tmp_path: Path) -> None:
     rule = {
         "id": "a",
