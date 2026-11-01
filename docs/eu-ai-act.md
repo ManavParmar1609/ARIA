@@ -67,7 +67,7 @@ would want:
 
 | Article | What it asks | Where ARIA does it |
 |---|---|---|
-| 12, 19 and 26(6): record-keeping | Automatic logs over the system's life, kept at least six months | Every run's events, checkpoints, evidence, review decisions and outbound actions are stored and can be forked from any checkpoint ([ADR 0008](adr/0008-keep-runs-checkpoints-and-memory-in-one-sql-database.md)). Retention is the deployer's database policy. |
+| 12, 19 and 26(6): record-keeping | Automatic logs over the system's life, kept at least six months | Every run's events, checkpoints, evidence, review decisions and outbound actions are stored and can be forked from any checkpoint ([ADR 0008](adr/0008-keep-runs-checkpoints-and-memory-in-one-sql-database.md)). Runs are kept until someone deletes them, unless the deployer sets a retention period; a purge then deletes the runs past it ([ops runbook](ops-runbook.md#retention-and-purge)). |
 | 14: human oversight | People can understand, monitor, override, and stay aware of automation bias (14(4)(b)) | The review interrupt; evidence beside every claim; a prediction set that says which levels ARIA cannot rule out; reasons a person should confirm; blind checks that measure the model without anchoring the reviewer ([ADR 0014](adr/0014-promise-coverage-per-level-and-send-unfamiliar-windows-to-a-person.md)) |
 | 15: accuracy and robustness | Declared accuracy, resilience to errors and to attempts to alter use | Published results by ring (familiar systems, systems never seen, real data), each with intervals ([evaluation.md](evaluation.md)); per-level coverage promises; the injection guard and its benchmark results ([threat model](threat-model.md)) |
 | 50: transparency | People told when they read AI-generated text | Every report records whether a model or a template wrote it, and each run records the providers it called |
@@ -76,9 +76,12 @@ would want:
 
 - **Tenant isolation.** One deployment serves one organisation. Serving several would need a
   tenant identifier on every stored row, which is not built.
-- **Retention controls.** ARIA keeps runs until they are deleted. A configurable retention period
-  with a purge job is planned.
 - **A tamper-evident decision record.** Decisions are stored with the run, but not yet in an
-  append-only, hash-chained log.
+  append-only, hash-chained log. It needs a database change, which waits for the owner's
+  approval.
 
-The last two need database changes, which wait for the owner's approval.
+Retention is no longer a gap. A deployer sets how long runs are kept (`retention.days`, off by
+default, so nothing is deleted unless they set it), and `aria purge` or a periodic job deletes the
+runs past that period with everything that belongs only to them
+([ops runbook](ops-runbook.md#retention-and-purge)). Where Article 26(6) applies, set at least six
+months.

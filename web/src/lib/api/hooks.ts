@@ -32,6 +32,7 @@ import type { components } from "./schema";
 export type SettingsView = components["schemas"]["SettingsOut"];
 export type CapacityView = components["schemas"]["CapacityOut"];
 export type FeedbackView = components["schemas"]["FeedbackOut"];
+export type ReviewersView = components["schemas"]["ReviewersOut"];
 export type RealIncident = components["schemas"]["RealIncidentOut"];
 export type ReplayRequest = components["schemas"]["ReplayRequest"];
 export type ExpertCheck = components["schemas"]["ExpertCheckOut"];
@@ -57,6 +58,7 @@ export const keys = {
   capacity: ["capacity"] as const,
   settings: ["settings"] as const,
   feedback: ["feedback"] as const,
+  reviewers: ["reviewers"] as const,
   blindCheck: ["blind-check"] as const,
   drift: ["drift"] as const,
   realIncidents: ["real-incidents"] as const,
@@ -280,6 +282,15 @@ export function useFeedback(limit = 8) {
   return useQuery({
     queryKey: [...keys.feedback, limit],
     queryFn: () => apiFetch<FeedbackView>(v1(`/feedback?limit=${limit}`)),
+    staleTime: 30_000,
+  });
+}
+
+/** How each reviewer decides: approvals without edits, changed levels and time to decide. */
+export function useReviewers() {
+  return useQuery({
+    queryKey: keys.reviewers,
+    queryFn: () => apiFetch<ReviewersView>(v1("/reviewers")),
     staleTime: 30_000,
   });
 }

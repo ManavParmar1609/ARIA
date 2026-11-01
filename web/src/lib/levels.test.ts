@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { coverageText, orList, shortListText } from "./levels";
+import { coverageText, orList, shortListText, tornText } from "./levels";
 
 const assessment = (changes: Partial<Parameters<typeof shortListText>[0]> = {}) => ({
   severity: "SEV2" as const,
@@ -80,6 +80,28 @@ describe("shortListText", () => {
     expect(shortListText(assessment({ severity: "SEV4", decided_by: "human" }))).toBe(
       "A reviewer set SEV4.",
     );
+  });
+});
+
+describe("tornText", () => {
+  it("names the levels ARIA is torn between and the one it plans for", () => {
+    expect(tornText("SEV2", ["SEV3", "SEV2"])).toBe(
+      "ARIA is torn between SEV2 and SEV3 and plans for SEV2",
+    );
+    expect(tornText("SEV1", ["SEV1", "SEV2", "SEV3"])).toBe(
+      "ARIA is torn between SEV1, SEV2 and SEV3 and plans for SEV1",
+    );
+  });
+
+  it("says what ARIA had planned once a person decided", () => {
+    expect(tornText("SEV2", ["SEV2", "SEV3"], true)).toBe(
+      "ARIA was torn between SEV2 and SEV3 and planned for SEV2",
+    );
+  });
+
+  it("leaves a set of one level to the bare level", () => {
+    expect(tornText("SEV2", ["SEV2"])).toBeNull();
+    expect(tornText("SEV2", ["SEV2", "SEV2"])).toBeNull();
   });
 });
 

@@ -62,6 +62,7 @@ from aria.contracts.report import ReviewDecision
 from aria.contracts.run import RunStatus
 from aria.db import repository as repo
 from aria.graph.runner import RunOutcome, TriageRunner
+from aria.graph.workflow import review_lead
 
 A2A_PATH = "/a2a"
 _REQUEST_KEYS = frozenset({"logs", "alerts", "window_id", "ticket"})
@@ -287,7 +288,11 @@ class AriaExecutor(AgentExecutor):
             return
         await self._attach_report(updater, outcome.run_id)
         if outcome.status is RunStatus.AWAITING_REVIEW:
-            ask = "The report is ready for review. Reply with a decision: approve, edit or reject."
+            lead = review_lead(outcome.interrupt or {})
+            ask = (
+                f"The report is ready for review. {lead}Reply with a decision: approve, edit or "
+                "reject."
+            )
             parts = [new_text_part(ask), new_data_part(outcome.interrupt or {})]
             await updater.requires_input(updater.new_agent_message(parts))
         elif outcome.status is RunStatus.REJECTED:

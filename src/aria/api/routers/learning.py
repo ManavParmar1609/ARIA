@@ -1,4 +1,5 @@
-"""What ARIA learns from and how it measures itself: reviews, calibration, evaluation, tickets."""
+"""What ARIA learns from and how it measures itself: reviews and reviewers, calibration,
+evaluation, tickets."""
 
 from __future__ import annotations
 
@@ -10,6 +11,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from aria.api.reviewers import reviewer_stats
 from aria.api.schemas import (
     BlindCase,
     BlindCheckOut,
@@ -19,6 +21,8 @@ from aria.api.schemas import (
     CalibrationOut,
     DriftOut,
     FeedbackOut,
+    ReviewerOut,
+    ReviewersOut,
     ReviewOut,
     SystemDrift,
 )
@@ -92,6 +96,36 @@ async def feedback(state: State, limit: Annotated[int, Query(ge=1, le=500)] = 50
             )
             for row in rows
         ],
+    )
+
+
+@router.get("/reviewers", response_model=ReviewersOut)
+async def reviewers(
+    state: State, limit: Annotated[int, Query(ge=1, le=10_000)] = 2_000
+) -> ReviewersOut:
+    """How each person reviews: how often they approve a report without editing it, how often
+    they set a level other than ARIA's, and the median time from a run pausing for review to
+    their decision. From the newest ``limit`` reviews ARIA keeps; reviews of a visitor's own
+    runs on a shared demo are not kept, so they are not counted."""
+    rows = await asyncio.to_thread(repo.review_decisions, state.services.engine, limit=limit)
+    moments = [row["decided_at"] for row in rows if row["decided_at"] is not None]
+    return ReviewersOut(
+        reviewers=[
+            ReviewerOut(
+                reviewer=stats.reviewer,
+                decisions=stats.decisions,
+                approved_as_is=stats.approved_as_is,
+                edited=stats.edited,
+                rejected=stats.rejected,
+                level_changed=stats.level_changed,
+                timed=len(stats.waits_s),
+                median_wait_s=stats.median_wait_s,
+            )
+            for stats in reviewer_stats(rows)
+        ],
+        decisions=len(rows),
+        since=min(moments) if moments else None,
+        limit=limit,
     )
 
 

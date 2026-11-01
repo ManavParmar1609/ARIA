@@ -15,7 +15,7 @@ import os
 import socket
 import uuid
 from collections import defaultdict
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncIterator, Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -25,14 +25,13 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.errors import InvalidUpdateError
 from langgraph.store.base import BaseStore
 from langgraph.types import Command, Overwrite, StateSnapshot, StreamMode
-from sqlalchemy import delete
 
 from aria.contracts.inputs import RunOptions, TriageRequest
 from aria.contracts.report import IncidentReport, OutboundAction, ReviewDecision
 from aria.contracts.run import EventKind, Plan, RunEvent, RunStatus
 from aria.db import repository as repo
 from aria.db.engine import session_scope
-from aria.db.models import FeedbackRow, IncidentRow, LogEventRow, RunRow, ToolCallRow
+from aria.graph import retention
 from aria.graph.checkpoint import SqlCheckpointSaver
 from aria.graph.state import Json
 from aria.graph.store import SqlStore
@@ -51,9 +50,9 @@ from aria.notify import send_action
 from aria.observability.logging import get_logger
 from aria.reporting.markdown import render_markdown
 from aria.retrieval import runlog
-from aria.retrieval.memory import run_incident_id
 from aria.security.fields import clean_request
 from aria.services import Services
+from aria.severity.policy import level_words
 
 log = get_logger(__name__)
 STREAM_MODES: list[StreamMode] = ["tasks", "custom", "checkpoints"]
@@ -139,6 +138,10 @@ def summarize(node: str, result: Json) -> Json:
             "novelty",
         )
         out = {k: sev.get(k) for k in keys}
+        # In words, for whoever reads the event log: the bare level, or the levels ARIA is torn
+        # between and the one it plans for.
+        if sev.get("severity"):
+            out["summary"] = level_words(sev["severity"], sev.get("prediction_set") or ())
     elif node in ("recall", "widen") and result.get("retrieval"):
         retrieval = result["retrieval"]
         out = {
@@ -821,7 +824,8 @@ class TriageRunner:
         return sent
 
     async def delete(self, run_id: str) -> None:
-        """Remove a run everywhere: checkpoints, lines, events, report, actions, audit, memory.
+        """Remove a run everywhere: what ``retention.owned`` lists, the same a retention purge
+        removes (checkpoints, lines, events, report, messages, audit, reviews, memory, alerts).
 
         It holds the run as a drive would, so a review applied at the same moment is refused
         (409) instead of failing halfway and writing checkpoints for a run that is gone."""
@@ -837,29 +841,28 @@ class TriageRunner:
         self._locks.pop(run_id, None)
 
     async def _purge(self, run_id: str) -> None:
+        # Through the graph's own saver and store first, in case they are not the SQL ones.
         await self.checkpointer.adelete_thread(run_id)
         for item in await self.store.asearch(("feedback",), filter={"run_id": run_id}, limit=100):
             await self.store.adelete(item.namespace, item.key)
 
         def purge() -> None:
             with session_scope(self.engine) as session:
-                session.execute(
-                    delete(LogEventRow).where(
-                        LogEventRow.window_id == run_id, LogEventRow.dataset == runlog.RUN_DATASET
-                    )
-                )
-                session.execute(delete(ToolCallRow).where(ToolCallRow.run_id == run_id))
-                session.execute(delete(FeedbackRow).where(FeedbackRow.run_id == run_id))
-                session.execute(
-                    delete(IncidentRow).where(IncidentRow.id == run_incident_id(run_id))
-                )
-                row = session.get(RunRow, run_id)
-                if row is not None:
-                    session.delete(row)  # events, reports and actions cascade in the database
+                retention.delete_owned(session, [run_id])
 
         await asyncio.to_thread(purge)
         await self.services.memory.refresh()
         self._last_seq.pop(run_id, None)
+
+    def forget(self, run_ids: Iterable[str]) -> None:
+        """Let go of what this process keeps in memory for runs deleted elsewhere (a retention
+        purge): their event counters, held model keys and idle locks."""
+        for run_id in run_ids:
+            self._last_seq.pop(run_id, None)
+            self.keys.drop(run_id)
+            lock = self._locks.get(run_id)
+            if lock is not None and not lock.locked():
+                self._locks.pop(run_id, None)
 
 
 def _interrupts(snapshot: StateSnapshot) -> list[Any]:

@@ -33,7 +33,7 @@ import {
   type Severity,
 } from "@/lib/api/types";
 import { stripSeverity } from "@/lib/format";
-import { LEVEL_WORD, orList } from "@/lib/levels";
+import { LEVEL_WORD, tornText } from "@/lib/levels";
 import { cn } from "@/lib/utils";
 
 const KIND: Record<string, string> = {
@@ -178,6 +178,24 @@ export function hasChanges(edits: ReportEdits): boolean {
   );
 }
 
+/** What the review says of the level before anyone decides. With several levels possible it
+ * names them and the one ARIA plans for, never a bare level; with one, it speaks only when ARIA
+ * was unsure of it, as it always has. */
+export function severityAdvice(
+  prompt: Pick<ReviewPrompt, "severity" | "prediction_set" | "needs_review">,
+): string | null {
+  const torn = tornText(prompt.severity, prompt.prediction_set);
+  if (prompt.needs_review) {
+    const lead = torn
+      ? `${torn}.`
+      : `ARIA isn't sure enough of ${prompt.severity} to decide alone.`;
+    return `${lead} Check the severity before approving, or change it with Edit before sending.`;
+  }
+  return torn
+    ? `${torn}. Approving keeps ${prompt.severity}; Edit before sending changes it.`
+    : null;
+}
+
 /** What approving does, in the button's words: a message goes out only when one is ticked and
  * its channel is connected. */
 export function approveLabel(sending: number, pending: boolean): string {
@@ -246,6 +264,7 @@ export function ReviewPanel({
   const previews = proposed.filter((a) => !channels[a.kind]);
   const sending = sendable.filter((a) => send.has(a.action_id)).length;
   const validation = report?.validation;
+  const advice = severityAdvice(prompt);
 
   // The dialogs open from these buttons, not from triggers of their own, so closing one puts
   // focus back by hand: otherwise it falls to the page and the next key press is a shortcut.
@@ -354,16 +373,13 @@ export function ReviewPanel({
           {error}
         </p>
       ) : null}
-      {prompt.needs_review ? (
+      {advice && prompt.needs_review ? (
         <p className="flex gap-2 rounded-md bg-sev3/12 p-2.5 text-sm">
           <TriangleAlertIcon aria-hidden className="mt-0.5 size-4 shrink-0 text-sev3-fg" />
-          <span>
-            {prompt.prediction_set.length > 1
-              ? `ARIA isn't sure whether this is ${orList(prompt.prediction_set)}.`
-              : `ARIA isn't sure enough of ${prompt.severity} to decide alone.`}{" "}
-            Check the severity before approving, or change it with Edit before sending.
-          </span>
+          <span>{advice}</span>
         </p>
+      ) : advice ? (
+        <p className="text-sm">{advice}</p>
       ) : null}
       {!prompt.valid ? (
         <p className="flex gap-2 rounded-md bg-danger/10 p-2.5 text-sm text-danger">

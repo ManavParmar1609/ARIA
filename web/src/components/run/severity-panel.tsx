@@ -4,7 +4,14 @@ import { LevelChip, SeverityScale } from "@/components/aria/severity";
 import { decisionPhrase } from "@/lib/decision";
 import { SEVERITIES, type SeverityAssessment } from "@/lib/api/types";
 import { chance, percent } from "@/lib/format";
-import { coverageText, LEVEL_RESPONSE, NOVELTY_WORDS, orList, unsettled } from "@/lib/levels";
+import {
+  coverageText,
+  LEVEL_RESPONSE,
+  NOVELTY_WORDS,
+  orList,
+  tornText,
+  unsettled,
+} from "@/lib/levels";
 import { cn } from "@/lib/utils";
 
 import { Citations } from "./evidence";
@@ -51,6 +58,12 @@ export function SeverityPanel({
     : decisionPhrase(assessment, status);
   const set = assessment.prediction_set;
   const overruled = assessment.decided_by === "human" && !set.includes(assessment.severity);
+  // With more than one level possible, the level is a plan, said as one: never a bare "SEV2".
+  // A reviewer's own level is theirs, so it reads as before.
+  const torn =
+    assessment.decided_by === "human"
+      ? null
+      : tornText(assessment.severity, set, status === "published" || status === "rejected");
   const maxScore = Math.max(1, ...SEVERITIES.map((s) => assessment.rule_scores[s] ?? 0));
   return (
     // overflow-clip: the stamp starts large, and a transform still counts as overflow; clipped to
@@ -72,8 +85,10 @@ export function SeverityPanel({
         />
         <p className="text-sm">
           {unsettled(assessment, status) && status !== "rejected"
-            ? `Not settled: ARIA could not narrow it down, so it plans for ${assessment.severity} until someone decides. ${LEVEL_RESPONSE[assessment.severity]}`
-            : LEVEL_RESPONSE[assessment.severity]}
+            ? `Not settled: ${torn ?? `ARIA plans for ${assessment.severity}`} until someone decides. ${LEVEL_RESPONSE[assessment.severity]}`
+            : torn
+              ? `${torn}. ${LEVEL_RESPONSE[assessment.severity]}`
+              : LEVEL_RESPONSE[assessment.severity]}
         </p>
       </div>
       {/* In words, not badges: the level is already shown twice on this screen. */}

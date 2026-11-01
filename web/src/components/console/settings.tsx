@@ -4,7 +4,9 @@ import { ChevronRightIcon, LogOutIcon } from "lucide-react";
 import Link from "next/link";
 
 import { BlindCheck, DriftReport } from "@/components/console/calibration-check";
+import { DataTerms } from "@/components/console/data-terms";
 import { ModelKeyPanel } from "@/components/console/model-key";
+import { ReviewerStats } from "@/components/console/reviewer-stats";
 import { ErrorState, LoadingRows, PageHeader } from "@/components/console/states";
 import { Button } from "@/components/ui/button";
 import {
@@ -81,6 +83,28 @@ function Pairs({ items }: { items: [string, React.ReactNode][] }) {
 
 const onOff = (value: unknown) => (value ? "On" : "Off");
 
+/** "every hour", "every 6 hours", "every day": how often old runs are purged. */
+function everyWords(seconds: number): string {
+  const [size, unit] =
+    seconds % 86_400 === 0
+      ? [seconds / 86_400, "day"]
+      : seconds % 3_600 === 0
+        ? [seconds / 3_600, "hour"]
+        : [Math.round(seconds / 60), "minute"];
+  return size === 1 ? `every ${unit}` : `every ${size.toLocaleString("en")} ${unit}s`;
+}
+
+/** How long runs are kept (the retention period), in words. */
+export function keptWords(retention: Record<string, number> | undefined): string {
+  const days = retention?.days ?? 0;
+  if (days <= 0) return "Until someone deletes them";
+  const period = `${days.toLocaleString("en")} ${days === 1 ? "day" : "days"} after their last change`;
+  const every = retention?.purge_interval_s ?? 0;
+  return every > 0
+    ? `${period}, purged ${everyWords(every)}`
+    : `${period}, purged when someone runs aria purge`;
+}
+
 // The deployment's environment in words; "dev" is also what the free public demo runs as.
 const ENVIRONMENT: Record<string, string> = {
   dev: "Development or demo",
@@ -109,6 +133,7 @@ function Configuration({ view }: { view: SettingsView }) {
               view.worker_mode === "external" ? "a separate worker" : "the API process",
             ],
             ["Requests a minute, for each caller", view.rate_limit_per_minute],
+            ["Runs are kept", keptWords(view.retention)],
           ]}
         />
       </Section>
@@ -423,6 +448,20 @@ export function Settings() {
         )}
       </Section>
 
+      <Section
+        id="set-data-terms"
+        title="What providers do with prompts"
+        intro="What each model provider's own terms say it may do with the evidence ARIA sends it, and when someone last read them for ARIA. Terms nobody has read yet say Not verified."
+      >
+        {view.isError ? (
+          <p className="text-sm text-muted-foreground">Not loaded: see the error above.</p>
+        ) : view.isPending ? (
+          <LoadingRows rows={2} label="Loading what providers do with prompts" />
+        ) : (
+          <DataTerms terms={view.data.data_terms ?? []} />
+        )}
+      </Section>
+
       {/* Only where the site has a model of its own: its room is what visitors share. */}
       {view.data?.shared_model ? (
         <Section
@@ -604,6 +643,10 @@ export function Settings() {
             ) : (
               <Learning view={feedback.data} />
             )}
+            <div className="grid gap-3 pt-2">
+              <h3 className="text-lg">How each reviewer decides</h3>
+              <ReviewerStats />
+            </div>
           </Section>
         </div>
       </details>

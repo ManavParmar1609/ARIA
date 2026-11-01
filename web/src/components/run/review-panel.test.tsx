@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { approveLabel, changedEdits, hasChanges, type EditForm } from "./review-panel";
+import {
+  approveLabel,
+  changedEdits,
+  hasChanges,
+  severityAdvice,
+  type EditForm,
+} from "./review-panel";
 
 const original = {
   title: "Block serve exceptions in HDFS",
@@ -82,5 +88,31 @@ describe("approveLabel", () => {
     expect(approveLabel(0, false)).toBe("Approve and publish");
     expect(approveLabel(2, false)).toBe("Approve and send");
     expect(approveLabel(2, true)).toBe("Saving");
+  });
+});
+
+describe("severityAdvice", () => {
+  const prompt = (changes: Partial<Parameters<typeof severityAdvice>[0]> = {}) => ({
+    severity: "SEV2" as const,
+    prediction_set: ["SEV2" as const, "SEV3" as const],
+    needs_review: true,
+    ...changes,
+  });
+
+  it("names the levels ARIA is torn between, not a bare level", () => {
+    expect(severityAdvice(prompt())).toBe(
+      "ARIA is torn between SEV2 and SEV3 and plans for SEV2. Check the severity before approving, or change it with Edit before sending.",
+    );
+    // Even when no one asked for a check, the review says the level is one of several.
+    expect(severityAdvice(prompt({ needs_review: false }))).toBe(
+      "ARIA is torn between SEV2 and SEV3 and plans for SEV2. Approving keeps SEV2; Edit before sending changes it.",
+    );
+  });
+
+  it("keeps today's words for a set of one level", () => {
+    expect(severityAdvice(prompt({ prediction_set: ["SEV2"] }))).toBe(
+      "ARIA isn't sure enough of SEV2 to decide alone. Check the severity before approving, or change it with Edit before sending.",
+    );
+    expect(severityAdvice(prompt({ prediction_set: ["SEV2"], needs_review: false }))).toBeNull();
   });
 });
