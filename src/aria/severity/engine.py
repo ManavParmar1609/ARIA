@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -62,6 +62,9 @@ class SeverityEngine:
         # The version this release trained: a recalibration of any other is stale.
         self.trained_version = trained_version
         self._model_mtime = _mtime(model_path)
+        # Told (previous version, new version) whenever a running engine swaps its model, so the
+        # swap goes on the decision record (aria.services wires it up).
+        self.on_swap: Callable[[str | None, str], None] | None = None
         self._set_model(model)
 
     def _set_model(self, model: LinearModel | None) -> None:
@@ -115,8 +118,11 @@ class SeverityEngine:
             # Written by a process still on the previous release, mid-upgrade.
             log.warning("severity.live_model_outdated", live=model.version)
             return False
+        previous = self.model.version if self.model is not None else None
         self._set_model(model)
         log.info("severity.model_reloaded", version=model.version)
+        if self.on_swap is not None:
+            self.on_swap(previous, model.version)
         return True
 
     def model_row(

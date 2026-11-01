@@ -62,11 +62,13 @@ from aria.config import AppConfig, BudgetConfig, Settings
 from aria.contracts.base import Claim, EvidenceKind, Severity
 from aria.contracts.inputs import TriageRequest
 from aria.contracts.parsing import ParsedBatch
+from aria.contracts.record import RecordKind
 from aria.contracts.report import IncidentReport, OutboundAction, ReviewDecision
 from aria.contracts.retrieval import Investigation, RetrievalResult
 from aria.contracts.run import BudgetUsage, Plan, RunStatus
 from aria.contracts.severity import SeverityAssessment, TicketAssessment
 from aria.data.loghub import LogRecord, format_raw_line
+from aria.db import record
 from aria.db import repository as repo
 from aria.db.engine import session_scope
 from aria.db.models import LogEventRow
@@ -96,6 +98,7 @@ from aria.retrieval import runlog
 from aria.retrieval.memory import MemoryIncident, run_incident_id
 from aria.retrieval.retriever import build_query
 from aria.security.fields import clean_request
+from aria.security.redaction import Redactor
 from aria.services import Services
 from aria.text import headline
 
@@ -1001,6 +1004,92 @@ async def _private(services: Services, run_id: str) -> bool:
     return await _db(repo.run_visitor, services.engine, run_id) is not None
 
 
+def _actor(reviewer: str) -> str:
+    """Who decided, as the decision record names them: the reviewer, or ``system`` when ARIA
+    itself approved an unattended run."""
+    return "system" if reviewer == "aria:auto" else reviewer
+
+
+def send_facts(action: OutboundAction) -> dict[str, Any]:
+    """What the decision record keeps about a message that went out, or did not: never its
+    body, which the action row holds."""
+    return {
+        "action_id": action.action_id,
+        "kind": action.kind,
+        "audience": action.audience,
+        "status": action.status,
+        "title": action.title,
+        "problem": action.result.get("error") or action.result.get("reason"),
+    }
+
+
+async def _record(
+    runtime: Runtime[TriageContext], run_id: str, kind: RecordKind, actor: str, **facts: Any
+) -> None:
+    """Add a decision to the append-only record, with the run's own pseudonyms.
+
+    A failure raises: the node fails loudly (a database error is retried first) rather than
+    finish a decision nobody can account for afterwards.
+    """
+    services = runtime.context.services
+
+    def write() -> None:
+        salt = run_salt(services.settings, run_id, services.engine)
+        record.append(
+            services.engine,
+            kind=kind,
+            actor=actor,
+            run_id=run_id,
+            payload=facts,
+            redactor=Redactor(salt=salt),
+        )
+
+    await asyncio.to_thread(write)
+
+
+async def _record_decision(
+    state: TriageState,
+    runtime: Runtime[TriageContext],
+    *,
+    decision: ReviewDecision,
+    original: SeverityAssessment,
+    final: Severity,
+) -> None:
+    """The review on the record: who decided what, and what an edit changed. The facts, never
+    the report's text: the report row keeps that, and a decision is accountable without it."""
+    run_id, actor = state["run_id"], _actor(decision.reviewer)
+    report_id = str(state["report"]["report_id"])
+    await _record(
+        runtime,
+        run_id,
+        "review",
+        actor,
+        decision=decision.decision,
+        reviewer=decision.reviewer,
+        report_id=report_id,
+        from_severity=str(original.severity),
+        to_severity=str(final),
+        decided_by=original.decided_by,
+        prediction_set=[str(s) for s in original.prediction_set],
+        approved_actions=sorted(decision.approve_actions),
+        comment=record.clipped(decision.comment),
+    )
+    edits = decision.edits
+    if edits is not None and edits.changes_anything():
+        await _record(
+            runtime,
+            run_id,
+            "edit",
+            actor,
+            report_id=report_id,
+            title=edits.title,
+            severity=str(edits.severity) if edits.severity else None,
+            summary_lines=len(edits.summary or []),
+            actions_added=len(edits.add_actions),
+            note=record.clipped(edits.note),
+        )
+
+
 async def publish(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
     services = runtime.context.services
     request = _request(state)
@@ -1010,6 +1099,9 @@ async def publish(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
     evidence = EvidenceStore(evidence_of(state))
     drafted = IncidentReport.model_validate(state["report"])
     incident, assessment = apply_review(drafted, original, decision, evidence)
+    await _record_decision(
+        state, runtime, decision=decision, original=original, final=assessment.severity
+    )
     validation = validate_report(
         incident,
         evidence=evidence.all(),
@@ -1027,6 +1119,20 @@ async def publish(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
         reviewer=decision.reviewer,
         comment=decision.comment,
     )
+    await _record(
+        runtime,
+        run_id,
+        "publish",
+        _actor(decision.reviewer),
+        report_id=incident.report_id,
+        version=incident.version,
+        severity=str(incident.severity),
+        title=incident.title,
+        decided_by=assessment.decided_by,
+        generated_by=incident.generated_by,
+        model=incident.model,
+        valid=validation.ok,
+    )
     private = await _private(services, run_id)
     memory = _memory_incident(state, incident, assessment, request.synthetic)
     if not private:
@@ -1040,6 +1146,7 @@ async def publish(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
         proposed = redraft(proposed, incident, service=service_name(request), run_url=run_url)
     actions: list[OutboundAction] = []
     for proposal in proposed:
+        delivered: OutboundAction | None = None
         if proposal.action_id not in approved:
             action = proposal.model_copy(update={"status": "rejected"})
         elif already.get(proposal.action_id) == "sent":
@@ -1050,7 +1157,7 @@ async def publish(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
             actions.append(proposal.model_copy(update={"status": "approved"}))
             continue
         else:
-            action = await send_action(
+            action = delivered = await send_action(
                 proposal.model_copy(update={"status": "approved"}),
                 services.config.comms,
                 run_url=run_url,
@@ -1060,6 +1167,10 @@ async def publish(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
         await _db(
             repo.save_actions, services.engine, run_id, [action], approved_by=decision.reviewer
         )
+        if delivered is not None:
+            await _record(
+                runtime, run_id, "send", _actor(decision.reviewer), **send_facts(delivered)
+            )
         actions.append(action)
 
     batch = ParsedBatch.model_validate(state["batch"])
@@ -1102,6 +1213,9 @@ async def reject(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
         markdown=markdown,
         reviewer=decision.reviewer,
         comment=decision.comment,
+    )
+    await _record_decision(
+        state, runtime, decision=decision, original=original, final=original.severity
     )
     actions = [
         OutboundAction.model_validate(raw).model_copy(update={"status": "rejected"})

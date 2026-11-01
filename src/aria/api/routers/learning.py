@@ -29,6 +29,7 @@ from aria.contracts.base import Severity
 from aria.contracts.inputs import TicketContext, TriageRequest
 from aria.contracts.parsing import ParsedBatch
 from aria.contracts.severity import SeverityAssessment, TicketAssessment
+from aria.db import record
 from aria.db import repository as repo
 from aria.graph.runner import RunNotFoundError
 from aria.severity.drift import MIN_RUNS, level_drift
@@ -164,20 +165,29 @@ async def rate_blind(
     batch, assessment, request = await _decided(state, run_id)
     counted = viewer.tag is None
     if counted:
+        facts = {
+            "to": str(body.severity),
+            "aria": str(assessment.severity),
+            "set": [str(s) for s in assessment.prediction_set],
+            "calibration": assessment.calibration,
+            "model_version": assessment.model_version,
+        }
         await asyncio.to_thread(
             repo.save_feedback,
             services.engine,
             run_id,
             "blind_check",
-            {
-                "to": str(body.severity),
-                "aria": str(assessment.severity),
-                "set": [str(s) for s in assessment.prediction_set],
-                "calibration": assessment.calibration,
-                "model_version": assessment.model_version,
-                "model_row": services.severity.model_row(batch.features, request.alerts),
-            },
+            {**facts, "model_row": services.severity.model_row(batch.features, request.alerts)},
             author=caller.name,
+        )
+        # On the decision record straight after: a rating that recalibrates ARIA is a decision.
+        await asyncio.to_thread(
+            record.append,
+            services.engine,
+            kind="blind_check",
+            actor=caller.name,
+            run_id=run_id,
+            payload={**facts, "held": body.severity in assessment.prediction_set},
         )
     checks = len(await asyncio.to_thread(repo.feedback_of, services.engine, "blind_check"))
     return BlindReveal(

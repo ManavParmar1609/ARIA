@@ -329,13 +329,14 @@ async def fork(
 
 
 @router.delete("/{run_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_run(run_id: RunId, state: State, viewer: ViewerDep) -> None:
-    """Delete the run and everything derived from it (report, events, memory, checkpoints)."""
+async def delete_run(run_id: RunId, state: State, caller: Caller, viewer: ViewerDep) -> None:
+    """Delete the run and everything derived from it (report, events, memory, checkpoints).
+    The deletion itself stays on the decision record, under the caller's name."""
     run = await _run_or_404(state, run_id, viewer)
     viewer.refuse_example(run)
     if run["status"] in (RunStatus.RUNNING, RunStatus.QUEUED):
         raise HTTPException(status.HTTP_409_CONFLICT, "the run is still in progress")
     try:
-        await state.runner.delete(run_id)
+        await state.runner.delete(run_id, by=caller.name)
     except RunBusyError as exc:  # a review is being applied right now
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc

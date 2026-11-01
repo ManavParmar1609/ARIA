@@ -28,8 +28,10 @@ from langgraph.types import Command, Overwrite, StateSnapshot, StreamMode
 from sqlalchemy import delete
 
 from aria.contracts.inputs import RunOptions, TriageRequest
+from aria.contracts.record import RecordKind
 from aria.contracts.report import IncidentReport, OutboundAction, ReviewDecision
 from aria.contracts.run import EventKind, Plan, RunEvent, RunStatus
+from aria.db import record
 from aria.db import repository as repo
 from aria.db.engine import session_scope
 from aria.db.models import FeedbackRow, IncidentRow, LogEventRow, RunRow, ToolCallRow
@@ -43,6 +45,7 @@ from aria.graph.workflow import (
     rekey_for_fork,
     run_link,
     run_salt,
+    send_facts,
 )
 from aria.llm.quota import Reservation, offline_message
 from aria.llm.visitor import VisitorKeys
@@ -53,6 +56,7 @@ from aria.reporting.markdown import render_markdown
 from aria.retrieval import runlog
 from aria.retrieval.memory import run_incident_id
 from aria.security.fields import clean_request
+from aria.security.redaction import Redactor
 from aria.services import Services
 
 log = get_logger(__name__)
@@ -812,6 +816,9 @@ class TriageRunner:
             action, self.services.config.comms, run_url=run_link(settings, run_id)
         )
         await asyncio.to_thread(repo.save_actions, self.engine, run_id, [sent])
+        await asyncio.to_thread(
+            self._record, run_id, "send", by, {**send_facts(sent), "resent": True}
+        )
         await self._event(
             run_id,
             "action",
@@ -820,11 +827,26 @@ class TriageRunner:
         )
         return sent
 
-    async def delete(self, run_id: str) -> None:
+    def _record(self, run_id: str, kind: RecordKind, actor: str, facts: Json) -> None:
+        """Add a decision about a run to the append-only record, with the run's pseudonyms. A
+        failure raises, so the caller answers with an error instead of a quiet success."""
+        salt = run_salt(self.services.settings, run_id, self.engine)
+        record.append(
+            self.engine,
+            kind=kind,
+            actor=actor,
+            run_id=run_id,
+            payload=facts,
+            redactor=Redactor(salt=salt),
+        )
+
+    async def delete(self, run_id: str, *, by: str | None = None) -> None:
         """Remove a run everywhere: checkpoints, lines, events, report, actions, audit, memory.
 
         It holds the run as a drive would, so a review applied at the same moment is refused
-        (409) instead of failing halfway and writing checkpoints for a run that is gone."""
+        (409) instead of failing halfway and writing checkpoints for a run that is gone. With
+        ``by``, the person who asked, the deletion goes on the decision record, which no deletion
+        touches; without it (a duplicate run nobody saw, a benchmark's own runs) it does not."""
         async with self._holding(run_id):
             took = await asyncio.to_thread(
                 repo.claim_run, self.engine, run_id, self.owner, status=None
@@ -832,7 +854,11 @@ class TriageRunner:
             if not took:
                 msg = f"run {run_id} is running in another process"
                 raise RunBusyError(msg)
+            run = await asyncio.to_thread(repo.get_run, self.engine, run_id) if by else None
             await self._purge(run_id)
+            if by is not None and run is not None:
+                facts = {k: run.get(k) for k in ("status", "system", "trigger", "title")}
+                await asyncio.to_thread(self._record, run_id, "delete", by, facts)
         self.keys.drop(run_id)
         self._locks.pop(run_id, None)
 
