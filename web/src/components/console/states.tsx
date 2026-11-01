@@ -151,24 +151,36 @@ export function PageHeader({
 }
 
 /** A section of a long page: its title in the serif, between the page's title and its cards' in
- * size, and a sentence on what the section holds. */
+ * size, and a sentence on what the section holds. A small badge may sit beside the title. */
 export function SectionHeader({
   id,
   title,
   description,
+  badge,
 }: {
   id: string;
   title: ReactNode;
   description?: ReactNode;
+  badge?: ReactNode;
 }) {
+  const heading = (
+    <h2
+      id={id}
+      className="scroll-mt-24 font-display text-3xl leading-tight font-normal tracking-heading lg:scroll-mt-8"
+    >
+      {title}
+    </h2>
+  );
   return (
     <div className="grid max-w-3xl gap-2">
-      <h2
-        id={id}
-        className="scroll-mt-24 font-display text-3xl leading-tight font-normal tracking-heading lg:scroll-mt-8"
-      >
-        {title}
-      </h2>
+      {badge ? (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {heading}
+          {badge}
+        </div>
+      ) : (
+        heading
+      )}
       {description ? <p className="text-lg text-muted-foreground">{description}</p> : null}
     </div>
   );
