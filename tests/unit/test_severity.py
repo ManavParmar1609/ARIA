@@ -353,6 +353,79 @@ def test_each_keyword_category_is_read_as_lines_patterns_and_a_share_of_issue_li
     )
 
 
+def test_a_window_of_client_cancellations_is_noise_unless_something_else_says_otherwise(
+    rules: RuleSet,
+) -> None:
+    """OpenTelemetry records a client cancelling its own request at DEBUG: a window made of them
+    is no error storm, and the rules that count errors by node or by critical component leave
+    it out. Other SEV2 evidence still counts, because a noise rule never dampens it."""
+
+    def errors(cancellations: int, **extra: Any) -> WindowFeatures:
+        issue = {"cancellation": cancellations, **extra.pop("issue_keyword_hits", {})}
+        return features(
+            level_counts={"INFO": 540, "ERROR": 60},
+            error_events=60,
+            error_ratio=0.1,
+            error_nodes=9,
+            distinct_nodes=10,
+            node_spread=0.9,
+            issue_events=60,
+            keyword_hits=dict(issue),
+            issue_keyword_hits=issue,
+            max_component_criticality=0.8,  # critical, short of the widespread SEV1 rule
+            **extra,
+        )
+
+    cancelled = rules.evaluate(feature_space(errors(50)))
+    hits = {h.rule_id for h in cancelled.hits}
+    assert "mostly_cancellations" in hits
+    assert not {"errors_spread", "critical_component_errors"} & hits
+    assert cancelled.rule_severity is Severity.SEV4
+    real = {h.rule_id for h in rules.evaluate(feature_space(errors(10))).hits}
+    assert real >= {"errors_spread", "critical_component_errors"}
+    assert "mostly_cancellations" not in real
+    crashing = rules.evaluate(feature_space(errors(50, issue_keyword_hits={"crash": 3})))
+    assert crashing.rule_severity is Severity.SEV2
+
+
+def test_one_message_repeated_by_one_node_is_not_many_failures(rules: RuleSet) -> None:
+    """A rule that a repeated line could inflate reads the distinct patterns beside the count:
+    an SSH host's background of failed logins is one pattern, an attack shows several, and a
+    cluster that keeps saying one thing is unavailable is not several services unreachable."""
+    noise = features(
+        level_counts={"INFO": 560, "ERROR": 40},
+        error_events=40,
+        error_ratio=40 / 600,
+        distinct_nodes=8,
+        error_nodes=4,
+        keyword_hits={"security": 40, "unavailable": 25},
+        keyword_templates={"security": 1, "unavailable": 1},
+    )
+    quiet = {h.rule_id for h in rules.evaluate(feature_space(noise)).hits}
+    assert not {"security_attempts", "attack_widespread", "unavailability_widespread"} & quiet
+    varied = noise.model_copy(update={"keyword_templates": {"security": 3, "unavailable": 2}})
+    loud = {h.rule_id for h in rules.evaluate(feature_space(varied)).hits}
+    assert loud >= {"security_attempts", "attack_widespread", "unavailability_widespread"}
+
+
+def test_a_burn_above_the_systems_baseline_needs_a_baseline_and_volume(rules: RuleSet) -> None:
+    burn_rules = {"error_burn_page", "error_burn_ticket"}
+    window = features(level_counts={"INFO": 570, "ERROR": 30}, error_events=30, error_ratio=0.05)
+    history = {"error_ratio_vs_baseline": 50.0, "baseline_error_ratio": 0.001, "baseline_runs": 12}
+
+    def hits(values: dict[str, float]) -> set[str]:
+        return {h.rule_id for h in rules.evaluate(values).hits}
+
+    assert not burn_rules & hits(feature_space(window))  # offline: no history, no burn
+    assert hits(feature_space(window, history=history)) >= burn_rules
+    usual = {**history, "error_ratio_vs_baseline": 1.2}
+    assert not burn_rules & hits(feature_space(window, history=usual))
+    few = features(
+        n_events=40, level_counts={"INFO": 36, "ERROR": 4}, error_events=4, error_ratio=0.1
+    )
+    assert not burn_rules & hits(feature_space(few, history=history))
+
+
 def test_history_features_are_absent_offline_and_only_ever_tested_from_below() -> None:
     values = feature_space(features())
     assert not set(HISTORY_FEATURES) & set(values)
