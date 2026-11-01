@@ -4,7 +4,7 @@ import { LevelChip, SeverityScale } from "@/components/aria/severity";
 import { decisionPhrase } from "@/lib/decision";
 import { SEVERITIES, type SeverityAssessment } from "@/lib/api/types";
 import { chance, percent } from "@/lib/format";
-import { LEVEL_RESPONSE, orList, unsettled } from "@/lib/levels";
+import { coverageText, LEVEL_RESPONSE, NOVELTY_WORDS, orList, unsettled } from "@/lib/levels";
 import { cn } from "@/lib/utils";
 
 import { Citations } from "./evidence";
@@ -26,6 +26,11 @@ export function SeverityPanel({
   status?: string;
 }) {
   const coverage = Math.round((1 - assessment.alpha) * 100);
+  const newSystem = (assessment.novelty ?? []).includes("new_system");
+  // The rules-only sentence already explains "unlike anything the model learned from".
+  const confirmBecause = (assessment.novelty ?? [])
+    .filter((reason) => reason !== "outside_training")
+    .map((reason) => NOVELTY_WORDS[reason]);
   // A window unlike the ones the model learned from (or no model loaded): the probabilities are
   // normalised rule scores, so nothing here may read them as a calibrated confidence.
   const rulesOnly = assessment.model_version.startsWith("rules-only");
@@ -87,11 +92,17 @@ export function SeverityPanel({
         {rulesOnly
           ? "The calibrated model was not used for this window, so the short list comes from the rules alone."
           : `${
-              shortListHeld != null
+              shortListHeld != null && !newSystem
                 ? `Short lists like this held the right level in ${Math.round(shortListHeld * 100)} of 100 past test incidents.`
-                : `Short lists like this are built to hold the right level ${coverage} times in 100.`
+                : `Short lists like this are built to hold the right level ${coverageText(assessment.alpha, assessment.alphas)} on systems ARIA trained on.`
             } That is how often the list was right, not ARIA's confidence in its first choice.`}
       </p>
+      {confirmBecause.length > 0 ? (
+        <p className="-mt-2 text-sm">
+          <span className="font-medium">Why a person should confirm: </span>
+          {confirmBecause.join("; ")}.
+        </p>
+      ) : null}
 
       <details className="group grid gap-3 text-sm">
         <summary className="w-fit cursor-pointer py-0.5 font-medium text-muted-foreground hover:text-heading">
@@ -136,6 +147,7 @@ export function SeverityPanel({
             decided={assessment.severity}
             floor={assessment.floor}
             alpha={assessment.alpha}
+            alphas={assessment.alphas}
             setEmpty={assessment.set_empty ?? false}
             rulesOnly={rulesOnly}
             drawBracket

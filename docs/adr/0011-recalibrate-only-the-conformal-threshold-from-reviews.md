@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted.
+Superseded by [0014](0014-promise-coverage-per-level-and-send-unfamiliar-windows-to-a-person.md)
+for models with per-level calibrations, which learn from blind checks instead. Still applies to
+model files without them.
 
 ## Context
 

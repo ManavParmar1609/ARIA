@@ -31,6 +31,7 @@ from aria.contracts.parsing import WindowFeatures
 from aria.data.labels import label_window, load_rubric, tag_stats
 from aria.data.loghub import LogRecord, format_raw_line, iter_raw_log
 from aria.evals import metrics as m
+from aria.evals import stats as st
 from aria.evals.severity import keyword_severity
 from aria.evidence import EvidenceStore
 from aria.severity.engine import SeverityEngine
@@ -169,12 +170,32 @@ class _Judged:
     lines: int
     pool_lines: int
     fired: tuple[str, ...]  # the rules that fired, to explain the misses
+    # The same window judged by a model trained without any BGL window (ring C: a system the
+    # model has never seen), when one is given.
+    unseen_aria: str | None = None
+    unseen_model: str | None = None
+    unseen_set: list[str] | None = None
 
 
-def _judge(engine: SeverityEngine, window: Window, feats: WindowFeatures) -> _Judged:
-    pre = engine.preliminary(feats, evidence=EvidenceStore())
+def _judge(
+    engine: SeverityEngine,
+    window: Window,
+    feats: WindowFeatures,
+    unseen: SeverityEngine | None = None,
+) -> _Judged:
+    pre = engine.preliminary(feats, system="bgl", evidence=EvidenceStore())
     decision = decide(pre, gate=engine.gate, llm_unavailable_reason="offline evaluation")
     probabilities = {str(k): v for k, v in pre.probabilities.items()}
+    other: dict[str, Any] = {}
+    if unseen is not None:
+        pre2 = unseen.preliminary(feats, system="bgl", evidence=EvidenceStore())
+        decision2 = decide(pre2, gate=unseen.gate, llm_unavailable_reason="offline evaluation")
+        probs2 = {str(k): v for k, v in pre2.probabilities.items()}
+        other = {
+            "unseen_aria": str(decision2.severity),
+            "unseen_model": max(probs2, key=probs2.__getitem__),
+            "unseen_set": [str(x) for x in pre2.prediction_set],
+        }
     return _Judged(
         label=window.label,
         aria=str(decision.severity),
@@ -187,6 +208,7 @@ def _judge(engine: SeverityEngine, window: Window, feats: WindowFeatures) -> _Ju
         lines=len(window.lines),
         pool_lines=window.pool_lines,
         fired=tuple(hit.rule_id for hit in pre.rule_hits),
+        **other,
     )
 
 
@@ -199,6 +221,7 @@ def evaluate(
     workers: int = 1,
     batch: int = 256,
     progress: Callable[[str], None] | None = None,
+    unseen: SeverityEngine | None = None,
 ) -> dict[str, Any]:
     tally = _Tally()
     judged: list[_Judged] = []
@@ -218,7 +241,7 @@ def evaluate(
                 )
             else:
                 features = [_features(w.lines, known) for w in chunk]
-            judged += [_judge(engine, w, f) for w, f in zip(chunk, features, strict=True)]
+            judged += [_judge(engine, w, f, unseen) for w, f in zip(chunk, features, strict=True)]
             if progress and len(judged) % (batch * 8) < batch:
                 progress(f"{len(judged):,} windows, {tally.lines:,} lines read")
     finally:
@@ -278,6 +301,37 @@ def evaluate(
             "share": round(sum(j.pool_lines for j in judged) / max(1, placed), 4),
         },
         "model_version": engine.model.version if engine.model else None,
+        **({"unseen_system_model": _unseen(judged, unseen)} if unseen is not None else {}),
+    }
+
+
+def _unseen(judged: Sequence[_Judged], engine: SeverityEngine) -> dict[str, Any]:
+    """Ring C: the full log judged by a model fitted without any BGL window.
+
+    ARIA's training windows include BGL lines labelled by the same alert-tag rubric as this log,
+    so the main result above measures a system the model has seen. This one does not.
+    """
+    truth = [j.label for j in judged]
+    aria = [j.unseen_aria or "SEV4" for j in judged]
+    model = [j.unseen_model or "SEV4" for j in judged]
+    misses, severe = st.severe_misses(truth, aria)
+    model_misses, _ = st.severe_misses(truth, model)
+    return {
+        "model_version": engine.model.version if engine.model else None,
+        "methods": {
+            "aria_policy": _scores(truth, aria),
+            "model_only": _scores(truth, model),
+        },
+        "severe": {
+            "misses": misses,
+            "severe": severe,
+            "upper95": round(st.upper_bound(misses, severe), 4),
+            "model_only_misses": model_misses,
+        },
+        "conformal": {
+            "target_coverage": round(1 - engine.alpha, 4),
+            "coverage": round(m.set_coverage([j.unseen_set or [] for j in judged], truth), 4),
+        },
     }
 
 
@@ -289,8 +343,17 @@ def summarize(
     bgl_dir: Path = BGL_DIR,
     workers: int = 1,
     progress: Callable[[str], None] | None = None,
+    unseen: SeverityEngine | None = None,
 ) -> dict[str, Any]:
     path = find_bgl(bgl_dir)
     if path is None:
         return {"missing": "download it with: aria data download --source loghub-bgl"}
-    return evaluate(path, engine=engine, known=known, pool=pool, workers=workers, progress=progress)
+    return evaluate(
+        path,
+        engine=engine,
+        known=known,
+        pool=pool,
+        workers=workers,
+        progress=progress,
+        unseen=unseen,
+    )

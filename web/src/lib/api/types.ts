@@ -68,6 +68,9 @@ export interface RuleHit {
   evidence_ids: string[];
 }
 
+export type NoveltyReason =
+  "outside_training" | "unusual_mix" | "new_patterns" | "empty_set" | "every_level" | "new_system";
+
 export interface SeverityAssessment {
   severity: Severity;
   decided_by: DecidedBy;
@@ -79,6 +82,12 @@ export interface SeverityAssessment {
   /** No class cleared the conformal threshold; the set holds the most likely class as a stand-in. */
   set_empty?: boolean;
   alpha: number;
+  /** The miss rate the short list allows per level; serious levels get a tighter one. */
+  alphas?: Partial<Record<Severity, number>>;
+  /** Which calibration made the list: per level, the rules alone, or one bar for every level. */
+  calibration?: "familiar" | "rules" | "single";
+  /** Why a person should confirm the level even if the model was confident. */
+  novelty?: NoveltyReason[];
   floor: Severity | null;
   confidence: number;
   auditable: boolean;

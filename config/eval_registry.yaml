@@ -1,0 +1,67 @@
+# What each evaluation suite has been used for, so a reader knows which numbers are clean tests.
+#
+# Rules, the lexicon, thresholds, prompts and model settings count as tuning. They are tuned only
+# on familiar-system windows (ring A: validation seeds 51-56, never the test seeds 41-42) and on
+# held-out-system folds (ring B). A real-data suite (ring C) looked at while ARIA was being changed
+# is recorded here with the date: its numbers are then "looked at", not untouched, until fresh data
+# replaces it. `make eval` copies this file into the results and the report prints it.
+#
+# status: untouched | seen (looked at during development; nothing tuned on it) | tuned (a change
+# was chosen by looking at it)
+
+suites:
+  severity:
+    ring: A
+    status: tuned
+    note: >-
+      Fresh windows of the training systems. Rules and features were developed on its validation
+      seeds; the published test seeds were never used to choose anything. A regression tripwire,
+      not a measure of new systems.
+  generalisation:
+    ring: B
+    status: untouched
+    since: "2026-10-31"
+    note: Each system and failure mode held out in turn; new in this record.
+  real.hdfs:
+    ring: C
+    status: seen
+    note: >-
+      Looked at during development before this record began (2026-10-31). HDFS lines are also
+      in the training pools; the report gives the overlap.
+  real.bgl:
+    ring: C
+    status: seen
+    note: >-
+      Looked at during development before this record began. BGL lines and the same alert-tag
+      rubric are in training, so the report also rates it with a model fitted without BGL.
+  real.hadoop:
+    ring: C
+    status: seen
+    note: Looked at during development before this record began.
+  real.openstack:
+    ring: C
+    status: seen
+    since: "2026-10-31"
+    note: >-
+      A regression found here on 2026-10-31 (healthy runs rated SEV1) led to the training-range
+      guard, whose setting was chosen on validation seeds only.
+  real.logchunks:
+    ring: C
+    status: seen
+    note: Looked at during development before this record began.
+  real.uci_tickets:
+    ring: C
+    status: seen
+    note: Looked at during development before this record began.
+  real.gitlab:
+    ring: C
+    status: seen
+    note: Looked at during development before this record began.
+  real.postmortems:
+    ring: C
+    status: seen
+    note: Looked at during development before this record began.
+  injection_benchmarks:
+    ring: C
+    status: seen
+    note: Looked at during development before this record began.

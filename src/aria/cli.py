@@ -179,7 +179,13 @@ def train_severity(
     config = get_app_config().severity
     rules = load_rules(config.rules_file)
     model, report = train_from_loghub(
-        logs, rules, alpha=config.alpha, per_mode=per_mode, workers=workers
+        logs,
+        rules,
+        alpha=config.alpha,
+        serious_alpha=config.serious_alpha,
+        severe_miss_risk=config.severe_miss_risk,
+        per_mode=per_mode,
+        workers=workers,
     )
     model.save(config.log_model_file)
     report_path = config.log_model_file.with_suffix(".report.json")
@@ -199,13 +205,30 @@ def train_recalibrate(
     """Recalibrate the severity model's prediction sets on reviewed incidents."""
     from aria.config import get_app_config, get_settings
     from aria.db.engine import get_engine
-    from aria.severity.model import live_model_path
-    from aria.severity.recalibration import recalibrate_from_feedback
+    from aria.severity.conformal import level_alphas
+    from aria.severity.model import LinearModel, live_model_path
+    from aria.severity.recalibration import adapt_from_blind_checks, recalibrate_from_feedback
 
     config = get_app_config().severity
+    live = live_model_path(config.log_model_file, get_settings().models_dir)
+    trained = LinearModel.load(config.log_model_file) if config.log_model_file.exists() else None
+    if trained is not None and trained.calibrations:
+        # Per-level models learn from blind checks, not approvals (docs/adr/0014).
+        adapted = adapt_from_blind_checks(
+            get_engine(),
+            live,
+            targets=level_alphas(trained.classes, config.alpha, config.serious_alpha),
+            trained=config.log_model_file,
+            dry_run=dry_run,
+        )
+        if adapted is None:
+            console.print("no new blind checks to learn from")
+        else:
+            console.print_json(json.dumps(adapted))
+        return
     result = recalibrate_from_feedback(
         get_engine(),
-        live_model_path(config.log_model_file, get_settings().models_dir),
+        live,
         alpha=config.alpha,
         min_new_reviews=config.recalibrate_after if min_new_reviews is None else min_new_reviews,
         dry_run=dry_run,

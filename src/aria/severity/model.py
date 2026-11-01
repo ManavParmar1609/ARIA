@@ -7,9 +7,13 @@
   calibrated probabilities into a set that contains the true class with probability at least
   ``1 - alpha`` on exchangeable data. A set with one class is a confident call; a larger set is
   what the LLM adjudicator (or a human) chooses within.
+* A :class:`Calibration` makes that promise per class (class-conditional, or Mondrian, conformal:
+  Vovk et al., 2005; Ding et al., 2023), so a rare class gets its own threshold and its own,
+  tighter miss rate, rather than borrowing the common classes' coverage. A model can carry one
+  calibration per kind of input (for the severity model: systems it trained on, and new ones).
 
-Models are stored as JSON: coefficients, scaler statistics, temperature and conformal
-threshold. Inference is plain numpy, and loading a model file cannot execute code.
+Models are stored as JSON: coefficients, scaler statistics, temperatures and conformal
+thresholds. Inference is plain numpy, and loading a model file cannot execute code.
 """
 
 from __future__ import annotations
@@ -85,6 +89,167 @@ def live_model_path(trained: Path, models_dir: Path) -> Path:
     return models_dir / trained.name
 
 
+def level_threshold(sorted_scores: Sequence[float], alpha: float) -> float:
+    """The class-conditional split-conformal threshold for one class.
+
+    ``sorted_scores`` are the class's calibration scores (1 - p(class) on windows whose truth is
+    the class), ascending. The threshold is the ceil((n + 1)(1 - alpha))-th smallest, so a new
+    window of the class scores at or below it with probability at least 1 - alpha. With too few
+    windows to promise that, it is 1: the class is never ruled out.
+    """
+    n = len(sorted_scores)
+    k = math.ceil((n + 1) * (1 - alpha) - 1e-9)
+    if n == 0 or k > n:  # also any alpha at or below zero
+        return 1.0
+    return float(sorted_scores[max(k, 1) - 1])
+
+
+@dataclass
+class Calibration:
+    """How one kind of input's logits become probabilities and a set of classes.
+
+    ``scores`` keeps each class's calibration scores, sorted, so the threshold at any miss rate
+    can be recomputed (adaptive recalibration moves ``alphas``, never the scores).
+    """
+
+    temperature: float
+    alphas: dict[str, float]
+    scores: dict[str, list[float]]
+    # Conformal risk control (Angelopoulos et al., 2024): when none of ``guard_classes`` made the
+    # set and their total probability is at least ``guard``, the likeliest of them joins it.
+    # ``epsilon`` is the risk the guard was certified for: on calibration-like data, at most that
+    # share of inputs whose truth is a guard class get a set without one. None: too few such
+    # inputs to certify anything. A certified calibration whose sets already meet the target needs
+    # no guard (``guard`` None).
+    guard_classes: list[str] = field(default_factory=list)
+    guard: float | None = None
+    epsilon: float | None = None
+    # The classes are ordinal: a set spans every class between its most and least severe.
+    ordered: bool = False
+    source: str = ""
+
+    def threshold(self, cls: str) -> float:
+        return level_threshold(self.scores.get(cls, []), self.alphas[cls])
+
+    def classes_in(self, probs_row: FloatArray, classes: Sequence[str]) -> list[str]:
+        """The set for one row, in class order; empty when no class clears its threshold."""
+        chosen = [
+            cls for i, cls in enumerate(classes) if 1.0 - float(probs_row[i]) <= self.threshold(cls)
+        ]
+        guarded = [classes.index(c) for c in self.guard_classes if c in classes]
+        if (
+            self.guard is not None
+            and guarded
+            and not set(chosen) & set(self.guard_classes)
+            and sum(float(probs_row[i]) for i in guarded) >= self.guard
+        ):
+            chosen.append(classes[max(guarded, key=lambda i: float(probs_row[i]))])
+        if self.ordered and chosen:
+            positions = sorted(classes.index(c) for c in chosen)
+            return list(classes[positions[0] : positions[-1] + 1])
+        return [c for c in classes if c in chosen]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "temperature": self.temperature,
+            "alphas": self.alphas,
+            "scores": {k: [round(v, 6) for v in vs] for k, vs in self.scores.items()},
+            "guard_classes": self.guard_classes,
+            "guard": self.guard,
+            "epsilon": self.epsilon,
+            "ordered": self.ordered,
+            "source": self.source,
+        }
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any], classes: Sequence[str]) -> Calibration:
+        alphas = {str(k): float(v) for k, v in raw["alphas"].items()}
+        scores = {str(k): sorted(float(x) for x in v) for k, v in raw["scores"].items()}
+        if set(alphas) != set(classes) or not set(scores) <= set(classes):
+            msg = "calibration levels do not match the model's classes"
+            raise ValueError(msg)
+        # Adaptive recalibration may take a miss rate a little below zero (see recalibration.py).
+        if not all(-0.5 <= a <= 1.0 for a in alphas.values()):
+            msg = "calibration miss rates must lie between -0.5 and 1"
+            raise ValueError(msg)
+        guard = raw.get("guard")
+        epsilon = raw.get("epsilon")
+        return cls(
+            temperature=float(raw["temperature"]),
+            alphas=alphas,
+            scores=scores,
+            guard_classes=[str(c) for c in raw.get("guard_classes") or []],
+            guard=None if guard is None else float(guard),
+            epsilon=None if epsilon is None else float(epsilon),
+            ordered=bool(raw.get("ordered", False)),
+            source=str(raw.get("source", "")),
+        )
+
+
+@dataclass
+class Novelty:
+    """How unusual a window's combination of features is, as a conformal p-value.
+
+    The distance is Mahalanobis, on standardised features with a shrunk covariance (Ledoit and
+    Wolf, 2004) fitted on the training windows. ``distances`` are held-out calibration windows'
+    distances, sorted; a window's p-value is the share of them at least as far out, so on data
+    like the calibration windows it falls below ``level`` at most that often (Vovk et al., 2005;
+    Bates et al., "Testing for outliers with conformal p-values", 2023).
+    """
+
+    center: FloatArray
+    precision: FloatArray
+    distances: list[float]
+    # Held-out windows' share of log patterns new to their system, sorted: the same p-value
+    # for "most of this window's patterns are new".
+    shares: list[float] = field(default_factory=list)
+    level: float = 0.01
+
+    def distance(self, z_row: FloatArray) -> float:
+        delta = z_row - self.center
+        return float(math.sqrt(max(0.0, float(delta @ self.precision @ delta))))
+
+    @staticmethod
+    def _upper_tail(sorted_reference: Sequence[float], value: float) -> float:
+        n = len(sorted_reference)
+        beyond = n - int(np.searchsorted(sorted_reference, value - 1e-12, side="left"))
+        return (beyond + 1) / (n + 1)
+
+    def p_value(self, z_row: FloatArray) -> float:
+        """The conformal p-value of a window's distance: small means unusually far out."""
+        return self._upper_tail(self.distances, self.distance(z_row))
+
+    def share_p_value(self, share: float) -> float:
+        """The same for the share of a window's patterns that are new to its system."""
+        return self._upper_tail(self.shares, share) if self.shares else 1.0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "center": [round(float(v), 8) for v in self.center],
+            "precision": [[round(float(v), 8) for v in row] for row in self.precision],
+            "distances": [round(v, 6) for v in self.distances],
+            "shares": [round(v, 6) for v in self.shares],
+            "level": self.level,
+        }
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any], n_features: int) -> Novelty:
+        novelty = cls(
+            center=np.array(raw["center"], dtype=np.float64),
+            precision=np.array(raw["precision"], dtype=np.float64),
+            distances=sorted(float(d) for d in raw["distances"]),
+            shares=sorted(float(d) for d in raw.get("shares") or []),
+            level=float(raw.get("level", 0.01)),
+        )
+        if novelty.center.shape != (n_features,) or novelty.precision.shape != (
+            n_features,
+            n_features,
+        ):
+            msg = "novelty statistics do not match the model's features"
+            raise ValueError(msg)
+        return novelty
+
+
 @dataclass
 class LinearModel:
     """Softmax over ``coef @ standardised(x) + intercept``, divided by a temperature."""
@@ -105,6 +270,11 @@ class LinearModel:
     # model extrapolates; models saved before these were recorded have none.
     low: FloatArray | None = None
     high: FloatArray | None = None
+    # Calibrations by kind of input; without them the model uses ``temperature`` and
+    # ``conformal_q`` alone (models saved before calibrations existed, and the ticket model).
+    calibrations: dict[str, Calibration] = field(default_factory=dict)
+    # How unusual a window's mix of features is; None for models saved before it existed.
+    novelty: Novelty | None = None
 
     @property
     def trained_version(self) -> str:
@@ -143,8 +313,11 @@ class LinearModel:
     def logits(self, x: FloatArray) -> FloatArray:
         return np.asarray(self.standardise(x) @ self.coef.T + self.intercept, dtype=np.float64)
 
-    def predict_proba(self, x: FloatArray) -> FloatArray:
-        return softmax(self.logits(x) / self.temperature)
+    def predict_proba(self, x: FloatArray, kind: str | None = None) -> FloatArray:
+        """Probabilities, at the temperature of calibration ``kind`` when the model has it."""
+        calibration = self.calibrations.get(kind) if kind is not None else None
+        temperature = calibration.temperature if calibration is not None else self.temperature
+        return softmax(self.logits(x) / temperature)
 
     def prediction_sets(self, probs: FloatArray) -> list[list[str]]:
         """Classes whose probability clears the conformal threshold; never empty."""
@@ -189,6 +362,12 @@ class LinearModel:
             "conformal_q": self.conformal_q,
             "alpha": self.alpha,
             "metadata": self.metadata,
+            **(
+                {"calibrations": {k: c.to_dict() for k, c in sorted(self.calibrations.items())}}
+                if self.calibrations
+                else {}
+            ),
+            **({"novelty": self.novelty.to_dict()} if self.novelty is not None else {}),
         }
 
     def save(self, path: Path) -> None:
@@ -216,6 +395,12 @@ class LinearModel:
             low=None if raw.get("low") is None else np.array(raw["low"], dtype=np.float64),
             high=None if raw.get("high") is None else np.array(raw["high"], dtype=np.float64),
         )
+        model.calibrations = {
+            str(kind): Calibration.from_dict(value, model.classes)
+            for kind, value in (raw.get("calibrations") or {}).items()
+        }
+        if raw.get("novelty") is not None:
+            model.novelty = Novelty.from_dict(raw["novelty"], len(model.feature_names))
         k, f = len(model.classes), len(model.feature_names)
         if model.coef.shape != (k, f) or model.intercept.shape != (k,) or model.mean.shape != (f,):
             msg = "model arrays do not match its classes and features"

@@ -18,9 +18,10 @@ status. Measured results live in [the evaluation](../evaluation.md), not here.
 | [0008](0008-keep-runs-checkpoints-and-memory-in-one-sql-database.md) | Keep runs, checkpoints and memory in ARIA's own SQL database | Accepted | One Alembic schema on SQLite or Azure SQL, with ARIA's own LangGraph checkpointer and Store for time travel and forks. |
 | [0009](0009-speak-a2a-ag-ui-and-mcp.md) | Speak A2A, AG-UI and MCP beside the REST API | Accepted | One API process serves REST/SSE, A2A, AG-UI and MCP, and maps the review pause onto each protocol. |
 | [0010](0010-backend-for-frontend-keeps-the-api-key-from-page-scripts.md) | A backend-for-frontend keeps the API key away from page scripts | Accepted | The Next.js server holds the key in an HttpOnly cookie and forwards same-origin requests to the API. |
-| [0011](0011-recalibrate-only-the-conformal-threshold-from-reviews.md) | Recalibrate only the conformal threshold from human reviews | Accepted | Reviews recalibrate the conformal threshold only, with versioned, atomic model swaps that running engines reload. |
+| [0011](0011-recalibrate-only-the-conformal-threshold-from-reviews.md) | Recalibrate only the conformal threshold from human reviews | Superseded by 0014 for per-level models | Reviews recalibrate the conformal threshold only, with versioned, atomic model swaps that running engines reload. |
 | [0012](0012-content-safety-check-is-optional-and-fails-closed.md) | The content-safety check is optional and fails closed | Accepted (off by default) | A safety model can screen LLM-written text; any doubt falls back to deterministic text. |
 | [0013](0013-run-background-jobs-where-runs-execute.md) | Run the scan and recalibration jobs where runs execute | Accepted | Periodic jobs start in the API in `inprocess` mode and in `aria worker` in `external` mode. |
+| [0014](0014-promise-coverage-per-level-and-send-unfamiliar-windows-to-a-person.md) | Promise coverage per severity level, and send unfamiliar windows to a person | Accepted | Per-level conformal thresholds with a certified severe-miss guard, a novelty check that asks a person, blind checks with adaptive recalibration, and label-free drift. |
 
 ## Adding a record
 

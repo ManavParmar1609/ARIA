@@ -15,7 +15,7 @@ describe("severity components", () => {
     );
     const figure = screen.getByRole("figure");
     expect(figure.getAttribute("aria-label")).toBe(
-      "Model probabilities: SEV1 3%, SEV2 15%, SEV3 70%, SEV4 12%. Short list, built to hold the right level 90% of the time: SEV3. Decided: SEV3. Safety floor: SEV3.",
+      "Model probabilities: SEV1 3%, SEV2 15%, SEV3 70%, SEV4 12%. Short list, built to hold the right level 90 times in 100: SEV3. Decided: SEV3. Safety floor: SEV3.",
     );
   });
 

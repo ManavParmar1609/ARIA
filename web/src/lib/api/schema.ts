@@ -157,6 +157,70 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/blind-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Blind Check
+         * @description A recent incident, picked at random, to rate before seeing ARIA's level.
+         *
+         *     Only what the logs showed comes back: no level, set, report or title (a title opens with the
+         *     level). On a shared demo a visitor may try it, but only a key-holder's ratings recalibrate.
+         */
+        get: operations["blind_check_api_v1_blind_check_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blind-check/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rate Blind
+         * @description Record a blind rating and show what ARIA decided. A key-holder's rating recalibrates.
+         */
+        post: operations["rate_blind_api_v1_blind_check__run_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/drift": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Drift
+         * @description Per system, whether the levels ARIA decided lately differ from the ones it decided before
+         *     by more than chance (see aria.severity.drift). Needs no labels.
+         */
+        get: operations["drift_api_v1_drift_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/eval": {
         parameters: {
             query?: never;
@@ -882,10 +946,85 @@ export type components = {
             scheme?: string;
         };
         /**
+         * BlindCase
+         * @description An incident to rate before seeing ARIA's level: what the logs showed, nothing it decided.
+         */
+        BlindCase: {
+            /** Error Lines */
+            error_lines: number;
+            /** Lines */
+            lines: number;
+            /** Minutes */
+            minutes: number;
+            /** Nodes */
+            nodes: number;
+            /** Patterns */
+            patterns: components["schemas"]["BlindPattern"][];
+            /** Run Id */
+            run_id: string;
+            /** System */
+            system: string;
+            /** Warning Lines */
+            warning_lines: number;
+        };
+        /** BlindCheckOut */
+        BlindCheckOut: {
+            case: components["schemas"]["BlindCase"] | null;
+            /** Checks */
+            checks: number;
+            /** Counted */
+            counted: boolean;
+        };
+        /**
+         * BlindPattern
+         * @description One log pattern of the incident, as the parser grouped it (already redacted).
+         */
+        BlindPattern: {
+            /** Count */
+            count: number;
+            /** Error Like */
+            error_like: boolean;
+            /** New */
+            new: boolean;
+            /** Template */
+            template: string;
+        };
+        /** BlindRating */
+        BlindRating: {
+            severity: components["schemas"]["Severity"];
+        };
+        /** BlindReveal */
+        BlindReveal: {
+            /** Agreed */
+            agreed: boolean;
+            aria: components["schemas"]["Severity"];
+            /** Checks */
+            checks: number;
+            /** Counted */
+            counted: boolean;
+            /** Held */
+            held: boolean;
+            /** Prediction Set */
+            prediction_set: components["schemas"]["Severity"][];
+            /** Run Id */
+            run_id: string;
+            yours: components["schemas"]["Severity"];
+        };
+        /**
          * CalibrationOut
          * @description Where the severity model's calibration stands against the reviews gathered so far.
          */
         CalibrationOut: {
+            /**
+             * Adapted On
+             * @default 0
+             */
+            adapted_on?: number;
+            /**
+             * Blind Checks
+             * @default 0
+             */
+            blind_checks?: number;
             /** Check Interval S */
             check_interval_s: number;
             /** Coverage After */
@@ -896,6 +1035,11 @@ export type components = {
             model_version: string | null;
             /** Pending */
             pending: number;
+            /**
+             * Per Level
+             * @default false
+             */
+            per_level?: boolean;
             /** Recalibrate After */
             recalibrate_after: number;
             /** Recalibrated */
@@ -987,6 +1131,15 @@ export type components = {
             status: "approved" | "sent" | "failed" | "skipped";
             /** Title */
             title: string;
+        };
+        /** DriftOut */
+        DriftOut: {
+            /** Min Runs */
+            min_runs: number;
+            /** Systems */
+            systems: components["schemas"]["SystemDrift"][];
+            /** Too Few Runs */
+            too_few_runs: string[];
         };
         /**
          * Evidence
@@ -1917,6 +2070,32 @@ export type components = {
             /** @example  */
             tenant?: string;
         };
+        /**
+         * SystemDrift
+         * @description Whether one system's decided levels shifted between its earlier and recent runs.
+         */
+        SystemDrift: {
+            /** Compared */
+            compared: number;
+            /** Critical */
+            critical: number;
+            /** Psi */
+            psi: number;
+            /** Recent */
+            recent: {
+                [key: string]: number;
+            };
+            /** Reference */
+            reference: {
+                [key: string]: number;
+            };
+            /** Runs */
+            runs: number;
+            /** Shifted */
+            shifted: boolean;
+            /** System */
+            system: string;
+        };
         TaskPushNotificationConfig: {
             /** @example null */
             authentication?: components["schemas"]["AuthenticationInfo"] | null;
@@ -2345,6 +2524,96 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    blind_check_api_v1_blind_check_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlindCheckOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rate_blind_api_v1_blind_check__run_id__post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlindRating"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlindReveal"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    drift_api_v1_drift_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DriftOut"];
                 };
             };
         };

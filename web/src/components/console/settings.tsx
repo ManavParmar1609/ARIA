@@ -3,6 +3,7 @@
 import { ChevronRightIcon, LogOutIcon } from "lucide-react";
 import Link from "next/link";
 
+import { BlindCheck, DriftReport } from "@/components/console/calibration-check";
 import { ModelKeyPanel } from "@/components/console/model-key";
 import { ErrorState, LoadingRows, PageHeader } from "@/components/console/states";
 import { Button } from "@/components/ui/button";
@@ -223,17 +224,32 @@ function Learning({ view }: { view: FeedbackView }) {
               {c.model_version ?? "none"}
             </span>,
           ],
-          [
-            "Recalibrated on",
-            c.recalibrated ? `${c.reviews_in_model} reviewed incidents` : "Not yet (as trained)",
-          ],
-          ["Reviews since then", `${c.pending} of ${c.recalibrate_after} needed`],
-          [
-            "Coverage on reviewed incidents",
-            c.coverage_before != null && c.coverage_after != null
-              ? `${percent(c.coverage_before)} before, ${percent(c.coverage_after)} after`
-              : "Measured at the first recalibration",
-          ],
+          ...(c.per_level
+            ? ([
+                ["Learns from", "Blind checks, one at a time"],
+                ["Blind checks so far", String(c.blind_checks ?? 0)],
+                [
+                  "Adjusted on",
+                  c.adapted_on
+                    ? `${c.adapted_on} blind ${c.adapted_on === 1 ? "check" : "checks"}`
+                    : "Not yet (as trained)",
+                ],
+              ] as [string, React.ReactNode][])
+            : ([
+                [
+                  "Recalibrated on",
+                  c.recalibrated
+                    ? `${c.reviews_in_model} reviewed incidents`
+                    : "Not yet (as trained)",
+                ],
+                ["Reviews since then", `${c.pending} of ${c.recalibrate_after} needed`],
+                [
+                  "Coverage on reviewed incidents",
+                  c.coverage_before != null && c.coverage_after != null
+                    ? `${percent(c.coverage_before)} before, ${percent(c.coverage_after)} after`
+                    : "Measured at the first recalibration",
+                ],
+              ] as [string, React.ReactNode][])),
           [
             "Checked",
             c.check_interval_s > 0
@@ -485,12 +501,28 @@ export function Settings() {
           )}
 
           <Section
+            id="set-blind"
+            title="Check ARIA blind"
+            intro="Rate a recent incident from its logs alone, before you see ARIA's level. A rating given without seeing ARIA's answer is free of the pull to agree with it, so these are the ratings ARIA recalibrates its short lists on, one at a time."
+          >
+            <BlindCheck />
+          </Section>
+
+          <Section
+            id="set-drift"
+            title="Has anything shifted?"
+            intro="For each system, the levels ARIA decided on its recent runs against its earlier runs. A shift beyond what chance explains is worth a look: new kinds of incidents, a changed system, or short lists that no longer fit."
+          >
+            <DriftReport />
+          </Section>
+
+          <Section
             id="set-learning"
             title="Learning from reviews"
             intro={
               view.data?.visitor_scope
-                ? "Every review records the severity a reviewer settled on, and once enough have gathered ARIA recalibrates its short lists on them. On this shared demo, reviews of your own incidents stay private and never retrain it."
-                : "Every review records the severity a reviewer settled on. Once enough have gathered, ARIA recalibrates its short lists on them, so the lists hold the reviewer's severity on this deployment's own incidents."
+                ? "Every review records the severity a reviewer settled on. On this shared demo, reviews of your own incidents stay private. ARIA recalibrates on blind checks, not on approvals, which tend to agree with whatever ARIA said."
+                : "Every review records the severity a reviewer settled on. ARIA recalibrates on blind checks, not on approvals, which tend to agree with whatever ARIA said."
             }
           >
             {feedback.isPending ? (
