@@ -332,6 +332,9 @@ export interface ReviewPrompt {
   report_id: string;
   title: string;
   severity: Severity;
+  /** The level in words: bare for one possible level, else the levels ARIA is torn between and
+   * the one it plans for. Missing from reviews paused before the API sent it. */
+  severity_text?: string;
   decided_by: DecidedBy;
   confidence: number;
   needs_review: boolean;

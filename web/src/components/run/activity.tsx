@@ -95,7 +95,8 @@ function rows(events: RunEvent[], { offline = false, titles = {} }: RowOptions =
           icon: CircleCheckIcon,
           tone: "good",
           title: `${label} finished`,
-          detail: notes,
+          // The severity step says its level in words: with several possible, which ones.
+          detail: typeof p.summary === "string" ? p.summary : notes,
           node: e.node,
         });
         break;
