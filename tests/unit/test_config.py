@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from aria.config import (
     AppConfig,
+    DataTerms,
     ProviderConfig,
     ProviderKind,
     get_app_config,
@@ -88,6 +89,47 @@ def test_unknown_provider_in_routing_is_rejected() -> None:
         AppConfig.model_validate(
             {"llm": {"providers": {"fake": {"kind": "fake"}}, "routing": {"x": ["ghost"]}}}
         )
+
+
+def test_terms_nobody_read_cannot_say_what_a_provider_does_with_prompts() -> None:
+    read = {
+        "company": "Anthropic",
+        "service": "Claude API",
+        "uses": [{"account": "API", "improves_models": False, "keeps_prompts": "30 days"}],
+        "sources": [{"title": "Terms", "url": "https://www.anthropic.com/legal/commercial-terms"}],
+    }
+    with pytest.raises(ValidationError, match="without the date someone read them"):
+        DataTerms.model_validate(read)
+    terms = DataTerms.model_validate({**read, "verified": "2026-11-01"})
+    assert terms.uses[0].improves_models is False
+    unread = DataTerms.model_validate({**read, "uses": [{"account": "API"}]})
+    assert (unread.verified, unread.uses[0].improves_models, unread.uses[0].keeps_prompts) == (
+        None,
+        None,
+        None,
+    )
+    with pytest.raises(ValidationError):  # a source is a page anyone can open
+        DataTerms.model_validate({**read, "sources": [{"title": "Terms", "url": "ftp://x"}]})
+
+
+def test_a_provider_names_terms_that_exist() -> None:
+    with pytest.raises(ValidationError, match=r"lacks: fake \(ghost\)"):
+        AppConfig.model_validate(
+            {"llm": {"providers": {"fake": {"kind": "fake", "terms": "ghost"}}}}
+        )
+
+
+def test_every_provider_that_sends_prompts_elsewhere_names_its_terms() -> None:
+    """Hosted providers point at what their terms say; a server you run yourself has none."""
+    llm = get_app_config().llm
+    yours = {"nim-local", "openai_compat", "fake", "local"}
+    for name, provider in llm.providers.items():
+        assert (provider.terms is None) == (name in yours), name
+    for kind, names in llm.visitor_keys.providers.items():
+        assert all(llm.providers[name].terms for name in names), kind
+    for key, terms in llm.data_terms.items():
+        assert all(source.url.startswith("https://") for source in terms.sources), key
+        assert terms.verified is not None or terms.notes, key  # unread terms say why
 
 
 def test_allow_no_key_enables_self_hosted_endpoint() -> None:

@@ -17,6 +17,7 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Callable
+from datetime import date
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
@@ -122,6 +123,9 @@ class ProviderConfig(_Strict):
     price_output_per_mtok: float | None = Field(default=None, ge=0)
     # Rate limits ARIA keeps under (aria.llm.quota); None: the provider's limits are not tracked.
     limits: ProviderLimits | None = None
+    # The entry of ``llm.data_terms`` that says what this provider may do with prompts; None for
+    # a server you run yourself, or the offline providers.
+    terms: str | None = None
     verified: bool = False
     notes: str | None = None
 
@@ -160,6 +164,53 @@ class ProviderConfig(_Strict):
         if not self.base_url:
             return False
         return self.allow_no_key or self.azure_ad or self.api_key() is not None
+
+
+class TermsSource(_Strict):
+    """A page of a provider's terms."""
+
+    title: str = Field(min_length=1, max_length=120)
+    url: str = Field(pattern=r"^https://\S+$", max_length=500)
+
+
+class DataUse(_Strict):
+    """What a provider's terms say happens to the prompts ARIA sends, for one kind of account.
+
+    None means not verified: nobody has read the terms on that point for ARIA.
+    """
+
+    account: str = Field(min_length=1, max_length=120)
+    # Whether the provider may use the prompts to improve its models.
+    improves_models: bool | None = None
+    # How long it keeps them, in plain words.
+    keeps_prompts: str | None = Field(default=None, min_length=1, max_length=500)
+
+
+class DataTerms(_Strict):
+    """A model provider's own terms about the prompts it is sent, as someone read them for ARIA.
+
+    ``verified`` is the day someone read the ``sources``. Terms nobody has read may not claim
+    anything: each use stays "not verified", so the console never states terms no one read.
+    """
+
+    company: str = Field(min_length=1, max_length=80)
+    service: str = Field(min_length=1, max_length=120)
+    uses: list[DataUse] = Field(min_length=1)
+    sources: list[TermsSource] = Field(min_length=1)
+    verified: date | None = None
+    notes: str | None = None
+
+    @model_validator(mode="after")
+    def _only_terms_someone_read_say_anything(self) -> DataTerms:
+        said = [u.account for u in self.uses if u.improves_models is not None or u.keeps_prompts]
+        if self.verified is None and said:
+            msg = (
+                f"data terms for {self.company} say what happens to prompts "
+                f"({', '.join(said)}) without the date someone read them: read the sources "
+                "and add `verified`, or leave those points unsaid"
+            )
+            raise ValueError(msg)
+        return self
 
 
 class VisitorKeysConfig(_Strict):
@@ -237,6 +288,8 @@ class LLMConfig(_Strict):
     shared: SharedAllowanceConfig = Field(default_factory=SharedAllowanceConfig)
     quota: QuotaConfig = Field(default_factory=QuotaConfig)
     cache: ResponseCacheConfig = Field(default_factory=ResponseCacheConfig)
+    # What each provider's own terms say about prompts, by name; providers point here by `terms`.
+    data_terms: dict[str, DataTerms] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _chains_reference_known_providers(self) -> LLMConfig:
@@ -247,6 +300,14 @@ class LLMConfig(_Strict):
         unknown = sorted({name for chain in chains for name in chain} - self.providers.keys())
         if unknown:
             msg = f"routing references unknown providers: {', '.join(unknown)}"
+            raise ValueError(msg)
+        missing = sorted(
+            f"{name} ({cfg.terms})"
+            for name, cfg in self.providers.items()
+            if cfg.terms is not None and cfg.terms not in self.data_terms
+        )
+        if missing:
+            msg = f"providers name data terms that llm.data_terms lacks: {', '.join(missing)}"
             raise ValueError(msg)
         for kind, names in self.visitor_keys.providers.items():
             if not re.fullmatch(r"[a-z][a-z0-9-]{0,23}", kind) or not names:

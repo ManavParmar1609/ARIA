@@ -73,6 +73,84 @@ llm:
     per_visitor: ${ARIA_SHARED_PER_VISITOR:-0}
     per_day: ${ARIA_SHARED_PER_DAY:-0}
 
+  # What each model provider's own terms say about the prompts ARIA sends it, for each kind of
+  # account: whether the provider may use them to improve its models (improves_models), and how
+  # long it keeps them (keeps_prompts). `verified` is the day someone read the sources for ARIA.
+  # Terms nobody has read say nothing, and the console shows "not verified", until someone reads
+  # them, fills them in and sets the date. Each provider below names its entry in `terms`. A
+  # server you run yourself (nim-local, openai_compat, or NVIDIA_NIM_BASE_URL pointed at your own
+  # NIM) and the offline providers have none: prompts stay with whoever runs them. Whatever the
+  # terms, ARIA sends a model only redacted, fenced evidence, never raw log lines.
+  data_terms:
+    google:
+      company: Google
+      service: Gemini API
+      uses:
+        - account: Free tier (a key without billing)
+        - account: Paid tier (a key on a billing account)
+      sources:
+        - title: Gemini API Additional Terms of Service
+          url: https://ai.google.dev/gemini-api/terms
+      notes: >-
+        Not verified: ai.google.dev could not be reached when these terms were recorded on
+        2026-11-01. Google's terms treat the two tiers differently, so read them before you send
+        sensitive logs with a free key.
+    anthropic:
+      company: Anthropic
+      service: Claude API
+      uses:
+        - account: API, under Anthropic's Commercial Terms
+          improves_models: false
+          keeps_prompts: >-
+            For the term of your agreement at most, then deleted within 30 days of its end, except
+            what the law, a dispute or stopping misuse requires Anthropic to keep.
+      sources:
+        - title: Commercial Terms of Service
+          url: https://www.anthropic.com/legal/commercial-terms
+        - title: Data Processing Addendum
+          url: https://www.anthropic.com/legal/data-processing-addendum
+      verified: 2026-11-01
+      notes: >-
+        The Commercial Terms (effective 17 June 2025) say Anthropic may not train models on
+        customer content from its services. The keeping period is the Data Processing Addendum's
+        (effective 24 February 2025), an upper bound: Anthropic's privacy center gives its usual
+        period for API logs, but privacy.anthropic.com could not be reached, so it is not recorded
+        here.
+    openai:
+      company: OpenAI
+      service: OpenAI API
+      uses:
+        - account: API
+      sources:
+        - title: Your data (OpenAI API documentation)
+          url: https://developers.openai.com/api/docs/guides/your-data
+      notes: >-
+        Not verified: these terms have not been read for ARIA yet. Read them before you send
+        sensitive logs, then record what they say and the date.
+    nvidia:
+      company: NVIDIA
+      service: Hosted NIM on build.nvidia.com
+      uses:
+        - account: API trial
+      sources:
+        - title: NVIDIA API Trial Terms of Service
+          url: https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf
+      notes: >-
+        Not verified: these terms have not been read for ARIA yet. Read them before you send
+        sensitive logs, then record what they say and the date. Pointing NVIDIA_NIM_BASE_URL at a
+        NIM you run yourself keeps prompts on your own servers.
+    microsoft:
+      company: Microsoft
+      service: Azure OpenAI
+      uses:
+        - account: Azure subscription
+      sources:
+        - title: Data, privacy, and security for Azure OpenAI
+          url: https://learn.microsoft.com/en-us/legal/cognitive-services/openai/data-privacy
+      notes: >-
+        Not verified: these terms have not been read for ARIA yet. Read them before you send
+        sensitive logs, then record what they say and the date.
+
   providers:
     nim-local:
       kind: nvidia_nim
@@ -106,6 +184,7 @@ llm:
       kind: openai_compatible
       base_url: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai}
       api_key_env: [GEMINI_API_KEY, gemini_api_key]
+      terms: google
       chat_model: ${GEMINI_CHAT_MODEL:-gemini-3.6-flash}
       reasoning_effort: ${GEMINI_REASONING_EFFORT:-minimal}
       structured_output: json_schema
@@ -132,6 +211,7 @@ llm:
       kind: openai_compatible
       base_url: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai}
       api_key_env: [GEMINI_API_KEY, gemini_api_key]
+      terms: google
       chat_model: ${GEMINI_LITE_MODEL:-gemini-3.5-flash-lite}
       reasoning_effort: ${GEMINI_REASONING_EFFORT:-minimal}
       structured_output: json_schema
@@ -153,6 +233,7 @@ llm:
       kind: openai_compatible
       base_url: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai}
       api_key_env: [GEMINI_API_KEY, gemini_api_key]
+      terms: google
       chat_model: ${GEMINI_LITE_2_MODEL:-gemini-3.1-flash-lite}
       reasoning_effort: ${GEMINI_REASONING_EFFORT:-minimal}
       structured_output: json_schema
@@ -175,6 +256,7 @@ llm:
       kind: openai_compatible
       base_url: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai}
       api_key_env: [GEMINI_API_KEY, gemini_api_key]
+      terms: google
       chat_model: ${GEMMA_MODEL:-gemma-3-27b-it}
       # Whether Gemma takes a JSON schema, a JSON mode or a system role through this endpoint is
       # unverified, so it is asked the plain way: the schema in the prompt, its JSON pulled out
@@ -201,6 +283,7 @@ llm:
       base_url: ${NVIDIA_NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}
       api_key_env: NVIDIA_API_KEY
       public_catalog: true
+      terms: nvidia
       chat_model: ${NVIDIA_NIM_CHAT_MODEL:-openai/gpt-oss-20b}
       reasoning_effort: ${NVIDIA_NIM_REASONING_EFFORT:-low}
       embedding_model: ${NVIDIA_NIM_EMBED_MODEL:-nvidia/nemotron-3.5-embed-1b}
@@ -228,6 +311,7 @@ llm:
       base_url: ${NVIDIA_NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}
       api_key_env: NVIDIA_API_KEY
       public_catalog: true
+      terms: nvidia
       chat_model: ${NVIDIA_NIM_FALLBACK_MODEL:-minimaxai/minimax-m3.1-flash}
       structured_output: json_schema
       stream_always: true
@@ -243,6 +327,7 @@ llm:
       base_url: ${AZURE_OPENAI_ENDPOINT:-}
       api_key_env: AZURE_OPENAI_API_KEY
       azure_ad: ${AZURE_OPENAI_USE_ENTRA:-false}
+      terms: microsoft
       chat_model: ${AZURE_OPENAI_CHAT_DEPLOYMENT:-gpt-5.1}
       embedding_model: ${AZURE_OPENAI_EMBED_DEPLOYMENT:-text-embedding-3-small}
       structured_output: json_schema
@@ -256,6 +341,7 @@ llm:
       kind: anthropic
       base_url: ${ANTHROPIC_BASE_URL:-https://api.anthropic.com}
       api_key_env: ANTHROPIC_API_KEY
+      terms: anthropic
       chat_model: ${ANTHROPIC_CHAT_MODEL:-claude-opus-5-5}
       reasoning_effort: ${ANTHROPIC_EFFORT:-low}
       # Claude always thinks a little first, and the thinking counts against each reply's limit.
@@ -283,6 +369,7 @@ llm:
       kind: openai_compatible
       base_url: https://api.openai.com/v1
       api_key_env: OPENAI_API_KEY
+      terms: openai
       chat_model: ${OPENAI_CHAT_MODEL:-gpt-6.1-sol}
       reasoning_effort: ${OPENAI_REASONING_EFFORT:-low}
       max_tokens_field: max_completion_tokens
