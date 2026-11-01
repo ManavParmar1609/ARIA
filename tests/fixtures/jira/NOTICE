@@ -1,0 +1,8 @@
+A few issues of the Public Jira Dataset (Apache's and Atlassian's Jira), as ARIA's
+download keeps them, with each description shortened to 300 characters.
+
+Source: https://zenodo.org/records/15719919 (DOI 10.5281/zenodo.15719919)
+Licence: Creative Commons Attribution 4.0 International (CC BY 4.0),
+https://creativecommons.org/licenses/by/4.0/
+Cite: L. Montgomery, C. Lueders, W. Maalej. An Alternative Issue Tracking Dataset of
+Public Jira Repositories. MSR 2022.

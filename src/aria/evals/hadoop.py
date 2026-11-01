@@ -13,6 +13,10 @@ hypothesis. A job counts as flagged when ARIA rates it SEV1-SEV3. Baselines on t
 rule that flags any job with an ERROR or FATAL line, and the keyword rule. ARIA's catalog has
 modes for tasks that cannot reach the ResourceManager and for HDFS lease renewal failures, but
 none for a full disk, so a disk-full job is explained right only by luck.
+
+Loghub issue #56 says six PageRank jobs may be mislabelled (``DISPUTED``). They stay in the
+headline with the data's own labels, and are also scored apart: ARIA's verdict on each, detection
+on the other 49 jobs, and detection with the issue's proposed labels.
 """
 
 from __future__ import annotations
@@ -43,6 +47,20 @@ LABELS = {
     "disk full": "disk_full",
 }
 FLAGGED = {"SEV1", "SEV2", "SEV3"}
+# Six PageRank jobs whose labels Loghub issue #56 (December 2024) says may be wrong: the label
+# the data gives, and the one the issue proposes. The maintainer closed the issue with a warning
+# rather than a fix, so these jobs are scored both with the data's labels and on their own.
+# The issue writes the fourth job as 1445182151478_0015, an id no job has; the only job with that
+# number whose label is machine down, as the issue says, is 1445062781478_0015.
+LABEL_ISSUE = "https://github.com/logpai/loghub/issues/56"
+DISPUTED = {
+    "application_1445144423722_0024": ("normal", "disk_full"),
+    "application_1445182159119_0017": ("machine_down", "normal"),
+    "application_1445062781478_0020": ("machine_down", "normal"),
+    "application_1445062781478_0015": ("machine_down", "disk_full"),
+    "application_1445182159119_0013": ("disk_full", "machine_down"),
+    "application_1445182159119_0011": ("disk_full", "machine_down"),
+}
 _STAMP = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}) ")
 _ERROR = re.compile(r"^\S+ \S+ (ERROR|FATAL) ")
 
@@ -83,6 +101,33 @@ def job_lines(directory: Path) -> list[str]:
                 current.append(raw)
     groups.sort(key=lambda g: (g[0], g[1]))
     return [line for _, _, lines in groups for line in lines]
+
+
+def label_issue(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """The jobs Loghub issue #56 disputes, scored apart: ARIA's verdict on each, detection on
+    the other jobs alone, and detection on every job with the issue's proposed labels."""
+    disputed = [r for r in rows if r["job"] in DISPUTED]
+    others = [r for r in rows if r["job"] not in DISPUTED]
+    proposed = [DISPUTED[r["job"]][1] if r["job"] in DISPUTED else r["label"] for r in rows]
+    return {
+        "source": LABEL_ISSUE,
+        "jobs": [
+            {
+                "job": r["job"],
+                "label": r["label"],
+                "proposed": DISPUTED[r["job"]][1],
+                "severity": r["severity"],
+                "leading_mode": r["leading_mode"],
+            }
+            for r in disputed
+        ],
+        "without_disputed": detection(
+            [r["severity"] in FLAGGED for r in others], [r["label"] != "normal" for r in others]
+        ),
+        "with_proposed_labels": detection(
+            [r["severity"] in FLAGGED for r in rows], [label != "normal" for label in proposed]
+        ),
+    }
 
 
 def detection(flags: Sequence[bool], failed: Sequence[bool]) -> dict[str, Any]:
@@ -185,5 +230,6 @@ async def evaluate(
             k: dict(Counter(r["leading_mode"] for r in v).most_common())
             for k, v in sorted(by_label.items())
         },
-        "jobs_detail": rows,
+        "label_issue": label_issue(rows),
+        "jobs_detail": [{**r, "disputed": r["job"] in DISPUTED} for r in rows],
     }

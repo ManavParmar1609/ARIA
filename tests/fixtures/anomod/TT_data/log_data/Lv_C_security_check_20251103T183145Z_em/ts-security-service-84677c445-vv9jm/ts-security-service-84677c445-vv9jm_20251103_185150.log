@@ -1,0 +1,6 @@
+2025-11-04 02:51:14.340 ERROR 1 --- [io-11188-exec-5] o.a.c.c.C.[.[.[/].[dispatcherServlet]    : Servlet.service() for servlet [dispatcherServlet] in context with path [] threw exception
+2025-11-04 02:51:14.425 ERROR 1 --- [io-11188-exec-6] edu.fudan.common.security.jwt.JWTUtil    : [validateToken][getClaims][Token expired][ExpiredJwtException: {} ]
+2025-11-04 02:51:14.340 ERROR 1 --- [io-11188-exec-5] o.a.c.c.C.[.[.[/].[dispatcherServlet]    : Servlet.service() for servlet [dispatcherServlet] in context with path [] threw exception
+
+edu.fudan.common.exception.TokenException: Token expired
+	at edu.fudan.common.security.jwt.JWTUtil.validateToken(JWTUtil.java:103) ~[ts-common-0.1.0.jar!/:0.1.0]

@@ -855,6 +855,34 @@ async def test_hadoop_jobs_are_merged_in_time_order_and_triaged_against_their_la
     assert "missing" in await hadoop.evaluate(env, tmp_path / "nothing")
 
 
+def test_the_hadoop_jobs_loghub_issue_56_disputes_are_also_scored_apart() -> None:
+    from aria.evals import hadoop, report_domains
+
+    def row(job: str, label: str, severity: str) -> dict[str, Any]:
+        return {"job": job, "label": label, "severity": severity, "leading_mode": "none"}
+
+    rows = [
+        row("application_1445144423722_0024", "normal", "SEV3"),  # disputed: may be disk full
+        row("application_1445182159119_0017", "machine_down", "SEV4"),  # disputed: may be normal
+        row("application_1_0001", "normal", "SEV4"),
+        row("application_1_0002", "disk_full", "SEV2"),
+    ]
+    issue = hadoop.label_issue(rows)
+    assert issue["source"].endswith("/logpai/loghub/issues/56")
+    assert [j["proposed"] for j in issue["jobs"]] == ["disk_full", "normal"]
+    # Without the disputed jobs: one failed job flagged, one healthy job left alone.
+    assert issue["without_disputed"]["failed_flagged"] == 1
+    assert issue["without_disputed"]["normal"] == 1
+    # With the proposed labels, ARIA's flag on the first job becomes a hit, not a false alarm.
+    assert issue["with_proposed_labels"]["failed_flagged"] == 2
+    assert issue["with_proposed_labels"]["normal_flagged"] == 0
+    assert len(hadoop.DISPUTED) == 6
+    assert all(job.startswith("application_1445") for job in hadoop.DISPUTED)
+    text = "\n".join(report_domains.render({"real": {"hadoop": {"label_issue": issue}}}))
+    assert "### The Hadoop jobs whose labels are disputed" in text
+    assert "| application_1445144423722_0024 | normal | disk full | SEV3 |" in text
+
+
 def _openstack_dataset(root: Path) -> None:
     """Three Nova experiments (silent failure, reported failure, healthy) and one with no logs."""
     import gzip

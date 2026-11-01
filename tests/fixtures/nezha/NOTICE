@@ -1,0 +1,10 @@
+Two entries of Nezha's fault list for 2022-08-22 (Online Boutique, dataset1), unchanged, and a
+few log rows from either side of the first of them (a thrown exception in the frontend), cut to
+the time, pod and log record as `aria data download` stores them but not gzipped. One row is
+repeated in both minute files, to test that a line two files hold is read once.
+
+Source: https://zenodo.org/records/7029202 (DOI 10.5281/zenodo.7029202)
+Licence: Creative Commons Attribution 4.0 International (CC BY 4.0) on Zenodo; the
+authors' repository states MIT. https://creativecommons.org/licenses/by/4.0/
+Cite: G. Yu, P. Chen, Y. Li, H. Chen, X. Li, Z. Zheng. Nezha: Interpretable Fine-Grained Root
+Causes Analysis for Microservices on Multi-Modal Observability Data. ESEC/FSE 2023.

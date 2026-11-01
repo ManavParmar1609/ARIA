@@ -10,10 +10,21 @@ Integrity checks per source kind:
   mirrors are tried in order, each trusted only if its file matches the sha256 pinned beside it.
 * gitlab: a live issues API, read page by page with fixed parameters. It cannot be pinned (an
   issue can be edited later), so the snapshot's sha256 and date are recorded beside it.
+* huggingface: files of a dataset repository at a pinned commit, each verified against the hash
+  the Hub records for it (the sha256 of a large file, the git blob id of a small one).
+* checksums: pinned in the manifest beside a source. A Zenodo file must match its pin as well as
+  the checksum the record publishes, so a record that changes its files is refused.
+* stream: part of a file too large to keep is read as it arrives (``aria.data.remote_zip``) and
+  only what the source's reader keeps is written; the manifest pins the checksums of those files.
+
+Zenodo refuses bursts (HTTP 403 "unusual traffic" after about two dozen quick calls), so every
+request to it waits ``ZENODO.interval`` seconds after the previous one, and a refused request is
+retried after a growing pause.
 """
 
 from __future__ import annotations
 
+import fnmatch
 import gzip
 import hashlib
 import json
@@ -21,11 +32,13 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+import time
 import zipfile
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 import httpx
 
@@ -41,6 +54,52 @@ class DownloadError(RuntimeError):
     pass
 
 
+class Throttle:
+    """Spaces the requests sent to one host, and pauses before retrying a refused one."""
+
+    def __init__(self, interval: float, backoff: tuple[float, ...]) -> None:
+        self.interval = interval
+        self.backoff = backoff
+        self.sleep: Callable[[float], None] = time.sleep
+        self.clock: Callable[[], float] = time.monotonic
+        self._last: float | None = None
+
+    def wait(self) -> None:
+        """Return once ``interval`` seconds have passed since the previous request."""
+        if self._last is not None:
+            pause = self.interval - (self.clock() - self._last)
+            if pause > 0:
+                self.sleep(pause)
+        self._last = self.clock()
+
+    def pause(self, attempt: int, retry_after: str | None) -> bool:
+        """Sleep before retry ``attempt`` (from 0); False once the retries are spent."""
+        if attempt >= len(self.backoff):
+            return False
+        wait = self.backoff[attempt]
+        if retry_after and retry_after.isdigit():
+            wait = max(wait, float(retry_after))
+        self.sleep(wait)
+        return True
+
+
+# Zenodo answered 403 after about two dozen quick calls; these spacings kept sessions clear.
+ZENODO = Throttle(interval=3.0, backoff=(15.0, 45.0, 90.0))
+# A transfer cut off mid-way (a reset connection, a TLS EOF) is retried after these pauses.
+TRANSPORT = Throttle(interval=0.0, backoff=(2.0, 5.0))
+_BUSY = {429, 502, 503, 504}
+
+
+def throttle_for(url: str) -> Throttle | None:
+    return ZENODO if urlsplit(url).hostname == "zenodo.org" else None
+
+
+def _refused(status: int, body: bytes) -> bool:
+    """A refusal worth waiting out: the host is busy, or it is limiting this caller's traffic
+    (Zenodo's 403 says "unusual traffic"; a 403 for any other reason is final)."""
+    return status in _BUSY or (status == httpx.codes.FORBIDDEN and b"unusual traffic" in body)
+
+
 def _hash_file(path: Path, algorithm: str) -> str:
     digest = hashlib.new(algorithm)
     with path.open("rb") as handle:
@@ -49,20 +108,83 @@ def _hash_file(path: Path, algorithm: str) -> str:
     return digest.hexdigest()
 
 
+def _get(client: httpx.Client, url: str) -> httpx.Response:
+    """GET, spaced and retried when the host is one that refuses bursts."""
+    throttle = throttle_for(url)
+    attempt = 0
+    while True:
+        if throttle is not None:
+            throttle.wait()
+        response = client.get(url)
+        if (
+            throttle is None
+            or not _refused(response.status_code, response.content)
+            or not throttle.pause(attempt, response.headers.get("retry-after"))
+        ):
+            return response
+        attempt += 1
+
+
+def _fetch(client: httpx.Client, url: str) -> httpx.Response:
+    """``_get``, with a connection cut off part way retried after a pause."""
+    cuts = 0
+    while True:
+        try:
+            return _get(client, url)
+        except httpx.TransportError:
+            if not TRANSPORT.pause(cuts, None):
+                raise
+            cuts += 1
+
+
 def _stream_to(url: str, target: Path) -> None:
+    """Download ``url`` to ``target``; a refusal worth waiting out, or a transfer cut off part
+    way, is retried after a pause."""
     target.parent.mkdir(parents=True, exist_ok=True)
     partial = target.with_suffix(target.suffix + ".part")
-    with (
-        httpx.Client(timeout=_TIMEOUT, follow_redirects=True) as client,
-        client.stream("GET", url) as response,
-    ):
-        if response.status_code != httpx.codes.OK:
-            msg = f"GET {url} returned {response.status_code}"
-            raise DownloadError(msg)
-        with partial.open("wb") as handle:
-            for chunk in response.iter_bytes(_CHUNK):
-                handle.write(chunk)
+    throttle = throttle_for(url)
+    refusals = cuts = 0
+    with httpx.Client(timeout=_TIMEOUT, follow_redirects=True) as client:
+        while True:
+            if throttle is not None:
+                throttle.wait()
+            try:
+                with client.stream("GET", url) as response:
+                    status = response.status_code
+                    if status == httpx.codes.OK:
+                        with partial.open("wb") as handle:
+                            for chunk in response.iter_bytes(_CHUNK):
+                                handle.write(chunk)
+                        break
+                    body = response.read() if status == httpx.codes.FORBIDDEN else b""
+                    retry_after = response.headers.get("retry-after")
+            except httpx.TransportError:
+                if not TRANSPORT.pause(cuts, None):
+                    raise
+                cuts += 1
+                continue
+            if not (
+                throttle is not None
+                and _refused(status, body)
+                and throttle.pause(refusals, retry_after)
+            ):
+                msg = f"GET {url} returned {status}"
+                raise DownloadError(msg)
+            refusals += 1
     partial.replace(target)
+
+
+def _check_pinned(source: DataSource, name: str, path: Path) -> None:
+    """Refuse a file whose bytes differ from the checksum the manifest pins for it."""
+    pinned = source.checksums.get(name)
+    if pinned is None:
+        return
+    algorithm, _, expected = pinned.partition(":")
+    actual = _hash_file(path, algorithm)
+    if actual != expected:
+        path.unlink(missing_ok=True)
+        msg = f"{source.name}: {name} {algorithm} mismatch (pinned {expected}, got {actual})"
+        raise DownloadError(msg)
 
 
 def _git(args: list[str], cwd: Path) -> None:
@@ -112,7 +234,8 @@ def compress_files(root: Path, patterns: list[str]) -> int:
 
 def _zenodo_files(record: str) -> list[dict[str, Any]]:
     url = f"https://zenodo.org/api/records/{record}"
-    response = httpx.get(url, timeout=_TIMEOUT, follow_redirects=True)
+    with httpx.Client(timeout=_TIMEOUT, follow_redirects=True) as client:
+        response = _fetch(client, url)
     if response.status_code != httpx.codes.OK:
         msg = f"Zenodo record {record} returned {response.status_code}"
         raise DownloadError(msg)
@@ -130,7 +253,20 @@ def download_zenodo(source: DataSource, dest: Path) -> Path:
         if entry is None:
             msg = f"{source.name}: {name} not found in Zenodo record {source.record}"
             raise DownloadError(msg)
-        algorithm, _, expected = str(entry.get("checksum", "")).partition(":")
+        published = str(entry.get("checksum", ""))
+        pinned = source.checksums.get(name, "")
+        same_kind = pinned.partition(":")[0] == published.partition(":")[0]
+        if pinned and published and same_kind and pinned != published:
+            msg = (
+                f"{source.name}: Zenodo now publishes {published} for {name}, but the manifest "
+                f"pins {pinned}; the record's files changed"
+            )
+            raise DownloadError(msg)
+        if source.stream is not None:
+            # Too large to keep: the reader takes what it needs as the file streams in.
+            stream_source(source, dest, entry["links"]["self"])
+            continue
+        algorithm, _, expected = published.partition(":")
         target = dest / name
         if not (target.exists() and _hash_file(target, algorithm or "md5") == expected):
             _stream_to(entry["links"]["self"], target)
@@ -139,8 +275,136 @@ def download_zenodo(source: DataSource, dest: Path) -> Path:
                 target.unlink(missing_ok=True)
                 msg = f"{name}: {algorithm} mismatch (expected {expected}, got {actual})"
                 raise DownloadError(msg)
+        _check_pinned(source, name, target)
         if source.extract:
             _extract(target, dest)
+    return dest
+
+
+# A stream reader: (source, destination, HTTP client, the file's URL when the source has one
+# file) -> the files it wrote under the destination.
+StreamReader = Callable[[DataSource, Path, httpx.Client, str | None], list[Path]]
+
+
+def _stream_readers() -> dict[str, StreamReader]:
+    # Imported here: the readers use this module's helpers.
+    from aria.data import itbench, jira, nezha  # noqa: PLC0415
+
+    return {
+        "jira-mongodump": jira.write_subset,
+        "itbench-logs": itbench.write_log_windows,
+        "nezha-logs": nezha.write_minutes,
+    }
+
+
+def stream_source(source: DataSource, dest: Path, url: str | None = None) -> Path:
+    """Run the source's stream reader, then check every file it wrote against its pin."""
+    if source.stream is None:
+        msg = f"{source.name}: no stream reader configured"
+        raise DownloadError(msg)
+    reader = _stream_readers()[source.stream.reader]
+    with httpx.Client(timeout=_TIMEOUT, follow_redirects=True) as client:
+        written = reader(source, dest, client, url)
+    for path in written:
+        _check_pinned(source, path.relative_to(dest).as_posix(), path)
+    log.info("dataset.streamed", source=source.name, files=len(written))
+    return dest
+
+
+def hub_repo(url: str) -> str:
+    """'https://huggingface.co/datasets/ibm-research/ITBench-Lite' -> 'ibm-research/ITBench-Lite'."""
+    parts = [p for p in urlsplit(url).path.split("/") if p]
+    if len(parts) != 3 or parts[0] != "datasets":
+        msg = f"{url} is not a Hugging Face dataset URL"
+        raise DownloadError(msg)
+    return "/".join(parts[1:])
+
+
+def _static_prefix(pattern: str) -> str:
+    """The folders of a glob before its first wildcard: 'a/b/*/c' -> 'a/b'."""
+    head: list[str] = []
+    for part in pattern.split("/")[:-1]:
+        if any(ch in part for ch in "*?["):
+            break
+        head.append(part)
+    return "/".join(head)
+
+
+def hub_files(
+    client: httpx.Client, repo: str, commit: str, patterns: list[str]
+) -> list[dict[str, Any]]:
+    """Every file of the dataset at ``commit`` that a pattern matches, as the Hub lists it."""
+    found: dict[str, dict[str, Any]] = {}
+    for prefix in sorted({_static_prefix(p) for p in patterns}):
+        url: str | None = (
+            f"https://huggingface.co/api/datasets/{repo}/tree/{commit}/{quote(prefix)}"
+            "?recursive=true&expand=false"
+        )
+        while url:
+            response = _fetch(client, url)
+            if response.status_code != httpx.codes.OK:
+                msg = f"listing {repo}@{commit[:12]} returned {response.status_code}"
+                raise DownloadError(msg)
+            for entry in response.json():
+                path = str(entry.get("path", ""))
+                if entry.get("type") == "file" and any(
+                    fnmatch.fnmatchcase(path, p) for p in patterns
+                ):
+                    found[path] = entry
+            url = response.links.get("next", {}).get("url")
+    return [found[path] for path in sorted(found)]
+
+
+def hub_url(repo: str, commit: str, path: str) -> str:
+    return f"https://huggingface.co/datasets/{repo}/resolve/{commit}/{quote(path)}"
+
+
+def blob_id(path: Path) -> str:
+    """Git's id for a file's bytes: the sha1 of 'blob <size>', a NUL byte and the bytes."""
+    digest = hashlib.sha1(f"blob {path.stat().st_size}\0".encode(), usedforsecurity=False)
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(_CHUNK), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def hub_verified(path: Path, entry: dict[str, Any]) -> bool:
+    """Whether ``path`` holds the bytes the Hub records for ``entry``."""
+    if not path.is_file():
+        return False
+    lfs = entry.get("lfs") or {}
+    if lfs.get("oid"):
+        return bool(_hash_file(path, "sha256") == lfs["oid"])
+    return bool(blob_id(path) == entry.get("oid"))
+
+
+def download_huggingface(source: DataSource, dest: Path) -> Path:
+    """The files ``paths`` match in the dataset repository at the pinned commit."""
+    if not (source.url and source.commit and source.paths):
+        msg = f"{source.name}: huggingface sources need url, commit and paths"
+        raise DownloadError(msg)
+    repo = hub_repo(source.url)
+    with httpx.Client(timeout=_TIMEOUT, follow_redirects=True) as client:
+        entries = hub_files(client, repo, source.commit, source.paths)
+    if not entries:
+        msg = f"{source.name}: no file in {repo}@{source.commit[:12]} matches {source.paths}"
+        raise DownloadError(msg)
+    for entry in entries:
+        target = dest / entry["path"]
+        if not target.resolve().is_relative_to(dest.resolve()):
+            msg = f"refusing to write {entry['path']} outside {dest}"
+            raise DownloadError(msg)
+        if hub_verified(target, entry):
+            continue
+        _stream_to(hub_url(repo, source.commit, entry["path"]), target)
+        if not hub_verified(target, entry):
+            target.unlink(missing_ok=True)
+            msg = f"{source.name}: {entry['path']} does not match the Hub's hash"
+            raise DownloadError(msg)
+    if source.stream is not None:
+        stream_source(source, dest)
+    (dest / ".commit").write_text(source.commit + "\n")
+    log.info("dataset.fetched", source=source.name, files=len(entries))
     return dest
 
 
@@ -329,6 +593,8 @@ def download(source: DataSource, raw_dir: Path) -> Path:
                 return download_zenodo(source, dest)
             if source.kind == "gitlab":
                 return download_gitlab(source, dest)
+            if source.kind == "huggingface":
+                return download_huggingface(source, dest)
             return download_http(source, dest, raw_dir.parent / "checksums.lock")
         except (DownloadError, httpx.HTTPError, subprocess.CalledProcessError) as exc:
             if not source.mirrors:

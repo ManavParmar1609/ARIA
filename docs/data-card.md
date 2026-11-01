@@ -20,7 +20,10 @@ labels its owners gave it**:
   labelled ([below](#gitlabcoms-production-incidents));
 - public post-mortems of AWS, Azure and Google Cloud incidents, with the root cause and the fix
   researchers recorded for each;
-- six public prompt-injection benchmarks, and a benchmark of benign look-alikes.
+- six public prompt-injection benchmarks, and a benchmark of benign look-alikes;
+- six public datasets from domains ARIA was never tuned on: security alerts from attacked
+  networks, faults in microservice shops, Kubernetes incidents and the priority people set on
+  public issue trackers ([below](#new-domains-data-aria-was-never-tuned-on)).
 
 The other numbers come from **semi-synthetic** incident windows. Their log lines are real lines
 from the public Loghub samples, but ARIA's scenario builder composes them into incidents: it
@@ -59,6 +62,12 @@ its integrity (see [What is in git](#what-is-in-git-and-what-is-not)).
 | `bipia`, `injecagent`, `cyberseceval-pi`, `tensor-trust`, `giskard-injections`, `jailbreak-llms` | Public prompt-injection benchmarks: BIPIA (Yi et al.), InjecAgent (Zhan et al.), CyberSecEval 2 (Meta), Tensor Trust (Toyer et al.), Giskard's collection and in-the-wild jailbreaks (Shen et al.), each at a pinned commit | Measuring the injection detector on attacks it was never tuned on | Downloaded |
 | `notinject` | NotInject (Li, Liu et al.): benign sentences that use one, two or three words common in injections | Measuring the detector's over-defence | Downloaded |
 | `gitlab-incidents` | GitLab.com's production incidents (public issues in gitlab-com/gl-infra/production, created before October 2026), with the responders' severity, service and root-cause labels | The incident-memory evaluation: similar past incidents from each later incident's title | Downloaded through the issues API. A live source: the download records its snapshot's sha256 and date, and issues edited later can make a fresh download differ |
+| `ait-ads` | The AIT Alert Data Set (Landauer et al., CSET 2024), Zenodo [8263181](https://zenodo.org/records/8263181): the intrusion-detection alerts of eight simulated company networks, each attacked once in several steps, with the start and end of every step | The security-alert evaluation ([below](#new-domains-data-aria-was-never-tuned-on)) | Downloaded and kept zipped; both files are pinned by md5 in the manifest as well as checked against the record |
+| `rcaeval-re3` | RCAEval's RE3 suite (Pham et al., WWW 2025 Companion), Zenodo [14590730](https://zenodo.org/records/14590730): 90 code-level faults injected into Sock Shop, Online Boutique and Train Ticket, each with every service's logs and the service at fault | The microservice-fault evaluation | Downloaded and kept zipped (the three RE3 zips only); pinned by md5 |
+| `anomod` | AnoMod (Ping et al., MSR 2026), Zenodo [18342898](https://zenodo.org/records/18342898): 24 anomalies at four levels in SocialNetwork and Train Ticket, plus a normal run of each, with five kinds of telemetry | The four-level anomaly evaluation, from the logs only | Downloaded and kept zipped; pinned by md5 |
+| `itbench-lite` | ITBench-Lite's 35 site-reliability scenarios (IBM Research, Hugging Face `ibm-research/ITBench-Lite` at commit `d0916b08`): Kubernetes incident snapshots with alerts, events, logs and a ground truth | The Kubernetes-incident evaluation | Downloaded at the pinned commit, each file checked against the hash the Hub records. The services' logs (about 4 GB) are streamed and checked, and only the 10 minutes before each incident (at most 20,000 lines) are kept |
+| `jira-public` | The Public Jira Dataset (Montgomery et al., MSR 2022), Zenodo [15719919](https://zenodo.org/records/15719919): 2.7 million issues from 16 public Jira instances in one 5.8 GB zip | The ticket-priority evaluation | A subset only: the download streams the dump inside the zip and keeps the first 20,000 issues of Apache's and of Atlassian's Jira, pinned by sha256; the zip is never stored |
+| `nezha` | Nezha's Online Boutique data (Yu et al., ESEC/FSE 2023), Zenodo [7029202](https://zenodo.org/records/7029202): two days of faults injected one at a time into Online Boutique's pods, each day with its fault list and every service's logs, metrics and traces, in one 788 MB zip of two `tar.xz` archives | The pod-fault evaluation | A subset only: the download streams both archives without storing them, checks each against the CRC-32 the zip records, and keeps each day's fault list (pinned by sha256) and the log files of the minutes around each fault, gzipped |
 
 ### Licences and citations
 
@@ -102,6 +111,13 @@ GitLab.com's production incidents are public issues in
 with no licence stated. ARIA reads them through GitLab's issues API only to evaluate incident
 memory, keeps them under `data/raw/`, and never redistributes them.
 
+The AIT Alert Data Set, AnoMod, the Public Jira Dataset and the Zenodo records of RCAEval and
+Nezha are licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); RCAEval's and
+Nezha's own repositories say MIT, and the manifest records both. ITBench-Lite is licensed
+Apache-2.0. These allow derived excerpts with attribution, so a few of their records are
+committed as test fixtures under `tests/fixtures/`, each folder with a `NOTICE` naming the
+source, its licence and the paper to cite. The manifest lists the citation for each.
+
 ARIA's code is MIT-licensed, but the data terms still apply to everything derived from the data.
 That includes the committed severity model and the seeded incident memory, which are built from
 Loghub lines. Check the Loghub terms before any commercial use.
@@ -115,7 +131,7 @@ prompt-injection collections. These were reachable but left out, or could not be
 |---|---|
 | BPI Challenge 2014 (Rabobank ICT incidents) | Its priority is a fixed function of impact and urgency (every pair maps to one priority) and it has no SLA outcome, so it would only confirm the matrix the UCI log already measures |
 | BPI Challenge 2013 (Volvo IT incidents) | Impact only, no priority, SLA or free text |
-| Nezha (Yu et al., ESEC/FSE 2023) | Reachable and labelled, but about 2 GB of logs from microservices ARIA has no parser or failure modes for; a candidate for a future fault-localisation evaluation |
+| LANL HPC failure records (Schroeder and Gibson, DSN 2006) | Checked on 2026-11-01: the download page (`usrc.lanl.gov`) did not answer, the FAQ is on an FTP host, and no licence is stated. The records hold no log or ticket text for ARIA to read, only times, systems and a root-cause category |
 | splunk attack_data, OTRF Security-Datasets | Labels per dataset file rather than per line or window |
 | GitHub, Google Cloud and AWS status-page archives; danluu and Kubernetes postmortem lists | Short public notices or link lists: too little text, or no labels ARIA can be scored against |
 | Spirit, Liberty, HDFS_v2, Eadro | Hosted only on hosts that could not be reached when ARIA's datasets were gathered, and no verifiable copy was found elsewhere |
@@ -130,8 +146,8 @@ and why it is not used yet:
 |---|---|---|
 | Loghub HDFS_v1, Zenodo [8196385](https://zenodo.org/records/8196385), CC BY 4.0 | `HDFS_v1.zip` (186,645,559 bytes): the whole HDFS log, with every block labelled. The manifest pins it as `hdfs-v1` and keeps it zipped | The check for units of work that stop partway runs on overlapping windows of the 100,000-line sample; the whole log needs the same check on contiguous windows first, so blocks that cross a window boundary are still judged |
 | MSDS (Nedelkoski et al., ESOCC 2020), Zenodo [3549604](https://zenodo.org/records/3549604), CC BY 4.0 | Two archives (`sequential_data.zip`, 315 MB, and `concurrent data.zip`, 335 MB) of logs, metrics and traces from an OpenStack testbed with injected faults | Its labels are the times faults were injected, not lines or windows; ARIA already scores fault detection on OpenStack with the dessertlab runs, so this would be a second check of the same kind |
-| RCAEval (Pham et al., 2025), Zenodo [14590730](https://zenodo.org/records/14590730), CC BY 4.0 | 735 failures in three microservice systems (Online Boutique, Sock Shop and Train Ticket), each with its root-cause service: RE1 holds metrics only, RE2 adds logs (8.6 to 26.9 million lines per system) and traces, and RE3 holds code-level faults with logs | The task is naming the service at fault from metrics, logs and traces together. ARIA reads logs only and has no format for these services, and RE2's archives (up to 2.8 GB each) are larger than this environment's disk. RE3, with logs, is the closest fit |
-| ITBench-Lite (IBM Research), Hugging Face `ibm-research/ITBench-Lite`, Apache-2.0 | 65 scenarios: 35 for site reliability (snapshots of a Kubernetes environment during an incident), 15 for cost anomalies and 15 for compliance | Its incident scenarios grade an agent that reads Kubernetes state, alerts, events and traces; ARIA has no tools for those yet. The cost and compliance scenarios are out of ARIA's scope |
+| RCAEval RE1 and RE2 (Pham et al., 2025), Zenodo [14590730](https://zenodo.org/records/14590730), CC BY 4.0 | RE1 holds metrics only; RE2 adds logs (8.6 to 26.9 million lines per system) and traces for resource and network faults | ARIA reads logs only, so RE1 has nothing for it, and RE2's archives (up to 2.8 GB each) are larger than this environment's disk. RE3, with code-level faults and logs, is used (`rcaeval-re3`) |
+| ITBench-Lite's cost and compliance scenarios, Apache-2.0 | 15 cost-anomaly and 15 compliance scenarios beside the 35 site-reliability ones | Out of ARIA's scope; the site-reliability scenarios are used (`itbench-lite`) |
 
 ## What is in git, and what is not
 
@@ -264,6 +280,121 @@ similar past incidents from each later incident's title and summary of impact.
   mitigation that matches no kind counts as no label, and [evaluation.md](evaluation.md) says how
   many matched.
 - **Duplicates.** A write-up filed twice (same cloud, title and date) counts once.
+
+## New domains: data ARIA was never tuned on
+
+Six public, labelled datasets test ARIA outside the systems it was built on: security alerts,
+microservice faults, Kubernetes incidents and issue-tracker priority. They are ring C of the
+evaluation: no rule, lexicon entry, threshold or model was changed for them, and a change made
+after reading their results would turn them into tuning data. None of them labels incident
+severity, so they measure detection, ranking, naming the service at fault and ticket priority.
+Each runs alone with `aria eval run --suite <name>` (`ait-ads`, `rcaeval`, `anomod`, `itbench`,
+`jira`, `nezha`), and `--suite all` runs every one that is downloaded. The suites are in
+[`src/aria/evals/`](../src/aria/evals/) and their loaders in [`src/aria/data/`](../src/aria/data/).
+
+### Security alerts from attacked networks (`ait-ads`)
+
+- **What it holds.** The alerts three intrusion detection systems (Wazuh, Suricata and AMiner)
+  raised over several days in each of eight simulated company networks, and the start and end
+  of every step of the one attack each network suffered: scans, a web shell, password cracking,
+  a reverse shell, privilege escalation, a stopped service and data theft over DNS. Most alerts
+  are false positives from the simulated users, as in a real security operations centre.
+- **How ARIA uses it.** Each alert becomes one line, as a SIEM forwards it (time, host, rule and
+  the log line it fired on). The alerts are cut into contiguous 20-minute windows, and ARIA rates
+  each from its lines alone, remembering the routine templates of the network's earlier windows.
+  A window counts as an attack window when a step's time range overlaps it. The steps never
+  reach ARIA. The detectors' own rule levels stay in the lines, and are scored as a baseline.
+- **Known label problems.** The networks and users are simulated. Steps are labelled by time
+  range, not alert by alert, so an attack window also holds routine alerts, and some steps leave
+  few or no alerts of their own (a reverse shell or a privilege escalation can look like routine
+  logins). A step whose windows were not paged counts as missed, whatever the reason. Steps
+  minutes apart share a window, so a page set off by a scan also counts for a web shell
+  uploaded just after it.
+
+### Code-level faults in microservice shops (`rcaeval-re3`)
+
+- **What it holds.** RCAEval's RE3 suite: 30 cases in each of Sock Shop, Online Boutique and
+  Train Ticket, each a code-level fault (the dataset's types f1 to f5) injected into one service,
+  with every service's logs from about twelve minutes before the fault to twelve after, and the
+  time it went in.
+- **How ARIA uses it.** Each case gives two windows, the logs before the fault and the logs from
+  the fault on, each led by its container's name as a log collector forwards it, and each
+  triaged offline, end to end. The case's folder names the service and the fault; ARIA never
+  sees it.
+- **Known label problems.** The faults are injected into demo shops under a synthetic workload.
+  The label is the service the fault went into, not every service that suffered. The fault types
+  are the dataset's own codes; this card does not guess what each means. Three Train Ticket cases
+  carry the code `f3_1`, a second variant of `f3`, and are scored under it.
+
+### Anomalies at four levels in two microservice systems (`anomod`)
+
+- **What it holds.** 24 runs of SocialNetwork and Train Ticket, each with one anomaly active for
+  the whole workload (performance, service, database or code level, six of each), and one normal
+  run of each system, with logs, metrics, traces, API responses and code coverage.
+- **How ARIA uses it.** Only the logs: each run's lines, led by time, level and service and merged
+  in time order, of which ARIA reads the newest up to its per-run cap. Train Ticket's pods log in
+  UTC+8, so their times are moved to UTC. Where the run's name names the service it targets (the
+  killed or stopped service, the service whose cache was squeezed, Train Ticket's preserve,
+  security and travel services), that is the service to name.
+- **Known label problems.** The label is the run's name, so performance runs in SocialNetwork,
+  Train Ticket's database runs and its exception injection name no service and are scored for
+  detection only. There is one normal run per system, too few to estimate false alarms, and the
+  normal runs log errors of their own. Train Ticket keeps each pod's last 1,000 lines only.
+
+### Kubernetes incidents (`itbench-lite`)
+
+- **What it holds.** 35 snapshots of a Kubernetes cluster running the OpenTelemetry demo shop
+  while one fault was injected (a feature flag, a broken deployment, a namespace quota, network
+  or memory chaos, an overloaded service), each with the alerts in alerting state when the
+  incident was raised, the cluster's events, the services' logs, and a ground truth naming the
+  entity at fault and how the fault spread.
+- **How ARIA uses it.** What an on-call engineer is paged with: the alerts, and the 10 minutes of
+  Kubernetes events and service logs before the incident was raised. The service to name is a
+  workload marked as the root cause or, when the root cause is not a workload (a ConfigMap, a
+  quota, a chaos object), the first workloads it spreads to. Every scenario is an incident, so
+  false alarms are measured on the healthy windows of the RCAEval and AnoMod suites instead.
+- **Known label problems.** One scenario has no incident time (its alerts never fired; its status
+  file says its deployment failed) and is left out. Some ground truths are wrapped as Kubernetes
+  objects; the loader reads both forms. The logs of a few scenarios end before the incident was
+  raised, so ARIA reads only their events and alerts.
+
+### Ticket priority in public issue trackers (`jira-public`)
+
+- **What it holds.** A subset of the Public Jira Dataset: the first 20,000 issues of Apache's and
+  of Atlassian's own Jira in the dump's order, each with its type, project, components, title,
+  description, creation time, final priority, and the priority it was opened with, read from its
+  change history. People set these priorities: maintainers and reporters in Apache's projects,
+  Atlassian's staff in theirs.
+- **How ARIA uses it.** ARIA's ticket model reads each issue as a ticket opening: its type as the
+  category, first component as the subcategory, project as the configuration item, and its
+  creation time. Each instance's priorities are mapped onto ARIA's four levels by their written
+  order (Blocker, Critical, Major, Minor and Trivial; Highest, High, Medium, Low and Lowest), and
+  the newest 30% of each instance is scored.
+- **Known label problems.** The dump is ordered by project, so the subset holds a handful of
+  projects (the last in alphabetical order), not a sample of each instance. Apache's priority is
+  mostly left at its default, Major. Atlassian's suggestions have no priority and are not scored.
+  These are development issues, not operational incidents.
+
+### Faults injected into a shop's pods (`nezha`)
+
+- **What it holds.** Nezha's Online Boutique data: 56 faults injected over two days, one at a
+  time and about eight minutes apart, into the pods of Online Boutique's ten services (CPU
+  contention, CPU consumption, network delay, a thrown exception and a wrong return value), with
+  each day's fault list and every service's logs, metrics and traces. Its licence and access
+  were checked on 2026-11-01: the Zenodo record is CC BY 4.0 and the authors' repository MIT.
+- **How ARIA uses it.** Only the logs. Each fault gives two windows, the services' logs of the
+  minute before it and of the minute from it on, each triaged offline, end to end. Each line is
+  led by its time, level and service, with the service's own JSON fields after its message, as a
+  log collector forwards it. The shop logs more lines a minute than ARIA's per-run cap, so ARIA
+  reads the start of each window. The fault list names the pod (so the service to name) and the
+  fault's type; ARIA never sees it.
+- **Known label problems.** The faults are injected into a demo shop under a synthetic workload.
+  The label is the service the fault went into, not every service that suffered. The fault list
+  gives each fault a timestamp and a readable time, and for two faults they differ (by 44
+  seconds and by a minute); there the healthy window ends at the earlier time and the faulty one
+  starts at the later. The data does not record how soon each fault took effect or how long it
+  lasted, so a fault whose effects show only after the part of the window ARIA reads counts as
+  missed. The same shop is in RCAEval's RE3 suite, with other faults.
 
 ## How semi-synthetic windows are built
 
@@ -579,6 +710,13 @@ them. The [threat model](threat-model.md) covers what these controls do and do n
 - **One company's incidents.** GitLab.com's incidents come from one SaaS platform's own
   responders, in their own vocabulary, and their titles are often written before the cause is
   known. Its labels name GitLab's services, not the systems the log scenarios cover.
+- **Disputed Hadoop labels.** Loghub issue
+  [#56](https://github.com/logpai/loghub/issues/56) says six PageRank jobs may be mislabelled, and
+  the maintainer closed it with a warning rather than a fix. The Hadoop evaluation keeps the
+  data's labels in its headline, and also scores those jobs apart: ARIA's verdict on each,
+  detection without them, and detection with the issue's proposed labels. The issue writes one
+  job's id as `1445182151478_0015`, which no job has; the evaluation reads it as
+  `1445062781478_0015`, the only job with that number labelled machine down, as the issue says.
 - **Mirrors.** Where a source's home host is blocked (Zenodo, UCI), the copy comes from a public
   repository. A file copy must match the sha256 pinned in the manifest; a repository copy is
   pinned to a commit. The BGL and UCI copies were also compared with independent copies, but

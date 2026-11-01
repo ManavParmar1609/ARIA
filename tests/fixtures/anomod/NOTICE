@@ -1,0 +1,8 @@
+A few log lines of three AnoMod runs (SocialNetwork Svc_Kill_Media and Normal_Baseline,
+Train Ticket Lv_C_security_check), unchanged.
+
+Source: https://zenodo.org/records/18342898 (DOI 10.5281/zenodo.18342898)
+Licence: Creative Commons Attribution 4.0 International (CC BY 4.0),
+https://creativecommons.org/licenses/by/4.0/
+Cite: K. Ping, H. B. Mazhar, Y. Wang, Y. Song, M. V. Mantyla. AnoMod: A Dataset for
+Anomaly Detection and Root Cause Analysis in Microservice Systems. MSR 2026.
