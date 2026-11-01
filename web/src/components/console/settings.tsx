@@ -451,7 +451,7 @@ export function Settings() {
       <Section
         id="set-data-terms"
         title="What providers do with prompts"
-        intro="ARIA sends a model only redacted, fenced evidence from your logs. This is what each provider's own terms say it may do with that evidence, and when someone last read them for ARIA."
+        intro="What each model provider's own terms say it may do with the evidence ARIA sends it, and when someone last read them for ARIA. Terms nobody has read yet say Not verified."
       >
         {view.isError ? (
           <p className="text-sm text-muted-foreground">Not loaded: see the error above.</p>
