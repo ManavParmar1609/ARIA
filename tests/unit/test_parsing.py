@@ -11,6 +11,7 @@ from aria.contracts import EvidenceKind
 from aria.data.loghub import LOGHUB_DIRS, iter_structured_csv
 from aria.data.scenarios import LinePools, ScenarioBuilder
 from aria.evidence import EvidenceStore
+from aria.parsing.catalog import LEXICON_PATH, load_lexicon
 from aria.parsing.drain import WILDCARD, Drain, drain_for, parameters, template_id
 from aria.parsing.features import FeatureInput, burst_score, compute_features
 from aria.parsing.parser import parse_lines
@@ -45,6 +46,53 @@ def test_drain_keeps_different_events_apart() -> None:
     a = drain.add("Accepted password for alice from 10.0.0.1")
     b = drain.add("Failed password for alice from 10.0.0.1")
     assert a.id != b.id
+
+
+def test_a_failure_never_merges_into_a_healthy_template() -> None:
+    drain = Drain(sim_threshold=0.4)
+    ok = drain.add("Connection to 10.0.0.1 port 22 established")
+    same = drain.add("Connection to 10.0.0.2 port 22 established")
+    failed = drain.add("Connection to 10.0.0.3 port 22 failed")
+    refused = drain.add("Connection to 10.0.0.4 port 22 REFUSED:")
+    assert ok.id == same.id
+    assert len({ok.id, failed.id, refused.id}) == 3
+    assert "established" in ok.template
+    assert "failed" in failed.template
+    # The same rule holds when only looking a message up.
+    assert drain.match("Connection to 10.0.0.9 port 22 failed") is failed
+
+
+def test_every_keyword_category_names_its_sources() -> None:
+    import yaml
+
+    raw = yaml.safe_load(LEXICON_PATH.read_text(encoding="utf-8"))
+    assert set(raw["sources"]) == set(load_lexicon())
+    assert all(raw["sources"][name] for name in raw["sources"])
+
+
+@pytest.mark.parametrize(
+    ("line", "category"),
+    [
+        ("rpc error: code = DataLoss desc = DATA_LOSS on shard 3", "data_risk"),
+        ("FATAL: sorry, too many clients already (too_many_connections)", "resource"),
+        ("etcdserver: mvcc: database space exceeded", "resource"),
+        ("KeeperErrorCode = ConnectionLoss for /brokers/ids", "unavailable"),
+        ("x509: certificate has expired or is not yet valid", "tls"),
+        ("dial tcp: lookup api.internal: no such host", "dns"),
+        ("vssadmin delete shadows /all /quiet", "backup"),
+        ("duplicate charge detected for order 1192", "payment"),
+        ("replication lag 412s on replica db-2", "freshness"),
+        ("SSO service unavailable: identity provider timed out", "signin"),
+    ],
+)
+def test_version_2_vocabulary_reads_codes_from_outside_loghub(line: str, category: str) -> None:
+    assert load_lexicon()[category].search(line.lower())
+
+
+def test_a_routine_lease_renewer_thread_is_not_degradation() -> None:
+    line = "WARN [LeaseRenewer:hdfs@nn:9000] org.apache.hadoop.ipc.Client: Address change detected"
+    assert not load_lexicon()["degradation"].search(line.lower())
+    assert load_lexicon()["degradation"].search("lease expired for client dfsclient_7")
 
 
 def test_match_does_not_learn() -> None:

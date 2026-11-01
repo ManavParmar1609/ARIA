@@ -99,7 +99,7 @@ Every assessment records the following, and the run view shows all of it:
 
 ## Inputs
 
-The model reads 40 features of one window
+The model reads 47 features of one window
 ([`src/aria/severity/features.py`](../src/aria/severity/features.py)). The parser computes them
 from redacted message text, levels, timestamps, nodes and components, plus any firing alerts.
 Lines quarantined as possible prompt injection are left out first. No feature reads dataset
@@ -110,7 +110,7 @@ labels or BGL alert tags.
 | Volume and spread (16) | Events, error events, events per minute, peak errors per minute, distinct nodes, nodes with errors, templates, novel templates, novel error templates, peak warnings per minute, nodes with warnings, novel warning templates, critical components, firing alerts, critical alerts, warning alerts | log(1 + x) |
 | Ratios (4) | Error ratio, node spread, highest criticality among components logging errors, highest criticality among components logging warnings or errors (the catalog default when those lines name none) | 0 to 1 |
 | Shape (5) | Burst score (capped at 50, divided by 10), persistence in minutes (log scale), shares of WARN, ERROR and FATAL lines | As listed |
-| Keyword categories (10) | Crash, data risk, unavailable, resource, security, hardware, storage, network, degradation, power ([`config/lexicon.yaml`](../config/lexicon.yaml)), counted on lines logged at WARN or above or with no level, because at INFO the same words are usually routine. The rules count every line | log(1 + matching lines) |
+| Keyword categories (17) | Crash, data risk, unavailable, resource, security, hardware, storage, network, degradation, power, and since version 2 TLS, DNS, control plane, backup, payment, freshness and sign-in ([`config/lexicon.yaml`](../config/lexicon.yaml), which names each one's sources: gRPC status codes, HTTP, Kubernetes reasons, PostgreSQL SQLSTATE, etcd, Linux errno, MITRE ATT&CK and others). They are counted on lines logged at WARN or above or with no level, because at INFO the same words are usually routine. Each rule says which count it reads, and the floors count every line | log(1 + matching lines) |
 | Rules (5) | The rules' smoothed probability for each severity, and the floor rank (0 is a SEV1 floor and 3 a SEV4 floor; 4 means no floor) | 0 to 1; 0 to 4 |
 
 Two of these depend on configuration and history:

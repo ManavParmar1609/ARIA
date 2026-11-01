@@ -4,6 +4,10 @@ Implementation of P. He, J. Zhu, Z. Zheng, M. R. Lyu, "Drain: An Online Log Pars
 Fixed Depth Tree", ICWS 2017. Lines are first masked (IPs, hex, numbers, block IDs...) so volatile
 values do not split templates, then routed by token count and leading tokens to a leaf, where
 the most similar cluster absorbs the line or a new cluster starts.
+
+One departure: a message never joins a cluster whose template differs from it in a failure word
+(``failed``, ``refused``...) or its healthy counterpart (``established``, ``ok``...); see
+``POLARITY``. Masks never touch words, so level and failure words always reach the template.
 """
 
 from __future__ import annotations
@@ -31,6 +35,61 @@ DEFAULT_MASKS: tuple[tuple[str, str], ...] = (
 )
 
 _SPLIT = re.compile(r"\s+")
+
+# Words that turn a healthy message into a failing one, and back. Two messages that differ in one
+# of them are different events, however alike the rest: "connection to <*> established" and
+# "connection to <*> failed" must not merge into "connection to <*> <*>", which would hide the
+# failure inside a healthy template and its counts. Level words count too.
+POLARITY = frozenset(
+    {
+        "abort",
+        "aborted",
+        "aborting",
+        "corrupt",
+        "corrupted",
+        "crash",
+        "crashed",
+        "critical",
+        "denied",
+        "down",
+        "error",
+        "errors",
+        "exception",
+        "fail",
+        "failed",
+        "failing",
+        "fails",
+        "failure",
+        "fatal",
+        "invalid",
+        "killed",
+        "lost",
+        "panic",
+        "refused",
+        "rejected",
+        "severe",
+        "timeout",
+        "unavailable",
+        "unreachable",
+        "warn",
+        "warning",
+        # Their healthy counterparts: a failure word replacing one of these is the same split.
+        "ok",
+        "success",
+        "succeeded",
+        "successful",
+        "successfully",
+        "completed",
+        "established",
+        "up",
+        "info",
+    }
+)
+_PUNCTUATION = ".,:;!?()[]{}<>'\"`"
+
+
+def _polar(token: str) -> bool:
+    return token.lower().strip(_PUNCTUATION) in POLARITY
 
 
 def _has_digit(token: str) -> bool:
@@ -116,13 +175,25 @@ class Drain:
                 same += 1
         return same / len(tokens) if tokens else 1.0, wild
 
+    @staticmethod
+    def _compatible(template: list[str], tokens: list[str]) -> bool:
+        """False when merging would turn a failure word, or its healthy counterpart, into ``<*>``."""
+        return not any(
+            a != b and a != WILDCARD and (_polar(a) or _polar(b))
+            for a, b in zip(template, tokens, strict=True)
+        )
+
     def _best(self, leaf: _Node, tokens: list[str]) -> Cluster | None:
         best: Cluster | None = None
         best_key = (-1.0, -1)
         for cid in leaf.clusters:
             cluster = self.clusters[cid]
             sim, wild = self._similarity(cluster.tokens, tokens)
-            if sim >= self.sim_threshold and (sim, wild) > best_key:
+            if (
+                sim >= self.sim_threshold
+                and (sim, wild) > best_key
+                and self._compatible(cluster.tokens, tokens)
+            ):
                 best, best_key = cluster, (sim, wild)
         return best
 
