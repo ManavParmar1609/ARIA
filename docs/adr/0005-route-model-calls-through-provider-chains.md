@@ -37,6 +37,17 @@ model is unavailable or a budget is spent.
   (`Retry-After`, or Gemini's retry info on a rate limit or quota) opens it at once for that long,
   up to an hour, so calls stop spending the provider's limit on refusals. Providers that stream
   every request fail over when they send nothing for `stall_timeout_s`.
+- **Limits counted before each call.** A provider may declare its rate limits (`limits`: requests
+  a minute, tokens a minute, requests a day). The [quota ledger](../../src/aria/llm/quota.py)
+  counts every request against them, less a safety margin, before the request goes, and the router
+  skips a provider with no room. A refusal for a limit is read for what it names
+  ([`ratelimit.py`](../../src/aria/llm/ratelimit.py)): a per-minute limit rests the provider for
+  its delay; a daily quota, a spending cap or an empty account rests it until the daily reset. A
+  model-written run reserves its calls before it starts, and runs offline when they do not fit.
+- **One retry layer.** A client sends each request once. When it fails, the next provider in the
+  chain takes the call; that fallback is the only retry a model call gets, so one failure never
+  multiplies into several requests against the same limit. The graph's node retry policy retries
+  database and tool-server errors, never a model call.
 - **Budgets.** [`BudgetGuard`](../../src/aria/llm/budget.py) checks tokens, cost, LLM calls, tool
   calls, steps and wall-clock time before each call, against limits in config that a run can
   only lower, for tokens and cost. A spent budget raises `BudgetExceededError`; the agent falls
