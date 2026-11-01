@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -191,6 +192,41 @@ def test_group_f1_weighs_every_event_equally() -> None:
     assert ps.grouping_accuracy(["a", "a", "b", "c"], truth) == 0.25
     assert ps.group_f1(["a", "a", "b", "c"], truth) == pytest.approx(0.4)
     assert ps.group_f1([ps.QUARANTINED] * 4, truth) == 0.0
+
+
+def test_an_event_is_found_only_when_one_template_holds_exactly_its_lines() -> None:
+    truth = ["E1", "E1", "E2", "E3", "E3"]
+    predicted = ["a", "a", "b", "c", ps.QUARANTINED]
+    assert ps.events_found(predicted, truth, ["E1", "E2"]) == 2
+    assert ps.events_found(predicted, truth, ["E3"]) == 0  # one of its lines was quarantined
+    merged = ["a", "a", "a", "c", "c"]  # E2 swallowed by E1's template
+    assert ps.events_found(merged, truth, ["E1", "E2", "E3"]) == 1
+
+
+def test_loghub2_scores_rare_and_many_parameter_events_apart(tmp_path: Path) -> None:
+    sample_csv = FIXTURES / "HDFS" / "HDFS_2k.log_structured.csv"
+    records = list(iter_structured_csv("hdfs", sample_csv))
+    whole = tmp_path / "HDFS"
+    whole.mkdir()
+    (whole / "HDFS_full.log").write_text("\n".join(format_raw_line(r) for r in records) + "\n")
+    with (whole / "HDFS_full.log_structured.csv").open("w", newline="") as out:
+        writer = csv.writer(out)
+        writer.writerow(["LineId", "EventId", "EventTemplate"])
+        writer.writerows(
+            (r.line_no, r.gt_event_id, "<*> <*> <*>" if r.gt_event_id == "E1" else "x")
+            for r in records
+        )
+    full = ps.summarize_loghub2(tmp_path)
+    hdfs = full["systems"]["HDFS"]
+    counts = Counter(r.gt_event_id for r in records)
+    assert hdfs["rare_events"] == sum(1 for n in counts.values() if n <= ps.RARE_EVENT_MAX_LINES)
+    assert hdfs["heavy_events"] == 1
+    assert 0 <= hdfs["rare_events_found"] <= hdfs["rare_events"]
+    assert full["rare_events"]["total"] == hdfs["rare_events"]
+    assert full["heavy_events"]["low"] <= full["heavy_events"]["high"]
+    text = "\n".join(report._loghub2(full, {}))
+    assert "Rare events (at most 10 lines)" in text
+    assert f"{hdfs['heavy_events_found']} of 1 |" in text
 
 
 def test_parsing_scores_loghub2_whole_logs_from_their_raw_lines(tmp_path: Path) -> None:

@@ -251,7 +251,7 @@ def _registry(registry: Mapping[str, Any]) -> list[str]:
         "| Suite | Ring | Status | Note |",
         "|---|---|---|---|",
     ]
-    status = {"untouched": "Untouched", "seen": "Looked at", "tuned": "Tuned on"}
+    status = {"untouched": "Untouched", "seen": "Looked at", "tuned": "Tuned"}
     for name, entry in suites.items():
         since = f" since {entry['since']}" if entry.get("since") else ""
         lines.append(
@@ -1305,6 +1305,27 @@ def _loghub2(full: Mapping[str, Any], sample: Mapping[str, Any]) -> list[str]:
         on = sample.get(r["aria_system"])
         return f"{on['grouping_accuracy']:.3f}" if on else "not downloaded"
 
+    def found(r: Mapping[str, Any], kind: str) -> str:
+        return f"{r[kind + '_found']} of {r[kind]}" if kind in r else "not scored"
+
+    def hard_cases() -> list[str]:
+        rare, heavy = full.get("rare_events"), full.get("heavy_events")
+        if not rare or not heavy:
+            return []
+        return [
+            (
+                "Parsers do worst on rare events and on templates with many variable parts "
+                "(Jiang et al., ISSTA 2024), so both are scored apart: an event is found when one "
+                "of ARIA's templates holds exactly its lines. Rare events (at most "
+                f"{full['rare_event_max_lines']} lines): {rare['found']} of {rare['total']} found "
+                f"(95% interval {rare['low']:.3f} to {rare['high']:.3f}). Events whose template "
+                f"has {full['heavy_template_min_params']} or more variable parts: "
+                f"{heavy['found']} of {heavy['total']} found (95% interval {heavy['low']:.3f} to "
+                f"{heavy['high']:.3f})."
+            ),
+            "",
+        ]
+
     scored = sorted((n, r) for n, r in full["systems"].items() if "error" not in r)
     unscored = sorted(name(n) for n, r in full["systems"].items() if "error" in r)
     return [
@@ -1322,14 +1343,17 @@ def _loghub2(full: Mapping[str, Any], sample: Mapping[str, Any]) -> list[str]:
             f"Source: {full['citation']}"
         ),
         "",
+        *hard_cases(),
         (
             "| System | Lines | True events | Templates found | Grouping accuracy "
-            "| F1 grouping score | On Loghub's sample |"
+            "| F1 grouping score | Rare events found | Many-parameter events found "
+            "| On Loghub's sample |"
         ),
-        "|---|---|---|---|---|---|---|",
+        "|---|---|---|---|---|---|---|---|---|",
         *(
             f"| {name(n)} | {r['lines']:,} | {r['events']} | {r['templates']} | "
-            f"{r['grouping_accuracy']:.3f} | {r['group_f1']:.3f} | {on_sample(r)} |"
+            f"{r['grouping_accuracy']:.3f} | {r['group_f1']:.3f} | {found(r, 'rare_events')} | "
+            f"{found(r, 'heavy_events')} | {on_sample(r)} |"
             for n, r in scored
         ),
         "",
