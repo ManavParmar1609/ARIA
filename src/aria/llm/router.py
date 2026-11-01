@@ -49,6 +49,7 @@ from functools import lru_cache
 from typing import Any, Literal, TypeVar
 
 import httpx
+import httpx2
 from pydantic import BaseModel, SecretStr, ValidationError
 
 from aria.config import (
@@ -750,7 +751,9 @@ class LLMRouter:
                 # The clients check how a reply ended; this checks again, so a client that
                 # hands back a refusal, or JSON cut short, still never has it parsed.
                 check_stop(provider.name, usage, structured=json_schema is not None)
-            except (ProviderError, httpx.HTTPError) as exc:
+            except (ProviderError, httpx.HTTPError, httpx2.HTTPError) as exc:
+                # httpx's (the OpenAI-compatible client) and httpx2's (Anthropic's SDK)
+                # transport errors, should a client let one through, become a fallback here.
                 mark_error(span, exc)
                 error = (
                     exc

@@ -12,7 +12,9 @@ key is the only credential that goes with a visitor's request.
 
 As with ARIA's other client, each ``chat`` sends one request: the SDK's own retries are off, since
 the router's fallback to the next provider is ARIA's one retry layer and every request must be
-counted against the limits first. A 429 with ``retry-after`` is a rate limit; one without, or a
+counted against the limits first. The SDK reads its stream with ``httpx2`` and lets an error in
+reading it through as raised; this client turns that into a provider error too, so a stream
+that breaks part way falls over to the next provider instead of failing the run's step. A 429 with ``retry-after`` is a rate limit; one without, or a
 message saying when access returns, is the organisation's spend limit, which holds until then
 (aria.llm.ratelimit). A refusal (``stop_reason == "refusal"``) raises ``ModelRefusalError`` and
 is never repaired on Claude. JSON cut short (``max_tokens`` or
@@ -28,6 +30,7 @@ from collections.abc import Sequence
 from typing import Any
 
 import anthropic
+import httpx2  # the HTTP library Anthropic's SDK is built on (anthropic.Timeout is httpx2's)
 from pydantic import SecretStr
 
 from aria.config import ProviderConfig, ProviderKind, StructuredOutputMode
@@ -187,6 +190,15 @@ class ClaudeProvider:
             raise error from exc
         except anthropic.AnthropicError as exc:
             raise self._error(exc) from exc
+        except httpx2.TimeoutException as exc:
+            # The SDK wraps errors in sending a request, but lets one in reading the stream
+            # through as httpx2 raised it. Turned into the router's error here, it falls over
+            # to the next provider like any other; raw, it would escape to the graph.
+            msg = self._scrub(f"{self.name}: stream stalled: {type(exc).__name__}")
+            raise ProviderError(msg, timed_out=True) from exc
+        except httpx2.HTTPError as exc:
+            msg = self._scrub(f"{self.name}: stream broke: {type(exc).__name__}: {exc}")
+            raise ProviderError(msg, retryable=True) from exc
         text = "".join(block.text for block in final.content if block.type == "text")
         usage = Usage(
             input_tokens=final.usage.input_tokens,
