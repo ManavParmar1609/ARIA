@@ -35,7 +35,7 @@ FLAGGED = {"SEV1", "SEV2", "SEV3"}  # worth a person's look
 ORDINAL = {"SEV1": 4.0, "SEV2": 3.0, "SEV3": 2.0, "SEV4": 1.0}
 STAMP = {
     "ring": "C",
-    "tuning": "untouched: no rule, lexicon entry, threshold or model was changed for this data",
+    "tuning": "no rule, lexicon entry, threshold or model was changed for this data",
 }
 _PREFIX = re.compile(r"^ts-")
 _SUFFIX = re.compile(r"(-?service)$")

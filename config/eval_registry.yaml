@@ -73,3 +73,45 @@ suites:
     ring: C
     status: seen
     note: Looked at during development before this record began.
+  domains.ait-ads:
+    ring: C
+    status: seen
+    since: "2026-11-01"
+    note: >-
+      Security alerts from attacked networks (AIT-ADS). Scored once while the suite was built, before the rule changes of 2026-11-01;
+      nothing was chosen by looking at it.
+  domains.rcaeval:
+    ring: C
+    status: seen
+    since: "2026-11-01"
+    note: >-
+      Code-level faults in microservice shops (RCAEval RE3). Scored once while the suite was built, before the rule changes of 2026-11-01;
+      nothing was chosen by looking at it.
+  domains.anomod:
+    ring: C
+    status: seen
+    since: "2026-11-01"
+    note: >-
+      Anomalies in two microservice systems at four levels (AnoMod). Scored once while the suite was built, before the rule changes of 2026-11-01;
+      nothing was chosen by looking at it.
+  domains.itbench:
+    ring: C
+    status: seen
+    since: "2026-11-01"
+    note: >-
+      Kubernetes incidents (ITBench-Lite). Scored once while the suite was built, before the rule changes of 2026-11-01;
+      nothing was chosen by looking at it.
+  domains.nezha:
+    ring: C
+    status: seen
+    since: "2026-11-01"
+    note: >-
+      Faults injected into Online Boutique's pods (Nezha). Scored once while the suite was built, before the rule changes of 2026-11-01;
+      nothing was chosen by looking at it.
+  domains.jira:
+    ring: C
+    status: seen
+    since: "2026-11-01"
+    note: >-
+      Human-set priority on public Jira issues (Public Jira Dataset subset). Scored once while the suite was built, before the rule changes of 2026-11-01;
+      nothing was chosen by looking at it.
