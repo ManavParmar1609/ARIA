@@ -1029,7 +1029,7 @@ def send_facts(action: OutboundAction) -> dict[str, Any]:
     body, which the action row holds."""
     return {
         "action_id": action.action_id,
-        "kind": action.kind,
+        "channel": action.kind,
         "audience": action.audience,
         "status": action.status,
         "title": action.title,

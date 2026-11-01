@@ -31,6 +31,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.orm import Session
 
 from aria.contracts.base import JsonDict, utcnow
 from aria.contracts.record import GENESIS, ChainCheck, DecisionRecord, RecordKind
@@ -41,8 +42,9 @@ from aria.security.redaction import Redactor
 
 log = get_logger(__name__)
 
-# Tries at the tail before giving up: enough for a burst of writers on one database.
-ATTEMPTS = 10
+# Tries at the tail before giving up: enough for a burst of writers on one database. The pauses
+# between them add up to well under a second.
+ATTEMPTS = 25
 # Free text in a payload (a reviewer's comment or note) is kept to this many characters.
 TEXT_CHARS = 500
 
@@ -183,12 +185,7 @@ def append(
     for attempt in range(ATTEMPTS):
         try:
             with session_scope(engine) as session:
-                tail = session.execute(
-                    select(DecisionRecordRow.seq, DecisionRecordRow.hash)
-                    .order_by(DecisionRecordRow.seq.desc())
-                    .limit(1)
-                ).first()
-                seq, prev_hash = (0, GENESIS) if tail is None else (int(tail[0]) + 1, str(tail[1]))
+                seq, prev_hash = _tail(session)
                 entry = make_entry(
                     seq=seq,
                     ts=utcnow(),
@@ -200,9 +197,10 @@ def append(
                 )
                 session.add(DecisionRecordRow(**entry.model_dump()))
         except (IntegrityError, OperationalError) as exc:
-            # Another writer took this seq, or the database was busy: read the tail again.
+            # Another writer took this seq, or the database was busy: read the tail again, after
+            # a pause that grows with each try, so a burst of writers spreads out.
             problem = exc
-            time.sleep(0.002 * attempt)
+            time.sleep(0.001 * attempt)
             continue
         except Exception as exc:
             log.exception("record.failed", kind=kind, run_id=run_id, actor=who)
@@ -213,6 +211,17 @@ def append(
     log.error("record.failed", kind=kind, run_id=run_id, actor=who, error=str(problem))
     msg = f"could not record the {kind} decision after {ATTEMPTS} attempts: {problem}"
     raise RecordError(msg) from problem
+
+
+def _tail(session: Session) -> tuple[int, str]:
+    """The next sequence number and the hash it chains to: the newest entry's, or the genesis
+    hash when the record is empty."""
+    tail = session.execute(
+        select(DecisionRecordRow.seq, DecisionRecordRow.hash)
+        .order_by(DecisionRecordRow.seq.desc())
+        .limit(1)
+    ).first()
+    return (0, GENESIS) if tail is None else (int(tail[0]) + 1, str(tail[1]))
 
 
 def _as_entry(row: DecisionRecordRow) -> DecisionRecord:
