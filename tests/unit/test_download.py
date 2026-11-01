@@ -571,3 +571,17 @@ def test_a_member_stream_cut_off_part_way_picks_up_where_it_stopped() -> None:
     assert (
         int(resumed.split("=")[1].split("-")[0]) == int(first.split("=")[1].split("-")[0]) + 1_000
     )
+
+
+def test_a_member_whose_bytes_miss_the_zips_crc_is_refused() -> None:
+    from aria.data import remote_zip
+
+    member_bytes = b"every line of the day's logs\n" * 200
+    payload = bytearray(_zip_bytes({"m.bin": member_bytes}))  # stored, so bytes map one to one
+    payload[payload.index(b"every line") + 100] ^= 0x20
+    with respx.mock, httpx.Client() as client:
+        respx.get("https://files.test/a.zip").mock(side_effect=_ranged(bytes(payload)))
+        member = remote_zip.locate(client, "https://files.test/a.zip", "m.bin")
+        chunks = remote_zip.stream(client, "https://files.test/a.zip", member)
+        with pytest.raises(remote_zip.RemoteZipError, match="CRC-32 mismatch"):
+            b"".join(chunks)

@@ -101,6 +101,7 @@ class Member:
     compress_type: int
     compress_size: int
     file_size: int
+    crc: int = 0  # the CRC-32 the zip records for the member's bytes
 
 
 def locate(
@@ -130,6 +131,7 @@ def locate(
         compress_type=info.compress_type,
         compress_size=info.compress_size,
         file_size=info.file_size,
+        crc=info.CRC,
     )
 
 
@@ -144,12 +146,14 @@ def stream(
 
     A connection cut off part way is picked up where it stopped, with a new range request, up
     to ``RESUMES`` times: the bytes are the same either way, so the inflater never notices.
+    A member read to its end is checked against the CRC-32 the zip records for it.
     """
     end = member.data_offset + member.compress_size - 1
     inflate = zlib.decompressobj(-zlib.MAX_WBITS)
     deflated = member.compress_type == zipfile.ZIP_DEFLATED
     received = 0
     resumes = 0
+    crc = 0
     while member.data_offset + received <= end:
         (before or (lambda: None))()
         headers = {"Range": f"bytes={member.data_offset + received}-{end}"}
@@ -162,6 +166,7 @@ def stream(
                     received += len(chunk)
                     data = inflate.decompress(chunk) if deflated else chunk
                     if data:
+                        crc = zlib.crc32(data, crc)
                         yield data
         except httpx.TransportError:
             resumes += 1
@@ -170,4 +175,8 @@ def stream(
             continue
         break
     if deflated and (tail := inflate.flush()):
+        crc = zlib.crc32(tail, crc)
         yield tail
+    if member.crc and crc != member.crc:
+        msg = f"{member.name}: CRC-32 mismatch (the zip records {member.crc:08x}, got {crc:08x})"
+        raise RemoteZipError(msg)
