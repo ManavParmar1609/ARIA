@@ -4,7 +4,10 @@
 2. With an LLM, ask it to improve the draft. Its output must pass the same grounding checks
    inside the router's repair loop, or it is discarded.
 3. A critic (the LLM critic when one is configured, else the offline lexical check) reviews
-   each claim against its cited evidence; claims it flags are removed.
+   each claim against its cited evidence; claims it flags are removed. When another real
+   provider can take the critic's role, it runs on that one, not on the writer's. The critic
+   may abstain, on one claim or on the whole report: it then says what the reviewer should
+   check, which reaches the reviewer as a warning and a note, and removes nothing.
 4. Validate the result. If anything still fails, publish the deterministic draft instead.
 
 Nothing a model writes reaches a reviewer without passing step 4.
@@ -44,6 +47,9 @@ class ReportOutcome:
     model: str | None = None
     critic: Literal["llm", "offline", "skipped"] = "skipped"
     critic_issues: list[CriticIssue] = field(default_factory=list)
+    critic_provider: str | None = None  # the provider the LLM critic ran on
+    # What the critic could not judge and asks the reviewer to check instead.
+    critic_checks: list[str] = field(default_factory=list)
     removed_claims: list[str] = field(default_factory=list)
     fell_back: bool = False
     safety: Literal["passed", "flagged", "skipped"] = "skipped"
@@ -173,6 +179,14 @@ class ReportWriter:
 
     # --- critic --------------------------------------------------------------------------------
 
+    def _critic_router(self, writer: str | None) -> LLMRouter | None:
+        """The router the critic asks: one that leaves out the provider that wrote the report,
+        when another real provider can take the critic's role; else the writer's own."""
+        if self.router is None or not writer:
+            return self.router
+        other = self.router.without(writer)
+        return other if other.has_real_llm("critic") else self.router
+
     async def _critic(
         self,
         report: IncidentReport,
@@ -180,7 +194,8 @@ class ReportWriter:
         *,
         budget: BudgetGuard | None,
         use_llm: bool,
-    ) -> tuple[CriticOutput, Literal["llm", "offline"]]:
+        writer: str | None = None,
+    ) -> tuple[CriticOutput, Literal["llm", "offline"], str | None]:
         claims = [
             {"path": path, "text": c.text, "evidence_ids": c.evidence_ids}
             for path, c in report.claims()
@@ -188,9 +203,10 @@ class ReportWriter:
         cited = sorted({e for c in claims for e in c["evidence_ids"]})
         evidence = [e for e in ctx.evidence if e.id in cited]
         messages = build_messages("critic", {}, evidence, untrusted_data={"claims": claims})
-        if use_llm and self.router is not None and self.router.has_real_llm("critic"):
+        router = self._critic_router(writer)
+        if use_llm and router is not None and router.has_real_llm("critic"):
             try:
-                result = await self.router.structured(
+                result = await router.structured(
                     "critic",
                     "critic",
                     messages,
@@ -199,7 +215,7 @@ class ReportWriter:
                     temperature=0.0,
                     max_tokens=1_200,
                 )
-                return result.value, "llm"
+                return result.value, "llm", result.provider
             except (BudgetExceededError, LLMError):
                 pass
         from aria.llm.fake import RESPONDERS  # noqa: PLC0415 - the offline lexical critic
@@ -211,7 +227,20 @@ class ReportWriter:
 
         ctx_facts = {**parse_context(messages), **parse_untrusted_data(messages)}
         ctx_facts["_evidence_block"] = parse_evidence_block(messages)
-        return CriticOutput.model_validate(RESPONDERS["critic"](ctx_facts)), "offline"
+        return CriticOutput.model_validate(RESPONDERS["critic"](ctx_facts)), "offline", None
+
+    @staticmethod
+    def _abstentions(review: CriticOutput) -> list[str]:
+        """What the critic could not judge, each with what the reviewer should check."""
+        checks = [
+            f"{issue.path}: {issue.explanation or 'the critic could not judge this claim'}"
+            for issue in review.issues
+            if issue.problem == "cannot_judge"
+        ]
+        if review.verdict == "abstain":
+            why = review.reviewer_should_check or "it gave no reason; check every claim"
+            checks.insert(0, f"the whole report: {why}")
+        return checks
 
     @staticmethod
     def _pin_severity(
@@ -295,8 +324,21 @@ class ReportWriter:
                         )
                         candidate = draft_report
 
-        review, critic_kind = await self._critic(candidate, ctx, budget=budget, use_llm=use_llm)
+        review, critic_kind, critic_provider = await self._critic(
+            candidate,
+            ctx,
+            budget=budget,
+            use_llm=use_llm,
+            writer=outcome.provider if candidate.generated_by == "llm" else None,
+        )
         outcome.critic, outcome.critic_issues = critic_kind, list(review.issues)
+        outcome.critic_provider = critic_provider
+        outcome.critic_checks = self._abstentions(review)
+        if outcome.critic_checks:
+            outcome.notes.append(
+                "the critic could not judge everything; the reviewer should check "
+                + "; ".join(outcome.critic_checks)
+            )
         if review.issues:
             candidate, outcome.removed_claims = self._drop_flagged(candidate, review.issues)
 
@@ -317,6 +359,16 @@ class ReportWriter:
             )
             for i in review.issues
         ]
+        if review.verdict == "abstain":
+            critic_notes.insert(
+                0,
+                ValidationIssue(
+                    code="critic_abstained",
+                    message=f"The critic could not judge this report. {outcome.critic_checks[0]}",
+                    path=None,
+                    level="warning",
+                ),
+            )
         result = result.model_copy(update={"issues": [*result.issues, *critic_notes]})
         outcome.report = candidate.model_copy(update={"validation": result})
         return outcome

@@ -9,14 +9,16 @@ from pathlib import Path
 import pytest
 
 from aria.config import (
+    CommsConfig,
     GuardrailConfig,
     LLMConfig,
     ProviderConfig,
     ProviderKind,
     RetrievalConfig,
+    Settings,
     SeverityConfig,
 )
-from aria.contracts.base import Claim, EvidenceKind, Severity
+from aria.contracts.base import Claim, Evidence, EvidenceKind, Severity
 from aria.contracts.report import ActionItem, IncidentReport
 from aria.contracts.retrieval import Hypothesis, Investigation, RetrievalResult, SimilarIncident
 from aria.data.scenarios import LinePools, ScenarioBuilder
@@ -29,12 +31,16 @@ from aria.parsing.parser import parse_lines
 from aria.reporting.comms import deterministic_drafts, draft_comms
 from aria.reporting.composer import ReportContext, compose_draft, compose_title
 from aria.reporting.grounding import (
+    factors,
+    key_terms,
     numbers_in,
+    off_topic,
     ungrounded_numbers,
     validate_external_text,
     validate_report,
 )
 from aria.reporting.markdown import render_markdown, render_postmortem
+from aria.reporting.outbound import DraftPolicy, screen
 from aria.reporting.writer import ReportWriter
 from aria.retrieval.memory import IncidentMemory
 from aria.retrieval.retriever import Retriever, build_query
@@ -296,6 +302,96 @@ async def test_validator_catches_every_kind_of_defect(builder: ScenarioBuilder) 
     assert result.citation_coverage < 1.0
 
 
+def _evidence(eid: str, kind: EvidenceKind, title: str, **data: object) -> Evidence:
+    return Evidence(id=eid, kind=kind, title=title, source="test", data=dict(data))
+
+
+EVIDENCE = [
+    _evidence("E1", EvidenceKind.TEMPLATE, "Template T1: authentication failure for user <*>"),
+    _evidence("E2", EvidenceKind.TEMPLATE, "Template T2: No space left on device /data/dn"),
+    _evidence("E3", EvidenceKind.FEATURE, "Window features: errors on 3 nodes", error_nodes=3),
+    _evidence("E4", EvidenceKind.TEMPLATE, "Template T4: kernel panic, stopping execution"),
+]
+
+
+def _claims(*claims: tuple[str, list[str]]) -> IncidentReport:
+    return IncidentReport(
+        report_id="rep-m",
+        run_id="run-m",
+        title="SEV2 · Storage trouble",
+        severity=Severity.SEV2,
+        summary=[Claim(text=text, evidence_ids=ids) for text, ids in claims],
+    )
+
+
+def test_a_claim_citing_evidence_about_something_else_is_flagged_and_kept() -> None:
+    report = _claims(
+        ("Disk space ran out on the data nodes.", ["E1"]),  # cites a failed login
+        ("Disk space ran out on 3 nodes.", ["E2", "E3"]),  # the disk item, and a count
+        ("Disk space ran out on the data nodes.", ["E3"]),  # a count names no factor of its own
+        ("Kernel panics stopped jobs, and disk space ran out.", ["E4", "E1"]),
+    )
+    result = validate_report(report, evidence=EVIDENCE)
+    flagged = {i.path: i for i in result.issues if i.code == "evidence_mismatch"}
+    assert set(flagged) == {"summary[0]", "summary[3]"}
+    assert all(i.level == "warning" for i in flagged.values())  # flagged, never removed
+    assert result.ok
+    message = flagged["summary[0]"].message
+    assert "the claim is about storage" in message
+    assert "E1 is about security" in message  # explainable: which item, about what
+    assert "E4" not in flagged["summary[3]"].message  # the panic item supports its part
+    assert "E1 is about security" in flagged["summary[3]"].message
+
+
+def test_shared_key_terms_tie_a_claim_to_evidence_the_lexicon_files_elsewhere() -> None:
+    """ "Disk space" is storage in the lexicon and "no space left" is resource; the word
+    "space" they share is enough to call the evidence relevant."""
+    assert factors("Disk space ran out on the data nodes.") == {"storage"}
+    assert "resource" in factors(EVIDENCE[1].title)
+    assert off_topic("Disk space ran out on the data nodes.", [EVIDENCE[1]]) == []
+    assert key_terms("Errors on nodes in the window, failed and logged.") == frozenset()
+    assert off_topic("Errors increased on 3 nodes.", [EVIDENCE[0]]) == []  # names no factor
+
+
+async def test_the_grounded_draft_cites_evidence_about_what_it_claims(
+    builder: ScenarioBuilder,
+) -> None:
+    ctx = await _context(builder)
+    report = (
+        await ReportWriter(None, RUNBOOKS).write(ctx, report_id="rep-m2", use_llm=False)
+    ).report
+    assert not [i for i in report.validation.issues if i.code == "evidence_mismatch"]
+
+
+async def test_a_model_citing_the_wrong_evidence_reaches_the_reviewer_flagged(
+    builder: ScenarioBuilder,
+) -> None:
+    """The lexical critic passes a claim that shares a filler word with its evidence; the
+    factor check still sees that disk space is not what a failed login is about."""
+    ctx = await _context(builder)
+    narrative = compose_draft(ctx).model_dump()
+    auth = ctx.evidence[0].model_copy(
+        update={
+            "id": "E900",
+            "title": "Template: authentication failure for user <*> on the login node",
+            "detail": "",
+            "data": {},
+        }
+    )
+    ctx = replace(ctx, evidence=[*ctx.evidence, auth])
+    narrative["impact"] = [
+        {"text": "Disk space ran out on the data nodes.", "evidence_ids": ["E900"]}
+    ]
+    fake = FakeProvider(script={"narrative": [json.dumps(narrative)]})
+    outcome = await ReportWriter(_router(fake, "reporter"), RUNBOOKS).write(ctx, report_id="rep-m3")
+    assert outcome.report.generated_by == "llm"
+    assert not outcome.removed_claims  # the lexical critic let it through
+    flagged = [i for i in outcome.report.validation.issues if i.code == "evidence_mismatch"]
+    assert [i.path for i in flagged] == ["impact[0]"]
+    assert "E900 is about security" in flagged[0].message
+    assert outcome.report.impact[0].text == "Disk space ran out on the data nodes."  # kept
+
+
 # --- writer with an LLM ------------------------------------------------------------------------
 
 
@@ -363,6 +459,83 @@ async def test_the_critic_removes_claims_its_evidence_does_not_support(
     assert any("checkout payments" in removed for removed in outcome.removed_claims)
     assert not any("checkout" in c.text for c in outcome.report.impact)
     assert outcome.report.validation.ok
+
+
+def _two(writer: FakeProvider, judge: FakeProvider, *, critic: list[str]) -> LLMRouter:
+    """Two real providers: both can write, and ``critic`` lists who may judge, in order."""
+
+    def entry(name: str) -> ProviderConfig:
+        return ProviderConfig(
+            kind=ProviderKind.NVIDIA_NIM,
+            base_url=f"http://{name}/v1",
+            allow_no_key=True,
+            chat_model=name,
+        )
+
+    for model in (writer, judge):
+        model.kind = ProviderKind.NVIDIA_NIM
+    config = LLMConfig(
+        providers={"writer": entry("writer"), "judge": entry("judge")},
+        routing={"reporter": ["writer", "judge"], "critic": critic},
+    )
+    return LLMRouter(config, providers={"writer": writer, "judge": judge})
+
+
+async def test_the_critic_runs_on_another_provider_than_the_writer(
+    builder: ScenarioBuilder,
+) -> None:
+    ctx = await _context(builder)
+    writer, judge = FakeProvider("writer"), FakeProvider("judge")
+    # The critic's own chain leads with the writer; another provider can judge, so it does.
+    router = _two(writer, judge, critic=["writer", "judge"])
+    outcome = await ReportWriter(router, RUNBOOKS).write(ctx, report_id="rep-c1")
+    assert (outcome.provider, outcome.critic, outcome.critic_provider) == (
+        "writer",
+        "llm",
+        "judge",
+    )
+    assert [call["task"] for call in writer.calls] == ["narrative"]
+    assert [call["task"] for call in judge.calls] == ["critic"]
+    # With only one provider, the critic still runs on it, as before.
+    alone = await ReportWriter(_router(FakeProvider(), "reporter", "critic"), RUNBOOKS).write(
+        ctx, report_id="rep-c2"
+    )
+    assert (alone.provider, alone.critic_provider) == ("llm", "llm")
+
+
+async def test_a_critic_that_cannot_judge_tells_the_reviewer_what_to_check(
+    builder: ScenarioBuilder,
+) -> None:
+    ctx = await _context(builder)
+
+    def abstain(_: dict[str, object]) -> dict[str, object]:
+        return {
+            "verdict": "abstain",
+            "issues": [
+                {
+                    "path": "summary[0]",
+                    "problem": "cannot_judge",
+                    "explanation": "the evidence holds no job records; check whether jobs failed",
+                    "suggested_evidence_ids": [],
+                }
+            ],
+            "reviewer_should_check": "whether the panics stopped jobs, which no evidence shows",
+        }
+
+    judge = FakeProvider("judge", responders={"critic": abstain})
+    router = _two(FakeProvider("writer"), judge, critic=["judge"])
+    outcome = await ReportWriter(router, RUNBOOKS).write(ctx, report_id="rep-c3")
+    assert outcome.critic_checks == [
+        "the whole report: whether the panics stopped jobs, which no evidence shows",
+        "summary[0]: the evidence holds no job records; check whether jobs failed",
+    ]
+    issues = {i.code: i for i in outcome.report.validation.issues}
+    assert issues["critic_abstained"].level == "warning"
+    assert "whether the panics stopped jobs" in issues["critic_abstained"].message
+    assert issues["critic_cannot_judge"].path == "summary[0]"
+    assert outcome.report.validation.ok  # abstaining flags; it never fails or removes a claim
+    assert not outcome.removed_claims
+    assert any("the reviewer should check" in note for note in outcome.notes)
 
 
 async def test_the_report_writer_sends_its_draft_fenced(builder: ScenarioBuilder) -> None:
@@ -468,6 +641,97 @@ async def test_comms_are_proposals_and_leaky_polish_is_rejected(builder: Scenari
     assert "R02" not in status.body  # the leaky polish was dropped for the deterministic draft
     assert "status_page" in outcome.rejected
     assert outcome.polished_by == "llm/aria-fake-1"
+
+
+async def test_drafts_keep_only_allowed_links_and_recipients_and_list_what_they_lost(
+    builder: ScenarioBuilder,
+) -> None:
+    ctx = await _context(builder)
+    report = (
+        await ReportWriter(None, RUNBOOKS).write(ctx, report_id="rep-8", use_llm=False)
+    ).report
+    run_url = "https://aria.example.com/console/runs/run-r1"
+    drafts = deterministic_drafts(report, service="BlueGene/L compute", run_url=run_url)
+    polished = {k: v.model_dump() for k, v in drafts.items()}
+    polished["responders"]["body"] = (
+        "Fix it with [the runbook](https://evil.example/fix) or www.evil-help.com, see "
+        "https://wiki.example.com/kernel and ping @channel, @oncall-bgl and attacker@evil.example."
+        f"\nReport: {run_url}"
+    )
+    polished["responders"]["title"] = "[SEV1] Kernel panics: act at status-help.com now"
+    policy = DraftPolicy(
+        link_hosts=frozenset({"aria.example.com", "wiki.example.com"}),
+        recipients=frozenset({"@oncall-bgl"}),
+    )
+    outcome = await draft_comms(
+        report,
+        service="BlueGene/L compute",
+        run_url=run_url,
+        router=_router(FakeProvider(script={"comms": [json.dumps(polished)]}), "comms"),
+        policy=policy,
+    )
+    slack = next(a for a in outcome.actions if a.kind == "slack")
+    sent = f"{slack.title}\n{slack.body}\n{slack.payload['text']}"
+    for gone in ("evil.example", "evil-help.com", "status-help.com", "@channel", "attacker@"):
+        assert gone not in sent
+    for kept in (run_url, "https://wiki.example.com/kernel", "@oncall-bgl", "the runbook"):
+        assert kept in slack.body
+    assert slack.removed == [
+        "link to status-help[.]com",
+        "link to evil[.]example",
+        "link to www[.]evil-help[.]com",
+        "recipient attacker@evil[.]example",
+        "recipient @channel",
+    ]
+    assert "[link removed]" in slack.title  # the reviewer sees where something was taken out
+    others = [a for a in outcome.actions if a.kind != "slack"]
+    assert all(not a.removed for a in others)  # nothing to take out of the untouched drafts
+
+
+async def test_log_text_never_becomes_a_link_or_recipient_in_a_draft(
+    builder: ScenarioBuilder,
+) -> None:
+    """The deterministic drafts quote the report, which quotes logs: a URL, an address or a
+    mention in a log line is taken out like a model's would be, with nothing configured."""
+    ctx = await _context(builder)
+    report = (
+        await ReportWriter(None, RUNBOOKS).write(ctx, report_id="rep-9", use_llm=False)
+    ).report
+    quoted = report.summary[0].model_copy(
+        update={
+            "text": "Line 4 says: login at https://evil.example/sso, mail ops@evil.example, @here"
+        }
+    )
+    report = report.model_copy(update={"summary": [quoted, *report.summary[1:]]})
+    outcome = await draft_comms(report, service="BlueGene/L compute", run_url="http://aria/r/1")
+    slack = next(a for a in outcome.actions if a.kind == "slack")
+    assert "evil" not in slack.body
+    assert "@here" not in slack.body
+    assert "http://aria/r/1" in slack.body  # the run's own link stays
+    assert slack.removed == [
+        "link to evil[.]example",
+        "recipient ops@evil[.]example",
+        "recipient @here",
+    ]
+
+
+def test_the_draft_policy_allows_aria_and_the_configured_hosts_and_recipients() -> None:
+    settings = Settings(
+        console_url="https://aria.example.com", public_base_url="https://api.aria.example.com"
+    )
+    comms = CommsConfig.model_validate(
+        {"link_hosts": " Wiki.Example.com, ", "recipients": "@OnCall,#incidents"}
+    )
+    policy = DraftPolicy.for_settings(settings, comms)
+    assert policy.allows_host("aria.example.com")
+    assert policy.allows_host("api.aria.example.com")
+    assert policy.allows_host("docs.wiki.example.com")  # a subdomain counts as its host
+    assert not policy.allows_host("example.com")
+    assert not policy.allows_host("evilaria.example.com.attacker.io")
+    assert policy.allows_recipient("@oncall")
+    assert policy.allows_recipient("#incidents")
+    assert not policy.allows_recipient("@channel")
+    assert screen("java.io.IOException at hdfs.py on dn-7.hdfs.prod", policy).removed == []
 
 
 SAFE = json.dumps({"User Safety": "safe", "Response Safety": "safe"})

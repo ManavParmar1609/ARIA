@@ -87,14 +87,21 @@ class NarrativeOutput(Contract):
 
 class CriticIssue(Contract):
     path: str  # for example "summary[1]"
-    problem: Literal["unsupported", "contradicted", "overstated", "missing_citation", "other"]
+    # "cannot_judge": the critic abstains on this claim; its explanation says what the reviewer
+    # should check. It never removes the claim.
+    problem: Literal[
+        "unsupported", "contradicted", "overstated", "missing_citation", "cannot_judge", "other"
+    ]
     explanation: Annotated[str, StringConstraints(max_length=400)]
     suggested_evidence_ids: list[EvidenceId] = Field(default_factory=list, max_length=6)
 
 
 class CriticOutput(Contract):
-    verdict: Literal["pass", "revise"]
+    # "abstain": the critic cannot judge the report; reviewer_should_check says what a person
+    # should look at instead.
+    verdict: Literal["pass", "revise", "abstain"]
     issues: list[CriticIssue] = Field(default_factory=list, max_length=12)
+    reviewer_should_check: Annotated[str, StringConstraints(max_length=400)] = ""
 
 
 class MessageDraft(Contract):

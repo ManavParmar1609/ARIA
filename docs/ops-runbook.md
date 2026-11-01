@@ -162,8 +162,10 @@ Both are read when a process starts, so restart after a change. `GET /api/v1/set
 | `ARIA_PSEUDONYM_KEY` | Keys the per-run pseudonyms for IP and e-mail addresses. Set the same value on every process. Without it, the processes sharing a database make one random key and keep it in that database, so they still agree, but anyone with a copy of the database can recompute the pseudonyms: set it from Key Vault in production. |
 | `ARIA_LOG_LEVEL`, `ARIA_LOG_FORMAT` | Log level, and `json` or `console` output |
 | `ARIA_OTEL_EXPORTER`, `ARIA_OTLP_ENDPOINT` | Trace export: `none`, `console`, `otlp` (to `ARIA_OTLP_ENDPOINT`) or `azure` |
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Where the `azure` exporter sends traces |
-| `ARIA_OTEL_CAPTURE_CONTENT` | Record prompt and completion text in traces. Off by default, because that text holds log data. |
+| `ARIA_OTLP_METRICS_ENDPOINT` | Where the `otlp` exporter sends the GenAI metrics, as an OTLP/HTTP `/v1/metrics` URL. Unset: no metrics over OTLP, since a traces-only backend such as Phoenix refuses them. The `azure` exporter sends them without it. |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Where the `azure` exporter sends traces and metrics |
+| `ARIA_DRAFT_LINK_HOSTS` | Hosts a message draft may link to, comma-separated, besides ARIA's own console and API (`comms.link_hosts`). A subdomain counts as its host. |
+| `ARIA_DRAFT_RECIPIENTS` | Whom a message draft may address besides its channel: `@handles`, `#channels` or e-mail addresses, comma-separated (`comms.recipients`). None by default. |
 | `ARIA_CONFIG_FILE`, `ARIA_DATA_DIR`, `ARIA_MODELS_DIR`, `ARIA_RUNBOOKS_DIR` | Where the config file, data, offline embeddings and runbooks live |
 | `ARIA_MCP_URL`, `ARIA_MCP_TOKEN` | Have the investigator call tools on a remote MCP endpoint instead of in-process |
 | `GEMINI_API_KEY` (or `gemini_api_key`) | Enables the Gemini pool (four models on the one key) for every role, ahead of hosted NIM |
@@ -191,6 +193,7 @@ The `config/aria.yaml` settings operators change most often:
 | `budgets` | Per-run limits for tokens, cost, elapsed time, steps, tool calls and LLM calls |
 | `guardrails` | Redaction, IP pseudonyms, injection detection, the content-safety check, and the line caps |
 | `triggers` | The alert grouping window, plus the scan's burst threshold and window size |
+| `comms.link_hosts`, `comms.recipients` | The hosts a message draft may link to and the recipients it may address. Anything else is taken out of the draft before review and listed for the reviewer. |
 | `severity.recalibrate_after`, `severity.recalibrate_check_s` | When recalibration runs. Their defaults are in [`config.py`](../src/aria/config.py), so add them to the YAML to change them. |
 | `retention.days`, `retention.purge_interval_s` | How long runs are kept, and how often they are purged (see [Retention and purge](#retention-and-purge)). Both are off by default. |
 | `llm.data_terms` | What each model provider's own terms say about the prompts ARIA sends it, and the day someone read them. Settings shows them beside the model settings. |
@@ -248,7 +251,16 @@ Only the API process serves metrics. In `external` mode the counters and the his
 
 ### Traces
 
-Set `ARIA_OTEL_EXPORTER=otlp` and `ARIA_OTLP_ENDPOINT`, for example Phoenix in compose. On Azure, `azure` sends traces to Application Insights. Spans follow the OpenTelemetry GenAI conventions (`chat <model>`, `execute_tool <tool>`), and carry no prompt or completion text unless `ARIA_OTEL_CAPTURE_CONTENT=true`.
+Set `ARIA_OTEL_EXPORTER=otlp` and `ARIA_OTLP_ENDPOINT`, for example Phoenix in compose. On Azure, `azure` sends traces to Application Insights. Spans follow the OpenTelemetry GenAI conventions (`chat <model>`, `execute_tool <tool>`). Each model call's span records:
+
+- the provider, the operation and the model asked for (`gen_ai.provider.name`, `gen_ai.operation.name`, `gen_ai.request.model`);
+- the model that answered and the provider's id for its response (`gen_ai.response.model`, `gen_ai.response.id`);
+- how the reply ended and the tokens it used (`gen_ai.response.finish_reasons`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`), also for a reply that was declined or cut short;
+- the endpoint's host and port, and `error.type` when the call failed.
+
+Counts ARIA estimated because the provider reported none are marked `aria.usage.estimated`. Two histograms follow the same conventions: `gen_ai.client.token.usage` (reported tokens, by `gen_ai.token.type`) and `gen_ai.client.operation.duration` (seconds). They reach Application Insights with `azure`; with `otlp`, set `ARIA_OTLP_METRICS_ENDPOINT` to a backend that takes metrics.
+
+Spans and metrics never carry prompt or completion text, keys or error messages: a failed call shows only its error's class or HTTP status. The run's events keep each failed call's error for the console.
 
 The API and `aria worker` both configure the exporter, so runs are traced whichever process executes them. The API's Prometheus counters cover only runs the API itself executes.
 
@@ -263,6 +275,7 @@ Processes log to standard output. With `ARIA_LOG_FORMAT=json`, each line is one 
 | `worker.recovered` | The API continued runs that a previous process left unfinished |
 | `worker.job_failed`, `runner.failed` | A run failed |
 | `llm.provider_error`, `llm.invalid_output` | A provider failed, or returned output that did not validate |
+| `llm.declined`, `llm.length_stop` | A model declined (a refusal or a content filter), or its structured answer stopped at its token limit; neither is used, and the call moves on |
 | `notify.sent`, `notify.failed` | An approved message was delivered, or was not |
 | `scan.started`, `scan.run_opened`, `scan.followup`, `scan.covered`, `scan.failed` | The log scan |
 | `severity.adapted`, `severity.recalibrated`, `severity.model_reloaded`, `severity.recalibration_failed`, `severity.model_missing` | The severity model |
@@ -364,7 +377,7 @@ Before you send real logs to a hosted provider, read what its terms say about pr
 - **More workers.** Run more `aria worker` processes against the same database; a claim is a conditional update, so two workers never take the same run. In compose, run `docker compose up -d --scale worker=3`. On Azure, raise the worker app's `minReplicas` (the template allows up to three).
 - **Concurrency.** Set `ARIA_WORKER_CONCURRENCY`, or override it per worker with `aria worker --concurrency N`.
 - **The database.** SQLite serialises writes. For more than a couple of workers, use Azure SQL.
-- **Abandoned runs.** Every process that drives a run, a worker or the API applying a review, claims it first and renews the claim every minute; it lets go when the run pauses or ends. A run whose holder went quiet for 5 minutes is reclaimed by another worker (or, in process, by the API), and a process with every slot busy leaves it to the others. A reclaimed run that had already paused for review, or ended, is recorded as such and let go at once. Two processes never drive one run at once, and each approved message is marked as being sent before it goes out, so it goes out once.
+- **Abandoned runs.** Every process that drives a run, a worker or the API applying a review, claims it first and renews the claim every minute; it lets go when the run pauses or ends. A run whose holder went quiet for 5 minutes is reclaimed by another worker (or, in process, by the API), and a process with every slot busy leaves it to the others. A reclaimed run that had already paused for review, or ended, is recorded as such and let go at once. Two processes never drive one run at once, and each approved message is marked as being sent before it goes out, so it goes out once. The drive that applies a review saves each step before the next begins, so a process that stops while publishing leaves the approval saved: the run is recovered in front of publish, under that approval.
 - **Periodic jobs.** Each worker runs the recalibration job against the shared model file; repeating it is harmless, because each blind check is applied once, by its id, whichever worker gets there first. Configure the log scan on one worker only, or replicas tailing the same files can open duplicate runs. The retention purge is safe on every worker: each run is taken and deleted in one transaction, by one of them.
 - **More API replicas.** Run migrations as a separate step (`aria db upgrade`), and set `ARIA_MIGRATE_ON_START=false`. The rate limiter and the A2A task store live in each process's memory, so each replica keeps its own. Alert grouping does not: an alert storm delivered to several replicas at once still opens one group and one run. The database keeps one open group per alert key (a unique index, added by `aria db upgrade`), and every request tries the group's run IDs in the same order, so racing requests end up on the same run.
 
@@ -476,6 +489,22 @@ The first look at each file starts at its end, so history never opens a run. A f
 
 The safety model reads LLM-written report claims and polished messages. A flagged one is replaced by the deterministic draft, and run notes say why. Each check is one more LLM call against the run's budget. The check fails closed; see [the safety check flags everything](#the-safety-check-flags-everything).
 
+### Run the red-team suite
+
+After a change to the guard, the prompts, the report checks or the message drafts, see what injection attacks can still achieve:
+
+```bash
+uv run aria eval run --suite redteam
+```
+
+It runs offline and costs nothing: no provider is called. It starts from the public injection benchmarks when they are downloaded (`aria data download`), or from the edge-case suite's own attacks, mutates each attack until a version gets past the guard, and triages it with a stand-in model that obeys any order it reads. `--limit N` runs N attacks instead of the default. The results land in `reports/eval/redteam.json`:
+
+- `outcomes`: how many attacks moved the severity outside its prediction set, got a message sent without approval, left an unlisted link or recipient in a stored draft, or got a planted key, password or address into a prompt, the report or a draft, each with an exact 95% upper bound. Any hit is a failure to investigate.
+- `model_obeyed`: how many attacks got the stand-in model to act on each kind of order, which is what the checks after the guard had to stop.
+- `guard`: how many attacks the guard missed as written, which mutations got past it, and how many it flagged whatever the mutation.
+
+`make eval` runs it too, as part of `--suite all`.
+
 ### Delete a run
 
 `DELETE /api/v1/runs/{run_id}` removes a run and everything that belongs only to it, the same rows a retention purge removes (listed under [Retention and purge](#retention-and-purge)):
@@ -574,6 +603,8 @@ One thing stays: when the newest `feedback` row belongs to a purged run, its id 
 
 **Fix.** Correct the key or the model variable and restart. A breaker that opened after three failures in a row lets one trial request through after 30 seconds; meanwhile the chain falls back to the next provider. Breakers live in memory, so a restart closes them. A rest after a daily quota or a spending cap is kept in `llm-quota.json` in `ARIA_DATA_DIR` and ends at the next midnight Pacific time; to try a model sooner (say, after raising its cap), stop the API, delete that file and start it again.
 
+**Declined and cut-short replies.** A model that declines (a refusal or a content filter) or whose structured answer stops at its token limit has failed that call: nothing it wrote is used, and the call moves to the next provider, or to the deterministic path. Neither opens the breaker, and the tokens are still counted. The run's model calls show `stop: refusal` or `stop: length`, and the logs say `llm.declined` or `llm.length_stop`. A cut answer is asked for once more with twice the token budget first. Frequent length stops on one model usually mean its reasoning spends the budget: lower its `reasoning_effort` or raise its `reasoning_tokens` in `config/aria.yaml`.
+
 ### Runs fall back to rules only
 
 **Likely cause.** The run spent one of its budgets: tokens, cost, LLM calls, elapsed time, tool calls or steps. A slow provider usually spends the time budget first. This is by design: a run never fails for lack of budget.
@@ -632,6 +663,22 @@ A message whose process stopped while sending it stays marked as being sent. Onc
 ended, the card says "Delivery not confirmed" and offers **Send again** too. It may already have
 gone out: the resend carries the same idempotency key, so a receiver that keeps those drops the
 repeat. Check the receiver first if it does not.
+
+### A draft says "[link removed]" or "[recipient removed]"
+
+**Cause.** The draft linked to a host that is not ARIA's own console or API and not in `comms.link_hosts`, or addressed someone not in `comms.recipients`. The text may have come from a model, a log line or an alert label; ARIA takes it out before review either way.
+
+**Check.** The run's notes say "removed from the responders draft: ...", and the review lists each action's `removed` items. Hosts and addresses there are written with their dots bracketed (`evil[.]example`), so the list itself is never a link.
+
+**Fix.** Nothing, when the link or address should not be there. When it should (your wiki, your incident channel), add it to `ARIA_DRAFT_LINK_HOSTS` or `ARIA_DRAFT_RECIPIENTS` and restart; drafts written after that keep it.
+
+### The critic could not judge a report
+
+**Symptom.** The report has a `critic_abstained` or `critic_cannot_judge` warning, the run's notes say "the critic could not judge everything", and the review lists `critic_checks`.
+
+**Cause.** The critic, a model judging each claim against its cited evidence, said it could not tell, and named what a person should check instead. It removes nothing when it abstains. When another real provider is set up, the critic runs there rather than on the provider that wrote the report; the run's report metadata names both.
+
+**Fix.** Check what the review lists before approving. A report can also carry `evidence_mismatch` warnings: claims whose cited evidence is about something else (a sentence about disk space citing a failed login). Those are flagged, never removed.
 
 ### The scan opens no runs
 
