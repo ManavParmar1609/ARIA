@@ -18,7 +18,7 @@ from aria.config import (
     Settings,
     SeverityConfig,
 )
-from aria.contracts.base import Claim, EvidenceKind, Severity
+from aria.contracts.base import Claim, Evidence, EvidenceKind, Severity
 from aria.contracts.report import ActionItem, IncidentReport
 from aria.contracts.retrieval import Hypothesis, Investigation, RetrievalResult, SimilarIncident
 from aria.data.scenarios import LinePools, ScenarioBuilder
@@ -31,7 +31,10 @@ from aria.parsing.parser import parse_lines
 from aria.reporting.comms import deterministic_drafts, draft_comms
 from aria.reporting.composer import ReportContext, compose_draft, compose_title
 from aria.reporting.grounding import (
+    factors,
+    key_terms,
     numbers_in,
+    off_topic,
     ungrounded_numbers,
     validate_external_text,
     validate_report,
@@ -297,6 +300,96 @@ async def test_validator_catches_every_kind_of_defect(builder: ScenarioBuilder) 
     } <= codes
     assert not result.ok
     assert result.citation_coverage < 1.0
+
+
+def _evidence(eid: str, kind: EvidenceKind, title: str, **data: object) -> Evidence:
+    return Evidence(id=eid, kind=kind, title=title, source="test", data=dict(data))
+
+
+EVIDENCE = [
+    _evidence("E1", EvidenceKind.TEMPLATE, "Template T1: authentication failure for user <*>"),
+    _evidence("E2", EvidenceKind.TEMPLATE, "Template T2: No space left on device /data/dn"),
+    _evidence("E3", EvidenceKind.FEATURE, "Window features: errors on 3 nodes", error_nodes=3),
+    _evidence("E4", EvidenceKind.TEMPLATE, "Template T4: kernel panic, stopping execution"),
+]
+
+
+def _claims(*claims: tuple[str, list[str]]) -> IncidentReport:
+    return IncidentReport(
+        report_id="rep-m",
+        run_id="run-m",
+        title="SEV2 · Storage trouble",
+        severity=Severity.SEV2,
+        summary=[Claim(text=text, evidence_ids=ids) for text, ids in claims],
+    )
+
+
+def test_a_claim_citing_evidence_about_something_else_is_flagged_and_kept() -> None:
+    report = _claims(
+        ("Disk space ran out on the data nodes.", ["E1"]),  # cites a failed login
+        ("Disk space ran out on 3 nodes.", ["E2", "E3"]),  # the disk item, and a count
+        ("Disk space ran out on the data nodes.", ["E3"]),  # a count names no factor of its own
+        ("Kernel panics stopped jobs, and disk space ran out.", ["E4", "E1"]),
+    )
+    result = validate_report(report, evidence=EVIDENCE)
+    flagged = {i.path: i for i in result.issues if i.code == "evidence_mismatch"}
+    assert set(flagged) == {"summary[0]", "summary[3]"}
+    assert all(i.level == "warning" for i in flagged.values())  # flagged, never removed
+    assert result.ok
+    message = flagged["summary[0]"].message
+    assert "the claim is about storage" in message
+    assert "E1 is about security" in message  # explainable: which item, about what
+    assert "E4" not in flagged["summary[3]"].message  # the panic item supports its part
+    assert "E1 is about security" in flagged["summary[3]"].message
+
+
+def test_shared_key_terms_tie_a_claim_to_evidence_the_lexicon_files_elsewhere() -> None:
+    """ "Disk space" is storage in the lexicon and "no space left" is resource; the word
+    "space" they share is enough to call the evidence relevant."""
+    assert factors("Disk space ran out on the data nodes.") == {"storage"}
+    assert "resource" in factors(EVIDENCE[1].title)
+    assert off_topic("Disk space ran out on the data nodes.", [EVIDENCE[1]]) == []
+    assert key_terms("Errors on nodes in the window, failed and logged.") == frozenset()
+    assert off_topic("Errors increased on 3 nodes.", [EVIDENCE[0]]) == []  # names no factor
+
+
+async def test_the_grounded_draft_cites_evidence_about_what_it_claims(
+    builder: ScenarioBuilder,
+) -> None:
+    ctx = await _context(builder)
+    report = (
+        await ReportWriter(None, RUNBOOKS).write(ctx, report_id="rep-m2", use_llm=False)
+    ).report
+    assert not [i for i in report.validation.issues if i.code == "evidence_mismatch"]
+
+
+async def test_a_model_citing_the_wrong_evidence_reaches_the_reviewer_flagged(
+    builder: ScenarioBuilder,
+) -> None:
+    """The lexical critic passes a claim that shares a filler word with its evidence; the
+    factor check still sees that disk space is not what a failed login is about."""
+    ctx = await _context(builder)
+    narrative = compose_draft(ctx).model_dump()
+    auth = ctx.evidence[0].model_copy(
+        update={
+            "id": "E900",
+            "title": "Template: authentication failure for user <*> on the login node",
+            "detail": "",
+            "data": {},
+        }
+    )
+    ctx = replace(ctx, evidence=[*ctx.evidence, auth])
+    narrative["impact"] = [
+        {"text": "Disk space ran out on the data nodes.", "evidence_ids": ["E900"]}
+    ]
+    fake = FakeProvider(script={"narrative": [json.dumps(narrative)]})
+    outcome = await ReportWriter(_router(fake, "reporter"), RUNBOOKS).write(ctx, report_id="rep-m3")
+    assert outcome.report.generated_by == "llm"
+    assert not outcome.removed_claims  # the lexical critic let it through
+    flagged = [i for i in outcome.report.validation.issues if i.code == "evidence_mismatch"]
+    assert [i.path for i in flagged] == ["impact[0]"]
+    assert "E900 is about security" in flagged[0].message
+    assert outcome.report.impact[0].text == "Disk space ran out on the data nodes."  # kept
 
 
 # --- writer with an LLM ------------------------------------------------------------------------

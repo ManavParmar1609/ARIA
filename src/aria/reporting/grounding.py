@@ -10,6 +10,13 @@ A report passes only when:
 * every action that names a runbook names a real one, at no lower risk than that runbook's
   matching step.
 
+And it is flagged, with a warning that removes nothing, when a claim cites evidence about
+something else: the claim names a factor (a lexicon category such as ``resource`` for disk
+space, or ``security`` for failed logins) and a cited item is about other factors only and
+shares no key term with the claim. A sentence about disk space that cites an authentication
+failure is flagged; one that cites a count or a model score (evidence with no factor of its own)
+is not.
+
 These checks do not judge meaning; the LLM critic does that. They catch what can be checked
 exactly, every time, at no cost.
 """
@@ -24,6 +31,7 @@ from typing import Any
 
 from aria.contracts.base import Evidence, Severity
 from aria.contracts.report import IncidentReport, ValidationIssue, ValidationResult
+from aria.parsing.catalog import load_lexicon
 from aria.retrieval.runbooks import Runbook
 from aria.security.injection import scan_line
 from aria.security.redaction import Redactor
@@ -36,6 +44,7 @@ _DATETIME = re.compile(
 _NUMBER = re.compile(r"(?<![\w.\-/])(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?\s?(%|x\b)?(?![\w\-/])")
 _WORD = re.compile(r"[a-z0-9_]{3,}")
 _RISK = {"low": 0, "medium": 1, "high": 2}
+_CLAIM_SECTIONS = ("summary", "impact", "suspected_cause")
 
 
 @dataclass(frozen=True)
@@ -110,6 +119,95 @@ def contains_secret(text: str) -> bool:
     return bool(redactor.counts)
 
 
+# --- does the cited evidence support the factor a claim names? ----------------------------------
+
+_KEY = re.compile(r"[a-z][a-z0-9]{3,}")
+# Words any claim or log line may use whatever the factor: they tie a claim to nothing.
+_GENERIC_WORDS = """
+about above across after again against also among because been before being below between both
+could does doing down during each from further have having here into itself just more most much
+must only other over same seen should since some such than that their them then there these they
+this those through under until upon very were what when where which while with within would your
+error errors failed failing failure failures fail fails warn warning warnings issue issues problem
+problems incident incidents event events line lines log logs logged logging message messages
+template templates node nodes host hosts server servers service services system systems component
+components instance instances process processes cluster window count counts total number rate
+rates time times minute minutes second seconds hour hours first last several many high higher
+lower likely possible suspected cause causes caused impact impacts affected affecting affects
+report reports reported shows showed show points point evidence severity level levels rated
+rating model rule rules occurred occurrences started stopped began ended still ongoing appears
+appeared
+"""
+_GENERIC = frozenset(_GENERIC_WORDS.split())
+
+
+def _stem(word: str) -> str:
+    """A word without its common endings, so "panics" meets "panic" and "stopping" meets
+    "stopp"."""
+    for suffix in ("ing", "ed", "es", "s"):
+        if word.endswith(suffix) and len(word) - len(suffix) >= 4:
+            return word[: -len(suffix)]
+    return word
+
+
+def key_terms(text: str) -> frozenset[str]:
+    """The words of ``text`` that can tie a claim to its evidence: not stop words, not words
+    every incident uses, stemmed."""
+    return frozenset(_stem(w) for w in _KEY.findall(text.lower()) if w not in _GENERIC)
+
+
+def factors(text: str) -> frozenset[str]:
+    """The lexicon categories ``text`` names: "no space left on device" is ``resource``, a
+    failed password ``security``."""
+    lowered = text.lower()
+    return frozenset(name for name, pattern in load_lexicon().items() if pattern.search(lowered))
+
+
+def _evidence_words(item: Evidence) -> str:
+    """Everything an evidence item says in words: its title, detail and text data."""
+    return "\n".join([item.title, item.detail, *_flatten_strings(item.data)])
+
+
+def _flatten_strings(value: Any) -> Iterable[str]:
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, Mapping):
+        for item in value.values():
+            yield from _flatten_strings(item)
+    elif isinstance(value, list | tuple):
+        for item in value:
+            yield from _flatten_strings(item)
+
+
+def off_topic(text: str, cited: Sequence[Evidence]) -> list[tuple[Evidence, frozenset[str]]]:
+    """The cited items about something other than the factor ``text`` claims, each with the
+    factors it is about. An item counts when it names factors, none of them the claim's, and
+    shares no key term with the claim; evidence that names no factor (a count, a model score)
+    can support any claim, and a claim that names no factor is not checked."""
+    claimed = factors(text)
+    if not claimed:
+        return []
+    terms = key_terms(text)
+    out = []
+    for item in cited:
+        words = _evidence_words(item)
+        about = factors(words)
+        if about and not about & claimed and not terms & key_terms(words):
+            out.append((item, about))
+    return out
+
+
+def _mismatch_message(text: str, mismatched: Sequence[tuple[Evidence, frozenset[str]]]) -> str:
+    claimed = ", ".join(sorted(factors(text)))
+    cited = "; ".join(
+        f"{item.id} is about {', '.join(sorted(about))}" for item, about in mismatched
+    )
+    return (
+        f"the claim is about {claimed}, but {cited}, and shares no key term with it: "
+        "check that the evidence supports the claim"
+    )
+
+
 @dataclass
 class _Checked:
     path: str
@@ -171,6 +269,17 @@ def validate_report(
                     level,
                 )
                 ok = ok and level != "error"
+            # A claim that cites evidence about another factor is flagged for the reviewer,
+            # never removed: the check reads words, and a person decides.
+            if item.path.startswith(_CLAIM_SECTIONS) and (
+                mismatched := off_topic(item.text, cited)
+            ):
+                issue(
+                    "evidence_mismatch",
+                    _mismatch_message(item.text, mismatched),
+                    item.path,
+                    "warning",
+                )
         if contains_secret(item.text):
             issue("secret_in_text", "text looks like it contains a credential", item.path)
             ok = False
