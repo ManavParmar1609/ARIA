@@ -513,6 +513,7 @@ Mining Console Logs", SOSP 2009, for the HDFS labels. Sources and pinned checksu
 - [Data card](docs/data-card.md)
 - [Model card](docs/model-card.md)
 - [Threat model](docs/threat-model.md)
+- [The EU AI Act](docs/eu-ai-act.md): why ARIA, as shipped, is not a high-risk system, and what would change that
 - [Ops runbook](docs/ops-runbook.md)
 - [Deploy a free public demo](docs/deploy-free.md): the website on Vercel, the API on Render
 - [Quality audit](docs/quality-audit.md): what the pre-release audit checked, fixed and left
