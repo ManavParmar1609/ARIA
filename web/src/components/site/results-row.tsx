@@ -1,11 +1,12 @@
 import { ArrowRightIcon } from "lucide-react";
 import Link from "next/link";
 
-import type { Evaluation, RealData, RealLogs } from "@/lib/site-data";
+import { RollingNumber } from "@/components/aria/rolling-number";
+import type { Evaluation, RealLogs } from "@/lib/site-data";
 
-// The home page's results (item 28): one row of four findings, each computed from the published
-// results and linked to its test on Test results, including one where ARIA falls short. Test
-// results answers the same questions in full.
+// The home page's results (item 28): one row of findings, each computed from the published
+// results and linked to its test on Test results. Test results answers the same questions in
+// full, including where ARIA falls short.
 
 const per100 = (x: number) => Math.round(x * 100);
 const count = (x: number) => x.toLocaleString("en");
@@ -17,7 +18,7 @@ export interface ResultTile {
   link: string;
 }
 
-export function resultTiles(data: Evaluation, real: RealLogs, more: RealData): ResultTile[] {
+export function resultTiles(data: Evaluation, real: RealLogs): ResultTile[] {
   const life = real.lifecycle;
   const caught = life.flagged - life.falseAlarms;
   const best = [...real.detectors].sort(
@@ -30,7 +31,6 @@ export function resultTiles(data: Evaluation, real: RealLogs, more: RealData): R
       : ` The best standard detector caught ${count(best.flagged - best.falseAlarms)}, with ${count(best.falseAlarms)} false alarms.`;
   const s = data.severity;
   const p = data.pipeline;
-  const t = more.thunderbird;
   return [
     {
       figure: `${count(caught)} of ${count(real.judgedFailed)}`,
@@ -50,31 +50,19 @@ export function resultTiles(data: Evaluation, real: RealLogs, more: RealData): R
       href: "/console/evals#ev-pipeline",
       link: "The end-to-end test",
     },
-    {
-      figure: `${count(t.aria.quietPaged)} of ${count(t.quiet)}`,
-      label:
-        "quiet stretches of a supercomputer's log (Thunderbird) raised false alarms: its routine noise looks like trouble to ARIA.",
-      href: "/console/evals#ev-thunderbird",
-      link: "Where it falls short",
-    },
   ];
 }
 
-export function ResultsRow({
-  data,
-  real,
-  more,
-}: {
-  data: Evaluation;
-  real: RealLogs;
-  more: RealData;
-}) {
+export function ResultsRow({ data, real }: { data: Evaluation; real: RealLogs }) {
   return (
-    <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {resultTiles(data, real, more).map((tile) => (
-        <li key={tile.href} className="flex flex-col gap-3 rounded-card bg-raised p-6">
-          <p className="stat text-[2rem] leading-none whitespace-nowrap">{tile.figure}</p>
-          <p className="text-sm leading-relaxed text-foreground">{tile.label}</p>
+    <ul className="grid gap-3 md:grid-cols-3">
+      {resultTiles(data, real).map((tile) => (
+        <li key={tile.href} className="flex flex-col gap-4 rounded-card bg-raised p-6 sm:p-7">
+          {/* The figure rolls into view once (rolling-number.tsx); its plain text is always there. */}
+          <p className="stat text-[2.5rem] leading-none whitespace-nowrap sm:text-[2.75rem]">
+            <RollingNumber value={tile.figure} />
+          </p>
+          <p className="text-base leading-relaxed text-foreground">{tile.label}</p>
           <Link
             href={tile.href as never}
             prefetch={false}

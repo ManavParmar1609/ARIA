@@ -1,9 +1,21 @@
+import type { Severity } from "@/lib/api/types";
+import { LEVEL_RESPONSE, LEVEL_WORD } from "@/lib/levels";
+
 // The words ARIA's pages use that a newcomer may not know, defined in plain English. The landing
-// page and the console guide both read this list, so a term means the same thing everywhere.
+// page, the console guide and Ask ARIA all read this list, so a term means the same thing
+// everywhere. Keys are stable: other code looks entries up by them.
 
 export interface GlossaryEntry {
   term: string;
   definition: string;
+}
+
+/** A severity level in the words the report and the incident page use (levels.ts). */
+function level(severity: Severity, place: string): GlossaryEntry {
+  return {
+    term: `${severity} (${LEVEL_WORD[severity]})`,
+    definition: `${place} ${LEVEL_RESPONSE[severity]}`,
+  };
 }
 
 export const GLOSSARY = {
@@ -77,6 +89,102 @@ export const GLOSSARY = {
     definition:
       "A new incident that starts again from one of another incident's saved steps, with different options, so you can see what would have changed.",
   },
+  // The four severity levels, most serious first.
+  sev1: level("SEV1", "The most serious of ARIA's four severity levels."),
+  sev2: level("SEV2", "The second of ARIA's four severity levels."),
+  sev3: level("SEV3", "The third of ARIA's four severity levels."),
+  sev4: level("SEV4", "The least serious of ARIA's four severity levels."),
+  // The systems in the public logs ARIA is tested on, and their parts.
+  hadoop: {
+    term: "Hadoop",
+    definition:
+      "Free software that spreads very large amounts of data, and the jobs that work on it, over many servers so they act as one computer. HDFS is the part that stores the data.",
+  },
+  hdfs: {
+    term: "HDFS",
+    definition:
+      "The Hadoop Distributed File System, where a Hadoop cluster keeps its data. It splits files into blocks and keeps copies of each on several servers, so one failing server loses nothing.",
+  },
+  datanode: {
+    term: "DataNode",
+    definition:
+      "One of the servers in HDFS that store the blocks of data and hand them out when a program asks for them.",
+  },
+  openssh: {
+    term: "OpenSSH",
+    definition:
+      "The software most servers use for SSH, the secure way to sign in to a computer over the network. Its log records every sign-in attempt, so password guessing shows up there.",
+  },
+  zookeeper: {
+    term: "ZooKeeper",
+    definition:
+      "A small service that keeps a cluster's servers in agreement, such as on which one is in charge. When its servers lose touch with each other, everything built on it can stall.",
+  },
+  bluegene: {
+    term: "BlueGene/L",
+    definition:
+      "A supercomputer built by IBM for Lawrence Livermore National Laboratory. Its public log, with alerts marked by the people who ran it, is a standard test for tools that read logs.",
+  },
+  lustre: {
+    term: "Lustre",
+    definition:
+      "A file system that the computers of a supercomputer share, so thousands of them can read and write the same files at once.",
+  },
+  "io-node": {
+    term: "I/O node",
+    definition:
+      "A computer inside a supercomputer that reads and writes data for the compute nodes, the computers that do the calculations.",
+  },
+  "kernel-panic": {
+    term: "Kernel panic",
+    definition:
+      "A crash of the core of a computer's operating system. The computer stops at once and must restart, and whatever was running on it is lost.",
+  },
 } satisfies Record<string, GlossaryEntry>;
 
 export type GlossaryKey = keyof typeof GLOSSARY;
+
+/**
+ * Where the glossary's words turn up in text that comes from data (an incident's title, a
+ * sample's summary, the name of the system behind it), so a page can define them where they
+ * stand. Matched as written, whole words only.
+ */
+export const GLOSSARY_WORDS: readonly (readonly [RegExp, GlossaryKey])[] = [
+  [/\bHDFS\b/, "hdfs"],
+  [/\bHadoop\b/, "hadoop"],
+  [/\bDataNodes?\b/, "datanode"],
+  [/\bOpenSSH\b/, "openssh"],
+  [/\bZooKeeper\b/, "zookeeper"],
+  [/\bBlueGene\/L\b/, "bluegene"],
+  [/\bLustre\b/, "lustre"],
+  [/\bI\/O nodes?\b/, "io-node"],
+  [/\b[Kk]ernel panics?\b/, "kernel-panic"],
+];
+
+export interface GlossaryMention {
+  start: number;
+  end: number;
+  key: GlossaryKey;
+}
+
+/**
+ * The first mention of each glossary word in `text`, in reading order, leaving out the words in
+ * `skip` (already defined nearby). One definition per word is plenty.
+ */
+export function glossaryMentions(
+  text: string,
+  skip: readonly GlossaryKey[] = [],
+): GlossaryMention[] {
+  const mentions: GlossaryMention[] = [];
+  for (const [pattern, key] of GLOSSARY_WORDS) {
+    if (skip.includes(key) || mentions.some((m) => m.key === key)) continue;
+    const found = pattern.exec(text);
+    if (!found) continue;
+    const start = found.index;
+    const end = start + found[0].length;
+    // Two words can't share letters: "Hadoop" inside an earlier match stays plain.
+    if (mentions.some((m) => start < m.end && end > m.start)) continue;
+    mentions.push({ start, end, key });
+  }
+  return mentions.sort((a, b) => a.start - b.start);
+}

@@ -61,7 +61,30 @@ def _vocabulary(text: str) -> set[str]:
 
 
 def _found(term: str, vocabulary: set[str]) -> bool:
-    return not _forms(term).isdisjoint(vocabulary)
+    if not _forms(term).isdisjoint(vocabulary):
+        return True
+    return any(not _forms(word).isdisjoint(vocabulary) for word in _SYNONYMS.get(term, ()))
+
+
+# Everyday words for what the records name in their own terms, so "password guesses" finds the
+# brute-force incident and "slow" finds latency. A word matches its listed terms, not the reverse.
+_SYNONYMS: dict[str, tuple[str, ...]] = {
+    "password": ("authentication", "brute", "login"),
+    "passwords": ("authentication", "brute", "login"),
+    "guess": ("brute", "guessing", "bruteforce"),
+    "guesses": ("brute", "guessing", "bruteforce"),
+    "guessing": ("brute", "bruteforce"),
+    "login": ("authentication", "password", "ssh"),
+    "logins": ("authentication", "password", "ssh"),
+    "hacker": ("brute", "attack", "break"),
+    "hackers": ("brute", "attack", "break"),
+    "hack": ("brute", "attack", "break"),
+    "hacked": ("brute", "attack", "break"),
+    "attacker": ("brute", "attack"),
+    "slow": ("latency", "degraded", "slowness"),
+    "crashed": ("panic", "crash", "segfault"),
+    "full": ("space", "quota"),
+}
 
 
 # The everyday words for each kind of evidence, so that a question in plain words ("what did the
@@ -96,8 +119,16 @@ _GENERIC = frozenset(" ".join([*_KIND_WORDS.values(), *_TOOL_WORDS.values()]).sp
     # How a question is put, not what it is about: "Which errors appeared most often?"
     "appear", "appeared", "appears", "often", "most", "frequent", "frequently", "common",
     "commonly", "show", "showed", "shown", "shows", "logged",
+    # "Which incidents involved ...?", "What does SEV1 mean?", "Why does it keep ...?"
+    "involve", "involved", "involves", "involving", "mean", "means", "meant", "meaning",
+    "keep", "keeps", "kept", "getting", "care", "worry", "worried", "bother", "explain",
+    "describe", "related", "regarding", "include", "includes", "included", "say", "says",
+    "said", "think", "look", "looks", "lot", "lots", "really", "actually", "mine",
 }  # fmt: skip
 
+_REVIEW_WORDS = frozenset(
+    {"review", "reviewed", "reviewer", "approve", "approved", "approval", "edit", "edited", "note"}
+)
 # A question about the state of things now, which no record of the past can answer.
 _NOW = re.compile(
     r"\b(?:still|currently|right now|at the moment|ongoing|as we speak|live)\b", re.IGNORECASE
@@ -129,8 +160,12 @@ def rank(
     OOM killed?" and in "killed jobs") does not make an unrelated incident an answer."""
     wanted = terms(question)
     about = wanted - _GENERIC
+    # A review restates what it reviewed: it answers questions about the review, not others.
+    reviews = not wanted.isdisjoint(_REVIEW_WORDS)
     scored = []
     for position, item in enumerate(evidence):
+        if item.kind is EvidenceKind.REVIEW and not reviews:
+            continue
         own = _vocabulary(f"{item.title} {item.detail}")
         named = sum(1 for term in about if _found(term, own))
         if about and item.kind is EvidenceKind.INCIDENT and 2 * named < len(about):
@@ -172,7 +207,7 @@ def notes(question: str, cited: Sequence[Evidence], *, run_scoped: bool) -> list
         if missing:
             quoted = [f"“{term}”" for term in missing[:4]]
             listed = quoted[0] if len(quoted) == 1 else f"{', '.join(quoted[:-1])} or {quoted[-1]}"
-            said.append(f"Nothing below mentions {listed}.")
+            said.append(f"None of the records below mention {listed}.")
     return said
 
 

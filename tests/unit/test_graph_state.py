@@ -233,6 +233,35 @@ def test_an_anonymous_reviewer_is_named_plainly_and_their_note_has_its_own_headi
     assert "## Open questions" not in text
 
 
+def test_a_changed_level_drops_arias_own_line_for_the_old_level() -> None:
+    """A published report does not say "SEV2 (high) ... page" under a reviewer's SEV3, and the
+    step a reviewer adds is published as theirs, not as one awaiting approval."""
+    store = EvidenceStore()
+    report, assessment = _report_and_assessment(store)
+    report = report.model_copy(
+        update={
+            "summary": [
+                Claim(text="SEV2 (high): major degradation or a failing critical component."),
+                *report.summary,
+            ]
+        }
+    )
+    decision = ReviewDecision.model_validate(
+        {
+            "decision": "edit",
+            "reviewer": "anonymous",
+            "edits": {"severity": "SEV3", "add_actions": ["Check the storage rack."]},
+        }
+    )
+    out, _ = apply_review(report, assessment, decision, store)
+    texts = [c.text for c in out.summary]
+    assert texts[0] == "A reviewer assigned SEV3; ARIA's assessment was SEV2."
+    assert not any(t.startswith("SEV2 (") for t in texts)
+    assert out.evidence[-1].title == "Review by a reviewer: edit"
+    text = render_markdown(out)
+    assert "- [ ] Check the storage rack. (added by the reviewer)" in text
+
+
 def test_a_summary_line_the_reviewer_kept_still_cites_its_evidence() -> None:
     store = EvidenceStore()
     report, assessment = _report_and_assessment(store)

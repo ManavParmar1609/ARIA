@@ -34,7 +34,7 @@ MAX_ALERTS_PER_PAYLOAD = 500
 MAX_LABELS = 64
 _KNOWN_SYSTEMS = frozenset(
     {
-        "bgl", "thunderbird", "hdfs", "hadoop", "spark", "zookeeper", "openstack", "hpc",
+        "bgl", "hdfs", "hadoop", "spark", "zookeeper", "openstack", "hpc",
         "windows", "linux", "mac", "android", "healthapp", "apache", "openssh", "proxifier",
     }
 )  # fmt: skip

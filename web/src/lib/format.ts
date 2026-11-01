@@ -81,6 +81,17 @@ export function percent(x: number | null | undefined, digits = 0): string {
   return `${(x * 100).toFixed(digits)}%`;
 }
 
+/**
+ * A calibrated model's probability as people should read it: never "100%" or "0%", which such a
+ * model cannot claim (0.996 reads ">99%", 0.003 "<1%").
+ */
+export function chance(p: number | null | undefined): string {
+  if (p == null || Number.isNaN(p)) return "";
+  if (p >= 0.995) return ">99%";
+  if (p > 0 && p < 0.005) return "<1%";
+  return `${Math.round(p * 100)}%`;
+}
+
 export function money(usd: number | null | undefined): string {
   if (usd == null) return "";
   if (usd === 0) return "$0";

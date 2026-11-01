@@ -1,53 +1,53 @@
 {
- "model_version": "severity-log-20261029-a362d541",
- "rules_version": "2026.10.2",
+ "model_version": "severity-log-20261031-b6dcaca3",
+ "rules_version": "2026.10.3",
  "c": 3.0,
  "alpha": 0.1,
- "temperature": 0.8271,
- "conformal_q": 0.5574191536038096,
+ "temperature": 0.5606,
+ "conformal_q": 0.21155339781309734,
  "labels": {
   "train": {
-   "SEV2": 157,
+   "SEV2": 153,
    "SEV1": 68,
-   "SEV3": 187,
-   "SEV4": 248
+   "SEV3": 167,
+   "SEV4": 236
   },
   "temperature": {
    "SEV2": 45,
    "SEV1": 13,
-   "SEV3": 45,
-   "SEV4": 62
+   "SEV3": 39,
+   "SEV4": 59
   },
   "conformal": {
    "SEV1": 33,
-   "SEV2": 84,
-   "SEV3": 92,
-   "SEV4": 121
+   "SEV2": 82,
+   "SEV3": 82,
+   "SEV4": 115
   }
  },
  "train": {
-  "n": 660,
-  "accuracy": 0.9591,
-  "nll": 0.1354,
-  "ece": 0.031,
-  "coverage": 0.9667,
-  "mean_set_size": 1.015
+  "n": 624,
+  "accuracy": 0.9872,
+  "nll": 0.0492,
+  "ece": 0.0143,
+  "coverage": 0.9872,
+  "mean_set_size": 1.0
  },
  "temperature_split": {
-  "n": 165,
-  "accuracy": 0.9515,
-  "nll": 0.1823,
-  "ece": 0.0229,
-  "coverage": 0.9576,
-  "mean_set_size": 1.018
+  "n": 156,
+  "accuracy": 0.9615,
+  "nll": 0.0867,
+  "ece": 0.0272,
+  "coverage": 0.9615,
+  "mean_set_size": 1.0
  },
  "conformal_split": {
-  "n": 330,
-  "accuracy": 0.8879,
-  "nll": 0.2945,
-  "ece": 0.0504,
-  "coverage": 0.9091,
-  "mean_set_size": 1.036
+  "n": 312,
+  "accuracy": 0.9487,
+  "nll": 0.1278,
+  "ece": 0.0256,
+  "coverage": 0.9487,
+  "mean_set_size": 1.0
  },
  "synthetic": true,
  "seeds": {

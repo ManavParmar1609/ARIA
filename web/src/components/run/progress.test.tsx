@@ -1,12 +1,14 @@
-import { act, render, renderHook, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { RunEvent } from "@/lib/api/types";
+import { markStarted, wasStarted } from "@/lib/started";
 
 import {
   pacedSteps,
   progressSteps,
   reachedCount,
+  RunProgress,
   type Step,
   STEP_MS,
   Steps,
@@ -150,6 +152,91 @@ describe("usePacedSteps", () => {
     }
     expect(result.current.playing).toBe(false);
     expect(result.current.steps[6]?.state).toBe("paused");
+  });
+
+  it("shows a finished run's result at once when asked, instead of playing it back", () => {
+    vi.useFakeTimers();
+    markStarted("run-skip");
+    const { result } = renderHook(() => usePacedSteps("run-skip", finishedRun, "awaiting_review"));
+    // The playback starts at the first step, with nothing to show yet.
+    expect(result.current.playing).toBe(true);
+    expect(result.current.steps[0]?.state).toBe("running");
+    expect(result.current.passed.size).toBe(0);
+
+    act(() => result.current.skip());
+    expect(result.current.playing).toBe(false);
+    expect(result.current.steps).toEqual(progressSteps(finishedRun, "awaiting_review"));
+    expect([...result.current.passed]).toContain("write");
+    // Nothing plays on afterwards, and the incident opens as it is from now on.
+    act(() => {
+      vi.advanceTimersByTime(STEP_MS * 10);
+    });
+    expect(result.current.playing).toBe(false);
+    expect(wasStarted("run-skip")).toBe(false);
+  });
+});
+
+// A run that rated, wrote its report and now waits for review, faster than a person can follow.
+const finishedRun = [
+  ...reading,
+  event(7, "node_started", "severity", "2026-10-01T00:00:00.060Z"),
+  event(8, "node_finished", "severity", "2026-10-01T00:00:00.070Z"),
+  event(9, "node_started", "report", "2026-10-01T00:00:00.080Z"),
+  event(10, "node_finished", "report", "2026-10-01T00:00:00.090Z"),
+  event(11, "node_started", "comms", "2026-10-01T00:00:00.091Z"),
+  event(12, "node_finished", "comms", "2026-10-01T00:00:00.095Z"),
+  event(13, "node_started", "review", "2026-10-01T00:00:00.096Z"),
+  event(14, "interrupt", "review", "2026-10-01T00:00:00.097Z"),
+];
+
+describe("RunProgress", () => {
+  it("offers the result at once above the steps it plays back, then hands focus on", () => {
+    const onSkip = vi.fn();
+    const { rerender } = render(
+      <RunProgress
+        steps={pacedSteps(progressSteps(finishedRun, "awaiting_review"), 2)}
+        status="running"
+        latencyMs={null}
+        facts=""
+        replaying
+        onSkip={onSkip}
+      />,
+    );
+    const steps = screen.getByRole("list", { name: "Run progress" });
+    const note = screen.getByText(/^ARIA has already finished/);
+    const skip = screen.getByRole("button", { name: "Show the result now" });
+    // Before the steps: on a phone's first screen, and still while the step words change.
+    for (const before of [note, skip]) {
+      expect(before.compareDocumentPosition(steps) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+
+    fireEvent.click(skip);
+    expect(onSkip).toHaveBeenCalledOnce();
+    // The strip folds into its one line, which takes focus from the button that went with it.
+    rerender(
+      <RunProgress
+        steps={progressSteps(finishedRun, "awaiting_review")}
+        status="awaiting_review"
+        latencyMs={800}
+        facts="offline: no language model"
+      />,
+    );
+    const line = screen.getByText("ARIA finished in 800 ms").closest("summary");
+    expect(line).not.toBeNull();
+    expect(document.activeElement).toBe(line);
+  });
+
+  it("says nothing of a playback while ARIA is still at work", () => {
+    render(
+      <RunProgress
+        steps={progressSteps(reading, "running")}
+        status="running"
+        latencyMs={null}
+        facts=""
+        onSkip={() => {}}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Show the result now" })).toBeNull();
   });
 });
 

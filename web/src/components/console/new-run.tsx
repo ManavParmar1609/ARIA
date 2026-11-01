@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 
+import { FamiliarLogs, familiarTitle, type FamiliarLog } from "@/components/console/familiar-logs";
 import { SampleGallery } from "@/components/console/sample-gallery";
 import { PageHeader } from "@/components/console/states";
 import { Button } from "@/components/ui/button";
@@ -22,7 +23,6 @@ import { ApiError } from "@/lib/api/client";
 import { useCreateRun, useModelKey, useSettingsView } from "@/lib/api/hooks";
 import { modelKeyLabel } from "@/lib/api/model-key";
 import { MAX_BODY_BYTES } from "@/lib/limits";
-import samples from "@/data/samples.json";
 import { SYSTEM_NAMES } from "@/lib/systems";
 import {
   accessSentence,
@@ -142,7 +142,17 @@ export function NewRun({ publicDemo = false }: { publicDemo?: boolean }) {
       <PageHeader
         title="New triage"
         description="Choose where the logs come from and an issue to triage, or paste your own logs. ARIA reads them, rates how serious the incident is and drafts a report with its sources. Nothing is sent until you approve it."
-      />
+      >
+        <p className="flex flex-wrap items-center gap-x-1 text-sm text-muted-foreground">
+          New here?
+          <Link
+            href="/console/guide"
+            className="inline-flex min-h-6 items-center underline underline-offset-4 hover:text-heading"
+          >
+            Start with the guide
+          </Link>
+        </p>
+      </PageHeader>
       <Tabs value={tab} onValueChange={setTab} className="grid gap-8">
         <TabsList aria-label="What to triage">
           <TabsTrigger value="samples">Samples</TabsTrigger>
@@ -168,6 +178,8 @@ interface Draft {
   title: string;
   system: string;
   text: string;
+  /** The familiar log in the box, as it was filled in; editing the lines makes them your own. */
+  sample: string | null;
   useLlm: boolean;
   investigate: boolean;
   approval: boolean;
@@ -177,6 +189,7 @@ const BLANK: Draft = {
   title: "",
   system: "generic",
   text: "",
+  sample: null,
   useLlm: true,
   investigate: true,
   approval: true,
@@ -191,6 +204,7 @@ export function loadDraft(storage: Pick<Storage, "getItem"> | undefined): Draft 
       title: typeof d.title === "string" ? d.title : "",
       system: typeof d.system === "string" ? d.system : "generic",
       text: typeof d.text === "string" ? d.text : "",
+      sample: typeof d.sample === "string" ? d.sample : null,
       useLlm: d.useLlm !== false,
       investigate: d.investigate !== false,
       approval: d.approval !== false,
@@ -210,73 +224,6 @@ function saveDraft(draft: Draft) {
   }
 }
 
-// Logs most people recognise, from the real-line samples the console ships
-// (scripts/export_web_samples.py): one click fills the box, ready to read, edit or run.
-const FAMILIAR: { id: string; name: string; what: string }[] = [
-  { id: "linux.auth_failures", name: "Linux server", what: "sign-ins keep failing" },
-  { id: "apache.mod_jk_worker_error", name: "Apache web server", what: "it loses its backends" },
-  { id: "openssh.bruteforce", name: "SSH server", what: "someone guesses passwords" },
-  { id: "mac.cocoa_scripting_noise", name: "Mac", what: "harmless app errors" },
-  { id: "android.permission_noise", name: "Android phone", what: "harmless permission warnings" },
-  {
-    id: "openstack.image_cache_missing",
-    name: "OpenStack cloud",
-    what: "servers miss their disk images",
-  },
-  { id: "hdfs.block_serve_exceptions", name: "Hadoop storage", what: "servers stop sending data" },
-  { id: "zookeeper.quorum_connection_loss", name: "ZooKeeper", what: "servers lose touch" },
-];
-
-type FamiliarLog = { title: string; system: string; lines: string[] };
-
-/** One click puts a familiar log in the box: for someone with no logs of their own at hand. */
-function FamiliarLogs({ chosen, onPick }: { chosen: string; onPick: (log: FamiliarLog) => void }) {
-  const id = useId();
-  const byId = new Map(samples.map((sample) => [sample.id, sample]));
-  return (
-    <section
-      aria-labelledby={`${id}-title`}
-      className="grid gap-3 rounded-card border border-rule bg-raised p-5 sm:p-6"
-    >
-      <div className="grid gap-1">
-        <h2 id={`${id}-title`} className="text-lg">
-          No logs at hand? Try a familiar one
-        </h2>
-        <p className="max-w-prose text-sm text-muted-foreground">
-          Each fills the box below with real lines from that kind of log, from the public Loghub
-          collection. Read or edit them, then start the triage.
-        </p>
-      </div>
-      <ul className="flex flex-wrap gap-2">
-        {FAMILIAR.map((log) => {
-          const sample = byId.get(log.id);
-          if (!sample) return null;
-          const text = sample.lines.join("\n");
-          return (
-            <li key={log.id}>
-              <button
-                type="button"
-                aria-pressed={chosen === text}
-                onClick={() =>
-                  onPick({
-                    title: `${log.name}: ${log.what}`,
-                    system: sample.system,
-                    lines: sample.lines,
-                  })
-                }
-                className="inline-flex min-h-10 items-center gap-2 rounded-full border border-rule bg-background px-4 py-1.5 text-left text-sm transition-colors duration-(--duration-quick) hover:border-control aria-pressed:border-primary aria-pressed:bg-highlight"
-              >
-                <span className="font-semibold text-heading">{log.name}</span>
-                <span className="text-muted-foreground">{log.what}</span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
-  );
-}
-
 function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
   const id = useId();
   const router = useRouter();
@@ -288,6 +235,9 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
   const [title, setTitle] = useState(draft.title);
   const [system, setSystem] = useState(draft.system);
   const [text, setText] = useState(draft.text);
+  // A familiar log is real lines arranged into a window, so a run from one, as it was filled in,
+  // is marked as built from a sample. Editing the lines makes them the visitor's own.
+  const [sample, setSample] = useState(draft.sample);
   const [useLlm, setUseLlm] = useState(draft.useLlm);
   const [investigate, setInvestigate] = useState(draft.investigate);
   const [approval, setApproval] = useState(draft.approval);
@@ -296,14 +246,14 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
   const sent = useRef(false);
   useEffect(() => {
     const later = window.setTimeout(() => {
-      if (!sent.current) saveDraft({ title, system, text, useLlm, investigate, approval });
+      if (!sent.current) saveDraft({ title, system, text, sample, useLlm, investigate, approval });
     }, 300);
     return () => window.clearTimeout(later);
-  }, [title, system, text, useLlm, investigate, approval]);
+  }, [title, system, text, sample, useLlm, investigate, approval]);
   // Leaving the tab or the page within that delay keeps the draft too (SL-p3).
   const latest = useRef(draft);
   useEffect(() => {
-    latest.current = { title, system, text, useLlm, investigate, approval };
+    latest.current = { title, system, text, sample, useLlm, investigate, approval };
   });
   useEffect(() => {
     const keep = () => {
@@ -366,6 +316,7 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
         title: title.trim() || undefined,
         system,
         logs: lines,
+        synthetic: sample !== null,
         options: { use_llm: useLlm, investigate, require_approval: approvalRequired || approval },
       },
       {
@@ -379,19 +330,27 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
     );
   };
 
-  const pick = (log: FamiliarLog) => {
+  const pick = (log: FamiliarLog, keepFocus: boolean) => {
     setText(log.lines.join("\n"));
+    setSample(log.id);
     setSystem(log.system in SYSTEM_NAMES ? log.system : "generic");
     setTitle(log.title);
     setTouched(false);
-    // To the lines, so the reader sees what was filled in and the button to start sits below.
-    logsBox.current?.focus({ preventScroll: true });
-    logsBox.current?.scrollIntoView({ block: "nearest" });
+    const box = logsBox.current;
+    // The lines come into view either way, and the count beside them says how many arrived.
+    // With a keyboard or a mouse, focus goes to them, so the reader sees what was filled in and
+    // the button to start sits below. On a touch screen it stays on the button: focusing the box
+    // would raise the on-screen keyboard over "Start a triage". Focus that moved on while the
+    // lines loaded stays where it went.
+    if (!keepFocus && !window.matchMedia("(hover: none)").matches) {
+      box?.focus({ preventScroll: true });
+    }
+    box?.scrollIntoView({ block: "nearest" });
   };
 
   return (
     <div className="grid max-w-4xl gap-10">
-      <FamiliarLogs chosen={text} onPick={pick} />
+      <FamiliarLogs chosen={sample} onPick={pick} />
       <form
         onSubmit={submit}
         className="grid gap-6"
@@ -409,14 +368,19 @@ function OwnLogs({ publicDemo }: { publicDemo: boolean }) {
             ref={logsBox}
             id={`${id}-logs`}
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              // Edited, the lines are the visitor's own: the title the familiar log gave them
+              // goes too, unless the visitor wrote one of their own.
+              if (sample !== null && title === familiarTitle(sample)) setTitle("");
+              setSample(null);
+            }}
             spellCheck={false}
             wrap="off"
             rows={8}
-            className="font-mono text-xs leading-5"
-            placeholder={
-              "Paste log lines here, one per line, such as:\n2026-10-31 10:00:01 ERROR api.gateway: upstream timed out"
-            }
+            // The placeholder is an instruction in the sans, so the empty box never looks filled.
+            className="font-mono text-xs leading-5 placeholder:font-sans placeholder:text-sm"
+            placeholder="Paste log lines here, one per line."
             aria-invalid={touched && problem ? true : undefined}
             aria-describedby={`${id}-logs-hint`}
           />

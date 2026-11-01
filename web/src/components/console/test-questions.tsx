@@ -19,6 +19,20 @@ export const heldAsPromised = (coverage: number, target: number) => coverage >= 
 const better = (gap: number) => (gap < 0.05 ? "slightly better" : "better");
 const less = (gap: number) => (gap < 0.05 ? "Slightly less often" : "Less often");
 
+/** A share as a newcomer reads it, put before a noun: "about 4 in 10", "nearly all", "no". */
+export function inTen(share: number): string {
+  if (share <= 0) return "no";
+  if (share >= 1) return "all";
+  const tenths = Math.round(share * 10);
+  if (tenths === 0) return "fewer than 1 in 10";
+  if (tenths === 10) return "nearly all";
+  return `about ${tenths} in 10`;
+}
+
+/** Two clauses of a verdict, joined by "and" when they point the same way and "but" when not. */
+const joined = (first: string, firstGood: boolean, second: string, secondGood: boolean) =>
+  `${first}, ${firstGood === secondGood ? "and" : "but"} ${second}`;
+
 function Question({
   id,
   question,
@@ -131,7 +145,20 @@ export function alarmsAnswer(bgl: RealData["bgl"]): string {
     majority.accuracy > aria.accuracy
       ? ` Always answering “quiet” is right more often (${per100(majority.accuracy)} stretches in 100, against ARIA's ${per100(aria.accuracy)}) yet misses all ${count(majority.severeMissed)} serious ones, which is why this page counts misses and false alarms rather than accuracy.`
       : "";
-  return `${rulesWin(bgl) ? "Not yet as well as it should. " : ""}On a supercomputer's whole log, ${bglResult(bgl)}${accuracy}`;
+  // Mostly: under 2 in 10 serious stretches missed and quiet ones paged.
+  const mostly =
+    aria.severeMissed / Math.max(1, bgl.severe) < 0.2 &&
+    aria.quietPaged / Math.max(1, bgl.quiet) < 0.2;
+  const verdict = rulesWin(bgl)
+    ? "Not yet as well as it should."
+    : !mostly
+      ? "Not reliably yet."
+      : aria.severeMissed > 0
+        ? "Mostly, though it still misses some."
+        : aria.quietPaged > 0
+          ? "Yes, though with some false alarms."
+          : "Yes.";
+  return `${verdict} On a supercomputer's whole log, ${bglResult(bgl)}${accuracy}`;
 }
 
 function AlarmTable({ bgl }: { bgl: RealData["bgl"] }) {
@@ -181,14 +208,16 @@ function AlarmTable({ bgl }: { bgl: RealData["bgl"] }) {
   );
 }
 
+/** The standard detector that caught the most failed blocks, with the fewest false alarms. */
+const bestDetector = (real: RealLogs) =>
+  [...real.detectors].sort((a, b) => b.recall - a.recall || a.falseAlarms - b.falseAlarms)[0];
+
 /** HDFS blocks: failures caught and false alarms, beside the best standard detector. */
 export function hdfsResult(real: RealLogs): string {
   const life = real.lifecycle;
   const caught = life.flagged - life.falseAlarms;
   const facts = `ARIA caught ${count(caught)} of ${count(real.judgedFailed)} failed blocks, with ${count(life.falseAlarms)} false alarms among ${count(life.healthy)} healthy ones.`;
-  const best = [...real.detectors].sort(
-    (a, b) => b.recall - a.recall || a.falseAlarms - b.falseAlarms,
-  )[0];
+  const best = bestDetector(real);
   if (!best) return facts;
   const bestCaught = best.flagged - best.falseAlarms;
   return bestCaught === caught && best.falseAlarms === life.falseAlarms
@@ -292,11 +321,6 @@ function MemoryRows({ data, more }: { data: Evaluation; more: RealData }) {
   );
 }
 
-export function thunderbirdResult(more: RealData): string {
-  const t = more.thunderbird;
-  return `ARIA raised false alarms on ${count(t.aria.quietPaged)} of ${count(t.quiet)} quiet stretches, and its short list held the right level only ${per100(t.coverage)} times in 100. Its rules count error lines, warning words and new messages in each stretch, and none of them knows what is routine for a system ARIA has not seen before; on Thunderbird those lines are routine.`;
-}
-
 export function buildsResult(more: RealData): string {
   const b = more.builds;
   const gap = b.lastErrorLines.rate - b.aria.rate;
@@ -318,7 +342,6 @@ const INJECTION_WHY =
 
 export function shortfallLines(data: Evaluation, more: RealData): string[] {
   return [
-    `Thunderbird, a second supercomputer: ${thunderbirdResult(more)}`,
     `Build logs from failed CI builds, which ARIA was not built for (no timestamps, servers or levels, and nothing was tuned on them): ${buildsResult(more)}`,
     `Public prompt-injection attacks: ${injectionResult(data, more)} ${INJECTION_WHY}`,
   ];
@@ -397,6 +420,252 @@ export function liveResult(data: Evaluation): string {
   return `${reports} passed the citation check, and the median report was ready for review after ${l.p50s.toFixed(1)} seconds.`;
 }
 
+// What each result means for the person on call, in one plain sentence that opens its card on
+// Test results. Like the results, every word that compares is chosen from the numbers.
+
+/** How ARIA's flags on the HDFS blocks compare with the best standard detector's. */
+function againstDetector(real: RealLogs): "same" | "better" | "worse" | "mixed" | null {
+  const best = bestDetector(real);
+  if (!best) return null;
+  const life = real.lifecycle;
+  const caught = life.flagged - life.falseAlarms;
+  const bestCaught = best.flagged - best.falseAlarms;
+  const atLeast = caught >= bestCaught && life.falseAlarms <= best.falseAlarms;
+  const atMost = caught <= bestCaught && life.falseAlarms >= best.falseAlarms;
+  return atLeast && atMost ? "same" : atLeast ? "better" : atMost ? "worse" : "mixed";
+}
+
+export function hdfsVerdict(real: RealLogs): string {
+  const life = real.lifecycle;
+  const flagged =
+    life.precision >= 0.9
+      ? "almost always failing"
+      : life.precision >= 0.6
+        ? "usually failing"
+        : "often healthy";
+  const missed = 1 - life.recall;
+  const misses =
+    missed < 0.05 ? "and it misses very few failures" : `but it misses ${inTen(missed)} failures`;
+  const versus = againstDetector(real);
+  const rival = versus
+    ? `; the best standard detector, which needs experts to prepare the log first, ${
+        {
+          same: "does no better",
+          better: "does worse",
+          worse: "does better",
+          mixed: "strikes a different balance",
+        }[versus]
+      }`
+    : "";
+  return `When ARIA flags a block, it is ${flagged}, ${misses}${rival}.`;
+}
+
+export function bglVerdict(bgl: RealData["bgl"]): string {
+  const { aria, rules } = bgl;
+  const alarms =
+    aria.quietPaged > 0
+      ? `raises false alarms on ${inTen(aria.quietPaged / Math.max(1, bgl.quiet))} quiet stretches`
+      : "raises no false alarms";
+  const facts = `ARIA misses ${inTen(aria.severeMissed / Math.max(1, bgl.severe))} serious problems and ${alarms}`;
+  // Above zero where ARIA's own rules, used alone, missed more or raised more false alarms.
+  const rulesMissMore = rules.severeMissed - aria.severeMissed;
+  const rulesAlarmMore = rules.quietPaged - aria.quietPaged;
+  const rival =
+    rulesMissMore === 0 && rulesAlarmMore === 0
+      ? "its own rules alone do the same"
+      : rulesMissMore <= 0 && rulesAlarmMore <= 0
+        ? "its own rules alone would have done better"
+        : rulesMissMore >= 0 && rulesAlarmMore >= 0
+          ? "that beats its own rules alone"
+          : "its own rules alone strike a different balance";
+  return `On a real supercomputer, ${facts}; ${rival}.`;
+}
+
+export function hadoopVerdict(more: RealData): string {
+  const { aria, anyError } = more.hadoop;
+  const lead =
+    aria.caught > anyError.caught
+      ? "ARIA catches more failed jobs than an alert on any error line"
+      : aria.caught === anyError.caught
+        ? "ARIA catches as many failed jobs as an alert on any error line"
+        : "ARIA catches fewer failed jobs than an alert on any error line";
+  const caveats = [
+    ...(aria.recall < 0.95 ? [`still misses ${inTen(1 - aria.recall)}`] : []),
+    ...(aria.falseAlarms > anyError.falseAlarms
+      ? ["raises more false alarms on healthy jobs"]
+      : []),
+  ];
+  return caveats.length ? `${lead}, but ${caveats.join(" and ")}.` : `${lead}.`;
+}
+
+export function openstackVerdict(more: RealData): string {
+  const o = more.openstack;
+  const alarms = o.aria.falseAlarms / Math.max(1, o.aria.healthy);
+  const silent = o.ariaSilent.share >= 0.9 ? ", silent ones included" : "";
+  const caught = `ARIA flags ${inTen(o.aria.recall)} broken runs${silent}`;
+  if (alarms < 0.2) return `${caught}, and ${inTen(alarms)} healthy ones.`;
+  return alarms >= 0.9
+    ? `${caught}, but also ${inTen(alarms)} healthy ones, so on this cloud its flags can't yet tell you which runs to worry about.`
+    : `${caught}, but also ${inTen(alarms)} healthy ones.`;
+}
+
+export function buildsVerdict(more: RealData): string {
+  const b = more.builds;
+  const gap = b.lastErrorLines.rate - b.aria.rate;
+  const rival =
+    gap > 0
+      ? `simply keeping the last error lines finds why a build failed ${gap < 0.05 ? "slightly more often" : "more often"}`
+      : "its evidence holds why a build failed at least as often as keeping the last error lines";
+  const both =
+    Math.max(b.aria.rate, b.lastErrorLines.rate) < 0.5 ? ", and both miss it in most builds" : "";
+  return `Build logs are not what ARIA was made for: ${rival}${both}.`;
+}
+
+export function ticketsVerdict(more: RealData): string {
+  const t = more.tickets;
+  // Within half a ticket in 100 is the same.
+  const gap = t.aria.accuracy - t.atOpen.accuracy;
+  const priority =
+    Math.abs(gap) < 0.005
+      ? "Setting priorities, ARIA does no better than keeping the one a ticket opened with"
+      : gap > 0
+        ? "Setting priorities, ARIA beats keeping the one a ticket opened with"
+        : "Setting priorities, ARIA does worse than keeping the one a ticket opened with";
+  const warns = t.sla.auroc > t.sla.bestBaseline;
+  const deadline = warns
+    ? "it is better than any single field at warning which tickets will miss their deadline"
+    : "it is no better than the best single field at warning which tickets will miss their deadline";
+  return `${joined(priority, gap >= 0.005, deadline, warns)}.`;
+}
+
+export function gitlabVerdict(more: RealData): string {
+  const { aria, bm25, random } = more.gitlab.service;
+  const lift = aria.hit3 / Math.max(random.hit3, 0.001);
+  const lead =
+    lift >= 2
+      ? "ARIA points you to a past incident on the same service far more often than chance"
+      : lift > 1.2
+        ? "ARIA points you to a past incident on the same service more often than chance"
+        : "ARIA barely beats chance at pointing you to a past incident on the same service";
+  return bm25.hit3 > aria.hit3
+    ? `${joined(lead, lift > 1.2, `plain keyword search does ${better(bm25.hit3 - aria.hit3)}`, false)}.`
+    : `${joined(lead, lift > 1.2, "at least as often as plain keyword search", true)}.`;
+}
+
+export function postmortemsVerdict(more: RealData): string {
+  const { aria, bm25, random } = more.postmortems.cause;
+  const edge = aria.hit3 - random.hit3;
+  const lead =
+    edge <= 0
+      ? "ARIA does no better than a random pick at finding a post-mortem with the same cause"
+      : edge < 0.1
+        ? "ARIA barely beats a random pick at finding a post-mortem with the same cause"
+        : "ARIA finds a post-mortem with the same cause more often than a random pick";
+  const keyword =
+    bm25.hit3 > aria.hit3
+      ? `keyword search does ${better(bm25.hit3 - aria.hit3)}`
+      : "at least as often as keyword search";
+  const why = edge < 0.1 ? ": a summary of what customers saw seldom says what broke" : "";
+  return `${joined(lead, edge >= 0.1, keyword, bm25.hit3 <= aria.hit3)}${why}.`;
+}
+
+export function injectionVerdict(more: RealData): string {
+  const i = more.injection;
+  const lead = i.rate >= 0.8 ? "A strong first defence" : "A first defence only";
+  const real = i.realFlagged === 0 ? " (and no real log lines)" : "";
+  return `${lead}: the line filter sets aside ${inTen(i.rate)} attacks written by others${real}, and what it misses still can't send anything without your approval.`;
+}
+
+export function severityVerdict(data: Evaluation): string {
+  const s = data.severity;
+  const aria = s.methods.find((m) => m.key === "aria_policy");
+  const best = s.methods.find((m) => m.key !== "aria_policy");
+  if (!aria || !best) return "";
+  const gap = aria.accuracy - best.accuracy;
+  const accuracy =
+    Math.abs(gap) < 0.02
+      ? "about as accurate as"
+      : gap > 0
+        ? "more accurate than"
+        : "less accurate than";
+  const under = aria.severeUnderTriage - best.severeUnderTriage;
+  const minor = Math.abs(under) < 0.005 ? "as likely" : under < 0 ? "less likely" : "more likely";
+  return `${joined(`On built samples, ARIA is ${accuracy} its best simple rival`, gap > -0.02, `${minor} to call a serious incident minor`, under < 0.005)}.`;
+}
+
+export function decidingVerdict(data: Evaluation): string {
+  const s = data.severity;
+  const share = s.autoDecided >= 0.5 ? "most incidents" : "some incidents";
+  const right =
+    s.accuracyWhenAuto >= 0.9
+      ? "is nearly always right when it does"
+      : s.accuracyWhenAuto >= 0.75
+        ? "is usually right when it does"
+        : "is often wrong when it does";
+  const harder =
+    s.accuracyWhenFlagged < s.accuracyWhenAuto
+      ? "; the ones it brings to you are the harder ones"
+      : "";
+  return `ARIA settles ${share} by itself and ${right}${harder}.`;
+}
+
+export function endToEndVerdict(data: Evaluation): string {
+  const p = data.pipeline;
+  const reports =
+    p.valid === 1
+      ? "every report"
+      : p.valid >= 0.9
+        ? "nearly every report"
+        : p.valid >= 0.5
+          ? "most reports"
+          : "only some reports";
+  const ready =
+    p.p50s < 1 ? "in under a second" : p.p50s < 60 ? "within a minute" : "within minutes";
+  return `Offline, ${reports} backed each claim with evidence you can check, and a report was usually ready ${ready}.`;
+}
+
+export function readingVerdict(data: Evaluation): string {
+  const reads =
+    data.parsing.meanAccuracy >= 0.8
+      ? "ARIA groups most log lines the way people do"
+      : "ARIA groups log lines less reliably than people do";
+  const sturdy =
+    data.robustness.parserErrors === 0 ? ", and no broken or hostile line stopped it" : "";
+  return `${reads}${sturdy}; its score against its own attacks is a best case, since it was tuned on them.`;
+}
+
+export function liveVerdict(data: Evaluation): string {
+  const l = data.live;
+  const passed =
+    l.valid === 1
+      ? "every report still passed the evidence check"
+      : `${per100(l.valid)} reports in 100 passed the evidence check`;
+  const slower = l.p50s > data.pipeline.p50s ? ", but each took longer" : "";
+  const few = l.n < 10 ? "; there were too few runs to be sure" : "";
+  return `With a language model writing, ${passed}${slower}${few}.`;
+}
+
+/** The findings How ARIA works shows, as one sentence for the person on call. */
+export function resultsInShort(data: Evaluation, real: RealLogs): string {
+  const storage = {
+    same: " as well as the best standard detector",
+    better: " better than the best standard detector",
+    worse: ", though not as well as the best standard detector",
+    mixed: " about as well as the best standard detector",
+  }[againstDetector(real) ?? "same"];
+  const s = data.severity;
+  const asks =
+    s.accuracyWhenFlagged < s.accuracyWhenAuto
+      ? "asks a person about the hard calls"
+      : "asks a person when it is unsure";
+  const valid = data.pipeline.valid;
+  const cites =
+    valid === 1
+      ? "backs every claim with evidence"
+      : `backs every claim with evidence in ${per100(valid)} reports in 100`;
+  return `For the person on call: ARIA catches failing storage on a real cluster${storage}, ${asks} and ${cites}.`;
+}
+
 export function TestQuestions({
   data,
   real,
@@ -415,11 +684,6 @@ export function TestQuestions({
       value: data.severity.coverageWithFloors,
     },
     { name: "BlueGene/L", detail: "a supercomputer's whole log", value: more.bgl.coverage },
-    {
-      name: "Thunderbird",
-      detail: "a second supercomputer's log",
-      value: more.thunderbird.coverage,
-    },
   ];
   return (
     <div className="grid gap-4">
@@ -452,7 +716,7 @@ export function TestQuestions({
       <Question
         id="q-limits"
         question="Where does it fall short, and why?"
-        answer="Where a system's normal noise looks like trouble, and on logs unlike the ones it was built for."
+        answer="On logs unlike the ones it was built for, and on attacks phrased as ordinary requests."
       >
         <ul className="grid max-w-prose list-disc gap-2 pl-5 text-sm leading-relaxed">
           {shortfallLines(data, more).map((line) => (

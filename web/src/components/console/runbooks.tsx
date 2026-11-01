@@ -2,6 +2,7 @@
 
 import { ArrowLeftIcon, BookOpenIcon } from "lucide-react";
 import Link from "next/link";
+import { useEffect, useRef } from "react";
 
 import { EmptyState, ErrorState, LoadingRows, PageHeader } from "@/components/console/states";
 import { Button } from "@/components/ui/button";
@@ -127,20 +128,43 @@ function Steps({ title, steps }: { title: string; steps: RunbookStep[] }) {
   );
 }
 
+/**
+ * Focus on the page's title once it has loaded, as on an incident page. The runbook's name only
+ * arrives with the runbook, after the page has been announced by its address, so this is when a
+ * screen reader hears which runbook opened. The title takes focus on every arrival, so it shows
+ * no ring.
+ */
+function useTitleFocus<T extends HTMLElement>() {
+  const page = useRef<T>(null);
+  useEffect(() => {
+    const title = page.current?.querySelector("h1");
+    if (!title) return;
+    title.tabIndex = -1;
+    title.focus({ preventScroll: true });
+  }, []);
+  return page;
+}
+
+function MissingRunbook() {
+  const page = useTitleFocus<HTMLDivElement>();
+  return (
+    <div ref={page} className="[&_h1]:outline-none">
+      <EmptyState heading="h1" title="No runbook by that name">
+        <Link href="/console/runbooks" className="underline">
+          See all runbooks
+        </Link>
+      </EmptyState>
+    </div>
+  );
+}
+
 export function RunbookDetail({ slug }: { slug: string }) {
   const runbook = useRunbook(slug);
-  useDocumentTitle(runbook.data?.title);
+  const missing = runbook.error instanceof ApiError && runbook.error.status === 404;
+  useDocumentTitle(runbook.data?.title ?? (missing ? "Runbook not found" : null));
   if (runbook.isPending) return <LoadingRows rows={6} label="Loading the runbook" />;
   if (runbook.isError) {
-    if (runbook.error instanceof ApiError && runbook.error.status === 404) {
-      return (
-        <EmptyState heading="h1" title="No runbook by that name">
-          <Link href="/console/runbooks" className="underline">
-            See all runbooks
-          </Link>
-        </EmptyState>
-      );
-    }
+    if (missing) return <MissingRunbook />;
     return (
       <ErrorState
         title="This runbook could not be loaded"
@@ -154,9 +178,13 @@ export function RunbookDetail({ slug }: { slug: string }) {
       />
     );
   }
-  const rb = runbook.data;
+  return <Runbook rb={runbook.data} />;
+}
+
+function Runbook({ rb }: { rb: RunbookOut }) {
+  const page = useTitleFocus<HTMLElement>();
   return (
-    <article className="grid max-w-3xl gap-8">
+    <article ref={page} className="grid max-w-3xl gap-8 [&_h1]:outline-none">
       <nav
         aria-label="Breadcrumb"
         className="flex min-w-0 items-center text-sm text-muted-foreground"

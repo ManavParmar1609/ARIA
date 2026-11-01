@@ -36,8 +36,9 @@ const COLUMNS: { title: string; links: { label: string; href: string; internal?:
   },
 ];
 
+// At least 24 px tall, as everything clickable is (DESIGN.md).
 const LINK =
-  "text-muted-foreground transition-colors duration-(--duration-quick) hover:text-heading";
+  "inline-flex min-h-6 items-center text-muted-foreground transition-colors duration-(--duration-quick) hover:text-heading";
 
 /** The site's foot: what ARIA is made of, and where to go next. */
 export function SiteFooter({ recordedAt }: { recordedAt: string }) {

@@ -130,6 +130,25 @@ def test_crash_on_critical_component_sets_a_floor(rules: RuleSet) -> None:
     assert "keyword_hits.crash=30 >= 10" in hit.detail
 
 
+def test_a_power_supply_fault_reported_as_an_error_is_never_below_sev2(rules: RuleSet) -> None:
+    """A failing power supply can take a node down with no other warning (HPC's "psu failure"
+    windows rated SEV3 on validation seeds before this floor)."""
+    window = features(
+        error_events=4,
+        error_ratio=0.02,
+        keyword_hits={"hardware": 4, "power": 4},
+        issue_keyword_hits={"hardware": 4, "power": 4},
+        error_nodes=2,
+        level_counts={"INFO": 196, "ERROR": 4},
+    )
+    result = rules.evaluate(feature_space(window))
+    assert result.floor is Severity.SEV2
+    assert "power_fault_floor" in {h.rule_id for h in result.hits}
+    # The same words on routine lines alone set no floor.
+    routine = features(keyword_hits={"power": 4}, level_counts={"INFO": 200})
+    assert rules.evaluate(feature_space(routine)).floor is None
+
+
 def test_alert_labels_feed_the_rules(rules: RuleSet) -> None:
     alert = AlertSignal(name="NodeDown", fingerprint="f1", labels={"severity": "critical"})
     values = feature_space(features(), [alert, alert.model_copy(update={"status": "resolved"})])
@@ -223,6 +242,42 @@ def test_model_round_trips_and_explains(tmp_path: Path) -> None:
     assert model.prediction_sets(probs[:2]) == [
         [model.classes[int(np.argmax(p))]] for p in probs[:2]
     ]
+
+
+def test_a_model_knows_the_range_it_was_trained_on(tmp_path: Path) -> None:
+    rng = np.random.default_rng(5)
+    x = rng.uniform(0.0, 1.0, size=(200, 3))
+    x[:, 2] = 0.0  # a feature the model never sees vary, so gives no weight
+    y = np.where(x[:, 0] > 0.5, "SEV2", "SEV4")
+    model = fit_linear_model(
+        "m", x, list(y), classes=["SEV1", "SEV2", "SEV3", "SEV4"], feature_names=["a", "b", "c"]
+    )
+    assert model.low is not None
+    assert model.high is not None
+    assert np.allclose(model.low, x.min(axis=0))
+    assert np.allclose(model.high, x.max(axis=0))
+    loaded = LinearModel.from_dict(model.to_dict())
+    assert loaded.low is not None
+    assert np.allclose(loaded.low, model.low)
+
+    inside = np.array([0.5, 0.5, 0.0])
+    assert loaded.outside_training(inside, 6.0, 0.25) == []
+    # Within six deviations of the mean, but well past anything seen in training.
+    far = np.array([2.0, 0.5, 0.0])
+    assert loaded.outside_training(far, 6.0, None) == []
+    assert loaded.outside_training(far, 6.0, 0.25) == ["a"]
+    # Just past the edge, inside the tolerance.
+    assert loaded.outside_training(np.array([1.1, 0.5, 0.0]), 6.0, 0.25) == []
+    # The feature the model ignores cannot mislead it, so its range does not count (within six
+    # deviations; past them every feature counts).
+    assert loaded.outside_training(np.array([0.5, 0.5, 5.0]), 6.0, 0.25) == []
+
+    older = model.to_dict()
+    del older["low"], older["high"]
+    assert LinearModel.from_dict(older).outside_training(far, 6.0, 0.25) == []
+    broken = {**model.to_dict(), "low": [0.0]}
+    with pytest.raises(ValueError, match="ranges"):
+        LinearModel.from_dict(broken)
 
 
 def test_binary_models_use_sigmoid_form() -> None:
@@ -492,15 +547,24 @@ async def test_uncertain_without_llm_falls_back_conservatively(rules: RuleSet) -
 
 
 async def test_a_flat_model_says_no_class_clears_the_threshold(rules: RuleSet) -> None:
-    flat = {"SEV1": 0.25, "SEV2": 0.25, "SEV3": 0.3, "SEV4": 0.2}
+    """No level clears the bar: the model's most likely level and the rules' both stay possible,
+    and ARIA plans for the more serious, never for the most likely alone."""
+    flat = {"SEV1": 0.2, "SEV2": 0.25, "SEV3": 0.25, "SEV4": 0.3}
     evidence = EvidenceStore()
     engine = SeverityEngine(rules, constant_model(flat, 0.5), alpha=0.1)  # threshold p >= 0.5
     result = await engine.assess(WINDOW, system="bgl", evidence=evidence, router=None)
+    pre = result.preliminary
     assert result.assessment.set_empty
-    assert result.assessment.prediction_set == [Severity.SEV3]
+    assert pre.rule_severity.rank < Severity.SEV4.rank  # the rules see more than noise
+    assert pre.raw_set == sorted({Severity.SEV4, pre.rule_severity}, key=lambda s: s.rank)
+    assert (result.assessment.severity, result.assessment.decided_by) == (
+        pre.rule_severity,
+        "fallback",
+    )
+    assert result.assessment.needs_review
     model = next(e for e in evidence.all() if e.kind == EvidenceKind.MODEL)
     assert model.data["set_empty"] is True
-    assert "falls back to the most likely class, SEV3" in model.detail
+    assert "the model's most likely class and the rules' stay possible" in model.detail
 
 
 async def test_llm_adjudicates_within_the_set(rules: RuleSet) -> None:

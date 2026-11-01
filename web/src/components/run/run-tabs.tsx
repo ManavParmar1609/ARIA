@@ -21,6 +21,7 @@ import {
   EvidenceChip,
   KIND_LABEL,
   LongLine,
+  patternEvidence,
   sourceLabel,
   useEvidence,
 } from "./evidence";
@@ -168,6 +169,7 @@ function Guard({ guard, raw }: { guard: GuardReport; raw: number }) {
 export function Templates({ batch }: { batch: ParsedBatch }) {
   const f = batch.features;
   const compact = useDensity() === "compact";
+  const { byId } = useEvidence();
   return (
     <div className="grid gap-5">
       <p className="text-sm text-muted-foreground">
@@ -228,7 +230,8 @@ export function Templates({ batch }: { batch: ParsedBatch }) {
                   reads like an error
                 </span>
               ) : null}
-              <Citations ids={[t.evidence_id]} />
+              {/* A pattern with no evidence of its own cites nothing, not the whole window (M3). */}
+              <Citations ids={patternEvidence(t, byId)} />
             </p>
           </li>
         ))}

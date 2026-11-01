@@ -1,9 +1,14 @@
 # Keyword categories counted in every window. Each pattern is a case-insensitive regex matched
-# against redacted log messages; a message counts once per category.
+# against redacted log messages; a message counts once per category. Each category is counted
+# twice: on every line (keyword_hits, which the rules read) and on lines logged at WARN or above
+# or with no level (issue_keyword_hits, which the severity model reads), because at INFO the same
+# words are usually routine.
 
 categories:
-  crash: "panic|segfault|segmentation fault|core dump|kernel terminated|fatal error|stopping execution|crash(ed)?|abort(ed)?"
-  data_risk: "corrupt|data loss|checksum|inconsistent|lost block|missing block|unrecoverable"
+  # "Software caused connection abort" is a dropped connection, not a crash.
+  crash: "panic|segfault|segmentation fault|core dump|kernel terminated|fatal error|stopping execution|crash(ed)?|(?<!connection )abort(ed)?"
+  # HPC's "inconsistent nodesets" status line is about cluster membership, not data.
+  data_risk: "corrupt|data loss|checksum|inconsistent(?! nodesets)|lost block|missing block|unrecoverable"
   unavailable: "unavailable|unreachable|\\bdown\\b|no route|connection refused|timed? ?out|cannot open channel|error in contacting|not responding"
   resource: "out of memory|\\boom\\b|disk full|no space|quota exceeded|too many open files|resource busy"
   security: "failed password|authentication failure|authentication failed|invalid user|break-in|unauthori[sz]ed|permission denied|brute"
@@ -11,3 +16,5 @@ categories:
   storage: "mount failed|mount failed|i/o error|input/output error|lustre|filesystem|file system|\\bdisk\\b|storage interrupt"
   network: "packet|tree network|socket|connection reset|broken pipe|link has been severed|connection broken|disconnect"
   degradation: "slow|latency|retry|retrying|backoff|throttl|degraded|lease"
+  # A power supply failing: a narrower subject than hardware, read by a safety floor.
+  power: "\\bpsu\\b|power supply|power-supply|power fault"

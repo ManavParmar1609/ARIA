@@ -27,7 +27,7 @@ from aria.llm.local_embed import LocalEmbeddingProvider
 from aria.llm.router import LLMRouter
 from aria.parsing.parser import parse_lines
 from aria.reporting.comms import deterministic_drafts, draft_comms
-from aria.reporting.composer import ReportContext, compose_draft
+from aria.reporting.composer import ReportContext, compose_draft, compose_title
 from aria.reporting.grounding import (
     numbers_in,
     ungrounded_numbers,
@@ -615,9 +615,11 @@ async def test_a_one_line_paste_is_counted_in_words_that_fit_it() -> None:
         runbooks=RUNBOOKS,
     )
     summary = " ".join(c.text for c in compose_draft(ctx).summary)
-    assert "1 error (100.0% of 1 line within a minute of logs)" in summary
+    assert "1 error in 1 line (100.0%), within a minute" in summary
     assert "1 errors" not in summary
     assert "0.0 minutes" not in summary
+    # Named by what the error says (resources running out), not "Error spike".
+    assert compose_title(ctx).startswith(f"{severity.severity} · Resources running out")
 
 
 def test_a_sentence_starting_with_a_name_keeps_the_name_as_written() -> None:
@@ -633,7 +635,7 @@ def test_a_sentence_starting_with_a_name_keeps_the_name_as_written() -> None:
 def test_failure_modes_read_as_words_and_keep_their_capitals() -> None:
     from aria.reporting.composer import _mode_words, _sentence
 
-    assert _sentence(_mode_words("dns_resolution")) == "DNS resolution failures"
+    assert _sentence(_mode_words("hdfs_lease_renewal")) == "HDFS lease renewal failures"
     assert _sentence(_mode_words("resourcemanager_unreachable")) == "ResourceManager unreachable"
     assert _sentence(_mode_words("bruteforce")) == "Brute-force attempts"
     assert _sentence(_mode_words("quorum_connection_loss")) == "Quorum connection loss"
@@ -872,8 +874,11 @@ def test_one_shared_word_does_not_make_an_unrelated_record_an_answer() -> None:
     assert [item.kind for item in kernel] == [EvidenceKind.INCIDENT]
     # What the answer cannot say, said: subjects no source mentions, and anything about now.
     assert notes("Did a kernel panic kill jobs during the deploy?", kernel, run_scoped=False) == [
-        "Nothing below mentions “deploy”."
+        "None of the records below mention “deploy”."
     ]
+    # Words that frame a question are not its subject: no caveat about "involved" or "mean".
+    assert notes("Which kernel panics involved killed jobs?", kernel, run_scoped=False) == []
+    assert rank("Why do my servers keep getting crashed jobs?", items) == kernel
     now = notes("Is this still happening?", [], run_scoped=True)
     assert now == [
         (

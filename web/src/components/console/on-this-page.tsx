@@ -102,7 +102,7 @@ export function OnThisPage({
                         <a
                           href={`#${child.id}`}
                           aria-current={child.id === current ? "true" : undefined}
-                          className={cn(link(child.id === current), "text-[0.8125rem]")}
+                          className={cn(link(child.id === current), "text-[0.9375rem]")}
                         >
                           {child.label}
                         </a>

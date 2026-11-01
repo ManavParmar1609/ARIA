@@ -156,16 +156,6 @@ async def run(
             else set(),
             workers=workers,
         )
-        tbird_pool = loghub_dir / "Thunderbird" / "Thunderbird_2k.log_structured.csv"
-        results["real"]["thunderbird"] = bg.summarize(
-            engine=SeverityEngine.load(config.severity),
-            known=known_templates(builder, "thunderbird"),
-            pool={r.message for r in iter_structured_csv("thunderbird", tbird_pool)}
-            if tbird_pool.exists()
-            else set(),
-            workers=workers,
-            log=bg.THUNDERBIRD,
-        )
         results["real"]["uci_tickets"] = tk.summarize(Path(config.severity.ticket_model_file))
         results["real"]["hadoop"] = await _hadoop(builder, loghub_dir, size, workers)
         results["real"]["openstack"] = await _openstack(builder, loghub_dir, size, workers)

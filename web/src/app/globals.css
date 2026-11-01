@@ -178,29 +178,30 @@
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* The reference's scale: 12 (the floor; it shows 10 and 11), 14, 15, 18, 20, 23, 28, 40, 56, 74. */
-  /* Raised a step after owner feedback that the text was too small (round 8): body copy is
-     16 px, small print 15 px and the smallest labels 13 px. */
-  --text-xs: 0.8125rem;
-  --text-xs--line-height: 1.2rem;
-  --text-sm: 0.9375rem;
-  --text-sm--line-height: 1.45rem;
-  --text-base: 1.0625rem;
-  --text-base--line-height: 1.7rem;
-  --text-lg: 1.125rem;
-  --text-lg--line-height: 1.6rem;
-  --text-xl: 1.25rem;
-  --text-xl--line-height: 1.75rem;
-  --text-2xl: 1.4375rem;
-  --text-2xl--line-height: 1.9rem;
-  --text-3xl: 1.75rem;
-  --text-3xl--line-height: 2.2rem;
-  --text-4xl: 2.5rem;
-  --text-4xl--line-height: 3rem;
-  --text-5xl: 3.5rem;
-  --text-5xl--line-height: 4rem;
-  --text-6xl: 4.625rem;
-  --text-6xl--line-height: 4.85rem;
+  /* Raised twice after owner feedback: first that the text was too small (round 8), then that
+     text and titles read as one size (round 9). Body copy is 18 px, small print 16 px and the
+     smallest labels 14 px, and each step above body grows by about an eighth, so a card's title
+     stands clear of the text under it: 14, 16, 18, 20, 23, 27, 32, 44, 60, 78. */
+  --text-xs: 0.875rem;
+  --text-xs--line-height: 1.3rem;
+  --text-sm: 1rem;
+  --text-sm--line-height: 1.55rem;
+  --text-base: 1.125rem;
+  --text-base--line-height: 1.8rem;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.8rem;
+  --text-xl: 1.4375rem;
+  --text-xl--line-height: 2rem;
+  --text-2xl: 1.6875rem;
+  --text-2xl--line-height: 2.25rem;
+  --text-3xl: 2rem;
+  --text-3xl--line-height: 2.5rem;
+  --text-4xl: 2.75rem;
+  --text-4xl--line-height: 3.25rem;
+  --text-5xl: 3.75rem;
+  --text-5xl--line-height: 4.25rem;
+  --text-6xl: 4.875rem;
+  --text-6xl--line-height: 5.1rem;
 
   --tracking-display: -0.03em;
   --tracking-heading: -0.01em;
@@ -289,7 +290,7 @@
     color-scheme: dark;
   }
   body {
-    @apply bg-background font-sans text-foreground antialiased;
+    @apply bg-background font-sans text-base text-foreground antialiased;
     font-optical-sizing: auto;
   }
   ::selection {
@@ -345,9 +346,9 @@
     align-items: center;
     border-radius: 4px;
     background: var(--panel-slate);
-    padding: 0.125rem 0.5rem;
-    font-size: 0.75rem;
-    line-height: 1.25rem;
+    padding: 0.125rem 0.625rem;
+    font-size: 0.875rem;
+    line-height: 1.5rem;
     font-weight: 500;
     color: var(--heading);
   }
@@ -357,49 +358,49 @@
   .tabular {
     font-variant-numeric: tabular-nums;
   }
-  /* The first screen's headline: 44 px on a phone, 74 px on a wide screen. */
+  /* The first screen's headline: 48 px on a phone, 76 px on a wide screen. */
   .text-hero {
     font-family: var(--font-display);
-    font-size: clamp(2.75rem, 3vw + 1.4rem, 4.25rem);
+    font-size: clamp(3rem, 3.2vw + 1.5rem, 4.75rem);
     line-height: 1.04;
     letter-spacing: var(--tracking-display);
     font-weight: 350;
   }
-  /* Section openers: 36 px on a phone, 56 px on a wide screen. */
+  /* Section openers: 38 px on a phone, 60 px on a wide screen. */
   .text-display {
     font-family: var(--font-display);
-    font-size: clamp(2.25rem, 2.4vw + 1.35rem, 3.5rem);
+    font-size: clamp(2.375rem, 2.6vw + 1.4rem, 3.75rem);
     line-height: 1.12;
     letter-spacing: var(--tracking-display);
     font-weight: 400;
   }
-  /* Section headings: 30 px on a phone, 40 px on a wide screen. */
+  /* Section headings: 32 px on a phone, 44 px on a wide screen. */
   .text-section {
     font-family: var(--font-display);
-    font-size: clamp(1.875rem, 1vw + 1.5rem, 2.5rem);
+    font-size: clamp(2rem, 1.2vw + 1.6rem, 2.75rem);
     line-height: 1.2;
     letter-spacing: var(--tracking-heading);
     font-weight: 400;
   }
-  /* Editorial statements: a serif paragraph, 23 to 28 px. */
+  /* Editorial statements: a serif paragraph, 24 to 30 px. */
   .text-statement {
     font-family: var(--font-display);
-    font-size: clamp(1.4375rem, 0.6vw + 1.25rem, 1.75rem);
+    font-size: clamp(1.5rem, 0.7vw + 1.3rem, 1.875rem);
     line-height: 1.32;
     letter-spacing: -0.005em;
     font-weight: 400;
     color: var(--heading);
   }
-  /* The subhead under a heading: 15 to 18 px. */
+  /* The subhead under a heading: 19 to 22 px. */
   .text-lead {
-    font-size: clamp(1.0625rem, 0.3vw + 1rem, 1.25rem);
+    font-size: clamp(1.1875rem, 0.35vw + 1.1rem, 1.375rem);
     line-height: 1.55;
     color: var(--muted-foreground);
   }
   /* Small labels: sentence case, never uppercase. */
   .eyebrow {
     font-size: var(--text-sm);
-    line-height: 1.25rem;
+    line-height: 1.5rem;
     font-weight: 500;
   }
   /* Large statistics: the serif, forest, figures that line up. */
@@ -468,6 +469,27 @@
   .js .draw[data-drawn] path {
     stroke-dashoffset: 0;
     transition: stroke-dashoffset 1800ms var(--ease-out) calc(var(--i, 0) * 70ms);
+  }
+}
+
+/* Library charts (library-charts.tsx): the first time a chart comes into view its bars grow from
+   their baseline, each a little after the one before. Only the transform moves, so later changes
+   to a bar's length never animate; with reduced motion the bars are simply there. */
+.draw-x {
+  transform-origin: left center;
+}
+.draw-y {
+  transform-origin: center bottom;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .js [data-draw]:not([data-drawn]) .draw-x {
+    transform: scaleX(0);
+  }
+  .js [data-draw]:not([data-drawn]) .draw-y {
+    transform: scaleY(0);
+  }
+  .js [data-draw][data-drawn] :is(.draw-x, .draw-y) {
+    transition: transform 900ms var(--ease-out) calc(var(--i, 0) * 55ms);
   }
 }
 

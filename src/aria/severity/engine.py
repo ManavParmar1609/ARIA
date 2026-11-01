@@ -30,6 +30,12 @@ RULES_ONLY_MIN_P = 0.2
 # before the model is not used. No training or held-out window reaches it; a handful of lines or
 # an alert with no logs is far past it.
 MODEL_RANGE_Z = 6.0
+# How far past the range of its training data (as a share of that range) a feature may go before
+# the model is not used. A window far longer than any it learned from, or with far more new
+# patterns, sits within six deviations yet beyond anything the model saw: there it extrapolates
+# (it rated healthy OpenStack runs SEV1), so the rules decide and a person reviews. Chosen on the
+# validation seeds only.
+MODEL_RANGE_TOLERANCE = 0.25
 
 
 @dataclass
@@ -158,7 +164,7 @@ class SeverityEngine:
         extra: dict[str, Any] = {}
         if self.model is not None:
             x = self.model.matrix([log_feature_row(values, evaluation)])
-            outside = self.model.outside_training(x[0], MODEL_RANGE_Z)
+            outside = self.model.outside_training(x[0], MODEL_RANGE_Z, MODEL_RANGE_TOLERANCE)
         if self.model is None or outside:
             probabilities = evaluation.probabilities
             raw_set = [s for s in SEVERITY_ORDER if probabilities[s] >= RULES_ONLY_MIN_P]
@@ -177,6 +183,14 @@ class SeverityEngine:
             version, conformal = self.model.version, self.model.conformal_q is not None
             q = self.model.conformal_q
             set_empty = q is not None and not any(float(p) >= 1.0 - q for p in probs)
+            if set_empty:
+                # No level is likely enough on its own: the model's most likely level and the
+                # rules' level both stay possible, and the conservative policy plans for the more
+                # serious of the two. (The most likely alone once rated an outage the rules
+                # called SEV2 as SEV4.)
+                raw_set = sorted(
+                    {Severity(str(top)), evaluation.rule_severity}, key=lambda s: s.rank
+                )
             extra = {
                 "conformal_q": self.model.conformal_q,
                 "temperature": round(self.model.temperature, 4),
@@ -191,7 +205,8 @@ class SeverityEngine:
             detail=(
                 (
                     f"No severity is likely enough for the {1 - self.alpha:.0%} prediction set on "
-                    f"its own; it falls back to the most likely class, {raw_set[0]}."
+                    f"its own; the model's most likely class and the rules' stay possible: "
+                    f"{{{', '.join(raw_set)}}}."
                     if set_empty
                     else f"{1 - self.alpha:.0%} prediction set: {{{', '.join(raw_set)}}}"
                 )

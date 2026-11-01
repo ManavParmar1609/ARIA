@@ -138,7 +138,7 @@ export function PageHeader({
               {eyebrow}
             </p>
           ) : null}
-          <h1 className="text-[2.25rem] leading-none tracking-heading sm:text-4xl">{title}</h1>
+          <h1 className="text-[2.5rem] leading-tight tracking-heading sm:text-4xl">{title}</h1>
           {description ? (
             <p className="max-w-prose text-lg text-muted-foreground">{description}</p>
           ) : null}
@@ -165,7 +165,7 @@ export function SectionHeader({
     <div className="grid max-w-3xl gap-2">
       <h2
         id={id}
-        className="scroll-mt-24 font-display text-[1.75rem] leading-tight font-normal tracking-heading lg:scroll-mt-8"
+        className="scroll-mt-24 font-display text-3xl leading-tight font-normal tracking-heading lg:scroll-mt-8"
       >
         {title}
       </h2>

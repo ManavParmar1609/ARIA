@@ -179,13 +179,49 @@ export function useHistory(id: string, enabled = true) {
   });
 }
 
-export function useIncidents(query?: string, system?: string) {
-  const params = new URLSearchParams({ limit: query ? "20" : "100" });
-  if (query) params.set("q", query);
-  if (system) params.set("system", system);
+// The library is read a page at a time until a page comes back short, so its totals never come
+// from one page. Past this many pages (10,000 incidents) the page says it summarises the newest.
+const LIBRARY_PAGE = 500;
+const LIBRARY_PAGES = 20;
+
+export interface Library {
+  incidents: IncidentOut[];
+  /** False when the library holds more than the console reads; it then has the newest. */
+  complete: boolean;
+}
+
+/** Every incident in the library, the most recent first. */
+export function useLibrary() {
   return useQuery({
-    queryKey: [...keys.incidents, query ?? "", system ?? ""],
-    queryFn: () => apiFetch<IncidentOut[]>(v1(`/incidents?${params.toString()}`)),
+    queryKey: [...keys.incidents, "library"],
+    queryFn: async (): Promise<Library> => {
+      const incidents: IncidentOut[] = [];
+      for (let page = 0; page < LIBRARY_PAGES; page++) {
+        const params = new URLSearchParams({
+          limit: String(LIBRARY_PAGE),
+          offset: String(page * LIBRARY_PAGE),
+        });
+        const rows = await apiFetch<IncidentOut[]>(v1(`/incidents?${params.toString()}`));
+        incidents.push(...rows);
+        if (rows.length < LIBRARY_PAGE) return { incidents, complete: true };
+      }
+      return { incidents, complete: false };
+    },
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** The incidents closest to a search, by keyword and by meaning, closest first. Enough of them
+ * that the page's filters still leave the closest few. */
+export function useIncidentSearch(query: string) {
+  return useQuery({
+    queryKey: [...keys.incidents, "search", query],
+    queryFn: () =>
+      apiFetch<IncidentOut[]>(
+        v1(`/incidents?${new URLSearchParams({ q: query, limit: "100" }).toString()}`),
+      ),
+    enabled: query.length >= 2,
     staleTime: 30_000,
     placeholderData: keepPreviousData,
   });

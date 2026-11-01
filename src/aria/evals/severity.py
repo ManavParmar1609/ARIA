@@ -135,18 +135,14 @@ def majority_label(report_path: Path = REPORT_PATH) -> str:
     return str(Severity.SEV3)
 
 
-# Raw lines from these systems open with the sysadmin alert tag ("-" or e.g. "KERNDTLB").
-TAGGED_SYSTEMS = frozenset({"bgl", "thunderbird"})
-
-
 def baseline_text(scenario: Scenario) -> str:
-    """The window's raw lines without the alert tag BGL and Thunderbird lines open with.
+    """The window's raw lines without the alert tag BGL lines open with ("-" or e.g. "KERNDTLB").
 
     The BGL labels come from that tag, so a baseline that read it would see the answer.
     ARIA's features and the evidence it shows models never read the tag either.
     """
     lines = scenario.lines
-    if scenario.system in TAGGED_SYSTEMS:
+    if scenario.system == "bgl":
         lines = [line.split(" ", 1)[1] if " " in line else "" for line in lines]
     return "\n".join(lines)
 

@@ -81,19 +81,22 @@ Severity keeps its own earthy hues, apart from the greens, so a level never read
 
 | Role                              | Face           | Size               | Notes                                     |
 | --------------------------------- | -------------- | ------------------ | ----------------------------------------- |
-| Hero (`.text-hero`)               | Newsreader 350 | 44 to 68 px        | -0.03em, line height 1.04                 |
-| Section opener (`.text-display`)  | Newsreader 400 | 36 to 56 px        | -0.03em                                   |
-| Section heading (`.text-section`) | Newsreader 400 | 30 to 40 px        | -0.01em                                   |
-| Page title (`h1`)                 | Newsreader 400 | 36 to 40 px        | -0.01em                                   |
-| Console section (`SectionHeader`) | Newsreader 400 | 28 px              | Groups a long page's cards                |
-| Panel, card and step title        | Inter 600      | 18 to 24 px        | `h2` and `h3`                             |
-| Statement (`.text-statement`)     | Newsreader 400 | 23 to 28 px        | Forest                                    |
-| Subhead (`.text-lead`)            | Inter 400      | 17 to 20 px        | Muted                                     |
-| Body                              | Inter 400      | 17 px (help 15 px) | Charcoal                                  |
-| Tag (`.tag`)                      | Inter 500      | 12 px              | Sentence case on a slate (or cream) label |
+| Hero (`.text-hero`)               | Newsreader 350 | 48 to 76 px        | -0.03em, line height 1.04                 |
+| Section opener (`.text-display`)  | Newsreader 400 | 38 to 60 px        | -0.03em                                   |
+| Section heading (`.text-section`) | Newsreader 400 | 32 to 44 px        | -0.01em                                   |
+| Page title (`h1`)                 | Newsreader 400 | 40 to 44 px        | -0.01em                                   |
+| Console section (`SectionHeader`) | Newsreader 400 | 32 px              | Groups a long page's cards                |
+| Panel, card and step title        | Inter 600      | 20 to 27 px        | `h2` and `h3`                             |
+| Statement (`.text-statement`)     | Newsreader 400 | 24 to 30 px        | Forest                                    |
+| Subhead (`.text-lead`)            | Inter 400      | 19 to 22 px        | Muted                                     |
+| Body                              | Inter 400      | 18 px (help 16 px) | Charcoal                                  |
+| Tag (`.tag`)                      | Inter 500      | 14 px              | Sentence case on a slate (or cream) label |
 | Stat (`.stat`)                    | Newsreader 400 | 48 px and up       | Lining, tabular figures                   |
 
-The floor is 12 px; the reference's 10 and 11 px labels are raised to it.
+The scale is 14, 16, 18, 20, 23, 27, 32, 44, 60 and 78 px (`--text-xs` to `--text-6xl`). It was
+raised twice on owner feedback: the text was too small, then text and titles read as one size.
+Each step above body grows by about an eighth, so a title stands clear of the text under it.
+The floor is 14 px for text; labels drawn inside a chart may go to 12 px.
 
 ## Shape
 
@@ -116,20 +119,37 @@ The floor is 12 px; the reference's 10 and 11 px labels are raised to it.
   pill). On a wide screen the theme button sits beside the console button; below that, one menu
   holds the sections, GitHub and the theme.
 - **Hero.** A sage panel holds the serif headline, which names the outcome, and the summary, which
-  names who it is for; beneath it sits a full-width forest button, "Try it on real logs". To the right, a slate panel
-  holds one cream card from the recorded run: the level, one claim with its citation open on the
-  log line it cites, and a status that is plainly not a button. Below, three bordered tiles each
-  link to the proof of one claim (the test results, the example, the review step).
-- **Sections.** Eight, each a tag, a heading, a sentence or two and one picture: the hero, what
-  ARIA does (four cards and the explainer video), the example incident, how it works in four
-  steps, the results (one row of four findings, each linked to its test), try it, questions and
-  the footer. Nothing loops: the results are a still row, not a ticker.
+  names who it is for; beneath it sits a full-width forest button, "Try it on real logs". To the
+  right, a slate panel holds one cream card from the recorded run: the level, one claim with its
+  citation open on the log line it cites, and a status that is plainly not a button.
+- **Sections.** The home page shows ARIA off (owner request, round 9), each section a tag, a
+  heading, a sentence or two and one picture:
+  - the hero;
+  - the problem and the answer: the line drawing still apart on cream, then running together on
+    a full-width sage band;
+  - what it does: four cards, and the explainer video with what it shows written out beneath it;
+  - how it works: a carousel of the four steps, each shown on the recorded incident;
+  - the example incident to explore;
+  - the results: one row of findings, each linked to its test;
+  - the way in, where the drawing's lines run on to the edge, and the footer.
+- **Carousel.** Tabs name the four steps, and a thin line under the current one fills as it
+  plays. It moves on by itself every nine seconds and slows to a quarter of that pace while a
+  pointer rests on it. Keyboard focus inside it, the Pause button, a hidden browser tab or
+  scrolling it off screen stop it, and with reduced motion it starts paused. Arrow keys move
+  between the tabs. It is the only part of the site that moves on its own (WCAG 2.2.2).
 - **Cards.** Cream with a hairline, a keylime icon tile holding a forest line icon, a serif
   title and muted body text.
 - **FAQ.** Rows with the question in the serif on the left and the answer in the sans on the
   right, a hairline between rows. Every answer is visible.
 - **Console.** A cream sidebar panel on the warm canvas, with keylime for the active item; cards
   are cream, and the main action is forest.
+- **Ask ARIA.** A chat in one centred column, about 46rem wide.
+  - Your questions sit on the right in forest bubbles. ARIA's answers sit on the left on cream
+    cards beside its round mark; on a phone the mark sits above the card, with ARIA's name.
+  - Bubbles have 18 px corners, with a tighter 6 px corner on the speaker's side.
+  - Each answer ends with its sources as small cards that open their records, a copy button and
+    the time.
+  - The question box is docked at the foot of the screen, with a round forest send button.
 
 ## Motion
 
@@ -139,13 +159,15 @@ transform, opacity and the stroke dash offset animate, and everything stops unde
 to stop it (WCAG 2.2.2).
 
 - **Line art.** Each drawing's strokes draw in once as it comes into view.
-- **The six chosen animations:**
+- **The seven chosen animations:**
   - the hero entrance: the report card rises into place once;
   - the sliding nav pill;
   - numbers that roll into view;
   - the severity stamp and the prediction-set bracket;
   - the highlight that sweeps across cited evidence;
-  - the dot bloom on ghost buttons.
+  - the dot bloom on ghost buttons;
+  - a new chat message fading up into place once (while ARIA answers, three dots pulse; with
+    reduced motion they are the words "ARIA is thinking…").
 
 ## Icons and illustration
 

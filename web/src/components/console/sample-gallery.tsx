@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { TermsIn } from "@/components/aria/term";
 import { EmptyState, ErrorState } from "@/components/console/states";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,6 +19,7 @@ import {
   useStartSample,
 } from "@/lib/api/hooks";
 import type { Scenario, SizeChoice } from "@/lib/api/types";
+import { glossaryMentions } from "@/lib/glossary";
 import { systemName } from "@/lib/systems";
 import { cn } from "@/lib/utils";
 
@@ -63,7 +65,6 @@ const DATA_SOURCES: DataSource[] = [
     about: "The service that keeps a cluster's servers in agreement",
   },
   { system: "bgl", group: "hpc", about: "A supercomputer at Lawrence Livermore" },
-  { system: "thunderbird", group: "hpc", about: "A supercomputer at Sandia" },
   { system: "hpc", group: "hpc", about: "A computing cluster at Los Alamos" },
   { system: "android", group: "desktop", about: "An Android phone's system log" },
   { system: "mac", group: "desktop", about: "A Mac's system log" },
@@ -189,6 +190,8 @@ function SampleCard({ sample, compact = false }: { sample: Scenario; compact?: b
     );
   };
 
+  // A dotted underline defines the system and its jargon in plain words, once per card.
+  const defined = glossaryMentions(sample.technology).map((mention) => mention.key);
   return (
     <li className="flex min-w-0 flex-col gap-3 rounded-lg bg-raised p-5">
       <div className="grid gap-1">
@@ -196,12 +199,14 @@ function SampleCard({ sample, compact = false }: { sample: Scenario; compact?: b
           {sample.title}
         </h3>
         <p className="text-xs text-muted-foreground">
-          {sample.technology}
+          <TermsIn text={sample.technology} instance={sample.id} />
           {sample.benign ? ", harmless: a test of whether ARIA stays calm" : ""}
           {sample.tricky ? ", one line tries to trick ARIA" : ""}
         </p>
       </div>
-      <p className="text-sm text-muted-foreground">{sample.summary}</p>
+      <p className="text-sm text-muted-foreground">
+        <TermsIn text={sample.summary} instance={sample.id} skip={defined} />
+      </p>
       {compact && sample.id === RECORDED ? (
         <Link
           href="/console/how-it-works/example"
@@ -281,7 +286,9 @@ function RealIncidentCard({ incident }: { incident: RealIncident }) {
           {incident.title}
         </h3>
       </div>
-      <p className="text-sm text-muted-foreground">{incident.summary}</p>
+      <p className="text-sm text-muted-foreground">
+        <TermsIn text={incident.summary} instance={incident.id} />
+      </p>
       <p className="text-xs text-muted-foreground">
         {incident.lines.toLocaleString("en")} real lines. Experts marked each {incident.unit}{" "}
         healthy or failed: ARIA never sees their verdicts, and the incident compares them with its
@@ -373,6 +380,7 @@ function SourceTiles({ samples, reals }: { samples: Scenario[]; reals: RealIncid
       <div className="grid max-w-3xl gap-2">
         <h2
           id="sources-title"
+          tabIndex={-1}
           className="font-display text-[1.75rem] leading-tight font-normal tracking-heading"
         >
           Or choose where the logs come from
@@ -395,6 +403,7 @@ function SourceTiles({ samples, reals }: { samples: Scenario[]; reals: RealIncid
                     <Link
                       href={href(d.system) as never}
                       scroll={false}
+                      data-log={d.system}
                       className="group/source grid h-full content-start gap-1.5 rounded-card border border-rule bg-raised p-5 transition-colors duration-(--duration-quick) hover:border-control"
                     >
                       <span className="flex items-baseline justify-between gap-3">
@@ -453,6 +462,7 @@ function SourceIssues({
         {group ? <p className="text-sm font-medium text-muted-foreground">{group.name}</p> : null}
         <h2
           id="issues-title"
+          tabIndex={-1}
           className="font-display text-[1.75rem] leading-tight font-normal tracking-heading"
         >
           {systemName(source.system)}
@@ -480,6 +490,7 @@ export function SampleGallery() {
   const params = useSearchParams();
   const raw = params.get("source");
   const source: Source = isSource(raw) ? raw : "all";
+  const log = params.get("log");
   const [showAll, setShowAll] = useState<Source | null>(null);
   const list = useRef<HTMLUListElement>(null);
   const revealFrom = useRef<number | null>(null);
@@ -493,6 +504,23 @@ export function SampleGallery() {
       heading.focus();
     }
   });
+  // Choosing a log swaps its issues in where the logs were, and "All logs" (or Back) swaps them
+  // back. Focus follows: to the issues' heading, or back to the log the person came from, so
+  // neither a keyboard nor a screen reader is left at the top of the page. Arriving with a log
+  // already chosen leaves focus where the browser puts it.
+  const shownLog = useRef(log);
+  useEffect(() => {
+    const from = shownLog.current;
+    if (from === log) return;
+    shownLog.current = log;
+    const tile = [...document.querySelectorAll<HTMLElement>("[data-log]")].find(
+      (link) => link.dataset.log === from,
+    );
+    const target = log
+      ? document.getElementById("issues-title")
+      : (tile ?? document.getElementById("sources-title"));
+    target?.focus();
+  }, [log]);
 
   // Both lists, or neither: a real incident arriving after the samples would push every card
   // below it down the page.
@@ -536,7 +564,6 @@ export function SampleGallery() {
         (s.key === "bigdata" ? reals.length : 0),
     ]),
   ]) as Record<Source, number>;
-  const log = params.get("log");
   const chosen = dataSources(samples, reals).find((d) => d.system === log);
   if (chosen) {
     return (

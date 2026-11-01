@@ -1,10 +1,13 @@
 import { Suspense, type ReactNode } from "react";
 
 import { Term } from "@/components/aria/term";
+import { resultsInShort } from "@/components/console/test-questions";
 import { Explainer } from "@/components/site/explainer";
 import { Faq } from "@/components/site/faq";
 import { ResultsRow } from "@/components/site/results-row";
 import { RunGraph, type GraphStep } from "@/components/site/run-graph";
+import { StepCarousel } from "@/components/site/step-carousel";
+import { stepShowcase } from "@/components/site/step-showcase";
 import { TriageReplay } from "@/components/site/triage-replay";
 import { Why } from "@/components/site/why";
 import {
@@ -155,7 +158,8 @@ export function ExamplePart() {
   );
 }
 
-/** Part 3: the four steps, with what each did in the recorded incident. */
+/** Part 3: the four steps, first at a glance as a carousel on the recorded incident, then each
+ * in detail with what it did there. */
 export function StepsPart() {
   return (
     <Part
@@ -164,15 +168,22 @@ export function StepsPart() {
       intro="What ARIA does with an alert's logs, step by step. The figures come from the recorded example, and words with a dotted underline open a short definition."
     >
       <Suspense>
+        <StepCarousel data={stepShowcase()} factLead="In the recorded example:" />
+      </Suspense>
+      <h3 className="mt-4 text-2xl">Each step in detail</h3>
+      <Suspense>
         <RunGraph steps={steps(runFacts(), evaluation().severity.targetCoverage)} />
       </Suspense>
     </Part>
   );
 }
 
-/** Part 4: four findings from the tests, one where ARIA falls short. */
+/** Part 4: findings from the tests, led by what they mean for the person on call, so a figure such
+ * as "the best standard detector did the same" reads as the match it is. */
 export function ResultsPart() {
   const datasets = realData();
+  const data = evaluation();
+  const real = realLogs();
   // The HDFS log plus every other real dataset on Test results.
   const nDatasets = Object.keys(datasets).length + 1;
   return (
@@ -180,9 +191,12 @@ export function ResultsPart() {
       id="results"
       tinted
       title="What the tests show"
-      intro={`ARIA is tested on ${nDatasets} public, labelled datasets, each against a simpler method. Four of the findings, including one where it falls short:`}
+      intro={`ARIA is tested on ${nDatasets} public, labelled datasets, each against a simpler method. Each finding below links to its test, and Test results also shows where ARIA falls short.`}
     >
-      <ResultsRow data={evaluation()} real={realLogs()} more={datasets} />
+      <p className="max-w-[62ch] text-lg leading-relaxed font-medium text-heading">
+        {resultsInShort(data, real)}
+      </p>
+      <ResultsRow data={data} real={real} />
     </Part>
   );
 }

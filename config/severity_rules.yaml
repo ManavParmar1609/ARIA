@@ -14,10 +14,11 @@
 #
 # Conditions are {feature, op, value}, combined with all: [...] or any: [...] and nested freely.
 # Features: every numeric WindowFeatures field, level_counts.<LEVEL>, keyword_hits.<category>
-# (see config/lexicon.yaml), n_critical_components, alerts.firing, alerts.critical and
-# alerts.warning. Unknown feature names fail at load time.
+# (see config/lexicon.yaml), issue_keyword_hits.<category> (the same, on lines at WARN or above
+# or with no level), n_critical_components, alerts.firing, alerts.critical and alerts.warning.
+# Unknown feature names fail at load time.
 
-version: "2026.10.2"
+version: "2026.10.3"
 
 # A severity is decided without the LLM only when the prediction set is a single class and the
 # calibrated model gives it at least this probability.
@@ -262,6 +263,18 @@ rules:
     effect: floor
     severity: SEV2
     when: {feature: alerts.critical, op: ">=", value: 1}
+
+  # A failing power supply can take a node down with no other warning. Reported at warning level
+  # or above, it is never rated below SEV2 (it once came out SEV3 on validation windows the
+  # scenario policy rates SEV1 or SEV2).
+  - id: power_fault_floor
+    title: Power-supply faults reported as errors
+    effect: floor
+    severity: SEV2
+    when:
+      all:
+        - {feature: issue_keyword_hits.power, op: ">=", value: 1}
+        - {feature: error_events, op: ">=", value: 1}
 
   # Silent failures log no errors, so the model, trained on windows that do, can read them as
   # noise. Work that broke off partway always gets a person's look.

@@ -16,8 +16,9 @@ import {
   UserRoundIcon,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
+import { Button } from "@/components/ui/button";
 import type { RunEvent } from "@/lib/api/types";
 import { duration } from "@/lib/format";
 import { forgetStarted, wasStarted } from "@/lib/started";
@@ -152,13 +153,14 @@ const reducedMotion = () =>
  * watched it start (M1). While the playback is behind the run, ``playing`` is true and ``passed``
  * names the steps it has shown, so the page can present each step's results as the trace reaches
  * it. Once results have shown they stay: a slow run the playback keeps up with shows its results
- * as they come. A run opened later, or under reduced motion, shows as it is.
+ * as they come. ``skip`` ends the playback at once, for a visitor who would rather not wait (L2).
+ * A run opened later, or under reduced motion, shows as it is.
  */
 export function usePacedSteps(
   runId: string,
   events: RunEvent[],
   status: string | undefined,
-): { steps: Step[]; playing: boolean; passed: ReadonlySet<string> } {
+): { steps: Step[]; playing: boolean; passed: ReadonlySet<string>; skip: () => void } {
   const actual = useMemo(() => progressSteps(events, status ?? "queued"), [events, status]);
   // Decided once, when the status is first known.
   const [watched, setWatched] = useState<boolean | null>(null);
@@ -177,21 +179,24 @@ export function usePacedSteps(
   const reached = reachedCount(actual);
   const over = status !== undefined && FOLDED.has(status);
   const pacing = watched === true && status !== "failed";
+  // Ends the playback where it is: the steps and their results show as the run has them, and the
+  // incident opens as it is from then on.
+  const skip = useCallback(() => {
+    setHeld(true);
+    forgetStarted(runId);
+  }, [runId]);
   useEffect(() => {
-    if (!pacing) return;
+    if (!pacing || held) return;
     if (shown < reached) {
       const next = setTimeout(() => setShown(shown + 1), STEP_MS);
       return () => clearTimeout(next);
     }
     // Nothing to hold before the steps have loaded (a slow connection): the playback waits for
     // them rather than folding an empty strip (SL-m1).
-    if (!over || held || reached === 0) return;
-    const fold = setTimeout(() => {
-      setHeld(true);
-      forgetStarted(runId);
-    }, HOLD_MS);
+    if (!over || reached === 0) return;
+    const fold = setTimeout(skip, HOLD_MS);
     return () => clearTimeout(fold);
-  }, [pacing, shown, reached, over, held, runId]);
+  }, [pacing, shown, reached, over, held, skip]);
   // Behind the run, or holding the finished trace: the page waits for the playback.
   const waiting = pacing && !held && (shown < reached || over);
   // Results that have shown once never go back to waiting (J-M6).
@@ -206,6 +211,7 @@ export function usePacedSteps(
     steps: pacing && !held ? pacedSteps(actual, shown) : actual,
     playing,
     passed,
+    skip,
   };
 }
 
@@ -468,6 +474,7 @@ export function RunProgress({
   latencyMs,
   facts,
   replaying = false,
+  onSkip,
 }: {
   /** From {@link usePacedSteps}. */
   steps: Step[];
@@ -478,11 +485,23 @@ export function RunProgress({
   facts: string;
   /** The run has finished and its steps play back: said so, rather than passed off as live. */
   replaying?: boolean;
+  /** Ends the playback at once ({@link usePacedSteps}' ``skip``), offered while it replays. */
+  onSkip?: () => void;
 }) {
-  if (FOLDED.has(status)) {
+  const folded = FOLDED.has(status);
+  // The button goes with the strip it ends, so focus moves to the folded line in its place.
+  const [skipped, setSkipped] = useState(false);
+  const summary = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (skipped && folded) summary.current?.focus({ preventScroll: true });
+  }, [skipped, folded]);
+  if (folded) {
     return (
       <details className="group/progress rounded-lg bg-raised px-5 py-3 duration-(--duration-moderate) ease-(--ease-out) motion-safe:animate-in motion-safe:fade-in-0">
-        <summary className="flex cursor-pointer flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+        <summary
+          ref={summary}
+          className="flex cursor-pointer flex-wrap items-center gap-x-2 gap-y-1 text-sm"
+        >
           <CircleCheckIcon aria-hidden className="size-4 text-ok" />
           <span className="font-medium">
             {latencyMs != null ? `ARIA finished in ${duration(latencyMs)}` : "ARIA finished"}
@@ -512,6 +531,26 @@ export function RunProgress({
       aria-label="Progress"
       className="grid gap-6 rounded-card border border-rule bg-raised p-5 sm:p-6"
     >
+      {/* First, and above the step words, whose height changes from step to step: on a phone's
+          first screen, and never moving under the pointer (L2, M2). */}
+      {replaying ? (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <p className="max-w-prose text-sm text-muted-foreground">
+            ARIA has already finished: its steps play back at a pace you can follow.
+          </p>
+          {onSkip ? (
+            <Button
+              size="sm"
+              onClick={() => {
+                setSkipped(true);
+                onSkip();
+              }}
+            >
+              Show the result now
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       {/* Keyed by step, so each new step's words fade in where the last one's stood. */}
       <div
         key={status === "queued" ? "queued" : step?.key}
@@ -526,11 +565,7 @@ export function RunProgress({
         ) : null}
       </div>
       <Steps steps={steps} large />
-      {replaying ? (
-        <p className="text-sm text-muted-foreground">
-          ARIA has already finished: its steps play back at a pace you can follow.
-        </p>
-      ) : facts && status !== "queued" && status !== "running" ? (
+      {!replaying && facts && status !== "queued" && status !== "running" ? (
         <p className="text-sm text-muted-foreground">{facts}</p>
       ) : null}
     </section>

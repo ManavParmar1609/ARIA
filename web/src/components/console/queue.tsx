@@ -297,7 +297,10 @@ export function Queue() {
                 <Link
                   href={`/console/runs/${encodeURIComponent(run.id)}` as never}
                   data-run-index={index}
-                  className="mt-2 block font-medium wrap-anywhere after:absolute after:inset-0 after:content-['']"
+                  // A long title (the API allows 200 characters) keeps to three lines in the list;
+                  // the whole title is on the incident page, and on hover here.
+                  title={runTitle(run)}
+                  className="mt-2 line-clamp-3 font-medium wrap-anywhere after:absolute after:inset-0 after:content-['']"
                 >
                   {runTitle(run)}
                 </Link>

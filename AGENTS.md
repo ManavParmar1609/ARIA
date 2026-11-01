@@ -59,7 +59,7 @@ must never need a network call or a real key. Contract tests mock HTTP.
 | Blocks between `<!-- generated:NAME -->` and `<!-- /generated:NAME -->` in `README.md` and `docs/model-card.md` | `make eval` |
 | `docs/eval-live.json` | `uv run aria eval run --suite pipeline --llm` (makes paid or rate-limited provider calls; ask first) |
 | `web/src/data/eval-results.json`, `web/src/data/eval-live.json`, `web/src/data/llms.json` | `pnpm --dir web sync:data` |
-| `web/src/data/samples.json` | `uv run python -I scripts/export_web_samples.py` |
+| `web/src/data/samples.json`, `web/src/data/samples/*.json`, `web/src/data/sample-lines.ts` | `uv run python -I scripts/export_web_samples.py` |
 | `web/src/data/demo-run.json` | `uv run python -I scripts/record_demo_run.py --llm` (paid or rate-limited provider calls; ask first; without `--llm` it records offline). The home page, the console's How ARIA works and `video/` read it |
 | `docs/openapi.json`, `web/src/lib/api/schema.ts` | `make openapi` |
 | `models/*.json`, `models/*.npz` | `make train` and `aria seed` |

@@ -42,6 +42,15 @@ describe("scaleSentence", () => {
     );
   });
 
+  it("says a short window's lines came within a minute", () => {
+    expect(scaleSentence(features({ n_events: 40, duration_s: 12 }))).toBe(
+      "40 lines within a minute: 60 errors, on 2 of 48 servers.",
+    );
+    expect(scaleSentence(features({ n_events: 40, duration_s: 60 }))).toMatch(
+      /^40 lines over 1 minute:/,
+    );
+  });
+
   it("says when there were no errors", () => {
     expect(
       scaleSentence(features({ error_events: 0, level_counts: { INFO: 100, WARN: 25 } })),

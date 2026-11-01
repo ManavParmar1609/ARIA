@@ -2,6 +2,9 @@ import { ArrowRightIcon, Clock3Icon } from "lucide-react";
 import Link from "next/link";
 
 import { LevelChip } from "@/components/aria/severity";
+import { TermsIn } from "@/components/aria/term";
+import { glossaryMentions } from "@/lib/glossary";
+import { LEVEL_RESPONSE } from "@/lib/levels";
 import type { Replay, ReplayClaim, ReplayEvidence } from "@/lib/site-data";
 import { cn } from "@/lib/utils";
 
@@ -32,7 +35,9 @@ function citedLine(data: Replay, evidence: ReplayEvidence): { lineNo?: number; t
   return { lineNo: evidence.lines[0], text: evidence.detail.replace(/^example:\s*/, "") };
 }
 
-/** The recorded run's report, opened on one claim and the log line it cites (item 27). */
+/** The recorded run's report, opened on one claim and the log line it cites (item 27). For a
+ * newcomer, a line under the level says what it means, and a dotted underline defines the
+ * system's names (HDFS, DataNodes), once each. */
 function ReportCard({ data }: { data: Replay }) {
   const open = openClaim(data);
   const line = open ? citedLine(data, open.evidence) : undefined;
@@ -40,6 +45,7 @@ function ReportCard({ data }: { data: Replay }) {
   // The other levels it could not rule out, said plainly: "short list" is explained further down.
   const others = data.predictionSet.filter((level) => level !== data.severity);
   const moreClaims = data.claims.length - 1;
+  const inTitle = glossaryMentions(data.title).map((mention) => mention.key);
   return (
     <figure className="hero-rise grid gap-3">
       <div className="grid gap-5 rounded-[12px] bg-raised p-5 sm:p-6">
@@ -51,12 +57,15 @@ function ReportCard({ data }: { data: Replay }) {
               {others.length ? `. Could also be ${others.join(" or ")}` : ""}
             </span>
           </div>
-          <p className="text-xl leading-snug tracking-heading text-heading">{data.title}</p>
+          <p className="text-sm text-muted-foreground">{LEVEL_RESPONSE[data.severity]}</p>
+          <p className="text-xl leading-snug tracking-heading text-heading">
+            <TermsIn text={data.title} instance="hero-title" />
+          </p>
         </div>
         {open && line ? (
           <div className="grid gap-3 border-t border-rule pt-5">
             <p className="text-base leading-relaxed text-foreground">
-              {open.claim.text}{" "}
+              <TermsIn text={open.claim.text} instance="hero-claim" skip={inTitle} />{" "}
               <span className="rounded-full bg-primary px-2 py-0.5 font-mono text-sm text-primary-foreground">
                 {open.evidence.id}
               </span>
@@ -69,7 +78,7 @@ function ReportCard({ data }: { data: Replay }) {
                   ? `, one of ${open.evidence.lines.length} like it`
                   : ""}
               </span>
-              <code className="font-mono text-sm leading-relaxed break-all text-foreground">
+              <code className="font-mono text-sm leading-relaxed wrap-anywhere text-foreground">
                 {line.text}
               </code>
             </div>
@@ -97,54 +106,8 @@ function ReportCard({ data }: { data: Replay }) {
   );
 }
 
-const PROOF: { title: string; body: string; href: string; link: string }[] = [
-  {
-    title: "Tested on public, labelled logs",
-    body: "Each test pits ARIA against a simpler method, and says where the simpler one wins.",
-    href: "/console/evals",
-    link: "See the test results",
-  },
-  {
-    title: "Every claim cites a log line",
-    body: "A check rejects any sentence whose source is missing or whose numbers disagree with it.",
-    href: "/console/how-it-works/example",
-    link: "See an example",
-  },
-  {
-    title: "Nothing is sent without you",
-    body: "Messages for chat or a status page wait as drafts until a person approves them.",
-    href: "/console/how-it-works/steps#how-4",
-    link: "See the review step",
-  },
-];
-
-/** Three claims a visitor can check, each linking to its proof. */
-function ProofTiles() {
-  return (
-    <ul className="grid gap-3 md:grid-cols-3">
-      {PROOF.map((tile) => (
-        <li
-          key={tile.title}
-          className="grid content-start gap-2 rounded-card border border-rule bg-raised p-6"
-        >
-          <h2 className="text-lg font-medium text-heading">{tile.title}</h2>
-          <p className="text-base leading-relaxed text-muted-foreground">{tile.body}</p>
-          <Link
-            href={tile.href as never}
-            prefetch={false}
-            className="mt-1 inline-flex w-fit items-center gap-1.5 text-base font-medium text-heading underline decoration-control underline-offset-4 hover:decoration-heading"
-          >
-            {tile.link}
-            <ArrowRightIcon aria-hidden className="size-4" />
-          </Link>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/** The first screen: the outcome on sage, the way in beneath it, the report on slate, and the
- * three claims a visitor can check. */
+/** The first screen: the outcome on sage, the way in beneath it, and the report on slate. The
+ * sections below the fold carry the proof. */
 export function Hero({ data }: { data: Replay }) {
   return (
     <section
@@ -161,6 +124,17 @@ export function Hero({ data }: { data: Replay }) {
               For the person on call: ARIA reads an alert&apos;s logs, rates how serious it is,
               finds what happened before, and drafts the report and the messages. Nothing is sent
               until you approve it.
+            </p>
+            {/* For a visitor who wants the words first: quiet, beside the one main action. */}
+            <p className="mt-4 flex flex-wrap items-center gap-x-1.5 text-base text-heading">
+              New here?
+              <Link
+                href="/console/guide"
+                prefetch={false}
+                className="inline-flex min-h-6 items-center font-medium underline decoration-heading/40 underline-offset-4 hover:decoration-heading"
+              >
+                Start with the guide
+              </Link>
             </p>
           </div>
           <Link
@@ -180,7 +154,6 @@ export function Hero({ data }: { data: Replay }) {
           <ReportCard data={data} />
         </div>
       </div>
-      <ProofTiles />
     </section>
   );
 }

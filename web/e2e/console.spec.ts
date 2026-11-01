@@ -31,7 +31,7 @@ test.describe("console", () => {
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await expect(
       page.getByText(
-        /^(Only SEV\d is likely(, and the severity model is confident of it|, and the rules agree)?\.|(Probably SEV\d(, \d+% likely)?|SEV\d is the likeliest level, at \d+%)\. (ARIA isn't sure enough to decide alone|Only ARIA's rules rated these logs), so please confirm\.|Could be SEV\d.*ARIA plans for SEV\d\.( Please confirm\.)?)$/,
+        /^(Only SEV\d is likely(, and the severity model is confident of it|, and the rules agree)?\.|(Probably SEV\d(, \d+% likely)?|SEV\d is the likeliest level, at \d+%)\. (ARIA isn't sure enough to decide alone|Only ARIA's rules rated these logs), so please confirm\.|Could be SEV\d.*ARIA plans for SEV\d( until someone decides)?\.( Please confirm\.)?|No level was likely enough on its own.*ARIA plans for SEV\d, .*\.( Please decide\.)?)$/,
       ),
     ).toBeVisible();
     // Four panels, one question each.
@@ -230,11 +230,27 @@ test.describe("console", () => {
     await expect(page).toHaveURL(/\/console\/runs\/new\?tab=own$/);
     await page.getByRole("button", { name: "Start a triage" }).click();
     await expect(page.getByText("Paste at least one log line")).toBeVisible();
-    // A familiar log fills the box in one click, for someone with no logs at hand.
-    const linux = page.getByRole("button", { name: /^Linux server/ });
+    // A familiar log fills the box in one click, for someone with no logs at hand. A handful show
+    // in their groups at first, and every log on request, each marked incident or routine.
+    const familiar = page.getByRole("region", { name: "No logs at hand? Try a familiar one" });
+    const all = familiar.getByRole("button", { name: /^Show all \d+ logs$/ });
+    const total = Number((await all.textContent())?.match(/\d+/)?.[0]);
+    expect(await familiar.getByRole("listitem").count()).toBeLessThan(total);
+    await all.click();
+    await expect(familiar.getByRole("listitem")).toHaveCount(total);
+    await expect(familiar.getByRole("heading", { name: "Supercomputers" })).toBeVisible();
+    await expect(familiar.getByRole("button", { name: /^Mac: .+, routine$/ })).toBeVisible();
+    await expectAccessible(page, "new triage, every familiar log");
+    const crash = familiar.getByRole("button", { name: /^BlueGene\/L: Compute nodes crash/ });
+    await crash.click();
+    await expect(crash).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByLabel("Log lines")).toHaveValue(/RAS KERNEL/);
+    await familiar.getByRole("button", { name: "Show fewer logs" }).click();
+    await expect(crash).toBeHidden();
+    const linux = familiar.getByRole("button", { name: /^Linux server/ });
     await linux.click();
     await expect(linux).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByLabel("Log lines")).not.toHaveValue("");
+    await expect(page.getByLabel("Log lines")).not.toHaveValue(/RAS KERNEL/);
     await page
       .getByLabel("Log lines")
       .fill(
@@ -263,8 +279,39 @@ test.describe("console", () => {
     await expectAccessible(page, "runbook");
   });
 
-  test("searches incident memory by meaning", async ({ page }) => {
+  test("sums up the incident library, filters it from a chart and searches it", async ({
+    page,
+  }) => {
     await page.goto("/console/memory");
+    // Figures and charts sum up the whole library; each chart's title says what it shows.
+    await expect(page.getByText("incidents in the library", { exact: true })).toBeVisible();
+    const levels = page.getByRole("region", { name: /SEV\d/ });
+    await expect(levels.getByRole("heading", { level: 3 })).toHaveText(
+      /^(SEV\d is the most common level|Most incidents here are SEV\d|SEV\d and SEV\d are the most common levels)$/,
+    );
+    await expectAccessible(page, "library");
+
+    // Pressing a level filters the whole page by it, and the address keeps the filter.
+    await levels.getByRole("button", { name: /^SEV1 critical/ }).click();
+    await expect(page).toHaveURL(/\/console\/memory\?sev=SEV1$/);
+    await expect(page.getByText(/^incidents? match(es)? your filters$/)).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /^SEV1 critical \d+ incidents?$/ }),
+    ).toHaveAttribute("aria-pressed", "true");
+    const systems = page.getByRole("region", { name: /most incidents|comes? from/ });
+    await systems.getByRole("button", { name: /^BlueGene\/L/ }).click();
+    await expect(page).toHaveURL(/\?sev=SEV1&system=bgl$/);
+    await expectAccessible(page, "library, two filters");
+    // Back undoes the last filter, and one press clears the rest.
+    await page.goBack();
+    await expect(page).toHaveURL(/\/console\/memory\?sev=SEV1$/);
+    await page.getByRole("button", { name: "Clear filters" }).click();
+    await expect(page).toHaveURL(/\/console\/memory$/);
+
+    // Every chart can be read as a table.
+    await levels.getByRole("button", { name: /^Show as a table/ }).click();
+    await expect(levels.getByRole("table", { name: "Incidents by severity level" })).toBeVisible();
+
     await page
       .getByRole("searchbox", { name: "Search", exact: true })
       .fill("quorum lost between peers");
@@ -273,35 +320,73 @@ test.describe("console", () => {
     await expectAccessible(page, "memory");
   });
 
-  test("answers a question with numbered sources and keeps suggestions in view", async ({
+  test("chats about past incidents with numbered sources, and keeps questions to try in view", async ({
     page,
   }) => {
     await page.goto("/console/ask");
-    await page.getByLabel("Your question").fill("How was ZooKeeper quorum loss fixed before?");
-    await page.getByRole("button", { name: "Ask ARIA" }).click();
-    const answer = page.getByRole("list", { name: "Answers" }).locator(":scope > li").first();
-    const first = answer.getByRole("button", { name: /^Source 1: Past incident, / }).first();
-    await expect(first).toBeVisible();
-    await expect(answer.getByRole("heading", { name: "Sources" })).toBeVisible();
-    // A screen reader hears that the answer came, and how much it holds.
+    // A first visit opens on a greeting, with questions to try.
+    await expect(page.getByText("What would you like to know?")).toBeVisible();
+    await expectAccessible(page, "ask, new chat");
+    const box = page.getByLabel("Your question");
+    const conversation = page.getByRole("log", { name: "Conversation" });
+    await box.fill("How was ZooKeeper quorum loss fixed before?");
+    await box.press("Enter");
+    const exchange = conversation.getByRole("article").last();
     await expect(
-      page
-        .getByRole("status")
-        .filter({ hasText: /^ARIA answered: \d+ points?, from \d+ sources?\.$/ }),
+      exchange.getByRole("heading", {
+        name: "You asked: How was ZooKeeper quorum loss fixed before?",
+      }),
+    ).toBeVisible();
+    const first = exchange.getByRole("button", { name: /^Source 1: Past incident, / }).first();
+    await expect(first).toBeVisible();
+    await expect(exchange.getByRole("heading", { name: "Sources" })).toBeVisible();
+    // The box is ready for the next question.
+    await expect(box).toBeFocused();
+    await expect(box).toHaveValue("");
+    // A screen reader hears the answer as it arrives, led by how much it holds.
+    await expect(
+      exchange.getByText(/^ARIA answered: \d+ points?, from \d+ sources?\.$/),
     ).toHaveCount(1);
-    // A citation opens its source in the list beneath the answer.
+    // Each source opens its record: a past incident in the library, or on its own page when ARIA
+    // triaged it (as it did the sample published above). A citation opens what its source says.
+    await expect(exchange.getByRole("link", { name: /^1 Past incident/ })).toHaveAttribute(
+      "href",
+      /^\/console\/(memory\?q=|runs\/run-)/,
+    );
     await first.click();
-    await expect(answer.locator("details[open]").first()).toContainText("Resolution:");
+    await expect(exchange.getByRole("region", { name: "Source 1" })).toContainText("Resolution:");
     await expect(
       page.getByRole("button", { name: /^Have we seen ZooKeeper lose quorum before/ }),
     ).toBeVisible();
     await expectAccessible(page, "ask");
 
-    await page.getByLabel("Your question").fill("What is the weather in Lisbon today?");
-    await page.getByRole("button", { name: "Ask ARIA" }).click();
-    const nothing = "Nothing in ARIA's records answers this.";
-    await expect(page.getByRole("list", { name: "Answers" }).getByText(nothing)).toBeVisible();
-    await expect(page.getByRole("status").filter({ hasText: nothing })).toHaveCount(1);
+    await box.fill("What is the weather in Lisbon today?");
+    await page.getByRole("button", { name: "Send question" }).click();
+    await expect(conversation.getByText("Nothing in ARIA's records answers this.")).toBeVisible();
+    await expect(box).toBeFocused();
+
+    // New chat clears the conversation.
+    await page.getByRole("button", { name: "New chat" }).click();
+    await expect(conversation.getByRole("article")).toHaveCount(0);
+    await expect(page.getByText("What would you like to know?")).toBeVisible();
+    await expect(box).toBeFocused();
+  });
+
+  test("asks about one incident from its page", async ({ page }) => {
+    await page.goto("/console/runs?status=published");
+    await page
+      .getByRole("row", { name: /ZooKeeper/ })
+      .getByRole("link")
+      .click();
+    await page.getByRole("link", { name: "Ask about this incident" }).click();
+    await expect(page).toHaveURL(/\/console\/ask\?run=run-/);
+    // About names the incident, and the questions to try are about it.
+    await expect(page.getByRole("combobox", { name: "About" })).toContainText(/ZooKeeper/i);
+    await page.getByRole("button", { name: "What did the investigation find?" }).click();
+    const exchange = page.getByRole("log", { name: "Conversation" }).getByRole("article").last();
+    await expect(exchange.getByText(/^About: .*ZooKeeper/i)).toBeVisible();
+    await expect(exchange.getByRole("button", { name: /^Source 1: / }).first()).toBeVisible();
+    await expectAccessible(page, "ask about one incident");
   });
 
   test("triages in chat over AG-UI and answers the review interrupt", async ({ page }) => {
@@ -468,6 +553,11 @@ test.describe("console at 320 px", () => {
       await page.getByRole("tab", { name: new RegExp(tab) }).click();
       await expectNoSidewaysScroll(page, `run view, ${tab}`);
     }
+
+    // The library's filters and charts reflow too, with filters on.
+    await page.goto("/console/memory?sev=SEV1&sev=SEV2&system=bgl");
+    await expect(page.getByRole("heading", { level: 2, name: "At a glance" })).toBeVisible();
+    await expectNoSidewaysScroll(page, "incident library, filtered");
   });
 });
 
@@ -475,7 +565,7 @@ test.describe("console on a phone", () => {
   test("meets WCAG 2.2 AA at 375 px", async ({ page }) => {
     // The phone header shows the wordmark where the sidebar was: its name must include "ARIA".
     await page.setViewportSize({ width: 375, height: 800 });
-    for (const path of ["/console", "/console/runs", "/console/guide"]) {
+    for (const path of ["/console", "/console/runs", "/console/guide", "/console/memory"]) {
       await page.goto(path);
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       await expectAccessible(page, `${path} at 375 px`);
@@ -508,5 +598,9 @@ test.describe("console in the dark theme", () => {
     }
     await page.goto("/console/evals");
     await expectAccessible(page, "evaluation, dark");
+    // The library's charts, with a filter on: pressed levels and greyed bars keep their contrast.
+    await page.goto("/console/memory?sev=SEV1&system=bgl");
+    await expect(page.getByText(/^incidents? match(es)? your filters$/)).toBeVisible();
+    await expectAccessible(page, "incident library, filtered, dark");
   });
 });

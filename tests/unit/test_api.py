@@ -142,7 +142,7 @@ async def test_health_is_public_and_everything_else_needs_a_key(api: Api) -> Non
     ready = (await api.client.get("/readyz", headers=anonymous)).json()
     assert (ready["database"], ready["providers"], ready["incidents"]) == (True, None, None)
     known = (await api.client.get("/readyz", headers=RAJ)).json()
-    assert (known["database"], known["incidents"], known["runbooks"]) == (True, 3, 19)
+    assert (known["database"], known["incidents"], known["runbooks"]) == (True, 3, 18)
     card = await api.client.get("/.well-known/agent-card.json", headers=anonymous)
     assert card.status_code == 200
     assert "bearer" in card.json()["securitySchemes"]
@@ -995,6 +995,23 @@ async def test_ask_cites_each_kind_of_past_incident_once(api: Api) -> None:
     assert sum("openssh" in e["title"] for e in past) == 1
 
 
+async def test_ask_understands_everyday_words(api: Api) -> None:
+    """A question in a newcomer's words reaches the records that use the trade's words."""
+    asked = await api.client.post(
+        "/api/v1/ask",
+        json={"question": "why does my server keep getting password guesses and should I care??"},
+    )
+    body = asked.json()
+    assert body["answer"], body
+    titles = " ".join(e["title"] for e in body["evidence"]).lower()
+    assert "brute" in titles or "openssh" in titles
+    suggested = await api.client.post(
+        "/api/v1/ask",
+        json={"question": "Which past incidents involved SSH brute-force attempts on many hosts?"},
+    )
+    assert not any("involved" in note for note in suggested.json().get("notes", []))
+
+
 async def test_ask_names_runbooks_and_says_it_cannot_see_systems_now(api: Api) -> None:
     library = await api.client.post(
         "/api/v1/ask", json={"question": "Which runbook covers kernel panics?"}
@@ -1107,6 +1124,23 @@ async def test_catalog_lists_incidents_and_runbooks(api: Api) -> None:
     text = await api.client.get("/api/v1/runbooks/zookeeper-quorum-loss.md")
     assert text.text.startswith("# ")
     assert (await api.client.get("/api/v1/runbooks/nope")).status_code == 404
+
+
+async def test_pages_through_the_whole_incident_library(api: Api) -> None:
+    async def page(**params: int | str) -> list[str]:
+        response = await api.client.get("/api/v1/incidents", params=params)
+        assert response.status_code == 200
+        return [i["incident_id"] for i in response.json()]
+
+    everything = await page(limit=500)
+    assert len(everything) == 3
+    # Pages follow one another without a gap or a repeat; a short page is the last one.
+    assert await page(limit=2) + await page(limit=2, offset=2) == everything
+    assert await page(limit=2, offset=3) == []
+    closest = await page(q="kernel panic", limit=500)
+    assert await page(q="kernel panic", limit=1, offset=1) == closest[1:2]
+    too_many = await api.client.get("/api/v1/incidents", params={"limit": 501})
+    assert too_many.status_code == 422
 
 
 async def test_reviews_calibration_evaluation_and_tickets(

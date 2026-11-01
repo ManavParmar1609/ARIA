@@ -48,6 +48,10 @@ class WindowFeatures(Contract):
     error_events: int = Field(ge=0)
     error_ratio: float = Field(ge=0, le=1)
     keyword_hits: dict[str, int] = Field(default_factory=dict)
+    # The same categories counted only on lines logged at WARN or above, or with no level. The
+    # model reads these: at INFO the same words are usually routine (a client dropping its
+    # connection, a checksum verified).
+    issue_keyword_hits: dict[str, int] = Field(default_factory=dict)
     burst_score: float = Field(ge=0)
     peak_errors_per_min: float = Field(ge=0)
     distinct_nodes: int = Field(ge=0)
@@ -62,6 +66,9 @@ class WindowFeatures(Contract):
     components: list[str] = Field(default_factory=list)
     critical_components: list[str] = Field(default_factory=list)
     max_component_criticality: float = Field(ge=0, le=1)
+    # The most critical component named on WARN, ERROR or FATAL lines, or the catalog default
+    # when those lines name none: many incidents log only at WARN.
+    warn_component_criticality: float = Field(default=0.0, ge=0, le=1)
     persistence_s: float = Field(ge=0)
     # Units of work (an HDFS block, a task attempt) followed from start to finish, and how many
     # broke off partway or took a step almost no other unit takes (see parsing/flows.py).

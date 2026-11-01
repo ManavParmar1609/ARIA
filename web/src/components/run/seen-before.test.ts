@@ -1,8 +1,11 @@
+import { render, screen, within } from "@testing-library/react";
+import { type ComponentProps, createElement } from "react";
 import { describe, expect, it } from "vitest";
 
-import type { SimilarIncident } from "@/lib/api/types";
+import type { Evidence, LogEvent, SimilarIncident } from "@/lib/api/types";
 
-import { matchCaveat, pastKinds } from "./seen-before";
+import { EvidenceProvider } from "./evidence";
+import { matchCaveat, pastKinds, SeenBefore } from "./seen-before";
 
 const incident = (id: string, changes: Partial<SimilarIncident> = {}): SimilarIncident => ({
   incident_id: id,
@@ -34,6 +37,39 @@ describe("past incidents of one kind", () => {
   it("stay apart when they were fixed differently", () => {
     const kinds = pastKinds([incident("a"), incident("b", { resolution: "Replace the disk" })]);
     expect(kinds).toHaveLength(2);
+  });
+
+  it("cite their sightings as sightings, not as the title's source", () => {
+    const sightings = [incident("1 node"), incident("5 nodes")];
+    const evidence = sightings.map(
+      (each) =>
+        ({
+          id: each.evidence_id,
+          kind: "incident",
+          title: each.title,
+          source: "memory.search",
+        }) as Evidence,
+    );
+    const rows = createElement(SeenBefore, {
+      incidents: sightings,
+      retrieval: undefined,
+      system: "hdfs",
+    });
+    // The rows go in as children, as JSX would pass them.
+    const provider = { evidence, events: [] as LogEvent[] } as ComponentProps<
+      typeof EvidenceProvider
+    >;
+    render(createElement(EvidenceProvider, provider, rows));
+    // One row for the kind, titled by the closest sighting, with no citation beside the title.
+    const title = screen.getByText("DataNodes failing to serve blocks (1 node)");
+    expect(within(title.parentElement as HTMLElement).queryAllByRole("button")).toHaveLength(0);
+    // Both sightings are cited together, under a name that says what they are.
+    const cited = screen.getByText(/^The closest sightings:/);
+    expect(
+      within(cited)
+        .getAllByRole("button")
+        .map((chip) => chip.textContent),
+    ).toEqual(["E-1 node", "E-5 nodes"]);
   });
 });
 

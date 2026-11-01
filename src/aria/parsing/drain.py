@@ -208,7 +208,6 @@ SYSTEM_SETTINGS: dict[str, DrainSettings] = {
     "zookeeper": DrainSettings(_m(r"(/|)(\d+\.){3}\d+(:\d+)?"), 0.5, 4),
     "bgl": DrainSettings(_m(r"core\.\d+"), 0.5, 4),
     "hpc": DrainSettings(_m(r"=\d+"), 0.5, 4),
-    "thunderbird": DrainSettings(_m(r"(\d+\.){3}\d+"), 0.5, 4),
     "windows": DrainSettings(_m(r"0x.*?\s"), 0.7, 5),
     "linux": DrainSettings(_m(r"(\d+\.){3}\d+", r"\d{2}:\d{2}:\d{2}"), 0.39, 6),
     "android": DrainSettings(

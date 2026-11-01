@@ -1,7 +1,9 @@
 import { expect, expectAccessible, expectNoSidewaysScroll, test } from "./fixtures";
 
 test.describe("landing page", () => {
-  test("stays short: the headline, the proof, four steps and the way in", async ({ page }) => {
+  test("shows ARIA off: the problem, the answer, the steps, an example and the proof", async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
@@ -12,21 +14,62 @@ test.describe("landing page", () => {
       page.getByText("Waiting for a person to approve. Nothing has been sent."),
     ).toBeVisible();
     await expect(page.locator("main").getByRole("heading", { level: 2 })).toHaveText([
-      "Tested on public, labelled logs",
-      "Every claim cites a log line",
-      "Nothing is sent without you",
-      "How it works, in four steps",
+      "The problem",
+      "The answer",
+      "A careful first look at every alert",
+      "Four steps, then you decide",
+      "One incident, start to finish",
+      "Tested on real, labelled logs",
       "Let ARIA take the first look.",
     ]);
-    // About three screens on a laptop: the detail lives on How ARIA works.
-    const height = await page.evaluate(() => document.documentElement.scrollHeight);
-    expect(height).toBeLessThan(3 * 900);
+    // The lines that run together: apart for the problem, merging for the answer and the way in.
+    await expect(page.locator("main svg.draw")).toHaveCount(3);
+    // What the video shows is written out under it, not folded away.
+    await expect(page.getByText("What the video shows")).toBeVisible();
+    await expect(page.locator("main video")).toHaveAttribute("preload", "none");
     // The header's links stay on the site, so only the source carries an outbound arrow.
     const nav = page.getByRole("navigation", { name: "Main" });
     await expect(nav.locator("svg")).toHaveCount(1);
     await nav.getByRole("link", { name: "How it works" }).click();
     await expect(page).toHaveURL(/\/console\/how-it-works$/);
     await expect(page.getByRole("heading", { level: 1, name: "How ARIA works" })).toBeVisible();
+  });
+
+  test("steps through how it works by itself, with tabs, arrows and a pause", async ({ page }) => {
+    await page.goto("/");
+    const carousel = page.getByRole("region", { name: "How ARIA works, step by step" });
+    await carousel.scrollIntoViewIfNeeded();
+    const tabs = carousel.getByRole("tab");
+    await expect(tabs).toHaveCount(4);
+    await expect(tabs.first()).toHaveAttribute("aria-selected", "true");
+    // It moves on by itself while it is on screen and nobody is pointing at it.
+    await page.mouse.move(0, 0);
+    await expect(tabs.nth(1)).toHaveAttribute("aria-selected", "true", { timeout: 15_000 });
+    // A tab shows its step; only the shown step reaches assistive technology.
+    await tabs.nth(3).click();
+    await expect(carousel.getByRole("tabpanel")).toHaveCount(1);
+    await expect(carousel.getByRole("tabpanel")).toContainText("Nothing has been sent");
+    // Pause stops it until Play.
+    await carousel.getByRole("button", { name: /^Pause/ }).click();
+    await expect(carousel.getByRole("button", { name: /^Play/ })).toBeVisible();
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(10_000);
+    await expect(tabs.nth(3)).toHaveAttribute("aria-selected", "true");
+    // Arrow keys move between the steps.
+    await tabs.nth(3).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(tabs.first()).toHaveAttribute("aria-selected", "true");
+    await expect(tabs.first()).toBeFocused();
+  });
+
+  test("starts the steps paused under reduced motion", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto("/");
+    const carousel = page.getByRole("region", { name: "How ARIA works, step by step" });
+    await carousel.scrollIntoViewIfNeeded();
+    await expect(carousel.getByRole("button", { name: /^Play/ })).toBeVisible();
+    await carousel.getByRole("button", { name: "Next step" }).click();
+    await expect(carousel.getByRole("tab").nth(1)).toHaveAttribute("aria-selected", "true");
   });
 
   test("meets WCAG 2.2 AA in both themes", async ({ page }) => {
@@ -63,9 +106,9 @@ test.describe("landing page", () => {
     await expectNoSidewaysScroll(page, "landing");
   });
 
-  test("links the hero to real incidents and each proof to its page", async ({ page }) => {
+  test("links the example and the hero to real incidents", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("link", { name: "See an example" }).click();
+    await page.getByRole("link", { name: "Open the full example" }).click();
     await expect(page).toHaveURL(/\/console\/how-it-works\/example$/);
     await expect(page.getByRole("article", { name: /Triage tag/ })).toBeVisible();
     await page.goto("/");
@@ -157,8 +200,9 @@ test.describe("how ARIA works", () => {
     const results = page.locator("section", {
       has: page.getByRole("heading", { name: "What the tests show" }),
     });
-    await expect(results.getByRole("listitem")).toHaveCount(4);
-    await expect(results.getByRole("link", { name: "Where it falls short" })).toBeVisible();
+    await expect(results.getByRole("listitem")).toHaveCount(3);
+    await expect(results.getByRole("link", { name: "When it asks a person" })).toBeVisible();
+    await expect(results.getByRole("link", { name: "The end-to-end test" })).toBeVisible();
     await results.getByRole("link", { name: "The real cluster test" }).click();
     await expect(page).toHaveURL(/\/console\/evals#ev-real$/);
   });

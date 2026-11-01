@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from aria.contracts.base import Claim
+from aria.contracts.base import Claim, EvidenceKind
 from aria.contracts.report import IncidentReport
 from aria.reporting.writer import cited_evidence
 
@@ -103,8 +103,13 @@ def render_markdown(report: IncidentReport, *, decided_by: str | None = None) ->
         ]
     if report.actions:
         lines += ["## Recommended actions", ""]
+        # A step the reviewer added cites their review: it was approved as it was written.
+        reviews = {item.id for item in report.evidence if item.kind is EvidenceKind.REVIEW}
         for action in report.actions:
-            risk = f"risk: {action.risk}" + (", needs approval" if action.risk != "low" else "")
+            if reviews.intersection(action.evidence_ids):
+                risk = "added by the reviewer"
+            else:
+                risk = f"risk: {action.risk}" + (", needs approval" if action.risk != "low" else "")
             runbook = f" · runbook `{action.runbook_slug}`" if action.runbook_slug else ""
             lines.append(
                 f"- [ ] {_safe(action.text)} ({risk}{runbook}) {_cite(action.evidence_ids)}"

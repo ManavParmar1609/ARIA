@@ -56,7 +56,7 @@ async def test_the_samples_are_listed_by_where_their_logs_come_from(
     client: httpx.AsyncClient,
 ) -> None:
     listed = (await client.get("/api/v1/scenarios")).json()
-    assert len(listed) == 21
+    assert len(listed) == 20
     sources = [s["source"] for s in listed]
     assert sources == sorted(sources, key=["security", "web", "bigdata", "hpc", "noise"].index)
     ssh = next(s for s in listed if s["id"] == "openssh.bruteforce")

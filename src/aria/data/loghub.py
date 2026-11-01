@@ -7,15 +7,11 @@ full datasets and from users parse into the same fields as the structured 2k sam
 from __future__ import annotations
 
 import csv
-import io
 import re
-import zipfile
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TextIO
 
 CANONICAL_LEVELS = ("DEBUG", "INFO", "WARN", "ERROR", "FATAL")
 _LEVEL_MAP = {
@@ -110,15 +106,6 @@ SYSTEMS: dict[str, SystemSpec] = {
             node_field="Node",
             labelled=True,
             description="BlueGene/L supercomputer (LLNL)",
-        ),
-        SystemSpec(
-            "thunderbird",
-            r"<Label> <Timestamp> <Date> <User> <Month> <Day> <Time> <Location> <Component>(\[<PID>\])?: <Content>",
-            2005,
-            node_field="Location",
-            level_field=None,
-            labelled=True,
-            description="Thunderbird supercomputer (Sandia)",
         ),
         SystemSpec(
             "hdfs",
@@ -227,7 +214,6 @@ SYSTEMS: dict[str, SystemSpec] = {
 # Loghub directory names differ in case from ARIA's system ids.
 LOGHUB_DIRS = {
     "BGL": "bgl",
-    "Thunderbird": "thunderbird",
     "HDFS": "hdfs",
     "Hadoop": "hadoop",
     "Spark": "spark",
@@ -289,7 +275,7 @@ def parse_timestamp(system: str, fields: dict[str, str]) -> datetime | None:
     year = spec.default_year if spec else 2020
     get = fields.get
     match system:
-        case "bgl" | "thunderbird":
+        case "bgl":
             return _epoch(get("Timestamp", ""))
         case "hpc":
             return _epoch(get("Time", ""))
@@ -437,6 +423,80 @@ _TIMESTAMPS: tuple[tuple[re.Pattern[str], Callable[[str], datetime]], ...] = (
 )
 
 
+# Times a line may carry elsewhere: an epoch in seconds or milliseconds as its first field
+# ("1793416932840|ledger-sync|I|..."), the common log format's "[31/Oct/2026:02:00:00 +0000]"
+# anywhere (web access logs), or an ISO time a few fields in.
+_EPOCH = re.compile(r"^(\d{10}|\d{13})(?:[.,]\d+)?$")
+_CLF_TIME = re.compile(r"\[(\d{2}/[A-Z][a-z]{2}/\d{4}:\d{2}:\d{2}:\d{2}(?: [+-]\d{4})?)\]")
+_ISO_TIME = re.compile(
+    r"(?<!\d)(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?)(?!\d)"
+)
+# A level word a few fields in, as Kubernetes pods log it: "checkout-6b7c9d checkout INFO ...".
+# Upper case only, so an ordinary word in a message is not read as one.
+_LATE_LEVEL = re.compile(
+    r"^(?:\S+\s+){1,3}?(?P<level>TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|ERR|SEVERE|"
+    r"CRITICAL|FATAL)\s+\S"
+)
+# A web request's status in an access log: "GET /api HTTP/1.1" 502.
+_ACCESS_STATUS = re.compile(
+    r'"(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|CONNECT) [^"]*"\s+(?P<status>[1-5]\d\d)\b'
+)
+_NAME = re.compile(r"[A-Za-z][\w.$/-]{1,79}")
+
+
+def _epoch_field(text: str) -> datetime | None:
+    found = _EPOCH.match(text)
+    if not found:
+        return None
+    value = int(found.group(1))
+    seconds = value / 1000 if len(found.group(1)) == 13 else value
+    try:
+        return datetime.fromtimestamp(seconds, tz=UTC)
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+def _time_anywhere(text: str) -> datetime | None:
+    clf = _CLF_TIME.search(text)
+    if clf:
+        try:
+            return datetime.strptime(clf.group(1), "%d/%b/%Y:%H:%M:%S %z").astimezone(UTC)
+        except ValueError:
+            try:
+                return datetime.strptime(clf.group(1), "%d/%b/%Y:%H:%M:%S").replace(tzinfo=UTC)
+            except ValueError:
+                return None
+    iso = _ISO_TIME.search(text[:80])
+    if iso:
+        try:
+            when = _iso(iso.group(1))
+        except ValueError:
+            return None
+        return when.replace(tzinfo=UTC) if when.tzinfo is None else when.astimezone(UTC)
+    return None
+
+
+def _delimited(text: str) -> tuple[datetime | None, str, str | None, str] | None:
+    """A line of fields split by "|", one of the first four a level: the time, the level, the
+    field before the level as the component, and the fields after it as the message."""
+    parts = [part.strip() for part in text.split("|")]
+    if len(parts) < 3:
+        return None
+    found = next(
+        ((i, level) for i, part in enumerate(parts[:4]) if (level := normalize_level(part))), None
+    )
+    if found is None:
+        return None
+    at, level = found
+    head = parts[:at]
+    when = next(
+        (t for t in (_epoch_field(part) or _time_anywhere(part) for part in head) if t), None
+    )
+    names = [part for part in head if _NAME.fullmatch(part)]
+    message = " | ".join(part for part in parts[at + 1 :] if part)
+    return when, level, (names[-1] if names else None), message or text
+
+
 def parse_generic_line(system: str, line: str, line_no: int = 0) -> LogRecord:
     rest = line.strip()
     ts: datetime | None = None
@@ -450,18 +510,40 @@ def parse_generic_line(system: str, line: str, line_no: int = 0) -> LogRecord:
             ts = ts.replace(tzinfo=UTC) if ts.tzinfo is None else ts.astimezone(UTC)
             rest = rest[found.end() :]
             break
+    delimited = _delimited(rest) if rest.count("|") >= 2 else None
+    if delimited is not None:
+        when, field_level, field_component, field_message = delimited
+        return LogRecord(
+            system=system,
+            line_no=line_no,
+            message=field_message,
+            ts=ts or when,
+            component=field_component,
+            level=field_level,
+            level_raw=field_level,
+        )
     match = _GENERIC.match(rest)
     groups = match.groupdict() if match else {}
     message = (groups.get("message") or rest or line).strip()
-    level = normalize_level(groups.get("level")) or _derive_level(system, {}, message)
+    explicit = groups.get("level")
+    component = groups.get("component")
+    if not explicit and (late := _LATE_LEVEL.match(message)):
+        # The level is read, the line is kept whole: what comes before it may be a pod and a
+        # container, or the start of a sentence.
+        explicit = late.group("level")
+    level = normalize_level(explicit) or _derive_level(system, {}, message)
+    status = None if explicit else _ACCESS_STATUS.search(message)
+    if status is not None:
+        # An access log has no level: a server error is an error, whatever words the path holds.
+        level = "ERROR" if status.group("status").startswith("5") else "INFO"
     return LogRecord(
         system=system,
         line_no=line_no,
         message=message,
-        ts=ts,
-        component=groups.get("component"),
+        ts=ts or _time_anywhere(rest),
+        component=component,
         level=level,
-        level_raw=groups.get("level"),
+        level_raw=explicit,
     )
 
 
@@ -475,22 +557,8 @@ def iter_structured_csv(system: str, path: Path, limit: int | None = None) -> It
             yield record_from_fields(system, line_no, row)
 
 
-@contextmanager
-def _open_text(path: Path, member: str | None) -> Iterator[TextIO]:
-    if member is None:
-        with path.open(encoding="utf-8", errors="replace") as handle:
-            yield handle
-        return
-    with zipfile.ZipFile(path) as archive, archive.open(member) as raw:
-        yield io.TextIOWrapper(raw, encoding="utf-8", errors="replace")
-
-
-def iter_raw_log(
-    system: str, path: Path, limit: int | None = None, *, member: str | None = None
-) -> Iterator[LogRecord]:
-    """Read a raw Loghub log; ``member`` reads one file inside the zip at ``path`` as it streams,
-    so a log larger than the disk's free space never has to be extracted."""
-    with _open_text(path, member) as handle:
+def iter_raw_log(system: str, path: Path, limit: int | None = None) -> Iterator[LogRecord]:
+    with path.open(encoding="utf-8", errors="replace") as handle:
         for i, line in enumerate(handle):
             if limit is not None and i >= limit:
                 return
@@ -519,13 +587,6 @@ def format_raw_line(record: LogRecord) -> str:
             return (
                 f"{record.label or '-'} {int(ts.timestamp())} {ts:%Y.%m.%d} {node} {stamp} {node} "
                 f"{get('Type', 'RAS')} {get('Component', 'KERNEL')} {get('Level', 'INFO')} {msg}"
-            )
-        case "thunderbird":
-            user = node.split("/", 1)[0]
-            pid = f"[{f['PID']}]" if f.get("PID") else ""
-            return (
-                f"{record.label or '-'} {int(ts.timestamp())} {ts:%Y.%m.%d} {user} {ts:%b} {ts.day} "
-                f"{ts:%H:%M:%S} {node} {get('Component', 'kernel')}{pid}: {msg}"
             )
         case "hdfs":
             return f"{ts:%y%m%d} {ts:%H%M%S} {get('Pid', '143')} {get('Level', 'INFO')} {get('Component', 'dfs.DataNode')}: {msg}"

@@ -38,7 +38,9 @@ function useDrawn<T extends Element>() {
 
 const stroke = (i: number, len: number) => ({ "--i": i, "--len": len }) as CSSProperties;
 
-/** Lines that run in from the left and merge into one that carries on to the right edge. */
+/** Lines that run in from the left and merge into one that carries on to the right edge. The
+ * caller sets its height: `h-auto` keeps the drawing's shape; a fixed height stretches it (the
+ * strokes keep their width). */
 export function Converge({ className, apart = false }: { className?: string; apart?: boolean }) {
   const ref = useDrawn<SVGSVGElement>();
   const mid = 120;
@@ -47,7 +49,7 @@ export function Converge({ className, apart = false }: { className?: string; apa
       ref={ref}
       viewBox="0 0 1200 240"
       preserveAspectRatio="none"
-      className={cx("draw block h-auto overflow-visible", className)}
+      className={cx("draw block overflow-visible", className)}
       aria-hidden="true"
       focusable="false"
     >

@@ -123,6 +123,7 @@ export interface WindowFeatures {
   error_events: number;
   error_ratio: number;
   keyword_hits: Record<string, number>;
+  issue_keyword_hits?: Record<string, number>;
   burst_score: number;
   peak_errors_per_min: number;
   distinct_nodes: number;
@@ -136,6 +137,7 @@ export interface WindowFeatures {
   components: string[];
   critical_components: string[];
   max_component_criticality: number;
+  warn_component_criticality?: number;
   persistence_s: number;
   flows_checked?: number;
   broken_flows?: number;

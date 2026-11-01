@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { Converge } from "@/components/site/line-art";
 import { ArrowCircle, Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import { REPO_URL } from "@/lib/site-data";
@@ -13,7 +14,7 @@ const QUICKSTART = [
   "make dev",
 ];
 
-/** The last panel: one action, and the commands to run it yourself. */
+/** The last panel: one action, the commands to run it yourself, and the lines running on. */
 export function Closing() {
   return (
     <section
@@ -43,15 +44,17 @@ export function Closing() {
             </div>
           </div>
           {/* Long commands wrap (with a hanging indent) rather than scroll, so phones need no
-              sideways scrolling inside the block. */}
-          <div className="grid rounded-[12px] bg-raised">
+              sideways scrolling inside the block. The clone address has no spaces, so it may
+              break anywhere; min-w-0 lets the box narrow to the panel instead of pushing the Copy
+              button out of it. */}
+          <div className="grid min-w-0 rounded-[12px] bg-raised">
             <div className="flex items-center justify-between gap-3 pt-1.5 pr-1.5 pl-5">
               <span className="text-sm text-muted-foreground">
                 On your own machine (Python 3.12 with uv, Node 22 with pnpm)
               </span>
               <CopyButton text={QUICKSTART.join("\n")} label="the commands" />
             </div>
-            <pre className="px-5 pt-1 pb-4 text-left text-xs leading-relaxed whitespace-pre-wrap text-foreground">
+            <pre className="px-5 pt-1 pb-4 text-left text-xs leading-relaxed wrap-anywhere whitespace-pre-wrap text-foreground">
               <code>
                 {QUICKSTART.map((command) => (
                   <span key={command} className="block pl-[2ch] -indent-[2ch]">
@@ -65,6 +68,8 @@ export function Closing() {
             </pre>
           </div>
         </div>
+        {/* The lines that ran together on the answer carry on into the way in. */}
+        <Converge className="mt-12 -mr-12 h-32 w-[calc(100%+3rem)] text-heading sm:mt-14 sm:h-auto" />
       </div>
     </section>
   );

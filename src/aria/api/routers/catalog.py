@@ -57,16 +57,21 @@ async def incidents(
     state: State,
     q: Annotated[str | None, Query(min_length=2, max_length=300)] = None,
     system: Annotated[str | None, Query(max_length=48)] = None,
-    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    limit: Annotated[int, Query(ge=1, le=500)] = 20,
+    offset: Annotated[int, Query(ge=0, le=100_000)] = 0,
 ) -> list[IncidentOut]:
-    """Past incidents: hybrid search when ``q`` is given, else the most recent."""
+    """Past incidents: hybrid search when ``q`` is given, else the most recent.
+
+    ``offset`` skips that many, so a client can page through the whole library: a page shorter
+    than ``limit`` is the last one.
+    """
     memory = state.services.memory
     if q:
-        hits = await memory.search(q, system=system, candidates=limit)
-        return [_incident(item, round(hit.score, 4)) for item, hit in hits[:limit]]
+        hits = await memory.search(q, system=system, candidates=offset + limit)
+        return [_incident(item, round(hit.score, 4)) for item, hit in hits[offset : offset + limit]]
     items = [i for i in memory.incidents.values() if system in (None, i.system)]
     items.sort(key=lambda i: (i.last_seen is not None, i.last_seen), reverse=True)
-    return [_incident(item) for item in items[:limit]]
+    return [_incident(item) for item in items[offset : offset + limit]]
 
 
 @router.get("/incidents/{incident_id}", response_model=IncidentOut)

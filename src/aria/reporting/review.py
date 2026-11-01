@@ -47,7 +47,8 @@ def review_evidence(
         lines.append(f"comment: {decision.comment}")
     return evidence.add(
         EvidenceKind.REVIEW,
-        f"Review by {decision.reviewer}: {decision.decision}",
+        f"Review by {_who(decision.reviewer)[0].lower()}{_who(decision.reviewer)[1:]}: "
+        f"{decision.decision}",
         source="reviewer",
         detail="\n".join(lines),
         data={
@@ -92,7 +93,10 @@ def apply_review(
             f"ARIA's assessment was {report.severity}.",
             evidence_ids=[eid],
         )
-        summary = [note, *summary]
+        # ARIA's own line for its level ("SEV1 (critical): ... page now.") would contradict the
+        # reviewer's: the note above keeps what ARIA thought.
+        stale = (f"{report.severity} (", f"{report.severity}:")
+        summary = [note, *(claim for claim in summary if not claim.text.startswith(stale))]
         update["severity"] = edits.severity
         new_severity = severity.model_copy(
             update={

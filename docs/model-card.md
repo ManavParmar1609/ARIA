@@ -15,11 +15,11 @@ It follows the spirit of [Model Cards for Model Reporting](https://arxiv.org/abs
 | | |
 |---|---|
 | Name | `severity_log` |
-| Committed version | `severity-log-20261029-a362d541`: the `version` field of [`models/severity_log.json`](../models/severity_log.json) |
+| Committed version | The `version` field of [`models/severity_log.json`](../models/severity_log.json) |
 | Task | Rate one window of log lines, plus any firing alerts, from SEV1 to SEV4 |
 | Type | Multinomial logistic regression on standardised features, with temperature scaling and split-conformal prediction sets |
 | Output | A calibrated probability for each of the four classes, and a prediction set that targets 90% coverage (alpha 0.1) |
-| Rules version | `2026.10.2` ([`config/severity_rules.yaml`](../config/severity_rules.yaml)), recorded in the model's metadata |
+| Rules version | The `version` in [`config/severity_rules.yaml`](../config/severity_rules.yaml), recorded in the model's metadata |
 | Format | JSON (`aria.linear_model.v1`): coefficients, scaler statistics, temperature, conformal threshold and metadata. Inference is plain numpy, and loading a model file cannot run code. |
 | Code | [`src/aria/severity/`](../src/aria/severity/): `model.py`, `training.py`, `policy.py`, `engine.py` and `recalibration.py` |
 | Training data | **Semi-synthetic** windows built from real Loghub lines ([data card](data-card.md)) |
@@ -39,17 +39,20 @@ The model is one stage of a policy
 order:
 
 1. **Rules score each severity, and some set a floor.** The rules file holds 22 scoring rules
-   and 4 floor rules. Three floors keep signals at SEV2 or worse: data-integrity errors
-   (corruption, data loss, missing blocks), a crashing critical component, and a firing
-   critical alert. The fourth keeps units of work that stopped partway with no error logged
+   and 5 floor rules. Four floors keep signals at SEV2 or worse: data-integrity errors
+   (corruption, data loss, missing blocks), a crashing critical component, a firing critical
+   alert, and a power-supply fault reported as an error. The fifth keeps units of work that
+   stopped partway with no error logged
    (parsing/flows.py) at SEV3 or worse: the model, trained on windows that log their failures,
    reads such a window as noise. A severity's summed rule weight must reach its activation threshold, so one
    decisive SEV1 rule is not outvoted by the weaker SEV2 rules that a severe incident also
    trips.
 2. **The model gives calibrated probabilities.** It reads the window's features, including the
    rules' output. The prediction set holds every class whose probability is at least 1 − q,
-   where q is the conformal threshold. If no class clears it, the most likely class stands
-   alone and the set is marked empty.
+   where q is the conformal threshold. If no class clears it, the set is marked empty and holds
+   the model's most likely class and the rules' class, so the conservative fallback plans for
+   the more serious of the two. (With the most likely class alone, a crash-looping service the
+   rules rated SEV2 came out SEV4.)
 3. **Floors narrow the set.** They remove every class less severe than the floor.
 4. **A confident one-class set is decided without an LLM.** This happens when the model gives
    the class at least 0.85 (the `gate` in the rules file), or when a floor alone settled it.
@@ -88,7 +91,7 @@ Every assessment records the following, and the run view shows all of it:
 
 ## Inputs
 
-The model reads 38 features of one window
+The model reads 40 features of one window
 ([`src/aria/severity/features.py`](../src/aria/severity/features.py)). The parser computes them
 from redacted message text, levels, timestamps, nodes and components, plus any firing alerts.
 Lines quarantined as possible prompt injection are left out first. No feature reads dataset
@@ -97,9 +100,9 @@ labels or BGL alert tags.
 | Group | Features | Scale |
 |---|---|---|
 | Volume and spread (16) | Events, error events, events per minute, peak errors per minute, distinct nodes, nodes with errors, templates, novel templates, novel error templates, peak warnings per minute, nodes with warnings, novel warning templates, critical components, firing alerts, critical alerts, warning alerts | log(1 + x) |
-| Ratios (3) | Error ratio, node spread, highest criticality among components logging errors | 0 to 1 |
+| Ratios (4) | Error ratio, node spread, highest criticality among components logging errors, highest criticality among components logging warnings or errors (the catalog default when those lines name none) | 0 to 1 |
 | Shape (5) | Burst score (capped at 50, divided by 10), persistence in minutes (log scale), shares of WARN, ERROR and FATAL lines | As listed |
-| Keyword categories (9) | Crash, data risk, unavailable, resource, security, hardware, storage, network, degradation ([`config/lexicon.yaml`](../config/lexicon.yaml)) | log(1 + matching lines) |
+| Keyword categories (10) | Crash, data risk, unavailable, resource, security, hardware, storage, network, degradation, power ([`config/lexicon.yaml`](../config/lexicon.yaml)), counted on lines logged at WARN or above or with no level, because at INFO the same words are usually routine. The rules count every line | log(1 + matching lines) |
 | Rules (5) | The rules' smoothed probability for each severity, and the floor rank (0 is a SEV1 floor and 3 a SEV4 floor; 4 means no floor) | 0 to 1; 0 to 4 |
 
 Two of these depend on configuration and history:
@@ -115,10 +118,9 @@ Two of these depend on configuration and history:
 - **Data.** The semi-synthetic scenario suite, built from real lines in the Loghub 2k samples.
   - Each seed contributes 6 windows per failure mode and 3 quiet windows per system.
   - The splits use separate seeds: train 11–14, temperature 21 and conformal 31–32.
-  - The committed model's metadata records 660 training, 165 temperature and 330 conformal
-    windows. The per-split label counts are in
-    [`models/severity_log.report.json`](../models/severity_log.report.json) and in the data
-    card.
+  - The committed model's training report,
+    [`models/severity_log.report.json`](../models/severity_log.report.json), records how many
+    windows each split holds and their labels.
   - Every window goes through the production parser and rules, so training sees exactly the
     features a run computes.
 - **Fit.** scikit-learn's logistic regression on standardised features, with balanced class
@@ -147,7 +149,7 @@ The coverage guarantee holds only on data like the calibration split. A deployme
 incidents differ from the semi-synthetic windows, so ARIA recalibrates on them
 ([`src/aria/severity/recalibration.py`](../src/aria/severity/recalibration.py)).
 
-**What is recorded.** Every human review stores the run's model input (the 38 features) and the
+**What is recorded.** Every human review stores the run's model input (the 40 features) and the
 severity the reviewer settled on:
 
 - an approval confirms ARIA's severity, and an edit corrects it;
@@ -203,47 +205,46 @@ compared with simple baselines on the held-out test seeds (41 and 42). `make eva
 this section; the method and the other suites are in [evaluation.md](evaluation.md).
 
 <!-- generated:severity-metrics -->
-Generated by `make eval` at commit `c6d459d`; do not edit by hand. The data is **semi-synthetic**: real lines from the public Loghub samples, composed into incidents by ARIA's scenario builder, on held-out seeds 41, 42. These numbers show how ARIA behaves on that distribution, not its accuracy on production incidents.
+Generated by `make eval` at commit `7e6233e`; do not edit by hand. The data is **semi-synthetic**: real lines from the public Loghub samples, composed into incidents by ARIA's scenario builder, on held-out seeds 41, 42. These numbers show how ARIA behaves on that distribution, not its accuracy on production incidents.
 
 ### Held-out results
 
-330 held-out windows. Labels: SEV1 34, SEV2 80, SEV3 95, SEV4 121.
+312 held-out windows. Labels: SEV1 34, SEV2 79, SEV3 84, SEV4 115.
 
 | Method | Accuracy (95% CI) | Macro-F1 (95% CI) | Weighted kappa | Under-triage | SEV1/2 rated SEV3/4 |
 |---|---|---|---|---|---|
-| ARIA policy (offline) | 90.3% (87.3–93.3%) | 0.880 (0.834–0.917) | 0.916 | 3.0% | 3.5% |
-| Calibrated model + rule floors | 90.0% (87.0–93.0%) | 0.878 (0.834–0.916) | 0.914 | 3.9% | 6.1% |
-| Calibrated model only | 90.6% (87.3–93.6%) | 0.883 (0.841–0.921) | 0.912 | 4.5% | 8.8% |
-| Rules only | 58.2% (52.7–63.6%) | 0.524 (0.469–0.579) | 0.554 | 17.0% | 22.8% |
-| Keyword categories only | 41.2% (36.1–46.4%) | 0.396 (0.340–0.448) | 0.249 | 20.9% | 18.4% |
-| TF-IDF + logistic regression (raw text) | 84.5% (80.9–88.2%) | 0.827 (0.782–0.868) | 0.923 | 6.4% | 14.0% |
-| Majority class | 36.7% (31.5–41.8%) | 0.134 (0.120–0.147) | 0.000 | 63.3% | 100.0% |
+| ARIA policy (offline) | 95.5% (93.0–97.8%) | 0.943 (0.910–0.970) | 0.966 | 1.6% | 1.8% |
+| Calibrated model + rule floors | 95.2% (92.6–97.4%) | 0.942 (0.909–0.968) | 0.977 | 2.9% | 3.5% |
+| Calibrated model only | 95.2% (92.6–97.4%) | 0.942 (0.909–0.968) | 0.977 | 2.9% | 3.5% |
+| Rules only | 58.3% (52.9–63.8%) | 0.528 (0.475–0.583) | 0.550 | 18.3% | 23.9% |
+| Keyword categories only | 42.3% (36.9–48.1%) | 0.403 (0.343–0.458) | 0.245 | 21.5% | 18.6% |
+| TF-IDF + logistic regression (raw text) | 84.0% (79.8–87.8%) | 0.823 (0.776–0.863) | 0.923 | 6.4% | 13.3% |
+| Majority class | 36.9% (31.7–42.0%) | 0.135 (0.120–0.148) | 0.000 | 63.1% | 100.0% |
 
-The text baseline reads each window's raw lines, minus the alert tag that BGL and Thunderbird lines open with: the BGL labels come from that tag.
+The text baseline reads each window's raw lines, minus the alert tag that BGL lines open with: the BGL labels come from that tag.
 
-Calibration of the model's probabilities: ECE 0.027, Brier 0.138.
+Calibration of the model's probabilities: ECE 0.016, Brier 0.075.
 
-Risk–coverage (the calibrated model answering only its most confident windows): 0.0% error at 50.0% coverage, 1.5% error at 60.0% coverage, 2.2% error at 70.0% coverage, 2.3% error at 80.0% coverage, 5.4% error at 90.0% coverage, 9.4% error at 100.0% coverage; AURC 0.016.
+Risk–coverage (the calibrated model answering only its most confident windows): 0.0% error at 50.0% coverage, 0.0% error at 60.0% coverage, 0.0% error at 70.0% coverage, 0.8% error at 80.0% coverage, 1.8% error at 90.0% coverage, 4.8% error at 100.0% coverage; AURC 0.004.
 
-Conformal prediction sets (alpha 0.1, target coverage 90.0%): coverage 91.8% before the rule floors, 91.2% after; mean set size 1.021.
+Conformal prediction sets (alpha 0.1, target coverage 90.0%): coverage 97.8% before the rule floors, 97.8% after; mean set size 1.083.
 
-Automation: 83.0% of windows were decided without review, with 96.0% accuracy; the rest were flagged for review (62.5% accuracy for the conservative choice).
+Automation: 88.5% of windows were decided without review, with 99.3% accuracy; the rest were flagged for review (66.7% accuracy for the conservative choice).
 
 | System | Windows | Accuracy | SEV1/2 rated SEV3/4 | Labels from |
 |---|---|---|---|---|
 | android | 18 | 100.0% | 0.0% | scenario_policy |
 | apache | 18 | 100.0% | 0.0% | scenario_policy |
-| bgl | 66 | 92.4% | 4.0% | bgl_alert_tags |
-| hadoop | 30 | 96.7% | 0.0% | scenario_policy |
+| bgl | 66 | 93.9% | 4.0% | bgl_alert_tags |
+| hadoop | 30 | 93.3% | 0.0% | scenario_policy |
 | hdfs | 18 | 100.0% | 0.0% | scenario_policy |
-| hpc | 42 | 71.4% | 3.5% | scenario_policy |
-| linux | 18 | 88.9% | 20.0% | scenario_policy |
+| hpc | 42 | 97.6% | 0.0% | scenario_policy |
+| linux | 18 | 100.0% | 0.0% | scenario_policy |
 | mac | 18 | 100.0% | 0.0% | scenario_policy |
 | openssh | 18 | 77.8% | 0.0% | scenario_policy |
-| openstack | 18 | 83.3% | 0.0% | scenario_policy |
+| openstack | 18 | 88.9% | 0.0% | scenario_policy |
 | proxifier | 18 | 100.0% | 0.0% | scenario_policy |
-| thunderbird | 18 | 100.0% | 0.0% | scenario_policy |
-| zookeeper | 30 | 83.3% | 0.0% | scenario_policy |
+| zookeeper | 30 | 96.7% | 0.0% | scenario_policy |
 <!-- /generated:severity-metrics -->
 
 What each row measures:
@@ -303,7 +304,9 @@ regression.
   parser, features, investigator and label policy changed after runs on them, and CI's smoke gate
   runs on seed 41. Read the severity numbers as development-set results. Their intervals resample
   windows as if they were independent, but windows of one failure mode share a few source
-  messages, so the true uncertainty is wider.
+  messages, so the true uncertainty is wider. The changes in rules version 2026.10.3 (keywords
+  and criticality read from warning lines, and two keyword patterns narrowed) were chosen on
+  separate validation seeds, 51–56, without looking at the test seeds.
 - **Prediction sets.** Almost every set holds one label, so coverage sits close to top-1
   accuracy and an LLM adjudicates rarely. The 90% target holds on windows exchangeable with the
   calibration windows; coverage differs by class and falls under a shift.
