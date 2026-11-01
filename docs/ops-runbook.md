@@ -9,7 +9,7 @@ It is not the incident runbook library in [`runbooks/`](../runbooks), which ARIA
 | Component | Command | What it does |
 |---|---|---|
 | API | `aria serve` (`make api`) | Serves REST and server-sent events, MCP at `/mcp`, A2A at `/a2a` and AG-UI at `/agui`, and the health checks. With `ARIA_WORKER_MODE=inprocess` it also executes runs and the periodic jobs. |
-| Worker | `aria worker` (`make worker`) | With `ARIA_WORKER_MODE=external`, it claims queued runs from the database and executes them, and runs the periodic jobs (the log scan and recalibration) |
+| Worker | `aria worker` (`make worker`) | With `ARIA_WORKER_MODE=external`, it claims queued runs from the database and executes them, and runs the periodic jobs (the log scan, recalibration and, when you set it up, the retention purge) |
 | Web app | `pnpm --dir web dev` (`make web`), or the `web` image | The landing page and the console. Its server forwards console requests to the API with the signed-in key. |
 | Database | | SQLite by default, or Azure SQL. It holds runs, checkpoints, events, reports, outbound actions, the tool-call audit, reviews and incident memory. |
 | Model files | | The trained severity model, `models/severity_log.json`, ships with the code. Recalibrated versions and the offline embeddings live in `ARIA_MODELS_DIR` (`/var/lib/aria/models`, on the shared volume, in containers). |
@@ -176,6 +176,7 @@ Both are read when a process starts, so restart after a change. `GET /api/v1/set
 | `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_USE_ENTRA`, `AZURE_OPENAI_CHAT_DEPLOYMENT`, `AZURE_OPENAI_EMBED_DEPLOYMENT` | Azure OpenAI, with a key or with the managed identity |
 | `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `OPENAI_CHAT_MODEL`, `OPENAI_EMBED_MODEL` | Any OpenAI-compatible endpoint (OpenAI, vLLM, Ollama) |
 | `ARIA_SCAN_INTERVAL_S`, `ARIA_SCAN_SOURCES` | The periodic log scan: seconds between polls (`0` turns it off), and `system=path` pairs |
+| `ARIA_RETENTION_DAYS`, `ARIA_PURGE_INTERVAL_S` | How long runs are kept (`0`, the default, keeps them until someone deletes them), and seconds between purges by the process that executes runs (`0`: only `aria purge` deletes). See [Retention and purge](#retention-and-purge). |
 | `SLACK_WEBHOOK_URL`, `TEAMS_WEBHOOK_URL`, `ARIA_OUTBOUND_WEBHOOK_URL`, `ARIA_OUTBOUND_WEBHOOK_SECRET` | Destinations for approved messages, and the key that signs generic webhook deliveries |
 | `ARIA_API_URL` | Web app: where its server reaches the API |
 | `ARIA_WEB_URL` | Web app: its public URL, used in page metadata and link previews. Pages are prerendered, so pass it when building the image too (`--build-arg ARIA_WEB_URL=...`; azd reads it from `azd env set ARIA_WEB_URL`) |
@@ -191,6 +192,8 @@ The `config/aria.yaml` settings operators change most often:
 | `guardrails` | Redaction, IP pseudonyms, injection detection, the content-safety check, and the line caps |
 | `triggers` | The alert grouping window, plus the scan's burst threshold and window size |
 | `severity.recalibrate_after`, `severity.recalibrate_check_s` | When recalibration runs. Their defaults are in [`config.py`](../src/aria/config.py), so add them to the YAML to change them. |
+| `retention.days`, `retention.purge_interval_s` | How long runs are kept, and how often they are purged (see [Retention and purge](#retention-and-purge)). Both are off by default. |
+| `llm.data_terms` | What each model provider's own terms say about the prompts ARIA sends it, and the day someone read them. Settings shows them beside the model settings. |
 
 ## Watching it run
 
@@ -264,6 +267,32 @@ Processes log to standard output. With `ARIA_LOG_FORMAT=json`, each line is one 
 | `scan.started`, `scan.run_opened`, `scan.covered`, `scan.failed` | The log scan |
 | `severity.adapted`, `severity.recalibrated`, `severity.model_reloaded`, `severity.recalibration_failed`, `severity.model_missing` | The severity model |
 | `services.ticket_models_missing` | No ticket model was found at start |
+| `retention.purged`, `retention.purge_failed` | The retention purge deleted runs (with how many rows of each kind, and how many runs it left because a process held them), or failed and will try again on its next round |
+
+### Reviewers
+
+`GET /api/v1/reviewers` says how each person reviews. The console's **Settings** shows it under **Deployment details**, **Learning from reviews**, as **How each reviewer decides**. For each reviewer:
+
+| Figure | What it counts |
+|---|---|
+| Reviews | Reports they approved, edited or discarded |
+| Approved without edits | Reviews that approved the report exactly as ARIA wrote it |
+| Changed ARIA's level | Reviews that settled on a level other than the one ARIA planned for |
+| Median time to decide | The median time from the run pausing for review to their decision. "Not known" when none of their runs recorded the pause. |
+
+The figures come from rows ARIA already stores, so they need no setup:
+
+- each review's feedback row: who decided, what, and ARIA's level against theirs;
+- the run's first `interrupt` event: when it paused for review;
+- the report's review time: when the decision was applied.
+
+They cover the newest 2,000 reviews by default (`?limit=` takes up to 10,000), and only reviews that are still stored:
+
+- a deleted or purged run takes its review with it;
+- reviews of a visitor's own runs on a shared demo (`ARIA_VISITOR_SCOPE`) are never stored, so they never count;
+- unattended runs (`ARIA_REQUIRE_APPROVAL=false`) have no reviewer, so they never count.
+
+A reviewer who approves nearly everything without edits, and quickly, may be agreeing with ARIA rather than checking it; blind checks (see [Recalibration](#recalibration)) measure that without the anchor.
 
 ## Routine operations
 
@@ -328,13 +357,15 @@ uv run aria providers check nim
 
 Changing the embedding provider changes the vector space. Memory re-embeds stale rows when it reloads, so an index never mixes models.
 
+Before you send real logs to a hosted provider, read what its terms say about prompts. `llm.data_terms` in `config/aria.yaml` records it for each provider, and Settings shows it beside the model settings. Terms that nobody has read say "Not verified". When you read them, fill in whether the provider may use prompts to improve its models and how long it keeps them, and set `verified` to the date you read them. The config refuses terms that say either without that date. A new hosted provider names its entry with `terms`.
+
 ### Scale workers
 
 - **More workers.** Run more `aria worker` processes against the same database; a claim is a conditional update, so two workers never take the same run. In compose, run `docker compose up -d --scale worker=3`. On Azure, raise the worker app's `minReplicas` (the template allows up to three).
 - **Concurrency.** Set `ARIA_WORKER_CONCURRENCY`, or override it per worker with `aria worker --concurrency N`.
 - **The database.** SQLite serialises writes. For more than a couple of workers, use Azure SQL.
 - **Abandoned runs.** Every process that drives a run, a worker or the API applying a review, claims it first and renews the claim every minute; it lets go when the run pauses or ends. A run whose holder went quiet for 5 minutes is reclaimed by another worker (or, in process, by the API), and a process with every slot busy leaves it to the others. A reclaimed run that had already paused for review, or ended, is recorded as such and let go at once. Two processes never drive one run at once, and each approved message is marked as being sent before it goes out, so it goes out once.
-- **Periodic jobs.** Each worker runs the recalibration job against the shared model file; repeating it is harmless, because each blind check is applied once, by its id, whichever worker gets there first. Configure the log scan on one worker only, or replicas tailing the same files can open duplicate runs.
+- **Periodic jobs.** Each worker runs the recalibration job against the shared model file; repeating it is harmless, because each blind check is applied once, by its id, whichever worker gets there first. Configure the log scan on one worker only, or replicas tailing the same files can open duplicate runs. The retention purge is safe on every worker: each run is taken and deleted in one transaction, by one of them.
 - **More API replicas.** Run migrations as a separate step (`aria db upgrade`), and set `ARIA_MIGRATE_ON_START=false`. The rate limiter and the A2A task store live in each process's memory, so each replica keeps its own. Alert grouping does not: an alert storm delivered to several replicas at once still opens one group and one run. The database keeps one open group per alert key (a unique index, added by `aria db upgrade`), and every request tries the group's run IDs in the same order, so racing requests end up on the same run.
 
 ### Database migrations
@@ -447,14 +478,65 @@ The safety model reads LLM-written report claims and polished messages. A flagge
 
 ### Delete a run
 
-`DELETE /api/v1/runs/{run_id}` removes a run everywhere:
+`DELETE /api/v1/runs/{run_id}` removes a run and everything that belongs only to it, the same rows a retention purge removes (listed under [Retention and purge](#retention-and-purge)):
 
 - its checkpoints, lines and events;
 - its report and outbound actions;
-- its tool-call audit and reviews;
-- its incident-memory entry.
+- its tool-call audit, reviews and reviewer correction;
+- its incident-memory entry;
+- the alert group that opened it, with its alerts.
 
-It answers 409 while the run is queued or running. Nothing deletes old runs automatically.
+It answers 409 while the run is queued or running. Nothing deletes old runs automatically unless you set a retention period.
+
+### Retention and purge
+
+ARIA keeps every run until someone deletes it. Nothing is deleted automatically unless you set a retention period.
+
+**Set a period.** Set `ARIA_RETENTION_DAYS` (`retention.days` in `config/aria.yaml`) to the number of days to keep a run after the last thing that happened to it: it was created, paused for review, was reviewed, had a message sent again, or someone rated it blind. Where the EU AI Act's Article 26(6) applies, keep runs at least six months (see [ARIA and the EU AI Act](eu-ai-act.md)).
+
+**Count first.** This prints how many runs are past the period and how many rows of each kind a purge would delete, and deletes nothing:
+
+```bash
+uv run aria purge --dry-run
+```
+
+Pass `--days N` to try another period. In compose, run it as `docker compose exec worker aria purge --dry-run`.
+
+**Purge.** Run it by hand or from a scheduler:
+
+```bash
+uv run aria purge
+```
+
+Or set `ARIA_PURGE_INTERVAL_S` (for example `86400`, once a day; at least `60`), and the process that executes runs purges on that schedule: the API in `inprocess` mode, each worker in `external` mode. Restart after changing either variable. Several processes can purge at once, because each takes a run and deletes it in one transaction, so every run is deleted once. A purge cannot be undone, so back up first if you might need the runs again.
+
+**What is deleted.** A run is purged when nothing has happened to it for the whole period and it is not queued or running. A run that a process holds at that moment, because it is applying a review or sending a message, is left for the next purge. For each purged run, one transaction deletes, children first:
+
+- the run itself (`runs`);
+- its event log (`run_events`), its report (`reports`), and its drafted and sent messages (`actions`);
+- its checkpoints (`lg_checkpoints`, `lg_writes`, `lg_blobs`), which hold the log lines the run was sent;
+- its stored log lines (`log_events` rows of the `run` dataset) and its tool-call audit (`tool_calls`);
+- its reviews and blind checks (`feedback`);
+- its reviewer correction in learned memory (`lg_store`, namespace `feedback/<system>/<failure mode>`, keyed by the run);
+- the incident-memory entry it became when it was published (`incidents`, the `inc-...` entry with source `run`);
+- the alert group that opened it (`alert_groups`) and that group's alerts (`alerts`).
+
+One thing stays: when the newest `feedback` row belongs to a purged run, its id is kept in an empty placeholder (no run, no reviewer, no ratings). SQLite would otherwise hand that id out again, and recalibration skips blind checks by id. A later purge removes the placeholder once newer rows exist.
+
+**What is never deleted:**
+
+- runbooks;
+- the incidents memory was seeded with, and every incident that did not come from a purged run;
+- the routine log templates ARIA learned from many runs (`lg_store`, namespace `templates`);
+- datasets (the other `log_events` rows, `log_windows` and the ITSM tables), evaluation runs (`eval_runs`) and model files;
+- other runs, copies (forks) of a purged run included: each keeps its own age.
+
+**After a purge.**
+
+- **Memory.** A purge by the periodic job reloads incident memory in its own process at once. Every other process stops finding the deleted incidents within a minute.
+- **Learning.** Recalibration keeps what it already learned from purged blind checks. A model without per-level calibrations counts reviews, so purging reviews postpones its next recalibration.
+- **Figures.** Purged runs drop out of the reviewer figures, the drift check and the review list.
+- **Copies.** A copy of a purged run still names the original, which no longer opens.
 
 ## Troubleshooting
 
