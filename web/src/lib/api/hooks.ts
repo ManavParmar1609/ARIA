@@ -33,6 +33,8 @@ export type SettingsView = components["schemas"]["SettingsOut"];
 export type CapacityView = components["schemas"]["CapacityOut"];
 export type FeedbackView = components["schemas"]["FeedbackOut"];
 export type ReviewersView = components["schemas"]["ReviewersOut"];
+export type DecisionRecordEntry = components["schemas"]["DecisionRecord"];
+export type ChainCheckView = components["schemas"]["ChainCheck"];
 export type RealIncident = components["schemas"]["RealIncidentOut"];
 export type ReplayRequest = components["schemas"]["ReplayRequest"];
 export type ExpertCheck = components["schemas"]["ExpertCheckOut"];
@@ -59,6 +61,8 @@ export const keys = {
   settings: ["settings"] as const,
   feedback: ["feedback"] as const,
   reviewers: ["reviewers"] as const,
+  record: (id: string) => ["run", id, "record"] as const,
+  audit: ["audit"] as const,
   blindCheck: ["blind-check"] as const,
   drift: ["drift"] as const,
   realIncidents: ["real-incidents"] as const,
@@ -320,6 +324,27 @@ export function useDrift() {
   return useQuery({
     queryKey: keys.drift,
     queryFn: () => apiFetch<DriftView>(v1("/drift")),
+    staleTime: 60_000,
+  });
+}
+
+/** A run's decisions, oldest first: each review, edit, publish, message and blind check, with
+ * who made it. A review or a resend invalidates it along with the rest of the run. */
+export function useRunRecord(id: string, enabled = true) {
+  return useQuery({
+    queryKey: keys.record(id),
+    queryFn: () => apiFetch<DecisionRecordEntry[]>(runPath(id, "/record")),
+    enabled,
+    staleTime: 10_000,
+  });
+}
+
+/** Whether the decision record's chain holds from its first entry to its last. The server
+ * reads every entry to answer, so the answer is kept for a while. */
+export function useAuditVerify() {
+  return useQuery({
+    queryKey: keys.audit,
+    queryFn: () => apiFetch<ChainCheckView>(v1("/audit/verify")),
     staleTime: 60_000,
   });
 }

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { BlindCheck, DriftReport } from "@/components/console/calibration-check";
 import { DataTerms } from "@/components/console/data-terms";
 import { ModelKeyPanel } from "@/components/console/model-key";
+import { RecordStatus } from "@/components/console/record-status";
 import { ReviewerStats } from "@/components/console/reviewer-stats";
 import { ErrorState, LoadingRows, PageHeader } from "@/components/console/states";
 import { Button } from "@/components/ui/button";
@@ -610,6 +611,14 @@ export function Settings() {
           ) : (
             <Configuration view={view.data} />
           )}
+
+          <Section
+            id="set-record"
+            title="Decision record"
+            intro="Every review, edit, publish, message sent, blind check, recalibration and purge goes on an append-only record, each entry hash-chained to the one before it. A chain that verifies means no entry was changed, removed or reordered since it was written."
+          >
+            <RecordStatus />
+          </Section>
 
           <Section
             id="set-blind"
