@@ -180,8 +180,9 @@ describe("the new-domain cards on Test results", () => {
       share: hits / of,
       ci: [0, 1] as [number, number],
     });
-    expect(cell(rate(10, 2683))).toBe("10 of 2,683 (under 1%)");
-    expect(cell(rate(1999, 2000))).toBe("1,999 of 2,000 (over 99%)");
+    // The words before the figure never part from it (a no-break space).
+    expect(cell(rate(10, 2683))).toBe("10 of 2,683 (under 1%)");
+    expect(cell(rate(1999, 2000))).toBe("1,999 of 2,000 (over 99%)");
     expect(cell(rate(0, 56))).toBe("0 of 56 (0%)");
     expect(cell(rate(90, 90))).toBe("90 of 90 (100%)");
     expect(cell(rate(19, 66))).toBe("19 of 66 (29%)");

@@ -205,7 +205,8 @@ const missFact = (label: string, m: MissRate): Fact => [
 function percent(r: Rate): string {
   if (r.hits === 0 || r.hits === r.of) return `${per100(r.share)}%`;
   const p = per100(r.share);
-  return p === 0 ? "under 1%" : p === 100 ? "over 99%" : `${p}%`;
+  // A no-break space, so a narrow cell never splits "under 1%".
+  return p === 0 ? "under 1%" : p === 100 ? "over 99%" : `${p}%`;
 }
 /** "19 of 66 (29%)": a share as a table cell. */
 export const cell = (r: Rate) => `${n(r.hits)} of ${n(r.of)} (${percent(r)})`;
