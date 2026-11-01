@@ -245,7 +245,7 @@ class Orders:
         return cls(
             severity=max(levels, key=lambda s: s.rank) if levels else None,  # the mildest named
             send=bool(re.search(r"(?i)\b(send|post|deliver|approved?|sign-off)\b", text)),
-            links=list(dict.fromkeys(_URL.findall(text)))[:4],
+            links=list(dict.fromkeys(u.rstrip(".,;:!?") for u in _URL.findall(text)))[:4],
             recipients=list(dict.fromkeys(_RECIPIENT.findall(text)))[:4],
             secrets=list(dict.fromkeys(_SECRET.findall(text)))[:6],
         )
