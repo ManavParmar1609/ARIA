@@ -14,8 +14,9 @@ from aria.api.scan import LogScanner, scan_forever
 from aria.graph.runner import TriageRunner
 from aria.observability.logging import get_logger
 from aria.services import Services
+from aria.severity.conformal import level_alphas
 from aria.severity.model import live_model_path
-from aria.severity.recalibration import recalibrate_from_feedback
+from aria.severity.recalibration import adapt_from_blind_checks, recalibrate_from_feedback
 
 log = get_logger(__name__)
 
@@ -27,16 +28,30 @@ async def recalibrate_forever(
     config = services.config.severity
     while not stop.is_set():
         try:
-            result = await asyncio.to_thread(
-                recalibrate_from_feedback,
-                services.engine,
-                live_model_path(config.log_model_file, services.settings.models_dir),
-                alpha=config.alpha,
-                min_new_reviews=config.recalibrate_after,
-                trained=config.log_model_file,
-            )
-            if result is not None:
-                services.severity.refresh()
+            live = live_model_path(config.log_model_file, services.settings.models_dir)
+            model = services.severity.model
+            if model is not None and model.calibrations:
+                # Per-level models learn from blind checks (ADR 0014), not approvals.
+                adapted = await asyncio.to_thread(
+                    adapt_from_blind_checks,
+                    services.engine,
+                    live,
+                    targets=level_alphas(model.classes, config.alpha, config.serious_alpha),
+                    trained=config.log_model_file,
+                )
+                if adapted is not None:
+                    services.severity.refresh()
+            else:
+                result = await asyncio.to_thread(
+                    recalibrate_from_feedback,
+                    services.engine,
+                    live,
+                    alpha=config.alpha,
+                    min_new_reviews=config.recalibrate_after,
+                    trained=config.log_model_file,
+                )
+                if result is not None:
+                    services.severity.refresh()
         except Exception:  # a failed check must not stop the job; the next one retries
             log.exception("severity.recalibration_failed")
         with contextlib.suppress(TimeoutError):

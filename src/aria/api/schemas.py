@@ -400,6 +400,68 @@ class FeedbackOut(BaseModel):
     reviews: list[ReviewOut]
 
 
+class BlindPattern(BaseModel):
+    """One log pattern of the incident, as the parser grouped it (already redacted)."""
+
+    template: str
+    count: int
+    error_like: bool
+    new: bool
+
+
+class BlindCase(BaseModel):
+    """An incident to rate before seeing ARIA's level: what the logs showed, nothing it decided."""
+
+    run_id: str
+    system: str
+    lines: int
+    error_lines: int
+    warning_lines: int
+    nodes: int
+    minutes: float
+    patterns: list[BlindPattern]
+
+
+class BlindCheckOut(BaseModel):
+    case: BlindCase | None
+    checks: int  # blind checks recorded so far
+    counted: bool  # whether this caller's ratings recalibrate ARIA (not a visitor's on a demo)
+
+
+class SystemDrift(BaseModel):
+    """Whether one system's decided levels shifted between its earlier and recent runs."""
+
+    system: str
+    runs: int
+    compared: int  # runs in each half
+    reference: dict[str, int]
+    recent: dict[str, int]
+    psi: float
+    critical: float  # what chance alone exceeds one time in twenty
+    shifted: bool
+
+
+class DriftOut(BaseModel):
+    min_runs: int
+    systems: list[SystemDrift]
+    too_few_runs: list[str]
+
+
+class BlindRating(BaseModel):
+    severity: Severity
+
+
+class BlindReveal(BaseModel):
+    run_id: str
+    yours: Severity
+    aria: Severity
+    prediction_set: list[Severity]
+    held: bool  # your level was in ARIA's set
+    agreed: bool
+    counted: bool
+    checks: int
+
+
 class Health(BaseModel):
     status: Literal["ok", "degraded"]
     version: str

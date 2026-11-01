@@ -127,7 +127,15 @@ def summarize(node: str, result: Json) -> Json:
         }
     elif node == "severity" and result.get("severity"):
         sev = result["severity"]
-        keys = ("severity", "decided_by", "confidence", "needs_review", "prediction_set")
+        keys = (
+            "severity",
+            "decided_by",
+            "confidence",
+            "needs_review",
+            "prediction_set",
+            "calibration",
+            "novelty",
+        )
         out = {k: sev.get(k) for k in keys}
     elif node in ("recall", "widen") and result.get("retrieval"):
         retrieval = result["retrieval"]

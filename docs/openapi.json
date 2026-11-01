@@ -2056,6 +2056,151 @@
         }
       }
     },
+    "/api/v1/blind-check": {
+      "get": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Blind Check",
+        "description": "A recent incident, picked at random, to rate before seeing ARIA's level.\n\nOnly what the logs showed comes back: no level, set, report or title (a title opens with the\nlevel). On a shared demo a visitor may try it, but only a key-holder's ratings recalibrate.",
+        "operationId": "blind_check_api_v1_blind_check_get",
+        "parameters": [
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlindCheckOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blind-check/{run_id}": {
+      "post": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Rate Blind",
+        "description": "Record a blind rating and show what ARIA decided. A key-holder's rating recalibrates.",
+        "operationId": "rate_blind_api_v1_blind_check__run_id__post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlindRating"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlindReveal"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/drift": {
+      "get": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Drift",
+        "description": "Per system, whether the levels ARIA decided lately differ from the ones it decided before\nby more than chance (see aria.severity.drift). Needs no labels.",
+        "operationId": "drift_api_v1_drift_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriftOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/eval": {
       "get": {
         "tags": [
@@ -2735,6 +2880,177 @@
         ],
         "title": "AskResponse"
       },
+      "BlindCase": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "system": {
+            "type": "string",
+            "title": "System"
+          },
+          "lines": {
+            "type": "integer",
+            "title": "Lines"
+          },
+          "error_lines": {
+            "type": "integer",
+            "title": "Error Lines"
+          },
+          "warning_lines": {
+            "type": "integer",
+            "title": "Warning Lines"
+          },
+          "nodes": {
+            "type": "integer",
+            "title": "Nodes"
+          },
+          "minutes": {
+            "type": "number",
+            "title": "Minutes"
+          },
+          "patterns": {
+            "items": {
+              "$ref": "#/components/schemas/BlindPattern"
+            },
+            "type": "array",
+            "title": "Patterns"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "system",
+          "lines",
+          "error_lines",
+          "warning_lines",
+          "nodes",
+          "minutes",
+          "patterns"
+        ],
+        "title": "BlindCase",
+        "description": "An incident to rate before seeing ARIA's level: what the logs showed, nothing it decided."
+      },
+      "BlindCheckOut": {
+        "properties": {
+          "case": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BlindCase"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "checks": {
+            "type": "integer",
+            "title": "Checks"
+          },
+          "counted": {
+            "type": "boolean",
+            "title": "Counted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "case",
+          "checks",
+          "counted"
+        ],
+        "title": "BlindCheckOut"
+      },
+      "BlindPattern": {
+        "properties": {
+          "template": {
+            "type": "string",
+            "title": "Template"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "error_like": {
+            "type": "boolean",
+            "title": "Error Like"
+          },
+          "new": {
+            "type": "boolean",
+            "title": "New"
+          }
+        },
+        "type": "object",
+        "required": [
+          "template",
+          "count",
+          "error_like",
+          "new"
+        ],
+        "title": "BlindPattern",
+        "description": "One log pattern of the incident, as the parser grouped it (already redacted)."
+      },
+      "BlindRating": {
+        "properties": {
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "severity"
+        ],
+        "title": "BlindRating"
+      },
+      "BlindReveal": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "yours": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "aria": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "prediction_set": {
+            "items": {
+              "$ref": "#/components/schemas/Severity"
+            },
+            "type": "array",
+            "title": "Prediction Set"
+          },
+          "held": {
+            "type": "boolean",
+            "title": "Held"
+          },
+          "agreed": {
+            "type": "boolean",
+            "title": "Agreed"
+          },
+          "counted": {
+            "type": "boolean",
+            "title": "Counted"
+          },
+          "checks": {
+            "type": "integer",
+            "title": "Checks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "yours",
+          "aria",
+          "prediction_set",
+          "held",
+          "agreed",
+          "counted",
+          "checks"
+        ],
+        "title": "BlindReveal"
+      },
       "CalibrationOut": {
         "properties": {
           "model_version": {
@@ -3037,6 +3353,35 @@
         ],
         "title": "Delivery",
         "description": "A message a reviewer approved, and what happened when ARIA sent it."
+      },
+      "DriftOut": {
+        "properties": {
+          "min_runs": {
+            "type": "integer",
+            "title": "Min Runs"
+          },
+          "systems": {
+            "items": {
+              "$ref": "#/components/schemas/SystemDrift"
+            },
+            "type": "array",
+            "title": "Systems"
+          },
+          "too_few_runs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Too Few Runs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "min_runs",
+          "systems",
+          "too_few_runs"
+        ],
+        "title": "DriftOut"
       },
       "Evidence": {
         "properties": {
@@ -5318,6 +5663,61 @@
           "label"
         ],
         "title": "SizeOptionOut"
+      },
+      "SystemDrift": {
+        "properties": {
+          "system": {
+            "type": "string",
+            "title": "System"
+          },
+          "runs": {
+            "type": "integer",
+            "title": "Runs"
+          },
+          "compared": {
+            "type": "integer",
+            "title": "Compared"
+          },
+          "reference": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Reference"
+          },
+          "recent": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Recent"
+          },
+          "psi": {
+            "type": "number",
+            "title": "Psi"
+          },
+          "critical": {
+            "type": "number",
+            "title": "Critical"
+          },
+          "shifted": {
+            "type": "boolean",
+            "title": "Shifted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "system",
+          "runs",
+          "compared",
+          "reference",
+          "recent",
+          "psi",
+          "critical",
+          "shifted"
+        ],
+        "title": "SystemDrift",
+        "description": "Whether one system's decided levels shifted between its earlier and recent runs."
       },
       "TicketAssessment": {
         "properties": {

@@ -465,6 +465,45 @@ def review_feedback(engine: Engine) -> list[tuple[int, dict[str, Any], bool]]:
         return [(row.id, dict(row.value), row.used_for_training) for row in rows]
 
 
+def feedback_of(engine: Engine, field: str) -> list[tuple[int, dict[str, Any], bool]]:
+    """Every feedback row of one kind (``review``, ``blind_check``), oldest first."""
+    with session_scope(engine) as session:
+        rows = session.scalars(
+            select(FeedbackRow).where(FeedbackRow.field == field).order_by(FeedbackRow.id)
+        )
+        return [(row.id, dict(row.value), row.used_for_training) for row in rows]
+
+
+def blind_check_candidates(engine: Engine, *, recent: int = 500) -> list[str]:
+    """Recent runs someone could rate blind: decided, shared (no visitor's own), not yet rated.
+
+    Picking at random from these, not choosing, keeps blind checks a fair sample of what ARIA
+    sees, which is what lets them recalibrate it.
+    """
+    done = blind_checked_runs(engine)
+    with session_scope(engine) as session:
+        rows = session.scalars(
+            select(RunRow.id)
+            .where(
+                RunRow.severity.is_not(None),
+                RunRow.visitor.is_(None),
+                RunRow.status.in_(
+                    [RunStatus.AWAITING_REVIEW, RunStatus.PUBLISHED, RunStatus.REJECTED]
+                ),
+            )
+            .order_by(RunRow.created_at.desc())
+            .limit(recent)
+        )
+        return [run_id for run_id in rows if run_id not in done]
+
+
+def blind_checked_runs(engine: Engine) -> set[str]:
+    """Runs someone has already rated blind."""
+    with session_scope(engine) as session:
+        rows = session.scalars(select(FeedbackRow.run_id).where(FeedbackRow.field == "blind_check"))
+        return set(rows)
+
+
 def list_feedback(engine: Engine, *, limit: int = 50) -> list[dict[str, Any]]:
     """The newest reviews first, for people: who decided what, and whether it was used."""
     with session_scope(engine) as session:
@@ -485,6 +524,25 @@ def list_feedback(engine: Engine, *, limit: int = 50) -> list[dict[str, Any]]:
             }
             for row in rows
         ]
+
+
+def decided_levels(engine: Engine, *, per_system: int = 400) -> dict[str, list[str]]:
+    """Each system's decided severity levels on its latest ``per_system`` runs, oldest first.
+
+    Visitors' own runs on a shared demo stay out: they are theirs, like their reviews.
+    """
+    out: dict[str, list[str]] = {}
+    with session_scope(engine) as session:
+        rows = session.execute(
+            select(RunRow.system, RunRow.severity)
+            .where(RunRow.severity.is_not(None), RunRow.visitor.is_(None))
+            .order_by(RunRow.created_at.desc(), RunRow.id.desc())
+        )
+        for system, level in rows:
+            levels = out.setdefault(str(system), [])
+            if len(levels) < per_system:
+                levels.append(str(level))
+    return {system: levels[::-1] for system, levels in out.items()}
 
 
 def mark_feedback_used(engine: Engine, ids: Sequence[int]) -> None:

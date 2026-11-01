@@ -24,6 +24,7 @@ import type {
   RunbookOut,
   SampleRunRequest,
   Scenario,
+  Severity,
   TriageRequest,
 } from "./types";
 import type { components } from "./schema";
@@ -33,6 +34,9 @@ export type FeedbackView = components["schemas"]["FeedbackOut"];
 export type RealIncident = components["schemas"]["RealIncidentOut"];
 export type ReplayRequest = components["schemas"]["ReplayRequest"];
 export type ExpertCheck = components["schemas"]["ExpertCheckOut"];
+export type BlindCheckView = components["schemas"]["BlindCheckOut"];
+export type BlindReveal = components["schemas"]["BlindReveal"];
+export type DriftView = components["schemas"]["DriftOut"];
 
 export const keys = {
   session: ["session"] as const,
@@ -51,6 +55,8 @@ export const keys = {
   providers: ["providers"] as const,
   settings: ["settings"] as const,
   feedback: ["feedback"] as const,
+  blindCheck: ["blind-check"] as const,
+  drift: ["drift"] as const,
   realIncidents: ["real-incidents"] as const,
   scenarios: ["scenarios"] as const,
 };
@@ -228,6 +234,35 @@ export function useFeedback(limit = 8) {
     queryKey: [...keys.feedback, limit],
     queryFn: () => apiFetch<FeedbackView>(v1(`/feedback?limit=${limit}`)),
     staleTime: 30_000,
+  });
+}
+
+/** A recent incident to rate before seeing ARIA's level, picked at random by the server. */
+export function useBlindCheck(enabled: boolean) {
+  return useQuery({
+    queryKey: keys.blindCheck,
+    queryFn: () => apiFetch<BlindCheckView>(v1("/blind-check")),
+    enabled,
+    staleTime: Infinity,
+  });
+}
+
+/** Rate the incident blind; the answer reveals what ARIA decided. */
+export function useRateBlind() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ runId, severity }: { runId: string; severity: Severity }) =>
+      postJson<BlindReveal>(v1(`/blind-check/${encodeURIComponent(runId)}`), { severity }),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.feedback }),
+  });
+}
+
+/** Per system, whether ARIA's recent levels shifted from its earlier ones. */
+export function useDrift() {
+  return useQuery({
+    queryKey: keys.drift,
+    queryFn: () => apiFetch<DriftView>(v1("/drift")),
+    staleTime: 60_000,
   });
 }
 
