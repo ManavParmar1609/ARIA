@@ -122,6 +122,35 @@ def test_a_routine_lease_renewer_thread_is_not_degradation() -> None:
     assert load_lexicon()["degradation"].search("lease expired for client dfsclient_7")
 
 
+@pytest.mark.parametrize(
+    "line",
+    [
+        "rpc error: code = Canceled desc = context canceled",
+        "grpc: Server.processUnaryRPC failed to write status: CANCELLED",
+        '10.0.0.1 - - [31/Oct/2026:02:00:00 +0000] "GET /api HTTP/1.1" 499 0 "-"',
+        "upstream request aborted: client closed the request",
+        "The operation was canceled. (CancellationToken)",
+        "request cancelled by the client",
+        "StatusCode.CANCELLED: Received RST_STREAM with error code 8",
+    ],
+)
+def test_a_client_that_gave_up_is_a_cancellation(line: str) -> None:
+    assert load_lexicon()["cancellation"].search(line.lower())
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "rpc error: code = DeadlineExceeded desc = context deadline exceeded",  # a timeout
+        "transferred 499 bytes in 2 ms",
+        "cancel the lease renewal for client dfsclient_7",
+        "connection reset by peer",
+    ],
+)
+def test_a_timeout_or_a_number_is_not_a_cancellation(line: str) -> None:
+    assert not load_lexicon()["cancellation"].search(line.lower())
+
+
 def test_match_does_not_learn() -> None:
     drain = Drain()
     drain.add("disk sda1 is 91 percent full")
@@ -241,6 +270,55 @@ def test_warn_component_criticality_reads_warnings_and_falls_back_to_the_default
         [_line("INFO", "ok", "KERNEL")], system="bgl", novel_template_ids=set()
     )
     assert quiet.warn_component_criticality == 0
+
+
+def test_a_line_with_no_level_is_trouble_only_when_the_window_corroborates_it() -> None:
+    """A log with no levels at all reports trouble in words, so its lines count. In a levelled
+    window an unlevelled line reads as INFO (the OpenTelemetry logs data model) unless the window
+    also logs errors, which says something is wrong."""
+    refused = "connection refused by node-7"
+    legacy = compute_features(
+        [_line(None, refused), _line(None, refused), _line(None, "all good")],
+        system="hpc",
+        novel_template_ids=set(),
+    )
+    assert legacy.issue_keyword_hits["unavailable"] == 2
+    assert legacy.issue_events == 3
+    quiet = compute_features(
+        [_line("INFO", "served request"), _line(None, refused)],
+        system="hpc",
+        novel_template_ids=set(),
+    )
+    assert quiet.keyword_hits["unavailable"] == 1
+    assert "unavailable" not in quiet.issue_keyword_hits
+    assert quiet.issue_events == 0
+    corroborated = compute_features(
+        [_line("ERROR", "disk full"), _line(None, refused)],
+        system="hpc",
+        novel_template_ids=set(),
+    )
+    assert corroborated.issue_keyword_hits["unavailable"] == 1
+    assert corroborated.issue_events == 2
+
+
+def test_keyword_patterns_count_a_repeated_line_once() -> None:
+    def at(level: str, message: str, template: str) -> FeatureInput:
+        return FeatureInput(datetime(2026, 1, 1, tzinfo=UTC), "n1", None, level, message, template)
+
+    lines = [
+        *[at("ERROR", "connection refused by 10.0.0.1", "T1")] * 5,
+        at("ERROR", "connection refused by 10.0.0.2", "T1"),
+        at("WARN", "no route to host 10.0.0.3", "T2"),
+        at("INFO", "host unreachable earlier, recovered", "T3"),
+    ]
+    features = compute_features(lines, system="hdfs", novel_template_ids=set())
+    assert features.keyword_hits["unavailable"] == 8
+    assert features.issue_keyword_hits["unavailable"] == 7
+    assert features.keyword_templates["unavailable"] == 3
+    assert features.issue_keyword_templates["unavailable"] == 2
+    assert features.issue_templates == {"T1": 6, "T2": 1}
+    assert features.issue_events == 7
+    assert "crash" not in features.keyword_templates
 
 
 @pytest.fixture(scope="module")

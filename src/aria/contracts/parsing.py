@@ -48,10 +48,21 @@ class WindowFeatures(Contract):
     error_events: int = Field(ge=0)
     error_ratio: float = Field(ge=0, le=1)
     keyword_hits: dict[str, int] = Field(default_factory=dict)
-    # The same categories counted only on lines logged at WARN or above, or with no level. The
-    # model reads these: at INFO the same words are usually routine (a client dropping its
-    # connection, a checksum verified).
+    # The same categories counted only on issue lines: lines logged at WARN or above, plus lines
+    # with no level when the window corroborates them (see parsing/features.py). The model reads
+    # these: at INFO the same words are usually routine (a client dropping its connection, a
+    # checksum verified).
     issue_keyword_hits: dict[str, int] = Field(default_factory=dict)
+    # How many lines count as issue lines.
+    issue_events: int = Field(default=0, ge=0)
+    # Distinct log patterns (templates) behind each category's hits, on every line and on issue
+    # lines. One message repeated by one node is one pattern however often it repeats, so rules
+    # that a repeated line could inflate read these beside the line counts.
+    keyword_templates: dict[str, int] = Field(default_factory=dict)
+    issue_keyword_templates: dict[str, int] = Field(default_factory=dict)
+    # The issue lines' templates and how many lines each has (the most frequent kept), so a
+    # window can be compared with the patterns reviewers dismissed on the same system before.
+    issue_templates: dict[str, int] = Field(default_factory=dict)
     burst_score: float = Field(ge=0)
     peak_errors_per_min: float = Field(ge=0)
     distinct_nodes: int = Field(ge=0)

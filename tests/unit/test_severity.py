@@ -34,7 +34,14 @@ from aria.severity.model import (
     softmax,
 )
 from aria.severity.policy import Preliminary, decide, level_words, torn_words
-from aria.severity.rules import RuleSet, feature_space, load_rules, parse_condition
+from aria.severity.rules import (
+    HISTORY_FEATURES,
+    RuleSet,
+    feature_space,
+    known_features,
+    load_rules,
+    parse_condition,
+)
 from aria.severity.training import featurize_all, fit_log_model
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "loghub"
@@ -320,6 +327,46 @@ def test_duplicate_rule_ids_are_rejected(tmp_path: Path) -> None:
     path.write_text(json.dumps({"rules": [rule, rule]}), encoding="utf-8")
     with pytest.raises(ValueError, match="duplicate"):
         load_rules(path)
+
+
+def test_each_keyword_category_is_read_as_lines_patterns_and_a_share_of_issue_lines() -> None:
+    window = features(
+        level_counts={"INFO": 590, "ERROR": 10},
+        error_events=10,
+        error_ratio=10 / 600,
+        issue_events=10,
+        keyword_hits={"cancellation": 8, "unavailable": 2},
+        issue_keyword_hits={"cancellation": 8, "unavailable": 2},
+        keyword_templates={"cancellation": 1, "unavailable": 2},
+        issue_keyword_templates={"cancellation": 1, "unavailable": 2},
+    )
+    values = feature_space(window)
+    assert values["issue_keyword_hits.cancellation"] == 8
+    assert values["issue_keyword_templates.cancellation"] == 1
+    assert values["keyword_templates.unavailable"] == 2
+    assert values["issue_keyword_share.cancellation"] == 0.8
+    assert values["issue_keyword_share.unavailable"] == 0.2
+    assert values["issue_keyword_share.crash"] == 0
+    # A window stored before issue lines were counted has no shares, never a division error.
+    assert (
+        feature_space(features(issue_keyword_hits={"crash": 3}))["issue_keyword_share.crash"] == 0
+    )
+
+
+def test_history_features_are_absent_offline_and_only_ever_tested_from_below() -> None:
+    values = feature_space(features())
+    assert not set(HISTORY_FEATURES) & set(values)
+    assert set(HISTORY_FEATURES) <= known_features()
+    history = {"error_ratio_vs_baseline": 20.0, "baseline_runs": 12, "something_else": 1.0}
+    with_history = feature_space(features(), history=history)
+    assert with_history["error_ratio_vs_baseline"] == 20.0
+    assert with_history["baseline_runs"] == 12
+    assert "something_else" not in with_history
+    burn = parse_condition(
+        {"feature": "error_ratio_vs_baseline", "op": ">=", "value": 14.4}, rule_id="r"
+    )
+    assert not burn.holds(values)  # absent reads as 0, so the rule never fires without history
+    assert burn.holds(with_history)
 
 
 # --- calibration and conformal prediction ------------------------------------------------------
