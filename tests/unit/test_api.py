@@ -200,6 +200,14 @@ async def test_me_and_settings_show_the_caller_and_limits_without_secrets(api: A
     assert view["routing"]["reporter"][0] == "nim-local"
     assert "k-ana" not in json.dumps(view)
     assert view["channels"]["slack"] is False  # no webhook set: its messages would be skipped
+    assert view["retention"] == {"days": 0, "purge_interval_s": 0}  # runs are kept until deleted
+    terms = {entry["id"]: entry for entry in view["data_terms"]}
+    assert terms["google"]["providers"] == ["gemini", "gemini-lite", "gemini-lite-2", "gemma"]
+    assert [use["improves_models"] for use in terms["google"]["uses"]] == [None, None]
+    assert terms["google"]["verified"] is None  # its page could not be read: not verified
+    claude = terms["anthropic"]
+    assert (claude["providers"], claude["uses"][0]["improves_models"]) == (["claude"], False)
+    assert claude["verified"] == "2026-11-01"
 
 
 async def test_rate_limit_answers_429_with_retry_after(monkeypatch: pytest.MonkeyPatch) -> None:

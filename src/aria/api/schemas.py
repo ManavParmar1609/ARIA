@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import (
@@ -371,6 +371,32 @@ class CapacityOut(BaseModel):
     providers: list[ProviderCapacityOut]
 
 
+class TermsSourceOut(BaseModel):
+    title: str
+    url: str
+
+
+class DataUseOut(BaseModel):
+    """What a provider's terms say about prompts for one kind of account. None: not verified."""
+
+    account: str
+    improves_models: bool | None = None  # may the provider use prompts to improve its models
+    keeps_prompts: str | None = None  # how long it keeps them, in plain words
+
+
+class DataTermsOut(BaseModel):
+    """A model provider's own terms about the prompts ARIA sends it (``llm.data_terms``)."""
+
+    id: str
+    company: str
+    service: str
+    providers: list[str]  # ARIA's providers these terms cover
+    uses: list[DataUseOut]
+    sources: list[TermsSourceOut]
+    verified: date | None = None  # the day someone read the sources; None: not verified
+    notes: str | None = None
+
+
 class SettingsOut(BaseModel):
     """The configuration a reviewer may see: limits, guardrails and routing, never secrets."""
 
@@ -397,6 +423,10 @@ class SettingsOut(BaseModel):
     shared_model: SharedModelOut | None = None
     # The largest request the API reads, so the console can say so before sending a paste.
     max_body_bytes: int | None = None
+    # How long runs are kept (``retention``): days 0 keeps them until someone deletes them.
+    retention: dict[str, int] = Field(default_factory=dict)
+    # What each model provider's terms say about prompts, as someone read them for ARIA.
+    data_terms: list[DataTermsOut] = Field(default_factory=list)
 
 
 class ModelKeyCheck(BaseModel):

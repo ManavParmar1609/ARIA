@@ -1165,6 +1165,40 @@ export type components = {
             /** Text */
             text: string;
         };
+        /**
+         * DataTermsOut
+         * @description A model provider's own terms about the prompts ARIA sends it (``llm.data_terms``).
+         */
+        DataTermsOut: {
+            /** Company */
+            company: string;
+            /** Id */
+            id: string;
+            /** Notes */
+            notes?: string | null;
+            /** Providers */
+            providers: string[];
+            /** Service */
+            service: string;
+            /** Sources */
+            sources: components["schemas"]["TermsSourceOut"][];
+            /** Uses */
+            uses: components["schemas"]["DataUseOut"][];
+            /** Verified */
+            verified?: string | null;
+        };
+        /**
+         * DataUseOut
+         * @description What a provider's terms say about prompts for one kind of account. None: not verified.
+         */
+        DataUseOut: {
+            /** Account */
+            account: string;
+            /** Improves Models */
+            improves_models?: boolean | null;
+            /** Keeps Prompts */
+            keeps_prompts?: string | null;
+        };
         DeleteTaskPushNotificationConfigRequest: {
             /** @example id */
             id?: string;
@@ -2080,6 +2114,8 @@ export type components = {
             channels?: {
                 [key: string]: boolean;
             };
+            /** Data Terms */
+            data_terms?: components["schemas"]["DataTermsOut"][];
             /** Embeddings */
             embeddings: string[];
             /** Environment */
@@ -2098,6 +2134,10 @@ export type components = {
             rate_limit_per_minute: number;
             /** Require Approval */
             require_approval: boolean;
+            /** Retention */
+            retention?: {
+                [key: string]: number;
+            };
             /** Retrieval */
             retrieval: {
                 [key: string]: unknown;
@@ -2256,6 +2296,13 @@ export type components = {
             token?: string;
             /** @example url */
             url?: string;
+        };
+        /** TermsSourceOut */
+        TermsSourceOut: {
+            /** Title */
+            title: string;
+            /** Url */
+            url: string;
         };
         /**
          * TicketAssessment
