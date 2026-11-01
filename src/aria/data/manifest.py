@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -9,6 +10,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 DEFAULT_MANIFEST = Path("data/manifest.yaml")
+_HEX = re.compile(r"[0-9a-f]+")
 
 
 class Mirror(BaseModel):
@@ -54,11 +56,25 @@ class DataSource(BaseModel):
     # Query parameters for an API source (kind "gitlab"): fixed, so the set of records is.
     params: dict[str, str] = Field(default_factory=dict)
     sha256: str | None = None
+    # Pinned checksums by file name, "md5:<hex>" or "sha256:<hex>": a Zenodo file must match
+    # both its pin and the checksum the record publishes, so a record that changes its files
+    # is refused.
+    checksums: dict[str, str] = Field(default_factory=dict)
     # Tried in order when the source's own host cannot be reached or serves other bytes.
     mirrors: list[Mirror] = Field(default_factory=list)
     license: str
     citation: str
     description: str
+
+    @model_validator(mode="after")
+    def _checksums_name_an_algorithm(self) -> DataSource:
+        for name, pinned in self.checksums.items():
+            algorithm, _, digest = pinned.partition(":")
+            width = {"md5": 32, "sha256": 64}.get(algorithm)
+            if width is None or len(digest) != width or not _HEX.fullmatch(digest):
+                msg = f"checksum for {name} must be md5:<32 hex> or sha256:<64 hex>"
+                raise ValueError(msg)
+        return self
 
 
 class Manifest(BaseModel):

@@ -7,6 +7,7 @@ import json
 import tarfile
 import zipfile
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -311,3 +312,135 @@ def test_large_text_logs_are_stored_gzipped_one_file_at_a_time(tmp_path: Path) -
     with gzip.open(logs / "nova-api.log.bzip2.out.gz", "rt", encoding="utf-8") as handle:
         assert handle.read().startswith("2018-06-26 03:21:12.936")
     assert (tmp_path / "nova.tsv").exists()  # only what matches is compressed
+
+
+# --- throttling and pinned checksums  -------------------------------
+
+
+@pytest.fixture(autouse=True)
+def pauses(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    """Record the pauses the downloader asks for instead of sleeping through them."""
+    from aria.data import download as dl
+
+    pauses: list[float] = []
+    monkeypatch.setattr(dl.ZENODO, "sleep", pauses.append)
+    monkeypatch.setattr(dl.TRANSPORT, "sleep", pauses.append)
+    return pauses
+
+
+def test_a_throttle_spaces_calls_and_backs_off_before_each_retry() -> None:
+    from aria.data.download import Throttle
+
+    now = [100.0]
+    pauses: list[float] = []
+    throttle = Throttle(interval=3.0, backoff=(15.0, 45.0))
+    throttle.clock = lambda: now[0]
+    throttle.sleep = pauses.append
+    throttle.wait()
+    now[0] += 1.0
+    throttle.wait()
+    assert pauses == [2.0]  # three seconds after the previous call, not one
+    assert throttle.pause(0, None)
+    assert throttle.pause(1, "60")
+    assert pauses[1:] == [15.0, 60.0]  # a Retry-After longer than the backoff wins
+    assert not throttle.pause(2, None)  # the retries are spent
+
+
+def _zenodo_record(record: str, payload: bytes, name: str = "data.zip") -> None:
+    md5 = hashlib.md5(payload, usedforsecurity=False).hexdigest()
+    respx.get(f"https://zenodo.org/api/records/{record}").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "files": [
+                    {
+                        "key": name,
+                        "checksum": f"md5:{md5}",
+                        "links": {"self": f"https://zenodo.org/f/{record}/{name}"},
+                    }
+                ]
+            },
+        )
+    )
+
+
+def _source(**fields: Any) -> DataSource:
+    return DataSource(license="x", citation="y", description="z", **fields)
+
+
+@respx.mock
+def test_zenodo_limiting_this_callers_traffic_is_waited_out(
+    tmp_path: Path, pauses: list[float]
+) -> None:
+    payload = b"labels\n"
+    md5 = hashlib.md5(payload, usedforsecurity=False).hexdigest()
+    record = {
+        "files": [
+            {"key": "a.csv", "checksum": f"md5:{md5}", "links": {"self": "https://zenodo.org/f/a"}}
+        ]
+    }
+    api = respx.get("https://zenodo.org/api/records/7").mock(
+        side_effect=[
+            httpx.Response(403, text="Access restricted due to unusual traffic"),
+            httpx.Response(200, json=record),
+        ]
+    )
+    respx.get("https://zenodo.org/f/a").mock(return_value=httpx.Response(200, content=payload))
+    dest = download(_source(name="a", kind="zenodo", record="7", files=["a.csv"]), tmp_path)
+    assert (dest / "a.csv").read_bytes() == payload
+    assert api.call_count == 2
+    assert 15.0 in pauses
+
+
+@respx.mock
+def test_a_record_whose_published_checksum_moved_from_the_pin_is_refused(tmp_path: Path) -> None:
+    _zenodo_record("8", b"new bytes")
+    source = _source(
+        name="pinned",
+        kind="zenodo",
+        record="8",
+        files=["data.zip"],
+        checksums={"data.zip": "md5:" + "0" * 32},
+    )
+    with pytest.raises(DownloadError, match="the record's files changed"):
+        download(source, tmp_path / "raw")
+
+
+@respx.mock
+def test_a_file_that_misses_its_pinned_sha256_is_deleted(tmp_path: Path) -> None:
+    payload = _zip_bytes({"a.txt": b"a"})
+    _zenodo_record("9", payload)
+    respx.get("https://zenodo.org/f/9/data.zip").mock(
+        return_value=httpx.Response(200, content=payload)
+    )
+    source = _source(
+        name="pinned",
+        kind="zenodo",
+        record="9",
+        files=["data.zip"],
+        extract=False,
+        checksums={"data.zip": "sha256:" + "0" * 64},
+    )
+    with pytest.raises(DownloadError, match="sha256 mismatch"):
+        download(source, tmp_path / "raw")
+    assert not (tmp_path / "raw" / "pinned" / "data.zip").exists()
+
+
+def test_a_pinned_checksum_names_its_algorithm_and_full_digest() -> None:
+    with pytest.raises(ValueError, match="md5:<32 hex>"):
+        _source(name="x", kind="zenodo", checksums={"a": "crc32:1234"})
+
+
+@respx.mock
+def test_a_transfer_cut_off_part_way_is_retried(tmp_path: Path, pauses: list[float]) -> None:
+    good = _zip_bytes({"incident_event_log.csv": b"number\nINC1\n"})
+    route = respx.get("https://archive.test/data.zip").mock(
+        side_effect=[httpx.ReadError("connection reset"), httpx.Response(200, content=good)]
+    )
+    source = _source(
+        name="uci", kind="http", url="https://archive.test/data.zip", sha256=_sha(good)
+    )
+    dest = download(source, tmp_path / "raw")
+    assert (dest / "incident_event_log.csv").exists()
+    assert route.call_count == 2
+    assert pauses == [2.0]

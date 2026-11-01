@@ -10,6 +10,12 @@ Integrity checks per source kind:
   mirrors are tried in order, each trusted only if its file matches the sha256 pinned beside it.
 * gitlab: a live issues API, read page by page with fixed parameters. It cannot be pinned (an
   issue can be edited later), so the snapshot's sha256 and date are recorded beside it.
+* checksums: pinned in the manifest beside a source. A Zenodo file must match its pin as well as
+  the checksum the record publishes, so a record that changes its files is refused.
+
+Zenodo refuses bursts (HTTP 403 "unusual traffic" after about two dozen quick calls), so every
+request to it waits ``ZENODO.interval`` seconds after the previous one, and a refused request is
+retried after a growing pause.
 """
 
 from __future__ import annotations
@@ -21,7 +27,9 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+import time
 import zipfile
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -41,6 +49,52 @@ class DownloadError(RuntimeError):
     pass
 
 
+class Throttle:
+    """Spaces the requests sent to one host, and pauses before retrying a refused one."""
+
+    def __init__(self, interval: float, backoff: tuple[float, ...]) -> None:
+        self.interval = interval
+        self.backoff = backoff
+        self.sleep: Callable[[float], None] = time.sleep
+        self.clock: Callable[[], float] = time.monotonic
+        self._last: float | None = None
+
+    def wait(self) -> None:
+        """Return once ``interval`` seconds have passed since the previous request."""
+        if self._last is not None:
+            pause = self.interval - (self.clock() - self._last)
+            if pause > 0:
+                self.sleep(pause)
+        self._last = self.clock()
+
+    def pause(self, attempt: int, retry_after: str | None) -> bool:
+        """Sleep before retry ``attempt`` (from 0); False once the retries are spent."""
+        if attempt >= len(self.backoff):
+            return False
+        wait = self.backoff[attempt]
+        if retry_after and retry_after.isdigit():
+            wait = max(wait, float(retry_after))
+        self.sleep(wait)
+        return True
+
+
+# Zenodo answered 403 after about two dozen quick calls; these spacings kept sessions clear.
+ZENODO = Throttle(interval=3.0, backoff=(15.0, 45.0, 90.0))
+# A transfer cut off mid-way (a reset connection, a TLS EOF) is retried after these pauses.
+TRANSPORT = Throttle(interval=0.0, backoff=(2.0, 5.0))
+_BUSY = {429, 502, 503, 504}
+
+
+def throttle_for(url: str) -> Throttle | None:
+    return ZENODO if urlsplit(url).hostname == "zenodo.org" else None
+
+
+def _refused(status: int, body: bytes) -> bool:
+    """A refusal worth waiting out: the host is busy, or it is limiting this caller's traffic
+    (Zenodo's 403 says "unusual traffic"; a 403 for any other reason is final)."""
+    return status in _BUSY or (status == httpx.codes.FORBIDDEN and b"unusual traffic" in body)
+
+
 def _hash_file(path: Path, algorithm: str) -> str:
     digest = hashlib.new(algorithm)
     with path.open("rb") as handle:
@@ -49,20 +103,83 @@ def _hash_file(path: Path, algorithm: str) -> str:
     return digest.hexdigest()
 
 
+def _get(client: httpx.Client, url: str) -> httpx.Response:
+    """GET, spaced and retried when the host is one that refuses bursts."""
+    throttle = throttle_for(url)
+    attempt = 0
+    while True:
+        if throttle is not None:
+            throttle.wait()
+        response = client.get(url)
+        if (
+            throttle is None
+            or not _refused(response.status_code, response.content)
+            or not throttle.pause(attempt, response.headers.get("retry-after"))
+        ):
+            return response
+        attempt += 1
+
+
+def _fetch(client: httpx.Client, url: str) -> httpx.Response:
+    """``_get``, with a connection cut off part way retried after a pause."""
+    cuts = 0
+    while True:
+        try:
+            return _get(client, url)
+        except httpx.TransportError:
+            if not TRANSPORT.pause(cuts, None):
+                raise
+            cuts += 1
+
+
 def _stream_to(url: str, target: Path) -> None:
+    """Download ``url`` to ``target``; a refusal worth waiting out, or a transfer cut off part
+    way, is retried after a pause."""
     target.parent.mkdir(parents=True, exist_ok=True)
     partial = target.with_suffix(target.suffix + ".part")
-    with (
-        httpx.Client(timeout=_TIMEOUT, follow_redirects=True) as client,
-        client.stream("GET", url) as response,
-    ):
-        if response.status_code != httpx.codes.OK:
-            msg = f"GET {url} returned {response.status_code}"
-            raise DownloadError(msg)
-        with partial.open("wb") as handle:
-            for chunk in response.iter_bytes(_CHUNK):
-                handle.write(chunk)
+    throttle = throttle_for(url)
+    refusals = cuts = 0
+    with httpx.Client(timeout=_TIMEOUT, follow_redirects=True) as client:
+        while True:
+            if throttle is not None:
+                throttle.wait()
+            try:
+                with client.stream("GET", url) as response:
+                    status = response.status_code
+                    if status == httpx.codes.OK:
+                        with partial.open("wb") as handle:
+                            for chunk in response.iter_bytes(_CHUNK):
+                                handle.write(chunk)
+                        break
+                    body = response.read() if status == httpx.codes.FORBIDDEN else b""
+                    retry_after = response.headers.get("retry-after")
+            except httpx.TransportError:
+                if not TRANSPORT.pause(cuts, None):
+                    raise
+                cuts += 1
+                continue
+            if not (
+                throttle is not None
+                and _refused(status, body)
+                and throttle.pause(refusals, retry_after)
+            ):
+                msg = f"GET {url} returned {status}"
+                raise DownloadError(msg)
+            refusals += 1
     partial.replace(target)
+
+
+def _check_pinned(source: DataSource, name: str, path: Path) -> None:
+    """Refuse a file whose bytes differ from the checksum the manifest pins for it."""
+    pinned = source.checksums.get(name)
+    if pinned is None:
+        return
+    algorithm, _, expected = pinned.partition(":")
+    actual = _hash_file(path, algorithm)
+    if actual != expected:
+        path.unlink(missing_ok=True)
+        msg = f"{source.name}: {name} {algorithm} mismatch (pinned {expected}, got {actual})"
+        raise DownloadError(msg)
 
 
 def _git(args: list[str], cwd: Path) -> None:
@@ -112,7 +229,8 @@ def compress_files(root: Path, patterns: list[str]) -> int:
 
 def _zenodo_files(record: str) -> list[dict[str, Any]]:
     url = f"https://zenodo.org/api/records/{record}"
-    response = httpx.get(url, timeout=_TIMEOUT, follow_redirects=True)
+    with httpx.Client(timeout=_TIMEOUT, follow_redirects=True) as client:
+        response = _fetch(client, url)
     if response.status_code != httpx.codes.OK:
         msg = f"Zenodo record {record} returned {response.status_code}"
         raise DownloadError(msg)
@@ -130,7 +248,16 @@ def download_zenodo(source: DataSource, dest: Path) -> Path:
         if entry is None:
             msg = f"{source.name}: {name} not found in Zenodo record {source.record}"
             raise DownloadError(msg)
-        algorithm, _, expected = str(entry.get("checksum", "")).partition(":")
+        published = str(entry.get("checksum", ""))
+        pinned = source.checksums.get(name, "")
+        same_kind = pinned.partition(":")[0] == published.partition(":")[0]
+        if pinned and published and same_kind and pinned != published:
+            msg = (
+                f"{source.name}: Zenodo now publishes {published} for {name}, but the manifest "
+                f"pins {pinned}; the record's files changed"
+            )
+            raise DownloadError(msg)
+        algorithm, _, expected = published.partition(":")
         target = dest / name
         if not (target.exists() and _hash_file(target, algorithm or "md5") == expected):
             _stream_to(entry["links"]["self"], target)
@@ -139,6 +266,7 @@ def download_zenodo(source: DataSource, dest: Path) -> Path:
                 target.unlink(missing_ok=True)
                 msg = f"{name}: {algorithm} mismatch (expected {expected}, got {actual})"
                 raise DownloadError(msg)
+        _check_pinned(source, name, target)
         if source.extract:
             _extract(target, dest)
     return dest
