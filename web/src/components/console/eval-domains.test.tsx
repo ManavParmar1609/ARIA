@@ -68,7 +68,17 @@ describe("the new-domain cards", () => {
     const missing = { missing: "download it with: aria data download --source itbench-lite" };
     render(<NewDomainCards domains={domains({ ...raw.domains(), itbench: missing })} />);
     expect(titles()).not.toContain("Kubernetes incidents");
-    expect(screen.getByText(/^Not run yet: Kubernetes incidents\./)).toBeTruthy();
+    expect(screen.getByText(/^Not run yet: Kubernetes incidents\. Its data/)).toBeTruthy();
+  });
+
+  it("names several suites not run yet in one line", () => {
+    const missing = { missing: "download it" };
+    render(
+      <NewDomainCards domains={domains({ ...raw.domains(), itbench: missing, jira: missing })} />,
+    );
+    expect(
+      screen.getByText(/^Not run yet: Kubernetes incidents and Jira priorities\. Their data/),
+    ).toBeTruthy();
   });
 
   it("shows only the line saying so when no suite has run", () => {

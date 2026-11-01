@@ -544,8 +544,9 @@ export function NewDomainCards({
         ) : null}
         {notRun.length ? (
           <p className="max-w-prose text-sm text-muted-foreground">
-            Not run yet: {list(notRun.map((key) => DOMAIN_CARDS[key].label))}. Their data was not
-            downloaded when these results were made.
+            Not run yet: {list(notRun.map((key) => DOMAIN_CARDS[key].label))}.{" "}
+            {notRun.length === 1 ? "Its" : "Their"} data was not downloaded when these results were
+            made.
           </p>
         ) : null}
       </div>
