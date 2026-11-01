@@ -33,7 +33,7 @@ from aria.severity.model import (
     fit_temperature,
     softmax,
 )
-from aria.severity.policy import Preliminary, decide
+from aria.severity.policy import Preliminary, decide, level_words, torn_words
 from aria.severity.rules import RuleSet, feature_space, load_rules, parse_condition
 from aria.severity.training import featurize_all, fit_log_model
 
@@ -460,6 +460,44 @@ def test_llm_choice_must_be_inside_the_set() -> None:
     assert (llm.severity, llm.decided_by, llm.auditable) == (Severity.SEV3, "llm", False)
     with pytest.raises(ValueError, match="outside the prediction set"):
         decide(pre, gate=0.85, llm_choice=Severity.SEV4)
+
+
+def test_a_wider_set_is_stated_as_the_levels_aria_is_torn_between() -> None:
+    assert (
+        level_words(Severity.SEV2, [Severity.SEV3, Severity.SEV2])
+        == "ARIA is torn between SEV2 and SEV3 and plans for SEV2"
+    )
+    assert (
+        level_words("SEV1", ["SEV3", "SEV1", "SEV2", "SEV2"])
+        == "ARIA is torn between SEV1, SEV2 and SEV3 and plans for SEV1"
+    )
+    # A ticket's own rating can lift the level out of the set; the words say what ARIA plans.
+    assert level_words("SEV1", ["SEV2", "SEV3"]).endswith("and plans for SEV1")
+
+
+def test_a_set_of_one_level_keeps_the_bare_level() -> None:
+    assert level_words(Severity.SEV2, [Severity.SEV2]) == "SEV2"
+    assert level_words("SEV1", ["SEV2"]) == "SEV1"  # a floor above the one likely level
+    assert torn_words(Severity.SEV3, [Severity.SEV3]) is None
+    assert torn_words(Severity.SEV3, [Severity.SEV3, Severity.SEV4]) == level_words(
+        Severity.SEV3, [Severity.SEV3, Severity.SEV4]
+    )
+
+
+@given(
+    st.sampled_from(SEVERITY_ORDER),
+    st.lists(st.sampled_from(SEVERITY_ORDER), min_size=1, max_size=6),
+)
+def test_the_words_name_every_level_in_the_set_and_the_planned_one(
+    severity: Severity, prediction_set: list[Severity]
+) -> None:
+    words = level_words(severity, prediction_set)
+    assert words.endswith(str(severity))
+    if len(set(prediction_set)) > 1:
+        assert words.startswith("ARIA is torn between ")
+        assert all(str(level) in words for level in prediction_set)
+    else:
+        assert words == str(severity)
 
 
 # --- engine end to end -------------------------------------------------------------------------

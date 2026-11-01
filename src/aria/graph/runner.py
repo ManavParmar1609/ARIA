@@ -54,6 +54,7 @@ from aria.retrieval import runlog
 from aria.retrieval.memory import run_incident_id
 from aria.security.fields import clean_request
 from aria.services import Services
+from aria.severity.policy import level_words
 
 log = get_logger(__name__)
 STREAM_MODES: list[StreamMode] = ["tasks", "custom", "checkpoints"]
@@ -139,6 +140,10 @@ def summarize(node: str, result: Json) -> Json:
             "novelty",
         )
         out = {k: sev.get(k) for k in keys}
+        # In words, for whoever reads the event log: the bare level, or the levels ARIA is torn
+        # between and the one it plans for.
+        if sev.get("severity"):
+            out["summary"] = level_words(sev["severity"], sev.get("prediction_set") or ())
     elif node in ("recall", "widen") and result.get("retrieval"):
         retrieval = result["retrieval"]
         out = {

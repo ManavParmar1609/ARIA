@@ -97,6 +97,7 @@ from aria.retrieval.memory import MemoryIncident, run_incident_id
 from aria.retrieval.retriever import build_query
 from aria.security.fields import clean_request
 from aria.services import Services
+from aria.severity.policy import level_words
 from aria.text import headline
 
 SHARD_LINES = 4_000  # fan parsing out above this many lines
@@ -845,6 +846,9 @@ def review_payload(state: TriageState) -> Json:
         "report_id": incident.report_id,
         "title": incident.title,
         "severity": str(incident.severity),
+        # The level as a reviewer should read it: with a wider set, the levels ARIA is torn
+        # between and the one it plans for, not the bare level.
+        "severity_text": level_words(incident.severity, assessment.prediction_set),
         "decided_by": assessment.decided_by,
         "confidence": assessment.confidence,
         "needs_review": assessment.needs_review,
@@ -857,6 +861,16 @@ def review_payload(state: TriageState) -> Json:
         ],
         "decisions": ["approve", "edit", "reject"],
     }
+
+
+def review_lead(payload: Json) -> str:
+    """How a review prompt read as text (A2A, AG-UI) opens: what ARIA is torn between, as a
+    sentence, when the prediction set holds more than one level. A set of one level adds
+    nothing, so those prompts read as they always have."""
+    text = payload.get("severity_text")
+    if not text or len(set(payload.get("prediction_set") or ())) < 2:
+        return ""
+    return f"{text}. "
 
 
 def review(state: TriageState, runtime: Runtime[TriageContext]) -> Command[Any]:

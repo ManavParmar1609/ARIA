@@ -26,6 +26,7 @@ from mcp import Client
 from sqlalchemy import select
 
 from aria.api import alerts as intake
+from aria.api.agui import review_interrupt
 from aria.api.app import create_app
 from aria.api.state import AppState
 from aria.api.worker import Worker, heartbeat_age, poll_forever
@@ -39,6 +40,7 @@ from aria.db.engine import dispose_engines, get_engine, init_db, session_scope
 from aria.db.models import AlertGroupRow, RunRow
 from aria.evidence import EvidenceStore
 from aria.graph.runner import RunBusyError, TriageRunner
+from aria.graph.workflow import review_lead
 from aria.mcp.client import remote_target
 from aria.mcp.server import TOOL_NAMES
 from aria.retrieval.memory import IncidentMemory
@@ -1288,6 +1290,12 @@ async def test_a2a_task_pauses_for_review_and_completes(api: Api) -> None:
     report = task["artifacts"][0]["parts"][0]["data"]
     assert report["severity"].startswith("SEV")
     assert "BlueGene/L" in report["title"]
+    # The question names the levels ARIA is torn between, when there are several.
+    said, prompt = task["status"]["message"]["parts"][:2]
+    assert said["text"] == (
+        f"The report is ready for review. {review_lead(prompt['data'])}Reply with a decision: "
+        "approve, edit or reject."
+    )
     reply = {
         "messageId": "m2",
         "role": "ROLE_USER",
@@ -1343,6 +1351,20 @@ async def test_cancelling_an_a2a_task_rejects_its_run_only_while_it_waits(api: A
     assert again["error"]["message"] == "Task cannot be canceled"
 
 
+def test_an_agui_review_prompt_leads_with_the_levels_aria_is_torn_between() -> None:
+    ask = "Review the incident report: approve it, edit it first, or discard it."
+    torn = {
+        "severity": "SEV2",
+        "prediction_set": ["SEV2", "SEV3"],
+        "severity_text": "ARIA is torn between SEV2 and SEV3 and plans for SEV2",
+    }
+    assert review_interrupt("i1", torn).message == f"{torn['severity_text']}. {ask}"
+    single = {"severity": "SEV2", "prediction_set": ["SEV2"], "severity_text": "SEV2"}
+    assert review_interrupt("i1", single).message == ask  # one level: worded as before
+    refused = {**torn, "error": "unknown action ids: a-9"}
+    assert review_interrupt("i1", refused).message == "unknown action ids: a-9"
+
+
 async def test_agui_streams_a_run_and_resumes_its_interrupt(api: Api) -> None:
     body = {
         "threadId": "thread-ui-1",
@@ -1364,6 +1386,7 @@ async def test_agui_streams_a_run_and_resumes_its_interrupt(api: Api) -> None:
     interrupt = outcome["interrupts"][0]
     assert interrupt["reason"] == "review"
     assert "decision" in interrupt["responseSchema"]["properties"]
+    assert interrupt["message"] == review_interrupt("i", interrupt["metadata"]).message
 
     stale = {**body, "runId": "ui-run-2", "resume": [{"interruptId": "x", "status": "resolved"}]}
     errored = sse((await api.client.post("/agui", json=stale)).text)
