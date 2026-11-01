@@ -54,7 +54,21 @@ order:
    rule names the dimensions it shows (an outage, at-risk data, a security exposure, how far it
    spreads, a critical component, how long it lasts, or monitoring's own alert), and SEV1 weight
    whose rules name only one counts towards SEV2. Rules that read a ratio need enough lines
-   behind it.
+   behind it. Node counts and node spread stand in for blast radius, which logs cannot see:
+   how many customers or requests an incident touches is not in them, and the rules that read
+   them say so. Each keyword category is counted as lines, as distinct log patterns and as its
+   share of the window's issue lines, so a rule that one message repeated by one node could
+   inflate reads the patterns beside the count: repeated authentication failures, attacks on
+   many hosts and services unreachable from several nodes each need more than one kind of
+   message, while a service reported unreachable keeps its line count, because real outages
+   often repeat one message. A window whose issue lines are mostly clients
+   cancelling their own requests, which OpenTelemetry records at DEBUG, counts as noise, and the
+   rules that count errors by node or by critical component leave it out. Two rules read the
+   system's own baseline, the median error ratio of its recent runs in the database: errors at
+   six times the usual ratio, with at least ten of them in a hundred lines, score as contained,
+   and at fourteen times, with at least twenty, as major, after the Google SRE workbook's
+   burn-rate alerts. Without five finished runs on the system, as in every offline evaluation,
+   the baseline is absent and those rules never fire.
 2. **The model gives calibrated probabilities.** It reads the window's features, including the
    rules' output. Each level has its own conformal threshold q, and the prediction set holds
    every level whose probability is at least 1 − q for that level. A set is ordered: one that
@@ -96,6 +110,15 @@ Two cases follow from this:
 - **Offline.** The adjudicator's provider chain has no offline fake provider. So offline runs,
   and the published offline evaluation, always end at step 4 or step 6.
 
+One more thing is read before a window is rated, and shown rather than scored. **Patterns
+reviewers dismissed:** the log patterns on the issue lines of the system's earlier runs whose
+reviewers discarded the draft or lowered the level to SEV4
+([`src/aria/severity/history.py`](../src/aria/severity/history.py)). When most of the window's
+issue lines follow them, the assessment carries a feedback item and a claim, "reviewers dismissed
+this pattern N times before", for the reviewer to weigh. It informs; it never lowers the level or
+changes the prediction set. It needs the reviews and the runs' stored lines, so deleting or
+purging those runs forgets it.
+
 Every assessment records the following, and the run view shows all of it:
 
 - the probabilities;
@@ -107,27 +130,37 @@ Every assessment records the following, and the run view shows all of it:
 
 ## Inputs
 
-The model reads 52 features of one window
-([`src/aria/severity/features.py`](../src/aria/severity/features.py)). The parser computes them
-from redacted message text, levels, timestamps, nodes and components, plus any firing alerts.
-Lines quarantined as possible prompt injection are left out first. No feature reads dataset
-labels or BGL alert tags.
+The model reads 53 features of one window
+([`src/aria/severity/features.py`](../src/aria/severity/features.py)); a model file trained
+before lexicon version 2.2 lists 52, as it has no count of client cancellations. The parser
+computes them from redacted message text, levels, timestamps, nodes and components, plus any
+firing alerts. Lines quarantined as possible prompt injection are left out first. No feature
+reads dataset labels or BGL alert tags. The rules read everything the model reads and more
+([`src/aria/severity/rules.py`](../src/aria/severity/rules.py)): the distinct patterns and the
+share of issue lines behind each keyword category, how many lines count as issue lines, and the
+system's own baseline.
 
 | Group | Features | Scale |
 |---|---|---|
 | Volume and spread (16) | Events, error events, events per minute, peak errors per minute, distinct nodes, nodes with errors, templates, novel templates, novel error templates, peak warnings per minute, nodes with warnings, novel warning templates, critical components, firing alerts, critical alerts, warning alerts | log(1 + x) |
 | Ratios (4) | Error ratio, node spread, highest criticality among components logging errors, highest criticality among components logging warnings or errors (the catalog default when those lines name none) | 0 to 1 |
 | Shape (5) | Burst score (capped at 50, divided by 10), persistence in minutes (log scale), shares of WARN, ERROR and FATAL lines | As listed |
-| Keyword categories (22) | Crash, data risk, unavailable, resource, security, hardware, storage, network, degradation, power; since version 2 TLS, DNS, control plane, backup, payment, freshness, sign-in and data leaving the network; and since version 2.1 the fatal forms: backups deleted, a filesystem shut down, fatal hardware and redundancy gone ([`config/lexicon.yaml`](../config/lexicon.yaml), which names each one's sources: gRPC status codes, HTTP, Kubernetes reasons, PostgreSQL SQLSTATE, etcd, Linux errno, MITRE ATT&CK and others). They are counted on lines logged at WARN or above or with no level, because at INFO the same words are usually routine. Each rule says which count it reads, and the floors count every line | log(1 + matching lines) |
+| Keyword categories (23) | Crash, data risk, unavailable, resource, security, hardware, storage, network, degradation, power; since version 2 TLS, DNS, control plane, backup, payment, freshness, sign-in and data leaving the network; since version 2.1 the fatal forms: backups deleted, a filesystem shut down, fatal hardware and redundancy gone; and since version 2.2 client cancellations ([`config/lexicon.yaml`](../config/lexicon.yaml), which names each one's sources: gRPC status codes, HTTP, Kubernetes reasons, PostgreSQL SQLSTATE, etcd, Linux errno, MITRE ATT&CK, OpenTelemetry and others). They are counted on issue lines: lines logged at WARN or above, plus lines with no level when the window has no levels at all or also logs errors, because at INFO the same words are usually routine and a lone unlevelled line in a levelled window reads as INFO, as the OpenTelemetry logs data model allows. Each rule says which count it reads, and the floors count every line | log(1 + matching lines) |
 | Rules (5) | The rules' smoothed probability for each severity, and the floor rank (0 is a SEV1 floor and 3 a SEV4 floor; 4 means no floor) | 0 to 1; 0 to 4 |
+| Rules only: issue lines and patterns | How many lines count as issue lines; for each keyword category, the distinct log patterns behind its hits on every line and on issue lines, and its share of the issue lines. The model does not read them: on the validation seeds they changed nothing it could learn from | counts; 0 to 1 |
+| Rules only: the system's baseline | The window's error ratio against the median error ratio of the system's last 30 finished runs in the database, that median, and how many runs it rests on. Absent, not zero, below 5 runs and in every offline evaluation, so a rule may only ask whether they are at least something | ratio; 0 to 1; count |
 
-Two of these depend on configuration and history:
+Three of these depend on configuration and history:
 
 - **Component criticality** comes from
   [`config/service_catalog.yaml`](../config/service_catalog.yaml). In a real deployment that
   file should come from the deployment's own service catalog.
 - **Novelty features** compare a window with the routine templates ARIA has already seen. A new
   deployment starts from the history that `aria seed` loads.
+- **The system's baseline** comes from the deployment's own runs (the events and errors each
+  run's parsing step recorded), so it exists only after the system has been triaged a few
+  times, and it follows what the deployment sends: a system triaged only when it is on fire has
+  a high baseline.
 
 ## Training
 
@@ -203,6 +236,18 @@ default; 0 turns it off), where runs execute. `aria train recalibrate [--dry-run
 by hand. The model is written atomically to `ARIA_MODELS_DIR`, with the previous file kept
 beside it, and running engines reload it when it changes.
 
+**The severe-miss alarm.** Each time the job runs, it also reads every blind check of an
+incident the person rated SEV1 or SEV2, in arrival order, and asks whether the share ARIA rated
+SEV3 or SEV4 has exceeded the promised severe-miss rate with confidence: the risk the guard was
+certified for (`severity.severe_miss_risk`), else the serious levels' target. The test is a
+mixture likelihood-ratio martingale, the likelihood of the misses so far under every miss rate
+above the promise, averaged, against their likelihood at the promise, read against 1/0.05
+([`drift.py`](../src/aria/severity/drift.py)). By Ville's inequality it sounds falsely at most
+one time in twenty over an endless sequence of checks, however often it is read (Robbins' mixture
+martingales; Howard, Ramdas, McAuliffe and Sekhon, 2021; Ramdas, Grünwald, Vovk and Shafer,
+2023). While it stands, the job logs `severity.severe_miss_alarm` and returns it with the
+adaptation summary. It recommends recalibration or retraining; it changes nothing by itself.
+
 **What moves and what does not.** Only each level's alpha, and after a batch its scores, move.
 The coefficients, scaler, temperature and novelty statistics stay as trained, so recalibration
 can widen or narrow the sets, and with them how often ARIA asks for review, but cannot change
@@ -224,7 +269,9 @@ operational steps.
 decided on each system's recent runs with its earlier runs (at least 40 runs), by the population
 stability index against the cut-off chance alone passes one time in twenty
 ([`drift.py`](../src/aria/severity/drift.py)). `/metrics` counts decisions by level, set sizes
-and each reason a person was asked to confirm.
+and each reason a person was asked to confirm. The severe-miss alarm above is the label-based
+companion: drift needs no labels and says the mix moved; the alarm needs blind checks and says
+the promise is being broken.
 
 ## Metrics
 
@@ -347,7 +394,23 @@ regression.
   and their floors) were chosen on separate validation
   seeds, 51–56, without looking at the test seeds. Each candidate had to lower the cost on
   held-out systems without raising it on familiar ones; one that did the first but not the
-  second (counting corrected hardware errors apart from failures) was not adopted.
+  second (counting corrected hardware errors apart from failures) was not adopted. The changes
+  in 2026.11.3 (patterns counted beside lines, the cancellation discount, the baseline burn
+  rules and corroboration for unlevelled lines) were chosen the same way, each candidate having
+  to leave the cost on both rings no higher; [validation-log.md](validation-log.md) records
+  every run, adopted or not.
+- **Proxies for blast radius.** Node counts and node spread stand in for how far an incident
+  reaches, because logs do not see customers or requests. A fleet of chatty nodes and a single
+  node serving everyone look alike to them, so the rules that read them are titled as stand-ins
+  and a deployment should bring its own impact signals through alerts or tickets.
+- **History the benchmark lacks.** The system's baseline and the patterns reviewers dismissed
+  exist only in a deployment with runs and reviews behind it. The semi-synthetic benchmark has
+  neither, so the burn-rate rules and the review note are tested by unit tests alone, and their
+  thresholds (the SRE workbook's burn rates, a minimum of ten or twenty errors in a hundred
+  lines, half the issue lines) are judgement, not measurement.
+- **Cancellations.** No dataset ARIA trains on logs client cancellations, so the discount for
+  windows made mostly of them rests on OpenTelemetry's convention and unit tests, not on
+  measurement.
 - **Prediction sets.** Almost every set holds one label, so coverage sits close to top-1
   accuracy and an LLM adjudicates rarely. The 90% target holds on windows exchangeable with the
   calibration windows; coverage differs by class and falls under a shift.
