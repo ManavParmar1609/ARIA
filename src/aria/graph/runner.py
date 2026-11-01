@@ -52,6 +52,7 @@ from aria.reporting.markdown import render_markdown
 from aria.retrieval import runlog
 from aria.security.fields import clean_request
 from aria.services import Services
+from aria.severity.history import SystemHistory
 from aria.severity.policy import level_words
 
 log = get_logger(__name__)
@@ -239,6 +240,11 @@ class TriageRunner:
         self.held: set[str] = set()
         # Visitors' own model keys, held in memory until the runs they came with start.
         self.keys = VisitorKeys()
+        # Severity reads a system's history (its recent runs' error ratios, the patterns its
+        # reviewers dismissed) from the database the runner writes to; the runner is where the
+        # two meet. Engines built without a runner, as evaluations are, read nothing.
+        if services.severity.history is None:
+            services.severity.history = SystemHistory(services.engine)
 
     @staticmethod
     def config(run_id: str, checkpoint_id: str | None = None) -> RunnableConfig:
