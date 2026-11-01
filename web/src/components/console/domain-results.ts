@@ -201,8 +201,14 @@ const missFact = (label: string, m: MissRate): Fact => [
   `At most ${pct(m.upper)}, with 95% confidence`,
 ];
 
+/** A share in whole hundredths, never "0%" for some or "100%" for not all. */
+function percent(r: Rate): string {
+  if (r.hits === 0 || r.hits === r.of) return `${per100(r.share)}%`;
+  const p = per100(r.share);
+  return p === 0 ? "under 1%" : p === 100 ? "over 99%" : `${p}%`;
+}
 /** "19 of 66 (29%)": a share as a table cell. */
-export const cell = (r: Rate) => `${n(r.hits)} of ${n(r.of)} (${per100(r.share)}%)`;
+export const cell = (r: Rate) => `${n(r.hits)} of ${n(r.of)} (${percent(r)})`;
 /** "0.579 (0.503 to 0.656)": a ranking as a table cell. */
 export const rankCell = (r: Ranking) =>
   `${r.auroc.toFixed(3)} (${r.ci[0].toFixed(3)} to ${r.ci[1].toFixed(3)})`;
@@ -272,7 +278,7 @@ export function alertsFacts(s: SecurityAlerts): Fact[] {
   return [
     ...(aria
       ? [
-          shareFact("Attack stretches paged (SEV1-2)", aria.attackPaged),
+          shareFact("Attack stretches paged", aria.attackPaged),
           shareFact("Routine stretches paged", aria.routinePaged),
         ]
       : []),
@@ -437,7 +443,7 @@ export function kubernetesShortfall(s: KubernetesIncidents): string | null {
 
 export function kubernetesFacts(s: KubernetesIncidents): Fact[] {
   return [
-    shareFact("Incidents paged (SEV1-2)", s.paged),
+    shareFact("Incidents paged", s.paged),
     missFact("Incidents missed (rated SEV4)", s.missed),
     shareFact("Service at fault among the first three suspects", s.naming.firstThree),
   ];

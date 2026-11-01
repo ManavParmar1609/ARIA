@@ -16,6 +16,7 @@ import {
   alertsVerdict,
   anomaliesShortfall,
   anomaliesVerdict,
+  cell,
   DOMAIN_CARDS,
   domainAspects,
   domainSummary,
@@ -170,6 +171,20 @@ describe("the new-domain cards on Test results", () => {
     expect(priorityVerdict(alone)).toBe(
       "On Jira, ARIA's ticket model sets the priority people chose, but it misses every urgent issue.",
     );
+  });
+
+  it("never writes a share in a table as none or all when it is not", () => {
+    const rate = (hits: number, of: number) => ({
+      hits,
+      of,
+      share: hits / of,
+      ci: [0, 1] as [number, number],
+    });
+    expect(cell(rate(10, 2683))).toBe("10 of 2,683 (under 1%)");
+    expect(cell(rate(1999, 2000))).toBe("1,999 of 2,000 (over 99%)");
+    expect(cell(rate(0, 56))).toBe("0 of 56 (0%)");
+    expect(cell(rate(90, 90))).toBe("90 of 90 (100%)");
+    expect(cell(rate(19, 66))).toBe("19 of 66 (29%)");
   });
 
   it("links each card to its section of the full write-up, as GitHub names it", () => {
