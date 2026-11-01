@@ -11,7 +11,7 @@ import threading
 import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -23,7 +23,7 @@ import uvicorn
 from asgi_lifespan import LifespanManager
 from fastapi import FastAPI
 from mcp import Client
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 
 from aria.api import alerts as intake
 from aria.api.agui import review_interrupt
@@ -37,7 +37,7 @@ from aria.contracts.run import RunStatus
 from aria.data.scenarios import LinePools, ScenarioBuilder
 from aria.db import repository as repo
 from aria.db.engine import dispose_engines, get_engine, init_db, session_scope
-from aria.db.models import AlertGroupRow, RunRow
+from aria.db.models import AlertGroupRow, ReportRow, RunEventRow, RunRow
 from aria.evidence import EvidenceStore
 from aria.graph.runner import RunBusyError, TriageRunner
 from aria.graph.workflow import review_lead
@@ -1245,6 +1245,60 @@ async def test_reviews_calibration_evaluation_and_tickets(
     untrained = await api.client.post("/api/v1/tickets/assess", json=ticket)
     assert untrained.status_code == 503
     assert "aria train tickets" in untrained.json()["detail"]
+
+
+async def test_reviewer_figures_come_from_the_reviews_kept(api: Api) -> None:
+    empty = (await api.client.get("/api/v1/reviewers")).json()
+    assert (empty["reviewers"], empty["decisions"], empty["since"]) == ([], 0, None)
+
+    approved, edited, discarded = [await start(api, title=f"Kernel panics {n}") for n in range(3)]
+    other = "SEV4" if edited["severity"] != "SEV4" else "SEV3"
+    for run, body, caller in (
+        (approved, {"decision": "approve"}, ANA),
+        (edited, {"decision": "edit", "edits": {"severity": other}}, RAJ),
+        (discarded, {"decision": "reject"}, ANA),
+    ):
+        done = await api.client.post(f"/api/v1/runs/{run['id']}/review", json=body, headers=caller)
+        assert done.status_code == 200, done.text
+
+    # Pin when each run paused for review and when its decision came, to know the waits.
+    engine = api.state.services.engine
+    paused = datetime(2026, 10, 1, 9, 0, tzinfo=UTC)
+    for run, waited_s in ((approved, 120), (edited, 45), (discarded, 600)):
+        with session_scope(engine) as session:
+            first = session.scalar(
+                select(func.min(RunEventRow.seq)).where(
+                    RunEventRow.run_id == run["id"], RunEventRow.kind == "interrupt"
+                )
+            )
+            session.execute(
+                update(RunEventRow)
+                .where(RunEventRow.run_id == run["id"], RunEventRow.seq == first)
+                .values(ts=paused)
+            )
+            session.execute(
+                update(ReportRow)
+                .where(ReportRow.run_id == run["id"])
+                .values(reviewed_at=paused + timedelta(seconds=waited_s))
+            )
+
+    body = (await api.client.get("/api/v1/reviewers")).json()
+    assert body["decisions"] == 3
+    assert body["since"].startswith("2026-10-01T09:00:45")
+    ana, raj = body["reviewers"]  # the busiest first
+    assert ana == {
+        "reviewer": "ana",
+        "decisions": 2,
+        "approved_as_is": 1,
+        "edited": 0,
+        "rejected": 1,
+        "level_changed": 0,
+        "timed": 2,
+        "median_wait_s": 360.0,
+    }
+    assert (raj["reviewer"], raj["edited"], raj["level_changed"]) == ("raj", 1, 1)
+    assert raj["median_wait_s"] == 45.0
+    assert (await api.client.get("/api/v1/reviewers?limit=1")).json()["decisions"] == 1
 
 
 # --- agent protocols ------------------------------------------------------------------------------

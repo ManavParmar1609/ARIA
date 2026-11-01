@@ -426,6 +426,29 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reviewers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reviewers
+         * @description How each person reviews: how often they approve a report without editing it, how often
+         *     they set a level other than ARIA's, and the median time from a run pausing for review to
+         *     their decision. From the newest ``limit`` reviews ARIA keeps; reviews of a visitor's own
+         *     runs on a shared demo are not kept, so they are not counted.
+         */
+        get: operations["reviewers_api_v1_reviewers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runbooks": {
         parameters: {
             query?: never;
@@ -1633,6 +1656,42 @@ export type components = {
             /** Markdown */
             markdown: string;
             report: components["schemas"]["IncidentReport"];
+        };
+        /**
+         * ReviewerOut
+         * @description How one person decides, over the reviews ARIA keeps.
+         */
+        ReviewerOut: {
+            /** Approved As Is */
+            approved_as_is: number;
+            /** Decisions */
+            decisions: number;
+            /** Edited */
+            edited: number;
+            /** Level Changed */
+            level_changed: number;
+            /** Median Wait S */
+            median_wait_s?: number | null;
+            /** Rejected */
+            rejected: number;
+            /** Reviewer */
+            reviewer: string;
+            /** Timed */
+            timed: number;
+        };
+        /**
+         * ReviewersOut
+         * @description Every reviewer's figures, the busiest first, from the newest ``decisions`` reviews.
+         */
+        ReviewersOut: {
+            /** Decisions */
+            decisions: number;
+            /** Limit */
+            limit: number;
+            /** Reviewers */
+            reviewers: components["schemas"]["ReviewerOut"][];
+            /** Since */
+            since?: string | null;
         };
         /**
          * ReviewOut
@@ -2967,6 +3026,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunAccepted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reviewers_api_v1_reviewers_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewersOut"];
                 };
             };
             /** @description Validation Error */

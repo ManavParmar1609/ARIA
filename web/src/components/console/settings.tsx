@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { BlindCheck, DriftReport } from "@/components/console/calibration-check";
 import { ModelKeyPanel } from "@/components/console/model-key";
+import { ReviewerStats } from "@/components/console/reviewer-stats";
 import { ErrorState, LoadingRows, PageHeader } from "@/components/console/states";
 import { Button } from "@/components/ui/button";
 import {
@@ -604,6 +605,10 @@ export function Settings() {
             ) : (
               <Learning view={feedback.data} />
             )}
+            <div className="grid gap-3 pt-2">
+              <h3 className="text-lg">How each reviewer decides</h3>
+              <ReviewerStats />
+            </div>
           </Section>
         </div>
       </details>

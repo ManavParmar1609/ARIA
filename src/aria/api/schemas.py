@@ -446,6 +446,29 @@ class FeedbackOut(BaseModel):
     reviews: list[ReviewOut]
 
 
+class ReviewerOut(BaseModel):
+    """How one person decides, over the reviews ARIA keeps."""
+
+    reviewer: str
+    decisions: int  # reports they approved, edited or discarded
+    approved_as_is: int  # approved without editing anything
+    edited: int  # edited, then approved
+    rejected: int  # discarded
+    level_changed: int  # settled on a level other than ARIA's
+    timed: int  # decisions whose run's pause for review was recorded
+    # The median time from a run pausing for review to this person's decision, in seconds.
+    median_wait_s: float | None = None
+
+
+class ReviewersOut(BaseModel):
+    """Every reviewer's figures, the busiest first, from the newest ``decisions`` reviews."""
+
+    reviewers: list[ReviewerOut]
+    decisions: int
+    since: datetime | None = None  # the oldest decision counted
+    limit: int  # the most recent decisions read at most
+
+
 class BlindPattern(BaseModel):
     """One log pattern of the incident, as the parser grouped it (already redacted)."""
 
