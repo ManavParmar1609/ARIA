@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { DOMAIN_CARDS } from "@/components/console/domain-results";
+import { NewDomainCards } from "@/components/console/eval-domains";
 import { Bars, Facts, MethodTable, pct, Section } from "@/components/console/eval-parts";
 import { OnThisPage, type TocItem } from "@/components/console/on-this-page";
 import { PageHeader, SectionHeader } from "@/components/console/states";
@@ -55,6 +57,7 @@ import {
   type SevereMisses,
   type generalisation,
 } from "@/lib/site-data";
+import type { DomainResult, NewDomains } from "@/lib/domains";
 import { count } from "@/lib/format";
 import { NODE_LABEL } from "@/lib/steps";
 import { systemName } from "@/lib/systems";
@@ -871,7 +874,10 @@ const REAL_TESTS = [
  * group's tests (lib/tuning.ts). Nothing when the record has none of them.
  */
 function ringBadge(tuning: TuningRecord | null | undefined, ring: string, title: string) {
-  const names = Object.fromEntries(REAL_TESTS.map((t) => [t.suite, t.label]));
+  const names = Object.fromEntries([
+    ...REAL_TESTS.map((t) => [t.suite, t.label]),
+    ...Object.entries(DOMAIN_CARDS).map(([key, card]) => [`domains.${key}`, card.label]),
+  ]);
   const summary = tuning ? ringTuning(tuning, ring, names) : null;
   return summary ? <TuningBadge id={`ring-${ring}`} tuning={summary} context={title} /> : null;
 }
@@ -881,12 +887,15 @@ export function Evals({
   real,
   more,
   unseen,
+  domains,
   tuning,
 }: {
   data: Evaluation;
   real?: RealLogs;
   more?: RealData;
   unseen?: ReturnType<typeof generalisation>;
+  /** The tests on data from fields ARIA was never built for: none until `make eval` runs them. */
+  domains?: NewDomains | null;
   /** What each test was tuned on: no badges while the results have no record. */
   tuning?: TuningRecord | null;
 }) {
@@ -897,7 +906,7 @@ export function Evals({
   const stages = Object.entries(p.stageP50)
     .map(([step, ms]) => [NODE_LABEL[step] ?? step, ms] as [string, number])
     .sort((a, b) => b[1] - a[1]);
-  const toc = contents(Boolean(real), Boolean(more), Boolean(unseen));
+  const toc = contents(Boolean(real), Boolean(more), Boolean(unseen), domains?.results ?? []);
   return (
     <div className="grid gap-8">
       <PageHeader
@@ -954,6 +963,7 @@ export function Evals({
             <div className="grid gap-4">
               {real ? <RealSection real={real} tuning={tuning} /> : null}
               {more ? <MoreRealSections more={more} data={data} tuning={tuning} /> : null}
+              {domains ? <NewDomainCards domains={domains} tuning={tuning} /> : null}
             </div>
           </section>
 
@@ -1279,11 +1289,21 @@ export function Evals({
 }
 
 /** The page's sections and the tests in each, for its "On this page" list. */
-function contents(real: boolean, more: boolean, unseen: boolean): TocItem[] {
-  // The HDFS card shows with the real-log results; the rest with the other real-data results.
-  const realTests = REAL_TESTS.filter((t) => (t.id === "ev-real" ? real : more)).map(
-    ({ id, label }) => ({ id, label }),
-  );
+export function contents(
+  real: boolean,
+  more: boolean,
+  unseen: boolean,
+  domains: DomainResult[] = [],
+): TocItem[] {
+  // The HDFS card shows with the real-log results; the rest with the other real-data results,
+  // then a card for each new-domain suite with results.
+  const realTests = [
+    ...REAL_TESTS.filter((t) => (t.id === "ev-real" ? real : more)).map(({ id, label }) => ({
+      id,
+      label,
+    })),
+    ...domains.map((d) => ({ id: DOMAIN_CARDS[d.key].id, label: DOMAIN_CARDS[d.key].label })),
+  ];
   return [
     ...(more
       ? [
