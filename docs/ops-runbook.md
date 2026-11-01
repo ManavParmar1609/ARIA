@@ -11,7 +11,7 @@ It is not the incident runbook library in [`runbooks/`](../runbooks), which ARIA
 | API | `aria serve` (`make api`) | Serves REST and server-sent events, MCP at `/mcp`, A2A at `/a2a` and AG-UI at `/agui`, and the health checks. With `ARIA_WORKER_MODE=inprocess` it also executes runs and the periodic jobs. |
 | Worker | `aria worker` (`make worker`) | With `ARIA_WORKER_MODE=external`, it claims queued runs from the database and executes them, and runs the periodic jobs (the log scan, recalibration and, when you set it up, the retention purge) |
 | Web app | `pnpm --dir web dev` (`make web`), or the `web` image | The landing page and the console. Its server forwards console requests to the API with the signed-in key. |
-| Database | | SQLite by default, or Azure SQL. It holds runs, checkpoints, events, reports, outbound actions, the tool-call audit, reviews and incident memory. |
+| Database | | SQLite by default, or Azure SQL. It holds runs, checkpoints, events, reports, outbound actions, the tool-call audit, reviews, incident memory and the append-only decision record. |
 | Model files | | The trained severity model, `models/severity_log.json`, ships with the code. Recalibrated versions and the offline embeddings live in `ARIA_MODELS_DIR` (`/var/lib/aria/models`, on the shared volume, in containers). |
 | Optional | | Arize Phoenix for traces, and a self-hosted NVIDIA NIM (both are compose profiles) |
 
@@ -268,6 +268,7 @@ Processes log to standard output. With `ARIA_LOG_FORMAT=json`, each line is one 
 | `severity.adapted`, `severity.recalibrated`, `severity.model_reloaded`, `severity.recalibration_failed`, `severity.model_missing` | The severity model |
 | `services.ticket_models_missing` | No ticket model was found at start |
 | `retention.purged`, `retention.purge_failed` | The retention purge deleted runs (with how many rows of each kind, and how many runs it left because a process held them), or failed and will try again on its next round |
+| `record.appended`, `record.failed` | A decision went on the decision record, or could not be written. `record.failed` is an error: the step that made the decision failed with it (a run marked failed, a request answered with an error, a job that logs the failure), so look into it at once. See [The decision record](#the-decision-record). |
 
 ### Reviewers
 
@@ -486,7 +487,7 @@ The safety model reads LLM-written report claims and polished messages. A flagge
 - its incident-memory entry;
 - the alert group that opened it, with its alerts.
 
-It answers 409 while the run is queued or running. Nothing deletes old runs automatically unless you set a retention period.
+It answers 409 while the run is queued or running. Nothing deletes old runs automatically unless you set a retention period. The run's entries on the [decision record](#the-decision-record) stay, and the deletion joins them under the caller's key name.
 
 ### Retention and purge
 
@@ -529,7 +530,8 @@ One thing stays: when the newest `feedback` row belongs to a purged run, its id 
 - the incidents memory was seeded with, and every incident that did not come from a purged run;
 - the routine log templates ARIA learned from many runs (`lg_store`, namespace `templates`);
 - datasets (the other `log_events` rows, `log_windows` and the ITSM tables), evaluation runs (`eval_runs`) and model files;
-- other runs, copies (forks) of a purged run included: each keeps its own age.
+- other runs, copies (forks) of a purged run included: each keeps its own age;
+- the decision record (`decision_record`): a purged run's entries stay, and the purge adds one entry for each run it deleted and one for the purge as a whole (see [The decision record](#the-decision-record)).
 
 **After a purge.**
 
@@ -537,6 +539,57 @@ One thing stays: when the newest `feedback` row belongs to a purged run, its id 
 - **Learning.** Recalibration keeps what it already learned from purged blind checks. A model without per-level calibrations counts reviews, so purging reviews postpones its next recalibration.
 - **Figures.** Purged runs drop out of the reviewer figures, the drift check and the review list.
 - **Copies.** A copy of a purged run still names the original, which no longer opens.
+- **The record.** The decision record keeps every purged run's entries and gains the purge's own.
+
+### The decision record
+
+Every decision ARIA or a person takes is one entry in the `decision_record` table, which only grows ([ADR 0017](adr/0017-keep-an-append-only-hash-chained-decision-record.md)). It is for the question "who decided what, and when", asked months later, by someone who must not have to trust the database as it stands today.
+
+**What is recorded.** One entry each time:
+
+| Kind | When | What the entry holds |
+|---|---|---|
+| `review` | A reviewer approves, edits or rejects a report, from the console, the API, A2A or AG-UI, or ARIA approves an unattended run | The decision, the reviewer, the level before and after, how ARIA had decided, the prediction set, the message ids approved, the comment |
+| `edit` | A review carried edits | Which parts changed: the new title or level, how many summary lines and actions, the note |
+| `publish` | A report is published | The report id and version, its level, who decided it, whether a model or the template wrote it, whether it validated |
+| `send` | An approved message goes out, fails or is kept as a preview, or is sent again | The message id, channel, audience, title and outcome. Never the message's body |
+| `blind_check` | A key-holder rates an incident blind | Their level, ARIA's, whether it was in the set, the model version |
+| `recalibration` | A recalibration writes a new model file (the job, or `aria train recalibrate`) | The versions before and after, how many checks or reviews it used, the coverage or miss figures |
+| `model_swap` | A running engine starts using a different model version | The versions before and after, and the file |
+| `purge` | The retention purge deletes runs | One entry per deleted run with the rows that went, and one for the purge with its totals |
+| `delete` | Someone deletes a run by hand | The run's status, system, trigger and title |
+
+Each entry names who acted: the reviewer's key name, `cli` for the operator at the command line, or `system` for ARIA's own jobs. Never a key. Every string in an entry goes through the same redaction as log text, with the run's own pseudonyms, and a reviewer's comment or note is cut to 500 characters. Log lines, report text and message bodies are never in it: those stay in their own rows.
+
+Each entry carries a SHA-256 hash over a canonical JSON of its own fields and the hash of the entry before it (the first chains to a fixed hash of zeros). The database refuses `UPDATE` and `DELETE` on the table, on SQLite and on Azure SQL, and nothing links it to `runs`, so deleting or purging a run leaves its entries where they are. A decision that cannot be recorded is not dropped: the step fails with the reason (a run ends `failed`, a request answers with an error, the purge job logs `record.failed`), so a quiet gap cannot open.
+
+**Verify it.**
+
+```bash
+uv run aria audit verify
+```
+
+It walks the chain from the first entry, prints how many entries it holds and exits 0 when every link holds, or names the first entry that does not and exits 1. It also prints the newest hash. `GET /api/v1/audit/verify` answers the same (`ok`, `length`, `first_broken`, `problem`, `head_hash`), and the console's Settings shows it under "Decision record". `GET /api/v1/runs/{run_id}/record` lists one run's entries, which the incident page shows as a list of when, what happened and who. Verifying reads every entry, so run it on a schedule (a daily cron, or your monitoring) rather than on every page view. In compose, run it as `docker compose exec api aria audit verify`.
+
+**Anchor the newest hash.** The chain shows that an entry was changed, removed or reordered. It cannot show that the whole chain was rewritten from some entry onward by someone with write access to the database, because they can recompute every later hash. Keeping the newest hash somewhere they cannot write (a ticket, a log system with its own retention, a file in another account) after each verify, and comparing it next time, catches that: a rewritten chain ends in a different hash, and a cut-off tail in an older one. The verify command and endpoint print it for that purpose.
+
+**What a broken chain means.** The verifier reports one of three things, for the first entry that fails:
+
+- *does not match its own hash*: that entry's fields were changed after it was written;
+- *does not chain to the entry before it*: an entry before it was changed, or replaced;
+- *is missing*: an entry was removed from the middle of the chain.
+
+None of these happens in normal operation: the triggers refuse every change, and the writer never reuses or skips a number (two writers that read the same tail cannot both insert the next entry; the loser tries again). A break means the triggers were dropped and rows were written by hand, or the database was restored from a backup and then written to from a copy with a different history. A step that ran twice after a database error writes its entry twice, which the verifier does not report: the two entries are what happened.
+
+**What to do.**
+
+1. Stop trusting the record from the broken entry onward, and say so to whoever relies on it.
+2. Find out how it was changed: the database's own audit (Azure SQL auditing, if enabled), the access log (`api.request`) for the time of the change, and who had write access.
+3. Compare with the last anchored hash and the backups: a backup from before the break still verifies and holds the entries as they were.
+4. Do not rewrite the chain back. Leave it as evidence, record what happened outside ARIA, and restore from a backup only if the whole database is being restored.
+5. Check that the triggers are in place: on SQLite, `SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'decision_record'` lists `decision_record_no_update` and `decision_record_no_delete`; on Azure SQL, `SELECT name FROM sys.triggers WHERE parent_id = OBJECT_ID('decision_record')`. `aria db upgrade` installs them with the table; a database someone created the table in by other means lacks them.
+
+**Migration.** The table arrives with `aria db upgrade` (revision `e8f2a7c3d9b1`). Decisions made before the upgrade are not on the record; the reports, actions and feedback rows still hold them. The record is never purged; it grows by a handful of entries per reviewed run and one per purged run.
 
 ## Troubleshooting
 

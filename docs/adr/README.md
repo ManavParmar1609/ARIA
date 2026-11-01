@@ -24,6 +24,7 @@ status. Measured results live in [the evaluation](../evaluation.md), not here.
 | [0014](0014-promise-coverage-per-level-and-send-unfamiliar-windows-to-a-person.md) | Promise coverage per severity level, and send unfamiliar windows to a person | Accepted | Per-level conformal thresholds with a certified severe-miss guard, a novelty check that asks a person, blind checks with adaptive recalibration, and label-free drift. |
 | [0015](0015-measure-in-three-rings-and-record-what-was-tuned.md) | Measure in three rings, and record what each suite was tuned on | Accepted | Familiar systems, systems held out in turn, and real data, with exact bounds, a registry of what was tuned on what, and a fixed rule for adopting a change. |
 | [0016](0016-keep-each-model-on-a-shared-key-inside-its-own-limits.md) | Keep each model on a shared key inside its own limits | Accepted | A pool of Gemini models on one key, a quota ledger with admission, run reservations and classified refusals, so the shared demo degrades to offline reports instead of errors. |
+| [0017](0017-keep-an-append-only-hash-chained-decision-record.md) | Keep an append-only, hash-chained decision record | Accepted | Every review, edit, publish, message, blind check, recalibration, model swap, purge and deletion is one entry in a table that only grows, each hashed with the entry before it, verified from the CLI, the API and the console. |
 
 ## Adding a record
 
