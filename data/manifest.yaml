@@ -285,3 +285,21 @@ sources:
     license: Apache-2.0
     citation: "S. Jha et al. ITBench: Evaluating AI Agents across Diverse Real-World IT Automation Tasks. ICML 2025. Data: IBM Research, ITBench-Lite (huggingface.co/datasets/ibm-research/ITBench-Lite)."
     description: ITBench-Lite's 35 site-reliability scenarios. Each is a snapshot of a Kubernetes cluster running the OpenTelemetry demo shop while a fault was injected, with the alerts in alerting state when the incident was raised, the cluster's Kubernetes events and a ground truth naming the entity at fault and how the fault spread. The services' logs (about 4 GB) are streamed, checked against the Hub's sha256, and only the last 20,000 lines of the 10 minutes before each incident are kept (src/aria/evals/itbench.py).
+
+  jira-public:
+    kind: zenodo
+    record: "15719919"
+    files: ["2025-06-23 ThePublicJiraDataset.zip"]
+    stream:
+      reader: jira-mongodump
+      member: "ThePublicJiraDataset/3. DataDump/mongodump-JiraReposAnon.archive"
+      keep: [Apache, Jira]
+      limit: 20000
+    checksums:
+      # The whole archive's md5 cannot be checked without downloading it; the subset is pinned.
+      "2025-06-23 ThePublicJiraDataset.zip": md5:02f85309d966092ea130ca0797aea795
+      apache.jsonl: sha256:8b8b2f399b2c585445c4deba255728f7058fe3ba4f2cb138fbdf54d850c5e592
+      jira.jsonl: sha256:d43d35e4c91e6d7a2e9d6a5dd5662f76937bf7d92f2b9546d7c50edfd13aa63f
+    license: CC BY 4.0 (the Zenodo record's licence)
+    citation: "L. Montgomery, C. Lüders, W. Maalej. An Alternative Issue Tracking Dataset of Public Jira Repositories. MSR 2022. Zenodo, DOI 10.5281/zenodo.15719919."
+    description: A subset of the Public Jira Dataset (2.7 million issues from 16 public Jira instances, one 5.8 GB zip). The download never fetches the zip whole; it streams the MongoDB dump inside it and keeps the first 20,000 issues of two instances, Apache's and Atlassian's own, in the dump's order, with each issue's type, components, title, description, final priority and the priority it was opened with (src/aria/data/jira.py). The ticket evaluation scores ARIA's ticket model against the priority people set (src/aria/evals/jira.py).

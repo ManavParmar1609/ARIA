@@ -46,7 +46,7 @@ class Stream(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    reader: Literal["itbench-logs"]
+    reader: Literal["jira-mongodump", "itbench-logs"]
     member: str | None = None
     keep: list[str] = Field(default_factory=list)
     limit: int | None = Field(default=None, gt=0)

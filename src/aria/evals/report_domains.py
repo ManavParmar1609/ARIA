@@ -37,6 +37,13 @@ _RANKERS = {
     "keyword": "Keyword categories",
     "rules_only": "ARIA's rules only",
 }
+_JIRA_METHODS = {
+    "aria": "ARIA's ticket model",
+    "at_open": "The priority it opened with",
+    "by_issue_type": "Commonest level for the issue's type",
+    "majority_class": "Commonest level",
+}
+_INSTANCES = {"Apache": "Apache's Jira", "Jira": "Atlassian's Jira"}
 _SYSTEMS = {
     "SS": "Sock Shop",
     "OB": "Online Boutique",
@@ -303,6 +310,46 @@ def _itbench(s: Mapping[str, Any]) -> list[str]:
     ]
 
 
+def _jira(s: Mapping[str, Any]) -> list[str]:
+    title = "### Ticket priority in public issue trackers"
+    if (gone := _missing(title, s)) is not None:
+        return gone
+    lines = [
+        title,
+        "",
+        (
+            f"{s['test_tickets']:,} recent issues from public Jira instances, scored against the "
+            f"priority people set; the {s['reference_tickets']:,} older issues of each instance "
+            f"set the simple baselines. Source: {s['source']}; {s['citation']} ARIA's ticket "
+            "model was trained on one company's ServiceNow desk and reads a ticket's category, "
+            "subcategory, configuration item and open time; Jira has no impact or urgency, so the "
+            "model, not the impact x urgency matrix, decides every ticket. Urgent means levels "
+            "1-2 (Blocker and Critical, or Highest and High)."
+        ),
+        "",
+    ]
+    for key, block in s["instances"].items():
+        levels = ", ".join(f"level {k}: {v:,}" for k, v in block["levels"].items())
+        lines += [
+            (
+                f"{_INSTANCES.get(key, key)}: {block['tickets']:,} tickets ({levels}); the priority "
+                f"changed after the issue opened for {_share(block['changed_after_open'])}. ARIA's "
+                f"conformal set held the true level for {_pct(block['set_coverage'])} of them."
+            ),
+            "",
+            "| Method | Accuracy (95% CI) | Macro-F1 (95% CI) | Urgent tickets rated 3-4 |",
+            "|---|---|---|---|",
+            *(
+                f"| {_JIRA_METHODS[name]} | {_pct(r['accuracy'])} ({_ci(r['accuracy_ci95'])}) | "
+                f"{r['macro_f1']:.3f} ({_ci(r['macro_f1_ci95'], percent=False)}) | "
+                f"{_miss(r['urgent_missed'])} |"
+                for name, r in block["methods"].items()
+            ),
+            "",
+        ]
+    return lines
+
+
 def render(results: Mapping[str, Any]) -> list[str]:
     """The new-domain sections from a results document."""
     domains = results.get("domains") or {}
@@ -329,6 +376,7 @@ def render(results: Mapping[str, Any]) -> list[str]:
         "rcaeval": _rcaeval,
         "anomod": _anomod,
         "itbench": _itbench,
+        "jira": _jira,
     }
     for name, renderer in renderers.items():
         if isinstance(domains.get(name), Mapping):

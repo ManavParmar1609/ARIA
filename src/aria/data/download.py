@@ -14,8 +14,8 @@ Integrity checks per source kind:
   the Hub records for it (the sha256 of a large file, the git blob id of a small one).
 * checksums: pinned in the manifest beside a source. A Zenodo file must match its pin as well as
   the checksum the record publishes, so a record that changes its files is refused.
-* stream: part of a file too large to keep is read as it arrives, and only what the source's
-  reader keeps is written.
+* stream: part of a file too large to keep is read as it arrives (``aria.data.remote_zip``) and
+  only what the source's reader keeps is written; the manifest pins the checksums of those files.
 
 Zenodo refuses bursts (HTTP 403 "unusual traffic" after about two dozen quick calls), so every
 request to it waits ``ZENODO.interval`` seconds after the previous one, and a refused request is
@@ -262,6 +262,10 @@ def download_zenodo(source: DataSource, dest: Path) -> Path:
                 f"pins {pinned}; the record's files changed"
             )
             raise DownloadError(msg)
+        if source.stream is not None:
+            # Too large to keep: the reader takes what it needs as the file streams in.
+            stream_source(source, dest, entry["links"]["self"])
+            continue
         algorithm, _, expected = published.partition(":")
         target = dest / name
         if not (target.exists() and _hash_file(target, algorithm or "md5") == expected):
@@ -284,9 +288,9 @@ StreamReader = Callable[[DataSource, Path, httpx.Client, str | None], list[Path]
 
 def _stream_readers() -> dict[str, StreamReader]:
     # Imported here: the readers use this module's helpers.
-    from aria.data import itbench  # noqa: PLC0415
+    from aria.data import itbench, jira  # noqa: PLC0415
 
-    return {"itbench-logs": itbench.write_log_windows}
+    return {"jira-mongodump": jira.write_subset, "itbench-logs": itbench.write_log_windows}
 
 
 def stream_source(source: DataSource, dest: Path, url: str | None = None) -> Path:

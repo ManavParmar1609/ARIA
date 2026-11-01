@@ -486,3 +486,88 @@ def test_hub_files_are_checked_against_the_hash_the_hub_records(tmp_path: Path) 
     events.mock(return_value=httpx.Response(200, content=b"tampered"))
     with pytest.raises(DownloadError, match="does not match the Hub's hash"):
         download(source, tmp_path / "raw")
+
+
+def _ranged(payload: bytes) -> Any:
+    """A server that answers HTTP range requests for ``payload``."""
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        first, _, last = request.headers["Range"].removeprefix("bytes=").partition("-")
+        start, end = int(first), min(int(last or len(payload) - 1), len(payload) - 1)
+        return httpx.Response(
+            206,
+            content=payload[start : end + 1],
+            headers={"content-range": f"bytes {start}-{end}/{len(payload)}"},
+        )
+
+    return answer
+
+
+@respx.mock
+def test_a_streamed_source_keeps_its_subset_without_storing_the_whole_zip(
+    tmp_path: Path,
+) -> None:
+    from test_jira import archive, issue
+
+    from aria.data.manifest import Stream
+
+    member = "Data/dump.archive"
+    dump = archive([("Apache", [issue("A-1", "Major"), issue("A-2", "Minor")])])
+    payload = _zip_bytes({"Data/README.md": b"read me", member: dump})
+    _zenodo_record("10", payload, "big.zip")
+    respx.get("https://zenodo.org/f/10/big.zip").mock(side_effect=_ranged(payload))
+    source = _source(
+        name="jira",
+        kind="zenodo",
+        record="10",
+        files=["big.zip"],
+        stream=Stream(reader="jira-mongodump", member=member, keep=["Apache"], limit=1),
+    )
+    dest = download(source, tmp_path / "raw")
+    assert not (dest / "big.zip").exists()  # the zip itself is never stored
+    with (dest / "apache.jsonl").open() as handle:
+        assert [json.loads(line)["key"] for line in handle] == ["A-1"]
+
+    pinned = source.model_copy(update={"checksums": {"apache.jsonl": "sha256:" + "0" * 64}})
+    with pytest.raises(DownloadError, match=r"apache\.jsonl sha256 mismatch"):
+        download(pinned, tmp_path / "raw")
+
+
+class _CutOff(httpx.SyncByteStream):
+    """A response body that stops part way, as a reset connection does."""
+
+    def __init__(self, data: bytes) -> None:
+        self.data = data
+
+    def __iter__(self) -> Any:
+        yield self.data
+        raise httpx.ReadError("connection reset by peer")
+
+
+def test_a_member_stream_cut_off_part_way_picks_up_where_it_stopped() -> None:
+    from aria.data import remote_zip
+
+    member_bytes = b"x" * 5_000 + b"y" * 5_000
+    payload = _zip_bytes({"m.bin": member_bytes})
+    answer = _ranged(payload)
+    calls: list[str] = []
+    cut = [False]
+
+    def flaky(request: httpx.Request) -> httpx.Response:
+        calls.append(request.headers["Range"])
+        response = answer(request)
+        if cut[0]:  # the member's first read: cut it off after a few bytes
+            cut[0] = False
+            return httpx.Response(206, stream=_CutOff(response.content[:1_000]))
+        return response
+
+    with respx.mock, httpx.Client() as client:
+        respx.get("https://files.test/a.zip").mock(side_effect=flaky)
+        member = remote_zip.locate(client, "https://files.test/a.zip", "m.bin")
+        cut[0] = True
+        data = b"".join(remote_zip.stream(client, "https://files.test/a.zip", member))
+    assert data == member_bytes
+    first, resumed = calls[-2], calls[-1]
+    assert (
+        int(resumed.split("=")[1].split("-")[0]) == int(first.split("=")[1].split("-")[0]) + 1_000
+    )
