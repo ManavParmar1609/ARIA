@@ -82,11 +82,16 @@ def ranking(truth: Sequence[bool], scores: Sequence[float]) -> dict[str, Any]:
 
 
 def judge(
-    engine: SeverityEngine, features: WindowFeatures, alerts: Sequence[AlertSignal] = ()
+    engine: SeverityEngine,
+    features: WindowFeatures,
+    *,
+    system: str,
+    alerts: Sequence[AlertSignal] = (),
 ) -> dict[str, Any]:
     """ARIA's offline severity for one window, with the rules alone, the model alone and the
-    keyword rule beside it."""
-    pre = engine.preliminary(features, alerts=alerts, evidence=EvidenceStore())
+    keyword rule beside it. ``system`` is the name ARIA would see in production: one it never
+    trained on sends the window to a person, as it would in a real deployment."""
+    pre = engine.preliminary(features, system=system, alerts=alerts, evidence=EvidenceStore())
     decision = decide(pre, gate=engine.gate, llm_unavailable_reason="offline evaluation")
     probabilities = {str(k): float(v) for k, v in pre.probabilities.items()}
     return {

@@ -94,7 +94,7 @@ def score_scenario(
             known_templates=list(history)[-HISTORY:],
             salt=SALT,
         ).batch
-        verdict = ringc.judge(engine, parsed.features)
+        verdict = ringc.judge(engine, parsed.features, system=SYSTEM)
         for template in parsed.templates:
             if not error_count(template) and not warning_count(template):
                 history.pop(template.template, None)
