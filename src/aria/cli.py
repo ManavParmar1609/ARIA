@@ -361,7 +361,7 @@ def purge(
         )
         return
     _require_database()
-    result = purge_runs(get_engine(), days=period, dry_run=dry_run)
+    result = purge_runs(get_engine(), days=period, dry_run=dry_run, actor="cli")
     when = f"{result.cutoff:%Y-%m-%d %H:%M} UTC"
     verb = "would be deleted" if dry_run else "deleted"
     console.print(
