@@ -179,7 +179,7 @@ class Drain:
     def _compatible(template: list[str], tokens: list[str]) -> bool:
         """False when merging would turn a failure word, or its healthy counterpart, into ``<*>``."""
         return not any(
-            a != b and a != WILDCARD and (_polar(a) or _polar(b))
+            a not in (b, WILDCARD) and (_polar(a) or _polar(b))
             for a, b in zip(template, tokens, strict=True)
         )
 
