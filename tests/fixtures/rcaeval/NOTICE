@@ -1,0 +1,8 @@
+A few log rows of one RCAEval RE3 case (Sock Shop, carts_f1, repetition 1), unchanged,
+from either side of the fault, and the case's injection time.
+
+Source: https://zenodo.org/records/14590730 (DOI 10.5281/zenodo.14590730)
+Licence: Creative Commons Attribution 4.0 International (CC BY 4.0) on Zenodo; the
+authors' repository states MIT. https://creativecommons.org/licenses/by/4.0/
+Cite: L. Pham, H. Zhang, H. Ha, F. Salim, X. Zhang. RCAEval: A Benchmark for Root Cause
+Analysis of Microservice Systems with Telemetry Data. WWW 2025 Companion.

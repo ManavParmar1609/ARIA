@@ -244,3 +244,16 @@ sources:
     license: CC BY 4.0 (the Zenodo record's licence)
     citation: "M. Landauer, F. Skopik, M. Wurzenberger. Introducing a New Alert Data Set for Multi-Step Attack Analysis. CSET 2024. Zenodo, DOI 10.5281/zenodo.8263181."
     description: The AIT Alert Data Set. 2,655,821 intrusion-detection alerts (Wazuh, Suricata and AMiner) from eight simulated company networks, each attacked once in several steps (scans, a web shell, password cracking, a reverse shell, privilege escalation, a stopped service and data theft over DNS), with the start and end of every attack step. Kept zipped (2.9 GB unpacked); the security-alert evaluation reads it from inside the zip (src/aria/evals/ait_ads.py).
+
+  rcaeval-re3:
+    kind: zenodo
+    record: "14590730"
+    files: [RE3-SS.zip, RE3-OB.zip, RE3-TT.zip]
+    checksums:
+      RE3-SS.zip: md5:467964eddb2a4fef4d6486c4679e749b
+      RE3-OB.zip: md5:96947589084348f9d12cba370313458e
+      RE3-TT.zip: md5:ae1eb5906fb4d13a16a6a5e58faaf30b
+    extract: false
+    license: CC BY 4.0 on Zenodo; MIT in the authors' repository (both permissive; the Zenodo licence applies)
+    citation: "L. Pham, H. Zhang, H. Ha, F. Salim, X. Zhang. RCAEval: A Benchmark for Root Cause Analysis of Microservice Systems with Telemetry Data. WWW 2025 Companion. Zenodo, DOI 10.5281/zenodo.14590730."
+    description: RCAEval's RE3 suite. 90 code-level faults injected into three microservice shops (Sock Shop, Online Boutique and Train Ticket, 30 each), each with every service's logs from before and after the fault and the service it was injected into. Kept zipped; the root-cause evaluation reads each case's logs from inside the zips (src/aria/evals/rcaeval.py).

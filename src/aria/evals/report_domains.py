@@ -156,6 +156,62 @@ def _ait(s: Mapping[str, Any]) -> list[str]:
     ]
 
 
+def _rcaeval(s: Mapping[str, Any]) -> list[str]:
+    title = "### Code-level faults in microservice shops"
+    if (gone := _missing(title, s)) is not None:
+        return gone
+    aria, base = s["aria"], s["baselines"]
+    systems = _join([f"{n} in {_SYSTEMS.get(k, k)}" for k, n in s["by_system"].items()])
+    paired = aria["paired"]
+    random = base["naming_random_expected"]
+    return [
+        title,
+        "",
+        (
+            f"{s['cases']} code-level faults injected into microservice shops ({systems}). "
+            f"Source: {s['source']}; {s['citation']} Each case gives two windows, every service's "
+            "logs from before the fault and from the fault on, each triaged offline, end to end, "
+            "with its lines led by their container's name. "
+            f"{s['windows_over_line_cap']} of the {s['windows']} windows hold more than the "
+            f"per-run line cap of {s['line_cap']:,}; ARIA reads up to the cap."
+        ),
+        "",
+        "| Method | Faulty windows flagged (95% CI) | Healthy windows flagged |",
+        "|---|---|---|",
+        (
+            f"| ARIA, end to end | {_share(aria['faulty_flagged'])} | "
+            f"{_share(aria['healthy_flagged'])} |"
+        ),
+        (
+            f"| ARIA, paged (SEV1-2) | {_share(aria['paged']['faulty_flagged'])} | "
+            f"{_share(aria['paged']['healthy_flagged'])} |"
+        ),
+        (
+            f"| Any error line | {_share(base['any_error_line']['faulty_flagged'])} | "
+            f"{_share(base['any_error_line']['healthy_flagged'])} |"
+        ),
+        "",
+        (
+            f"In {paired['higher']} cases ARIA rated the faulty window above its own healthy "
+            f"window, in {paired['same']} the same and in {paired['lower']} below. ARIA's "
+            f"probability of SEV1-2 ranks faulty windows above healthy ones with AUROC "
+            f"{_auroc(aria['ranking'])}; the count of error lines does so with "
+            f"{_auroc(base['error_count_ranking'])}."
+        ),
+        "",
+        "| Names the service at fault | First suspect | Among the first three |",
+        "|---|---|---|",
+        f"| ARIA | {_naming(aria['naming'])}",
+        f"| Most error lines | {_naming(base['naming_most_errors'])}",
+        (
+            f"| Largest change in log share (reads both windows) | "
+            f"{_naming(base['naming_most_changed'])}"
+        ),
+        f"| A container at random (expected) | {_pct(random['top1'])} | {_pct(random['top3'])} |",
+        "",
+    ]
+
+
 def render(results: Mapping[str, Any]) -> list[str]:
     """The new-domain sections from a results document."""
     domains = results.get("domains") or {}
@@ -179,6 +235,7 @@ def render(results: Mapping[str, Any]) -> list[str]:
     ]
     renderers = {
         "ait-ads": _ait,
+        "rcaeval": _rcaeval,
     }
     for name, renderer in renderers.items():
         if isinstance(domains.get(name), Mapping):

@@ -18,20 +18,30 @@ from pathlib import Path
 from typing import Any
 
 from aria.config import get_settings
+from aria.data import rcaeval as rcaeval_data
 from aria.data.scenarios import LinePools, ScenarioBuilder
-from aria.evals import ait_ads
+from aria.evals import ait_ads, rcaeval
 from aria.evals.pipeline import EvalEnvironment
 
-SUITES = ("ait-ads",)
+SUITES = ("ait-ads", "rcaeval")
 # The manifest source each suite reads.
 SOURCES = {
     "ait-ads": "ait-ads",
+    "rcaeval": "rcaeval-re3",
 }
 # Suites that triage cases end to end, with what lists their cases and what triages a share.
 Triage = Callable[[EvalEnvironment, Sequence[int], Path], Awaitable[list[dict[str, Any]]]]
-_PIPELINE: dict[str, tuple[Callable[[Path], int], Triage, Callable[..., dict[str, Any]], Path]] = {}
+_PIPELINE: dict[str, tuple[Callable[[Path], int], Triage, Callable[..., dict[str, Any]], Path]] = {
+    "rcaeval": (
+        lambda root: len(rcaeval_data.find_cases(root)),
+        rcaeval.triage,
+        rcaeval.summarize,
+        rcaeval_data.RCAEVAL_DIR,
+    ),
+}
 _MISSING = {
     "ait-ads": ait_ads.MISSING,
+    "rcaeval": rcaeval.MISSING,
 }
 
 
