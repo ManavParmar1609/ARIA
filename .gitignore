@@ -27,6 +27,7 @@ htmlcov/
 data/raw/
 data/processed/
 data/cache/
+data/llm-quota.json
 *.db
 *.db-journal
 *.db-shm

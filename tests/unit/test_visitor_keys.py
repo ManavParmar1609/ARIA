@@ -311,10 +311,16 @@ async def test_claude_asks_for_the_schema_in_words_when_it_cannot_constrain_to_i
         )
 
     provider = _claude(handler)
+    # One request per call: the refusal switches the client to asking in words and says the
+    # request may go again, which the router sends (each one counted against the limits).
+    with pytest.raises(ProviderError) as info:
+        await provider.chat(MESSAGES, json_schema=SCHEMA)
+    assert info.value.resend
+    assert provider.mode is StructuredOutputMode.PROMPT
     text, _ = await provider.chat(MESSAGES, json_schema=SCHEMA)
     assert json.loads(text) == {"x": 2}
     assert "JSON Schema" in bodies[-1]["system"]
-    assert provider.mode is StructuredOutputMode.PROMPT
+    assert len(bodies) == 2
 
 
 async def test_claude_lists_its_models_for_a_key_check() -> None:
@@ -558,12 +564,13 @@ def test_only_the_sites_own_key_counts_against_the_allowance() -> None:
     from aria.llm.visitor import VisitorKey
 
     def state(real_llm: bool) -> AppState:
-        router = SimpleNamespace(has_real_llm=lambda role: real_llm)
+        # The shared models have room (run_back_at None): only the allowance decides.
+        router = SimpleNamespace(has_real_llm=lambda role: real_llm, run_back_at=lambda _: None)
         return cast(
             "AppState",
             SimpleNamespace(
                 allowance=SharedAllowance(SharedAllowanceConfig(per_visitor=1)),
-                services=SimpleNamespace(router=router),
+                services=SimpleNamespace(router=router, config=get_app_config()),
             ),
         )
 

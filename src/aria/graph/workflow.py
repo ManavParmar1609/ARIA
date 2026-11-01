@@ -58,7 +58,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError
 
 from aria.agents.investigator import INVESTIGATOR_TOOLS, InvestigationInputs, Investigator
-from aria.config import BudgetConfig, Settings
+from aria.config import AppConfig, BudgetConfig, Settings
 from aria.contracts.base import Claim, EvidenceKind, Severity
 from aria.contracts.inputs import TriageRequest
 from aria.contracts.parsing import ParsedBatch
@@ -106,12 +106,39 @@ MAX_ALERT_EVIDENCE = 20
 FEEDBACK_REVIEW_THRESHOLD = 2  # corrections that make ARIA ask for a second look
 # Without ARIA_PSEUDONYM_KEY: the random key the processes sharing a database keep in it.
 _SHARED_KEYS: weakref.WeakKeyDictionary[Engine, bytes] = weakref.WeakKeyDictionary()
+# A node runs again on a database error, or when it cannot reach a remote MCP tool server
+# (ARIA_MCP_URL). Never on a model call: the router turns every provider failure into a
+# fallback to the next provider, ARIA's one retry layer for model calls, so a provider's
+# transport error never reaches a node to be multiplied by a rerun (aria.llm.router).
 TRANSIENT = RetryPolicy(
     max_attempts=3,
     initial_interval=0.25,
     backoff_factor=2.0,
     retry_on=(OperationalError, httpx.TransportError),
 )
+
+
+def expected_llm_calls(config: AppConfig) -> dict[str, int]:
+    """The model calls one model-written triage makes when nothing goes wrong, by role: what a
+    run reserves from the shared models' daily limits before it starts (aria.llm.quota).
+
+    * ``severity``: one adjudication, choosing inside the prediction set;
+    * ``recall``: one query rewrite, when the first search for similar incidents is weak;
+    * ``investigate``: one decision per round;
+    * ``report``: the narrative, then the critic;
+    * ``comms``: the message drafts.
+
+    Repairs, a replan's wider search and fallbacks are not reserved: each is admitted call by
+    call, within what the day has left.
+    """
+    return {
+        "adjudicator": 1,
+        "retriever": 1,
+        "investigator": config.investigation.max_rounds,
+        "reporter": 1,
+        "critic": 1,
+        "comms": 1,
+    }
 
 
 # --- context -------------------------------------------------------------------------------------
@@ -362,7 +389,13 @@ async def plan(state: TriageState, runtime: Runtime[TriageContext]) -> Command[A
             if dropped
             else []
         )
-        + withheld,
+        + withheld
+        # The runner's reason for running offline a triage that asked for a model.
+        + (
+            [request.offline_reason]
+            if request.offline_reason and not request.options.use_llm
+            else []
+        ),
     )
     sends = [
         Send(

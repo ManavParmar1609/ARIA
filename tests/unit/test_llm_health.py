@@ -22,7 +22,6 @@ def _cfg(**overrides: object) -> ProviderConfig:
         "api_key_env": "NVIDIA_API_KEY",
         "chat_model": "openai/gpt-oss-20b",
         "embedding_model": "nvidia/nemotron-3.5-embed-1b",
-        "max_retries": 0,
     }
     base.update(overrides)
     return ProviderConfig(**base)  # type: ignore[arg-type]
@@ -114,7 +113,6 @@ def _gemini_cfg() -> ProviderConfig:
         base_url=GEMINI,
         api_key_env=["GEMINI_API_KEY", "gemini_api_key"],
         chat_model="gemini-3.6-flash",
-        max_retries=0,
     )
 
 

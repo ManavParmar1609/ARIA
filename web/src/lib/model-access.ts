@@ -1,17 +1,19 @@
 import type { components } from "@/lib/api/schema";
 
 import { modelKeyLabel } from "./api/model-key";
+import { shortTime } from "./format";
 
 // Who answers a visitor's runs and questions (item B): their own key, else the site's own key
-// while today's share lasts, else nobody, and the work runs offline. The same words appear on
-// Settings and on New triage.
+// while today's share lasts and its models have room, else nobody, and the work runs offline.
+// The same words appear on Settings and on New triage.
 
 export type SharedModel = components["schemas"]["SharedModelOut"];
 
 export type ModelAccess =
   | { kind: "own"; label: string }
   | { kind: "shared"; label: string; left: number | null }
-  | { kind: "offline"; label: string; usedUp: boolean };
+  // ``backAt``: the site's models are at their limits until then (llm.quota on the server).
+  | { kind: "offline"; label: string; usedUp: boolean; backAt?: string };
 
 export function modelAccess(
   savedProvider: string | null,
@@ -22,6 +24,9 @@ export function modelAccess(
     return { kind: "own", label: `Your ${modelKeyLabel(savedProvider)} key` };
   }
   if (shared && shared.left !== 0) {
+    if (shared.back_at) {
+      return { kind: "offline", label: "Offline", usedUp: false, backAt: shared.back_at };
+    }
     const limited = shared.left != null;
     return {
       kind: "shared",
@@ -52,6 +57,9 @@ export function accessSentence(
         ? "The site's key triages your incidents and answers your questions."
         : `The site's key (shared, limited) triages your incidents and answers your questions: ${access.left} left today.`;
     case "offline":
+      if (access.backAt) {
+        return `Offline until ${shortTime(access.backAt)}: the site's models are at their limits for now, so triages use ${OFFLINE}.${bring}`;
+      }
       return access.usedUp
         ? `Offline for today: your share of the site's key is used, so triages use ${OFFLINE}.${bring}`
         : `Offline: triages use ${OFFLINE}, and nothing leaves the server.${bring}`;
@@ -68,6 +76,7 @@ export function accessShort(access: ModelAccess, canBringKey: boolean): string {
         ? "The site's key answers"
         : `The site's key answers: ${access.left} left today`;
     case "offline":
+      if (access.backAt) return `Offline until ${shortTime(access.backAt)}`;
       return canBringKey ? "Offline. Add a model key" : "Offline: no language model";
   }
 }

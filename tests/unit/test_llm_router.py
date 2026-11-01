@@ -104,8 +104,13 @@ def test_gemini_is_tried_before_hosted_nim_when_both_keys_are_set(
     monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-x")
     monkeypatch.setenv("GEMINI_API_KEY", "AIza-x")
     router = LLMRouter(get_app_config().llm)
-    assert router.chain("adjudicator") == ["gemini", "gemini-lite", "nim", "nim-fallback"]
-    assert router.chain("reporter") == ["gemini", "gemini-lite", "nim", "nim-fallback", "fake"]
+    pool = ["gemini", "gemini-lite", "gemini-lite-2", "gemma"]
+    assert router.chain("adjudicator") == [*pool, "nim", "nim-fallback"]
+    assert router.chain("reporter") == [*pool, "nim", "nim-fallback", "fake"]
+    # Light work leads with the lite models and Gemma, keeping the quality model's day for the
+    # steps where quality matters.
+    lite_first = ["gemini-lite", "gemini-lite-2", "gemma", "gemini"]
+    assert router.chain("comms") == [*lite_first, "nim", "nim-fallback", "fake"]
 
 
 def test_production_never_uses_the_fake_provider() -> None:

@@ -322,11 +322,53 @@ class Me(BaseModel):
 
 class SharedModelOut(BaseModel):
     """This visitor's share today of the server's own model keys (``llm.shared``). None means
-    no limit; ``left`` 0 means this visitor's work runs offline until tomorrow (UTC)."""
+    no limit; ``left`` 0 means this visitor's work runs offline until tomorrow (UTC).
+    ``back_at`` is set while the shared models themselves are at their limits (``llm.quota``):
+    until then, everyone's model-written triages run offline."""
 
     left: int | None = None
     per_visitor: int | None = None
     per_day: int | None = None
+    back_at: datetime | None = None
+
+
+class ProviderLimitsOut(BaseModel):
+    """A provider's limits as ARIA keeps them: the configured ones less the safety margin."""
+
+    requests_per_minute: int | None = None
+    tokens_per_minute: int | None = None
+    requests_per_day: int | None = None
+
+
+class ProviderCapacityOut(BaseModel):
+    """One shared model's room now. Counts and times only: never a key or a request."""
+
+    name: str
+    model: str | None
+    set_up: bool  # its key (or endpoint) is configured on this server
+    limits: ProviderLimitsOut | None
+    minute_requests_left: int | None
+    minute_tokens_left: int | None
+    day_requests_left: int | None
+    day_requests_used: int
+    day_requests_reserved: int  # set aside for runs in progress
+    minute_resets_at: datetime | None  # when the oldest request leaves the one-minute window
+    held_until: datetime | None  # resting after the provider refused for a limit
+    held_because: str | None
+
+
+class CapacityOut(BaseModel):
+    """The shared models' room now (``GET /api/v1/llm/capacity``)."""
+
+    timezone: str
+    margin: float
+    day_resets_at: datetime
+    # How many more model-written triages today's requests have room for; None when no daily
+    # limit bounds them.
+    runs_left_today: int | None
+    # Set while no model-written triage fits: when one may again.
+    back_at: datetime | None
+    providers: list[ProviderCapacityOut]
 
 
 class SettingsOut(BaseModel):

@@ -39,10 +39,12 @@ from aria.graph.store import SqlStore
 from aria.graph.workflow import (
     TriageContext,
     build_graph,
+    expected_llm_calls,
     rekey_for_fork,
     run_link,
     run_salt,
 )
+from aria.llm.quota import Reservation, offline_message
 from aria.llm.visitor import VisitorKeys
 from aria.mcp.client import Target
 from aria.notify import send_action
@@ -343,6 +345,8 @@ class TriageRunner:
             request = request.model_copy(update={"replay_of": None})
         if trigger != "sample" and request.sample is not None:
             request = request.model_copy(update={"sample": None})  # only the samples endpoint
+        if request.offline_reason is not None:
+            request = request.model_copy(update={"offline_reason": None})  # only the runner's
         request = self._cleaned(self._capped(request), run_id)
         repo.create_run(
             self.engine,
@@ -502,12 +506,47 @@ class TriageRunner:
                 self.held.discard(run_id)
                 await asyncio.to_thread(repo.release_run, self.engine, run_id, self.owner)
 
+    def _reserve(self, run_id: str, graph_input: Any) -> tuple[Any, Reservation | None]:
+        """Before a new model-written run starts on this server's own keys, set aside the day's
+        requests its calls need from the shared models. When they have no room for them, the
+        run goes offline, the way a run past the daily allowance does, and its plan says why
+        and when the models have room again. Forks and recovered runs are admitted call by
+        call."""
+        router, config = self.services.router, self.services.config
+        stored = graph_input.get("request") if isinstance(graph_input, dict) else None
+        if stored is None or not config.llm.quota.reserve_runs:
+            return graph_input, None
+        request = TriageRequest.model_validate(stored)
+        if not request.options.use_llm or not router.has_real_llm("reporter"):
+            return graph_input, None
+        outcome = router.prefer(request.options.provider).reserve_run(expected_llm_calls(config))
+        if isinstance(outcome, Reservation):
+            log.info("runner.reserved", run_id=run_id, calls=outcome.calls)
+            return graph_input, outcome
+        ledger = router.ledger
+        reason = offline_message(outcome.back_at, now=ledger.now(), tz=ledger.tz)
+        log.info("runner.offline", run_id=run_id, role=outcome.role, reason="no room")
+        offline = request.model_copy(
+            update={
+                "options": request.options.model_copy(update={"use_llm": False}),
+                "offline_reason": reason,
+            }
+        )
+        return {**graph_input, "request": offline.model_dump(mode="json")}, None
+
     async def _stream(
         self, run_id: str, graph_input: Any, config: RunnableConfig | None
     ) -> RunOutcome:
         # A run started with a visitor's key gets a router of its own, closed when it stops.
+        # Any other new run reserves the shared models' requests it needs, released when it
+        # stops (it does no model work after the review).
         visitor = self.keys.take(run_id)
         own = self.services.router.with_key(visitor) if visitor is not None else None
+        reservation = None
+        if own is None:
+            graph_input, reservation = self._reserve(run_id, graph_input)
+            if reservation is not None:
+                own = self.services.router.for_run(reservation)
         context = self.context.with_router(own) if own is not None else self.context
         try:
             async for part in self.graph.astream(
@@ -528,7 +567,9 @@ class TriageRunner:
             await self._event(run_id, "run_finished", payload={"status": str(RunStatus.FAILED)})
             return RunOutcome(run_id, RunStatus.FAILED, error=message)
         finally:
-            if own is not None:
+            if reservation is not None:
+                self.services.router.release_run(reservation)
+            elif own is not None:
                 await own.aclose()
         return await self._settle(run_id)
 
@@ -658,7 +699,8 @@ class TriageRunner:
         if stored is None:
             msg = "this checkpoint holds no request to fork from; fork from a later one"
             raise RunStateError(msg)
-        request = TriageRequest.model_validate(stored)
+        # The parent's reason for running offline is the parent's alone.
+        request = TriageRequest.model_validate(stored).model_copy(update={"offline_reason": None})
         if options:
             merged = RunOptions.model_validate({**request.options.model_dump(), **options})
             request = request.model_copy(update={"options": merged})

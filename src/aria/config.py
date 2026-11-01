@@ -21,6 +21,7 @@ from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Any, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
@@ -58,6 +59,28 @@ class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+_NO_LIMIT = {"", "none", "off", "unlimited"}
+
+
+class ProviderLimits(_Strict):
+    """What the provider allows this project for one model: requests a minute (``rpm``), tokens a
+    minute (``tpm``) and requests a day (``rpd``). Unset means no limit; 0 means none at all, as
+    AI Studio shows for a model with no free quota. ARIA keeps under each, less ``llm.quota``'s
+    safety margin."""
+
+    rpm: int | None = Field(default=None, ge=0)
+    tpm: int | None = Field(default=None, ge=0)
+    rpd: int | None = Field(default=None, ge=0)
+
+    @field_validator("rpm", "tpm", "rpd", mode="before")
+    @classmethod
+    def _words_mean_no_limit(cls, value: Any) -> Any:
+        # From an environment variable: "none" (or "unlimited", "off") lifts a limit.
+        if isinstance(value, str) and value.strip().lower() in _NO_LIMIT:
+            return None
+        return value
+
+
 class ProviderConfig(_Strict):
     kind: ProviderKind
     base_url: str | None = None
@@ -73,6 +96,9 @@ class ProviderConfig(_Strict):
     rerank_url: str | None = None
     safety_model: str | None = None
     structured_output: StructuredOutputMode = StructuredOutputMode.JSON_SCHEMA
+    # "merge" folds system messages into the first user message, for models that refuse a
+    # system role (Gemma on the Gemini API is reported to).
+    system_messages: Literal["keep", "merge"] = "keep"
     supports_streaming: bool = True
     # Stream every request, so a model that stalls (sends nothing for stall_timeout_s) fails
     # over quickly instead of holding the run until the full timeout.
@@ -89,10 +115,13 @@ class ProviderConfig(_Strict):
     extra_headers: dict[str, str] = Field(default_factory=dict)
     # The model list answers anyone, so checking a key needs one tiny request instead (NVIDIA's).
     public_catalog: bool = False
+    # A provider's client sends each request once: when it fails, the router hands the call to
+    # the next provider in the chain, ARIA's one retry layer (see aria.llm.router).
     timeout_s: float = Field(default=60.0, gt=0)
-    max_retries: int = Field(default=2, ge=0, le=6)
     price_input_per_mtok: float | None = Field(default=None, ge=0)
     price_output_per_mtok: float | None = Field(default=None, ge=0)
+    # Rate limits ARIA keeps under (aria.llm.quota); None: the provider's limits are not tracked.
+    limits: ProviderLimits | None = None
     verified: bool = False
     notes: str | None = None
 
@@ -162,6 +191,42 @@ class SharedAllowanceConfig(_Strict):
     per_day: int = Field(default=0, ge=0)
 
 
+class QuotaConfig(_Strict):
+    """How ARIA keeps every provider with ``limits`` inside them (aria.llm.quota).
+
+    ``margin`` is the share of each limit left unused, for clocks and counts that differ a little
+    from the provider's. A request that would pass a per-minute limit waits up to ``max_wait_s``
+    for room, then goes to the next provider. A model-written triage reserves the calls it needs
+    across the chains before it starts (``reserve_runs``); a reservation lapses after
+    ``reservation_ttl_s``. Daily counts start again at midnight in ``timezone``: Pacific time, as
+    Google's are.
+    """
+
+    margin: float = Field(default=0.1, ge=0, lt=1)
+    max_wait_s: float = Field(default=5.0, ge=0, le=60)
+    reserve_runs: bool = True
+    reservation_ttl_s: float = Field(default=900.0, gt=0, le=86_400)
+    timezone: str = "America/Los_Angeles"
+
+    @field_validator("timezone")
+    @classmethod
+    def _known_zone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            msg = f"unknown time zone {value!r}"
+            raise ValueError(msg) from exc
+        return value
+
+
+class ResponseCacheConfig(_Strict):
+    """Answers kept in memory for repeats of the same deterministic request (temperature 0):
+    for ``ttl_s`` seconds, at most ``max_entries`` of them. 0 for either turns it off."""
+
+    ttl_s: float = Field(default=900.0, ge=0, le=86_400)
+    max_entries: int = Field(default=256, ge=0, le=10_000)
+
+
 class LLMConfig(_Strict):
     providers: dict[str, ProviderConfig]
     routing: dict[str, list[str]] = Field(default_factory=dict)
@@ -170,6 +235,8 @@ class LLMConfig(_Strict):
     safety: list[str] = Field(default_factory=list)
     visitor_keys: VisitorKeysConfig = Field(default_factory=VisitorKeysConfig)
     shared: SharedAllowanceConfig = Field(default_factory=SharedAllowanceConfig)
+    quota: QuotaConfig = Field(default_factory=QuotaConfig)
+    cache: ResponseCacheConfig = Field(default_factory=ResponseCacheConfig)
 
     @model_validator(mode="after")
     def _chains_reference_known_providers(self) -> LLMConfig:
@@ -309,6 +376,9 @@ class Settings(BaseSettings):
     database_auth: Literal["default", "entra"] = "default"
     config_file: Path = Path("config/aria.yaml")
     data_dir: Path = Path("data")
+    # Where the model rate-limit counts are kept between restarts (aria.llm.quota). Unset: the
+    # file llm-quota.json in data_dir.
+    quota_file: Path | None = None
     models_dir: Path = Path("models")
     runbooks_dir: Path = Path("runbooks")
     api_keys: SecretStr | None = None
@@ -355,7 +425,9 @@ class Settings(BaseSettings):
     mcp_url: str | None = None
     mcp_token: SecretStr | None = None
 
-    @field_validator("api_keys", "pseudonym_key", "mcp_token", "mcp_url", mode="before")
+    @field_validator(
+        "api_keys", "pseudonym_key", "mcp_token", "mcp_url", "quota_file", mode="before"
+    )
     @classmethod
     def _blank_is_unset(cls, value: Any) -> Any:
         # Compose and shell defaults pass "" for an unset variable; an empty secret must not
@@ -372,6 +444,10 @@ class Settings(BaseSettings):
     @property
     def is_prod(self) -> bool:
         return self.env is Environment.PROD
+
+    @property
+    def quota_path(self) -> Path:
+        return self.quota_file or self.data_dir / "llm-quota.json"
 
 
 def _interpolate(value: Any) -> Any:

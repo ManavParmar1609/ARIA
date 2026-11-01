@@ -12,19 +12,45 @@ llm:
   # The adjudicator has no fake fallback: without a real model, the conservative severity policy
   # decides (most severe class in the prediction set, flagged for review).
   # nim-local (a self-hosted NIM) leads every chain; it is skipped until NIM_LOCAL_BASE_URL is set.
-  # Gemini comes next, then hosted NIM, Claude and OpenAI: each is skipped until its key is set,
-  # and a provider that fails, stalls or reaches its limit hands the call to the next.
+  # The Gemini pool comes next: four models on the one GEMINI_API_KEY, each with limits of its
+  # own. The investigator, the report writer and the severity choice lead with the quality model
+  # (gemini); the critic, message drafts, Ask ARIA and the rest (the search's query rewrite)
+  # lead with the lite models and Gemma, so the quality model's daily requests go where quality
+  # matters. Hosted NIM, Claude and OpenAI follow, each skipped until its key is set. A provider
+  # that fails, stalls or has no room left under its limits hands the call to the next.
   routing:
-    adjudicator: [nim-local, gemini, gemini-lite, nim, nim-fallback, claude, openai, azure, openai_compat]
-    investigator: [nim-local, gemini, gemini-lite, nim, nim-fallback, claude, openai, azure, openai_compat, fake]
-    reporter: [nim-local, gemini, gemini-lite, nim, nim-fallback, claude, openai, azure, openai_compat, fake]
-    critic: [nim-local, gemini, gemini-lite, nim, nim-fallback, claude, openai, azure, openai_compat, fake]
-    comms: [nim-local, gemini, gemini-lite, nim, nim-fallback, claude, openai, azure, openai_compat, fake]
-    ask: [nim-local, gemini, gemini-lite, nim, nim-fallback, claude, openai, azure, openai_compat, fake]
-    default: [nim-local, gemini, gemini-lite, nim, nim-fallback, claude, openai, azure, openai_compat, fake]
+    adjudicator: [nim-local, gemini, gemini-lite, gemini-lite-2, gemma, nim, nim-fallback, claude, openai, azure, openai_compat]
+    investigator: [nim-local, gemini, gemini-lite, gemini-lite-2, gemma, nim, nim-fallback, claude, openai, azure, openai_compat, fake]
+    reporter: [nim-local, gemini, gemini-lite, gemini-lite-2, gemma, nim, nim-fallback, claude, openai, azure, openai_compat, fake]
+    critic: [nim-local, gemini-lite, gemini-lite-2, gemma, gemini, nim, nim-fallback, claude, openai, azure, openai_compat, fake]
+    comms: [nim-local, gemini-lite, gemini-lite-2, gemma, gemini, nim, nim-fallback, claude, openai, azure, openai_compat, fake]
+    ask: [nim-local, gemini-lite, gemini-lite-2, gemma, gemini, nim, nim-fallback, claude, openai, azure, openai_compat, fake]
+    default: [nim-local, gemini-lite, gemini-lite-2, gemma, gemini, nim, nim-fallback, claude, openai, azure, openai_compat, fake]
   embeddings: [nim, azure, local]
   rerank: [nim]
   safety: [nim]
+
+  # Keeping each provider with `limits` inside them (src/aria/llm/quota.py). Each limit is cut by
+  # `margin` (0.1 keeps a tenth spare). Every request is counted before it goes; a provider
+  # without room is skipped for the next one, after waiting up to `max_wait_s` seconds for its
+  # minute to free up. A model-written triage reserves the day's requests it needs across the
+  # chains before it starts; when they do not fit, it runs offline and says until when. Daily
+  # counts start again at midnight in `timezone`, Pacific time as Google's do. The counts and any
+  # rest after a refusal are kept in llm-quota.json in ARIA_DATA_DIR (or ARIA_QUOTA_FILE), so a
+  # restart remembers them; each process counts only its own requests, so run one per key.
+  quota:
+    margin: ${ARIA_QUOTA_MARGIN:-0.1}
+    max_wait_s: 5
+    reserve_runs: true
+    reservation_ttl_s: 900
+    timezone: America/Los_Angeles
+
+  # Answers to repeats of a deterministic request (temperature 0: the severity choice, the
+  # investigator's steps, the critic) are kept in memory this long, at most this many. Work done
+  # with a visitor's own key is never kept. 0 turns it off.
+  cache:
+    ttl_s: 900
+    max_entries: 256
   # A visitor's own key (the console's Settings page, or the X-Model-Provider and X-Model-Key
   # headers), off unless ARIA_VISITOR_KEYS=true, as in the public demo image. A key stands in for
   # this server's key in the providers listed for its kind, which then lead every chain, for the
@@ -34,7 +60,7 @@ llm:
     enabled: ${ARIA_VISITOR_KEYS:-false}
     providers:
       claude: [claude]
-      gemini: [gemini, gemini-lite]
+      gemini: [gemini, gemini-lite, gemini-lite-2, gemma]
       openai: [openai]
       nvidia: [nim, nim-fallback]
 
@@ -60,6 +86,22 @@ llm:
       verified: false
       notes: Self-hosted NIM containers started by the `nim` docker compose profile.
 
+    # --- The Gemini pool: four models on one GEMINI_API_KEY ----------------------------------
+    # Google limits a project per model, in requests a minute (rpm), input tokens a minute (tpm)
+    # and requests a day (rpd), and starts the daily count again at midnight Pacific time: that
+    # is what Google's Gemini rate-limits page (ai.google.dev/gemini-api/docs/rate-limits) said
+    # when it was read on 2026-10-31, from a search extract (this project's research notes;
+    # the page itself could not be fetched). The page does not list each model's numbers: they
+    # show only in AI Studio, on the rate-limit page of the project behind your key, and they
+    # differ by tier (free, or billing enabled). So the defaults below are cautious
+    # placeholders, set at or under the lowest free-tier figures reported in 2026 (a Flash model
+    # at 20 requests a day), not Google's numbers for these models. Copy yours from AI Studio
+    # into the variables named here: GEMINI_RPM, GEMINI_TPM, GEMINI_RPD for gemini, and the same
+    # with GEMINI_LITE_, GEMINI_LITE_2_ and GEMMA_ in front for the others. "none" lifts a limit;
+    # 0 means the model has no quota, so it is never called. ARIA counts the tokens a reply may
+    # use as well as the prompt's, to err on the safe side. Routing across these models spreads
+    # the load within each one's own limits; never add keys or projects to multiply them, which
+    # Google's terms forbid.
     gemini:
       kind: openai_compatible
       base_url: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai}
@@ -70,7 +112,10 @@ llm:
       stream_always: true
       stall_timeout_s: 25
       timeout_s: 90
-      max_retries: 0  # a 429 or 503 goes straight to the next provider, not back into the limit
+      limits:
+        rpm: ${GEMINI_RPM:-5}
+        tpm: ${GEMINI_TPM:-100000}
+        rpd: ${GEMINI_RPD:-20}
       verified: true
       notes: >-
         Google's Gemini API through its OpenAI-compatible endpoint (key from aistudio.google.com).
@@ -93,12 +138,63 @@ llm:
       stream_always: true
       stall_timeout_s: 25
       timeout_s: 90
-      max_retries: 0
+      limits:  # placeholders: copy this model's numbers from AI Studio (see the pool's note)
+        rpm: ${GEMINI_LITE_RPM:-10}
+        tpm: ${GEMINI_LITE_TPM:-100000}
+        rpd: ${GEMINI_LITE_RPD:-20}
       verified: true
       notes: >-
-        A lighter Gemini model on the same key, with higher free-tier limits, tried when the first
-        fails, stalls or reaches its daily limit. gemini-3.5-flash-lite was verified 2026-10-30
-        (streaming, strict json_schema with ARIA's report schema).
+        A lighter Gemini model on the same key, with limits of its own. It leads the critic, the
+        message drafts and Ask ARIA, and takes the other roles' calls when gemini fails, stalls
+        or has no room. gemini-3.5-flash-lite was verified 2026-10-30 (streaming, strict
+        json_schema with ARIA's report schema).
+
+    gemini-lite-2:
+      kind: openai_compatible
+      base_url: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai}
+      api_key_env: [GEMINI_API_KEY, gemini_api_key]
+      chat_model: ${GEMINI_LITE_2_MODEL:-gemini-3.1-flash-lite}
+      reasoning_effort: ${GEMINI_REASONING_EFFORT:-minimal}
+      structured_output: json_schema
+      stream_always: true
+      stall_timeout_s: 25
+      timeout_s: 90
+      limits:  # placeholders: copy this model's numbers from AI Studio (see the pool's note)
+        rpm: ${GEMINI_LITE_2_RPM:-10}
+        tpm: ${GEMINI_LITE_2_TPM:-100000}
+        rpd: ${GEMINI_LITE_2_RPD:-20}
+      verified: false
+      notes: >-
+        A second lite model on the same key, with limits of its own, so a busy day spreads over
+        one more model. gemini-3.1-flash-lite is listed on Google's pricing page with a free tier
+        (read 2026-10-31) but has not been called from ARIA, so it is unverified: run `aria
+        providers check gemini-lite-2` before relying on it. Set GEMINI_LITE_2_MODEL to use
+        another.
+
+    gemma:
+      kind: openai_compatible
+      base_url: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai}
+      api_key_env: [GEMINI_API_KEY, gemini_api_key]
+      chat_model: ${GEMMA_MODEL:-gemma-3-27b-it}
+      # Whether Gemma takes a JSON schema, a JSON mode or a system role through this endpoint is
+      # unverified, so it is asked the plain way: the schema in the prompt, its JSON pulled out
+      # of the reply and checked, with one repair; and the instructions folded into the first
+      # user message. No reasoning effort: Gemma does not think first.
+      structured_output: prompt
+      system_messages: merge
+      stream_always: true
+      stall_timeout_s: 25
+      timeout_s: 90
+      limits:  # placeholders: copy this model's numbers from AI Studio (see the pool's note)
+        rpm: ${GEMMA_RPM:-15}
+        tpm: ${GEMMA_TPM:-12000}
+        rpd: ${GEMMA_RPD:-500}
+      verified: false
+      notes: >-
+        Google's open Gemma model, served on the same key with limits of its own: the pool's
+        last stop before other providers. gemma-3-27b-it has not been called from ARIA, so its
+        ID, its structured output and its system-role handling are unverified: run `aria
+        providers check gemma` first. Set GEMMA_MODEL to use another Gemma.
 
     nim:
       kind: nvidia_nim
@@ -168,7 +264,6 @@ llm:
       stream_always: true
       stall_timeout_s: 30
       timeout_s: 120
-      max_retries: 0
       price_input_per_mtok: 4.0
       price_output_per_mtok: 20.0
       # A request a safety classifier declines is run again on a model Anthropic picks for it.
@@ -197,7 +292,6 @@ llm:
       stream_always: true
       stall_timeout_s: 30
       timeout_s: 120
-      max_retries: 0
       price_input_per_mtok: 2.0
       price_output_per_mtok: 10.0
       verified: false

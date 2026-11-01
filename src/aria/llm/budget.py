@@ -51,18 +51,21 @@ class BudgetGuard:
     def record_llm(
         self, usage: Usage, *, task: str = "", provider: str = "", model: str = ""
     ) -> None:
-        self.calls.append(
-            {
-                "task": task,
-                "provider": provider,
-                "model": model,
-                "input_tokens": usage.input_tokens,
-                "output_tokens": usage.output_tokens,
-                "latency_ms": usage.latency_ms,
-                "estimated": usage.estimated,
-                "cost_usd": usage.cost_usd,
-            }
-        )
+        call: dict[str, Any] = {
+            "task": task,
+            "provider": provider,
+            "model": model,
+            "input_tokens": usage.input_tokens,
+            "output_tokens": usage.output_tokens,
+            "latency_ms": usage.latency_ms,
+            "estimated": usage.estimated,
+            "cost_usd": usage.cost_usd,
+        }
+        if usage.cached:
+            call["cached"] = True  # answered from the response cache: no provider call
+        if usage.finish_reason == "length":
+            call["stop"] = "length"  # cut short by its token budget
+        self.calls.append(call)
         self.usage.llm_calls += 1
         self.usage.tokens_in += usage.input_tokens
         self.usage.tokens_out += usage.output_tokens

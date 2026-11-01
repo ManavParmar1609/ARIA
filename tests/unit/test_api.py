@@ -1036,7 +1036,12 @@ async def test_past_the_daily_allowance_the_sites_model_steps_aside(
     api.state.allowance = SharedAllowance(SharedAllowanceConfig(per_visitor=1, per_day=5))
     monkeypatch.setattr(api.state.services.router, "has_real_llm", lambda role: True)
     settings = (await api.client.get("/api/v1/settings")).json()
-    assert settings["shared_model"] == {"left": 1, "per_visitor": 1, "per_day": 5}
+    assert settings["shared_model"] == {
+        "left": 1,
+        "per_visitor": 1,
+        "per_day": 5,
+        "back_at": None,  # the shared models themselves have room
+    }
     body = {"system": "bgl", "logs": logs(api), "options": {"investigate": False}}
     ids = [(await api.client.post("/api/v1/runs", json=body)).json()["run_id"] for _ in range(2)]
     used = [

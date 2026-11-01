@@ -43,6 +43,8 @@ def _isolated_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[N
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("ARIA_ENV", "test")
     monkeypatch.setenv("ARIA_DATABASE_URL", f"sqlite:///{tmp_path / 'aria.db'}")
+    # The model rate-limit counts each test keeps start empty and stay out of the repository.
+    monkeypatch.setenv("ARIA_QUOTA_FILE", str(tmp_path / "llm-quota.json"))
     monkeypatch.setenv("ARIA_CONFIG_FILE", str(REPO_ROOT / "config" / "aria.yaml"))
     monkeypatch.chdir(REPO_ROOT)
     reset_caches()
