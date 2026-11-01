@@ -16,6 +16,8 @@ from aria.api.keys import VisitorKeyDep, accepted_kinds
 from aria.api.metrics import CONTENT_TYPE
 from aria.api.schemas import (
     CapacityOut,
+    DataTermsOut,
+    DataUseOut,
     Health,
     Me,
     ModelKeyCheck,
@@ -24,10 +26,12 @@ from aria.api.schemas import (
     ProviderOut,
     SettingsOut,
     SharedModelOut,
+    TermsSourceOut,
 )
 from aria.api.security import Principal
 from aria.api.state import AppState, app_state, current_principal
 from aria.api.visitors import ViewerDep
+from aria.config import LLMConfig
 from aria.db.engine import session_scope
 from aria.graph.workflow import expected_llm_calls
 from aria.llm.base import Message, ProviderError
@@ -198,7 +202,26 @@ async def settings_view(state: State, viewer: ViewerDep) -> SettingsOut:
         visitor_scope=settings.visitor_scope,
         shared_model=shared,
         max_body_bytes=settings.max_body_bytes,
+        retention=config.retention.model_dump(mode="json"),
+        data_terms=data_terms(config.llm),
     )
+
+
+def data_terms(llm: LLMConfig) -> list[DataTermsOut]:
+    """What each provider's own terms say about prompts, with ARIA's providers they cover."""
+    return [
+        DataTermsOut(
+            id=key,
+            company=terms.company,
+            service=terms.service,
+            providers=[name for name, cfg in llm.providers.items() if cfg.terms == key],
+            uses=[DataUseOut.model_validate(use.model_dump()) for use in terms.uses],
+            sources=[TermsSourceOut.model_validate(s.model_dump()) for s in terms.sources],
+            verified=terms.verified,
+            notes=terms.notes,
+        )
+        for key, terms in llm.data_terms.items()
+    ]
 
 
 _KEY_NAMES = {"claude": "Anthropic", "gemini": "Google", "openai": "OpenAI", "nvidia": "NVIDIA"}

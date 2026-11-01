@@ -15,7 +15,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -109,6 +109,27 @@ def coverage_words(alphas: Mapping[Severity, float]) -> str:
         rest = min(1 - alphas.get(s, 1.0) for s in (Severity.SEV3, Severity.SEV4))
         words = f"prediction set ({serious:.0%} coverage for SEV1 and SEV2, {rest:.0%} for SEV3 and SEV4)"
     return words
+
+
+def torn_words(severity: Severity | str, prediction_set: Iterable[Severity | str]) -> str | None:
+    """The levels ARIA could not rule out and the one it plans for, when there are several:
+    "ARIA is torn between SEV2 and SEV3 and plans for SEV2". None for a set of one level.
+
+    The planned level can sit outside the set when a ticket's own rating lifted it; the words
+    stay true.
+    """
+    levels = sorted({Severity(level) for level in prediction_set}, key=lambda s: s.rank)
+    if len(levels) <= 1:
+        return None
+    named = [str(level) for level in levels]
+    between = f"{', '.join(named[:-1])} and {named[-1]}"
+    return f"ARIA is torn between {between} and plans for {Severity(severity)}"
+
+
+def level_words(severity: Severity | str, prediction_set: Iterable[Severity | str]) -> str:
+    """A severity as ARIA states it to a reviewer: the bare level ("SEV2") when the prediction
+    set holds one level, and what ARIA is torn between (``torn_words``) when it holds more."""
+    return torn_words(severity, prediction_set) or str(Severity(severity))
 
 
 SERIOUS = frozenset({Severity.SEV1, Severity.SEV2})

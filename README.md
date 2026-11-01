@@ -43,7 +43,9 @@ same way: switching is a config change.
    claim that does not cite an existing evidence ID is repaired or replaced by the deterministic
    draft.
 6. **Review.** The run pauses. A reviewer approves, edits or rejects. Nothing outbound (Slack,
-   Teams, ticket drafts) happens before approval.
+   Teams, ticket drafts) happens before approval. When the prediction set holds more than one
+   level, the review says so ("ARIA is torn between SEV2 and SEV3 and plans for SEV2") rather
+   than stating a bare level.
 7. **Learn.** Approved reports join incident memory. Reviewer corrections go to a feedback
    queue, and once enough gather, the severity model's prediction sets are recalibrated on them.
 
@@ -205,11 +207,11 @@ lines. With `ARIA_ENV=prod`, every call needs an API key from `ARIA_API_KEYS`.
 
 | Surface | Where | What it is for |
 |---|---|---|
-| Console | `web/`, http://localhost:3000/console | Queue, live run view with rule trace, prediction set, evidence and cited report; review, time travel, Ask ARIA, evals, the incident library with its filters and charts, settings, a guide with one-click samples, and search with keyboard shortcuts |
+| Console | `web/`, http://localhost:3000/console | Queue, live run view with rule trace, prediction set, evidence and cited report; review, time travel, Ask ARIA, evals, the incident library with its filters and charts, settings (with how each reviewer decides and what each model provider's terms say about prompts), a guide with one-click samples, and search with keyboard shortcuts |
 | REST and SSE | `/api/v1/*`, [docs/openapi.json](docs/openapi.json) | Runs, live event stream, report (JSON and Markdown), postmortem draft, review, resending a failed message, history, fork |
 | Alert webhooks | `/api/v1/alerts/alertmanager`, `/grafana`, `/alerts` | Turn alert storms into one grouped run |
 | Log scan | `ARIA_SCAN_SOURCES`, `ARIA_SCAN_INTERVAL_S` | Open a run on an error burst no alert caught |
-| CLI | `uv run aria --help` | Triage a file or scenario, train, evaluate, check providers, run the worker |
+| CLI | `uv run aria --help` | Triage a file or scenario, train, evaluate, check providers, run the worker, purge runs past the retention period |
 | MCP | `/mcp` (streamable HTTP) or `make mcp` (stdio) | Read-only tools over logs, incidents, runbooks and ticket history, plus resources and prompts, for any MCP client |
 | A2A | `/.well-known/agent-card.json`, `/a2a` | Other agents delegate triage; review maps to the `input-required` task state |
 | AG-UI | `/agui` | The event stream the console's chat uses; works with CopilotKit |
@@ -250,6 +252,10 @@ optional content-safety check (`guardrails.safety_model`, off by default) asks
 `nvidia/nemotron-3.5-content-safety` on NIM. That ID is in NVIDIA's model catalog (checked
 2026-10-29), but ARIA has not called it live yet, so its verdict format is unverified.
 `uv run aria providers list` shows what is enabled, and `aria providers check` confirms the IDs.
+
+What each provider's own terms say about prompts (whether it may use them to improve its models,
+and how long it keeps them) is recorded in `llm.data_terms`, with the day someone read them, and
+shown in Settings beside the model settings. Terms nobody has read yet say "Not verified".
 
 ## How severity is decided
 
@@ -414,7 +420,9 @@ Every section, with its method: [docs/evaluation.md](docs/evaluation.md).
     Clients get the same state, with more bytes per update.
 - **Raw log lines are kept with their run.** Analysis, model calls, reports, messages and memory
   use redacted text, but the lines a run was sent stay in its stored request and checkpoints, so
-  it can be replayed, until the run is deleted. Nothing prunes old runs yet.
+  it can be replayed, until the run is deleted. Old runs are purged only once an operator sets a
+  retention period (`retention.days`, off by default; see the
+  [ops runbook](docs/ops-runbook.md#retention-and-purge)).
 - **Mobile Lighthouse is at or just under the brief's bar.** On mobile, the landing page's
   performance score sits at or a few points below the brief's target of 95, varying from run to
   run; `make web-lighthouse` prints it, and CI gates at 90. Desktop and the other categories meet

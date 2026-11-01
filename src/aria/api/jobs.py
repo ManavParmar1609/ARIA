@@ -1,4 +1,5 @@
-"""Periodic jobs that run beside the run executor: the log scan and model recalibration.
+"""Periodic jobs that run beside the run executor: the log scan, model recalibration and, when
+an operator sets a retention period, the purge of old runs.
 
 They start where runs execute, so a deployment runs each job once per executing process: the API
 in ``inprocess`` mode, ``aria worker`` in ``external`` mode.
@@ -11,6 +12,7 @@ import contextlib
 from collections.abc import Callable
 
 from aria.api.scan import LogScanner, scan_forever
+from aria.graph.retention import purge
 from aria.graph.runner import TriageRunner
 from aria.observability.logging import get_logger
 from aria.services import Services
@@ -58,6 +60,34 @@ async def recalibrate_forever(
             await asyncio.wait_for(stop.wait(), timeout=interval_s)
 
 
+async def purge_forever(
+    services: Services, runner: TriageRunner, *, interval_s: float, stop: asyncio.Event
+) -> None:
+    """Purge runs past the retention period at once, then every interval (aria.graph.retention).
+
+    Several processes may purge at once: each takes a run in the same transaction that deletes
+    it, so a run goes once, and one another process holds is left for the next round."""
+    days = services.config.retention.days
+    while not stop.is_set():
+        try:
+            result = await asyncio.to_thread(purge, services.engine, days=days)
+            runner.forget(result.runs)
+            if result.runs or result.busy:
+                log.info(
+                    "retention.purged",
+                    runs=len(result.runs),
+                    busy=len(result.busy),
+                    rows=result.rows,
+                    older_than=result.cutoff.isoformat(),
+                )
+            if result.rows.get("incident memory"):
+                await services.memory.refresh()  # stop finding incidents that are gone
+        except Exception:  # a failed purge must not stop the job; the next round retries
+            log.exception("retention.purge_failed")
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(stop.wait(), timeout=interval_s)
+
+
 def start_background_jobs(
     services: Services,
     runner: TriageRunner,
@@ -90,6 +120,14 @@ def start_background_jobs(
                     services, interval_s=services.config.severity.recalibrate_check_s, stop=stop
                 ),
                 name="aria-recalibrate",
+            )
+        )
+    retention = services.config.retention
+    if retention.days > 0 and retention.purge_interval_s > 0:
+        tasks.append(
+            asyncio.create_task(
+                purge_forever(services, runner, interval_s=retention.purge_interval_s, stop=stop),
+                name="aria-purge",
             )
         )
     return tasks

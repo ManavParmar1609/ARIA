@@ -59,6 +59,7 @@ from aria.contracts.report import ReviewDecision
 from aria.contracts.run import RunEvent, RunStatus
 from aria.db import repository as repo
 from aria.graph.runner import RunOutcome, TriageRunner
+from aria.graph.workflow import review_lead
 from aria.llm.visitor import VisitorKey
 
 router = APIRouter(tags=["ag-ui"])
@@ -123,7 +124,8 @@ def review_interrupt(interrupt_id: str, payload: dict[str, Any]) -> Interrupt:
         id=interrupt_id,
         reason="review",
         message=payload.get("error")
-        or "Review the incident report: approve it, edit it first, or discard it.",
+        or f"{review_lead(payload)}Review the incident report: approve it, edit it first, or "
+        "discard it.",
         response_schema=ReviewRequest.model_json_schema(),
         metadata=payload,
     )
