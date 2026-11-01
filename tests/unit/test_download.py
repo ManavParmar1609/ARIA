@@ -314,7 +314,7 @@ def test_large_text_logs_are_stored_gzipped_one_file_at_a_time(tmp_path: Path) -
     assert (tmp_path / "nova.tsv").exists()  # only what matches is compressed
 
 
-# --- throttling and pinned checksums  -------------------------------
+# --- throttling, pinned checksums, the Hub and streamed subsets -------------------------------
 
 
 @pytest.fixture(autouse=True)
@@ -444,3 +444,45 @@ def test_a_transfer_cut_off_part_way_is_retried(tmp_path: Path, pauses: list[flo
     assert (dest / "incident_event_log.csv").exists()
     assert route.call_count == 2
     assert pauses == [2.0]
+
+
+def _blob_id(payload: bytes) -> str:
+    header = f"blob {len(payload)}\0".encode()
+    return hashlib.sha1(header + payload, usedforsecurity=False).hexdigest()
+
+
+@respx.mock
+def test_hub_files_are_checked_against_the_hash_the_hub_records(tmp_path: Path) -> None:
+    commit = "a" * 40
+    small, large = b"fault: x\n", b"time\tline\n" * 50
+    listing = [
+        {"type": "directory", "path": "snapshots/s1"},
+        {"type": "file", "path": "snapshots/s1/ground_truth.yaml", "oid": _blob_id(small)},
+        {"type": "file", "path": "snapshots/s1/events.tsv", "lfs": {"oid": _sha(large)}},
+        {"type": "file", "path": "snapshots/s1/metrics.tsv", "oid": "f" * 40},
+    ]
+    respx.get(url__regex=rf"https://huggingface\.co/api/datasets/org/set/tree/{commit}/.*").mock(
+        return_value=httpx.Response(200, json=listing)
+    )
+    base = f"https://huggingface.co/datasets/org/set/resolve/{commit}/snapshots/s1"
+    respx.get(f"{base}/ground_truth.yaml").mock(return_value=httpx.Response(200, content=small))
+    events = respx.get(f"{base}/events.tsv").mock(return_value=httpx.Response(200, content=large))
+    source = _source(
+        name="hub",
+        kind="huggingface",
+        url="https://huggingface.co/datasets/org/set",
+        commit=commit,
+        paths=["snapshots/*/ground_truth.yaml", "snapshots/*/events.tsv"],
+    )
+    dest = download(source, tmp_path / "raw")
+    assert (dest / "snapshots/s1/ground_truth.yaml").read_bytes() == small
+    assert (dest / "snapshots/s1/events.tsv").read_bytes() == large
+    assert not (dest / "snapshots/s1/metrics.tsv").exists()  # no pattern asks for it
+    assert (dest / ".commit").read_text().strip() == commit
+
+    download(source, tmp_path / "raw")  # files already verified are not fetched again
+    assert events.call_count == 1
+    (dest / "snapshots/s1/events.tsv").unlink()
+    events.mock(return_value=httpx.Response(200, content=b"tampered"))
+    with pytest.raises(DownloadError, match="does not match the Hub's hash"):
+        download(source, tmp_path / "raw")

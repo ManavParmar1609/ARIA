@@ -1,0 +1,82 @@
+---
+metadata:
+  version: "v1"
+fault:
+  - entity:
+      name: frontend
+      kind: Service
+    condition: High HTTP error rate
+    category: Resource Unavailable
+    fault_mechanism: custom(flagd)
+  - entity:
+      name: cart
+      kind: Service
+    condition: High HTTP error rate
+    category: Resource Unavailable
+    fault_mechanism: custom(flagd)
+  - entity:
+      name: flagd-config
+      kind: ConfigMap
+    changed:
+      element: "data.demo\\.flagd\\.json"
+      from: "\"cartFailure\": {\n      \"description\": \"Fail cart service\",\n      \"state\": \"ENABLED\",\n      \"variants\": {\n        \"on\": true,\n        \"off\": false\n      },\n      \"defaultVariant\": \"off\"\n    }"
+      to: "\"cartFailure\": {\n      \"description\": \"Fail cart service\",\n      \"state\": \"ENABLED\",\n      \"variants\": {\n        \"on\": true,\n        \"off\": false\n      },\n      \"defaultVariant\": \"on\"\n    }"
+    condition: cartFailure feature flag set
+    category: Configuration Setting
+    fault_mechanism: custom(flagd)
+groups:
+  - id: flagd-config
+    kind: ConfigMap
+    name: flagd-config
+    namespace: otel-demo
+    root_cause: true
+  - id: cart-service-1
+    kind: Service
+    filter:
+      - cart\b
+    namespace: otel-demo
+  - id: frontend-service-1
+    kind: Service
+    filter:
+      - frontend\b
+    namespace: otel-demo
+  - id: frontend-proxy-service-1
+    kind: Service
+    filter:
+      - frontend-proxy\b
+    namespace: otel-demo
+alerts:
+  - id: RequestErrorRate
+    group_id: cart-service-1
+    metadata:
+      description: Cart service EmptyCart operations failing due to feature flag
+  - id: RequestErrorRate
+    group_id: frontend-service-1
+    metadata:
+      description: Frontend service experiencing errors when users attempt to empty cart
+  - id: RequestErrorRate
+    group_id: frontend-proxy-service-1
+    metadata:
+      description: Frontend proxy experiencing errors from failed cart operations
+propagations:
+  - source: flagd-config
+    target: cart-service-1
+    condition: Feature flag causes cart service EmptyCart method to fail
+    effect: Cart service returns errors when users attempt to empty their shopping cart
+  - source: cart-service-1
+    target: frontend-service-1
+    condition: Frontend receives errors from cart service when users try to empty cart
+    effect: Users cannot empty their shopping carts, affecting checkout flow
+  - source: frontend-service-1
+    target: frontend-proxy-service-1
+    condition: Frontend returns error responses to proxy for failed cart operations
+    effect: Users experience cart functionality failures through the proxy
+recommended_actions:
+  - solution:
+      id: Disable cartFailure flag
+      actions:
+        - Disable cartFailure flag
+  - solution:
+      id: Restart cart service
+      actions:
+        - Restart cart service

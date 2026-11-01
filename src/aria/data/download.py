@@ -10,8 +10,12 @@ Integrity checks per source kind:
   mirrors are tried in order, each trusted only if its file matches the sha256 pinned beside it.
 * gitlab: a live issues API, read page by page with fixed parameters. It cannot be pinned (an
   issue can be edited later), so the snapshot's sha256 and date are recorded beside it.
+* huggingface: files of a dataset repository at a pinned commit, each verified against the hash
+  the Hub records for it (the sha256 of a large file, the git blob id of a small one).
 * checksums: pinned in the manifest beside a source. A Zenodo file must match its pin as well as
   the checksum the record publishes, so a record that changes its files is refused.
+* stream: part of a file too large to keep is read as it arrives, and only what the source's
+  reader keeps is written.
 
 Zenodo refuses bursts (HTTP 403 "unusual traffic" after about two dozen quick calls), so every
 request to it waits ``ZENODO.interval`` seconds after the previous one, and a refused request is
@@ -20,6 +24,7 @@ retried after a growing pause.
 
 from __future__ import annotations
 
+import fnmatch
 import gzip
 import hashlib
 import json
@@ -33,7 +38,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 import httpx
 
@@ -272,6 +277,129 @@ def download_zenodo(source: DataSource, dest: Path) -> Path:
     return dest
 
 
+# A stream reader: (source, destination, HTTP client, the file's URL when the source has one
+# file) -> the files it wrote under the destination.
+StreamReader = Callable[[DataSource, Path, httpx.Client, str | None], list[Path]]
+
+
+def _stream_readers() -> dict[str, StreamReader]:
+    # Imported here: the readers use this module's helpers.
+    from aria.data import itbench  # noqa: PLC0415
+
+    return {"itbench-logs": itbench.write_log_windows}
+
+
+def stream_source(source: DataSource, dest: Path, url: str | None = None) -> Path:
+    """Run the source's stream reader, then check every file it wrote against its pin."""
+    if source.stream is None:
+        msg = f"{source.name}: no stream reader configured"
+        raise DownloadError(msg)
+    reader = _stream_readers()[source.stream.reader]
+    with httpx.Client(timeout=_TIMEOUT, follow_redirects=True) as client:
+        written = reader(source, dest, client, url)
+    for path in written:
+        _check_pinned(source, path.relative_to(dest).as_posix(), path)
+    log.info("dataset.streamed", source=source.name, files=len(written))
+    return dest
+
+
+def hub_repo(url: str) -> str:
+    """'https://huggingface.co/datasets/ibm-research/ITBench-Lite' -> 'ibm-research/ITBench-Lite'."""
+    parts = [p for p in urlsplit(url).path.split("/") if p]
+    if len(parts) != 3 or parts[0] != "datasets":
+        msg = f"{url} is not a Hugging Face dataset URL"
+        raise DownloadError(msg)
+    return "/".join(parts[1:])
+
+
+def _static_prefix(pattern: str) -> str:
+    """The folders of a glob before its first wildcard: 'a/b/*/c' -> 'a/b'."""
+    head: list[str] = []
+    for part in pattern.split("/")[:-1]:
+        if any(ch in part for ch in "*?["):
+            break
+        head.append(part)
+    return "/".join(head)
+
+
+def hub_files(
+    client: httpx.Client, repo: str, commit: str, patterns: list[str]
+) -> list[dict[str, Any]]:
+    """Every file of the dataset at ``commit`` that a pattern matches, as the Hub lists it."""
+    found: dict[str, dict[str, Any]] = {}
+    for prefix in sorted({_static_prefix(p) for p in patterns}):
+        url: str | None = (
+            f"https://huggingface.co/api/datasets/{repo}/tree/{commit}/{quote(prefix)}"
+            "?recursive=true&expand=false"
+        )
+        while url:
+            response = _fetch(client, url)
+            if response.status_code != httpx.codes.OK:
+                msg = f"listing {repo}@{commit[:12]} returned {response.status_code}"
+                raise DownloadError(msg)
+            for entry in response.json():
+                path = str(entry.get("path", ""))
+                if entry.get("type") == "file" and any(
+                    fnmatch.fnmatchcase(path, p) for p in patterns
+                ):
+                    found[path] = entry
+            url = response.links.get("next", {}).get("url")
+    return [found[path] for path in sorted(found)]
+
+
+def hub_url(repo: str, commit: str, path: str) -> str:
+    return f"https://huggingface.co/datasets/{repo}/resolve/{commit}/{quote(path)}"
+
+
+def blob_id(path: Path) -> str:
+    """Git's id for a file's bytes: the sha1 of 'blob <size>', a NUL byte and the bytes."""
+    digest = hashlib.sha1(f"blob {path.stat().st_size}\0".encode(), usedforsecurity=False)
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(_CHUNK), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def hub_verified(path: Path, entry: dict[str, Any]) -> bool:
+    """Whether ``path`` holds the bytes the Hub records for ``entry``."""
+    if not path.is_file():
+        return False
+    lfs = entry.get("lfs") or {}
+    if lfs.get("oid"):
+        return bool(_hash_file(path, "sha256") == lfs["oid"])
+    return bool(blob_id(path) == entry.get("oid"))
+
+
+def download_huggingface(source: DataSource, dest: Path) -> Path:
+    """The files ``paths`` match in the dataset repository at the pinned commit."""
+    if not (source.url and source.commit and source.paths):
+        msg = f"{source.name}: huggingface sources need url, commit and paths"
+        raise DownloadError(msg)
+    repo = hub_repo(source.url)
+    with httpx.Client(timeout=_TIMEOUT, follow_redirects=True) as client:
+        entries = hub_files(client, repo, source.commit, source.paths)
+    if not entries:
+        msg = f"{source.name}: no file in {repo}@{source.commit[:12]} matches {source.paths}"
+        raise DownloadError(msg)
+    for entry in entries:
+        target = dest / entry["path"]
+        if not target.resolve().is_relative_to(dest.resolve()):
+            msg = f"refusing to write {entry['path']} outside {dest}"
+            raise DownloadError(msg)
+        if hub_verified(target, entry):
+            continue
+        _stream_to(hub_url(repo, source.commit, entry["path"]), target)
+        if not hub_verified(target, entry):
+            target.unlink(missing_ok=True)
+            msg = f"{source.name}: {entry['path']} does not match the Hub's hash"
+            raise DownloadError(msg)
+    if source.stream is not None:
+        stream_source(source, dest)
+    (dest / ".commit").write_text(source.commit + "\n")
+    log.info("dataset.fetched", source=source.name, files=len(entries))
+    return dest
+
+
 def _uci_data_url(dataset_id: int) -> str | None:
     try:
         response = httpx.get(
@@ -457,6 +585,8 @@ def download(source: DataSource, raw_dir: Path) -> Path:
                 return download_zenodo(source, dest)
             if source.kind == "gitlab":
                 return download_gitlab(source, dest)
+            if source.kind == "huggingface":
+                return download_huggingface(source, dest)
             return download_http(source, dest, raw_dir.parent / "checksums.lock")
         except (DownloadError, httpx.HTTPError, subprocess.CalledProcessError) as exc:
             if not source.mirrors:

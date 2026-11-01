@@ -1,0 +1,36 @@
+{
+    "data": {
+        "alerts": [
+            {
+                "activeAt": "2025-12-15T17:43:50.488970782Z",
+                "annotations": {
+                    "description": "Request error rate in service frontend-proxy in namespace otel-demo is above 0 (current: 0.01111111111111111)"
+                },
+                "labels": {
+                    "alertname": "RequestErrorRate",
+                    "namespace": "otel-demo",
+                    "service_name": "frontend-proxy",
+                    "severity": "warning"
+                },
+                "state": "firing",
+                "value": "1.111111111111111e-02"
+            },
+            {
+                "activeAt": "2025-12-15T17:50:50.488970782Z",
+                "annotations": {
+                    "description": "Request error rate in service fraud-detection in namespace otel-demo is above 0 (current: 0.01111111111111111)"
+                },
+                "labels": {
+                    "alertname": "RequestErrorRate",
+                    "namespace": "otel-demo",
+                    "service_name": "fraud-detection",
+                    "severity": "warning"
+                },
+                "state": "firing",
+                "value": "1.111111111111111e-02"
+            }
+        ]
+    },
+    "status": "success",
+    "timestamp": "2025-12-15T17:52:23Z"
+}

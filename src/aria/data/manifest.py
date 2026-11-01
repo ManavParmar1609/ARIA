@@ -35,11 +35,29 @@ class Mirror(BaseModel):
         return self
 
 
+class Stream(BaseModel):
+    """Part of a file too large to keep, read as it arrives and never stored whole.
+
+    ``reader`` names the code that reads it (see ``aria.data.download.stream_source``);
+    ``member`` is the file inside a zip to read, for a zipped source; ``keep`` and ``limit`` say
+    what the reader keeps; ``minutes`` is how much of a log it keeps before the moment the log is
+    read for.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    reader: Literal["itbench-logs"]
+    member: str | None = None
+    keep: list[str] = Field(default_factory=list)
+    limit: int | None = Field(default=None, gt=0)
+    minutes: int | None = Field(default=None, gt=0)
+
+
 class DataSource(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = ""
-    kind: Literal["git", "zenodo", "uci", "http", "gitlab"]
+    kind: Literal["git", "zenodo", "uci", "http", "gitlab", "huggingface"]
     url: str | None = None
     commit: str | None = None
     paths: list[str] = Field(default_factory=list)
@@ -58,8 +76,10 @@ class DataSource(BaseModel):
     sha256: str | None = None
     # Pinned checksums by file name, "md5:<hex>" or "sha256:<hex>": a Zenodo file must match
     # both its pin and the checksum the record publishes, so a record that changes its files
-    # is refused.
+    # is refused; for a streamed source they pin the files the reader writes.
     checksums: dict[str, str] = Field(default_factory=dict)
+    # Read part of a large file as it streams in, instead of downloading it (see Stream).
+    stream: Stream | None = None
     # Tried in order when the source's own host cannot be reached or serves other bytes.
     mirrors: list[Mirror] = Field(default_factory=list)
     license: str

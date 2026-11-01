@@ -19,17 +19,19 @@ from typing import Any
 
 from aria.config import get_settings
 from aria.data import anomod as anomod_data
+from aria.data import itbench as itbench_data
 from aria.data import rcaeval as rcaeval_data
 from aria.data.scenarios import LinePools, ScenarioBuilder
-from aria.evals import ait_ads, anomod, rcaeval
+from aria.evals import ait_ads, anomod, itbench, rcaeval
 from aria.evals.pipeline import EvalEnvironment
 
-SUITES = ("ait-ads", "rcaeval", "anomod")
+SUITES = ("ait-ads", "rcaeval", "anomod", "itbench")
 # The manifest source each suite reads.
 SOURCES = {
     "ait-ads": "ait-ads",
     "rcaeval": "rcaeval-re3",
     "anomod": "anomod",
+    "itbench": "itbench-lite",
 }
 # Suites that triage cases end to end, with what lists their cases and what triages a share.
 Triage = Callable[[EvalEnvironment, Sequence[int], Path], Awaitable[list[dict[str, Any]]]]
@@ -46,11 +48,18 @@ _PIPELINE: dict[str, tuple[Callable[[Path], int], Triage, Callable[..., dict[str
         anomod.summarize,
         anomod_data.ANOMOD_DIR,
     ),
+    "itbench": (
+        lambda root: len(itbench_data.find_scenarios(root)),
+        itbench.triage,
+        itbench.summarize,
+        itbench_data.ITBENCH_DIR,
+    ),
 }
 _MISSING = {
     "ait-ads": ait_ads.MISSING,
     "rcaeval": rcaeval.MISSING,
     "anomod": anomod.MISSING,
+    "itbench": itbench.MISSING,
 }
 
 

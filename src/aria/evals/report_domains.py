@@ -254,6 +254,55 @@ def _anomod(s: Mapping[str, Any]) -> list[str]:
     ]
 
 
+def _itbench(s: Mapping[str, Any]) -> list[str]:
+    title = "### Kubernetes incidents"
+    if (gone := _missing(title, s)) is not None:
+        return gone
+    aria, base = s["aria"], s["baselines"]
+    random = base["naming_random_expected"]
+    skipped = s.get("found", s["scenarios"]) - s["scenarios"]
+    return [
+        title,
+        "",
+        (
+            f"{s['scenarios']} incident snapshots of a Kubernetes cluster running a demo shop, "
+            f"each with one injected fault. Source: {s['source']}; {s['citation']} Each is "
+            "triaged offline, end to end, from the alerts in alerting state when the incident was "
+            f"raised and the {s['window_min']} minutes of Kubernetes events and service logs "
+            "before it. Every scenario is an incident, so false alarms are measured on the healthy "
+            "windows above instead."
+            + (
+                f" {skipped} scenario has no incident time (its alerts never fired) and is left out."
+                if skipped == 1
+                else f" {skipped} scenarios have no incident time and are left out."
+                if skipped
+                else ""
+            )
+        ),
+        "",
+        (
+            f"ARIA flagged {_share(aria['flagged'])} incidents and paged {_share(aria['paged'])}; "
+            f"missed (SEV4): {_miss(aria['missed'])}. The alerts' own severity flagged "
+            f"{_share(base['alert_severity']['flagged'])} and paged "
+            f"{_share(base['alert_severity']['paged'])}."
+        ),
+        "",
+        (
+            f"The service at fault is a workload marked as the root cause or, when the root cause "
+            "is not a workload (a ConfigMap, a namespace quota, an autoscaler), the first workloads "
+            f"it spreads to; {s['with_named_service']} scenarios have one."
+        ),
+        "",
+        "| Names the service at fault | First suspect | Among the first three |",
+        "|---|---|---|",
+        f"| ARIA | {_naming(aria['naming'])}",
+        f"| The services the alerts name | {_naming(base['naming_alerted_service'])}",
+        f"| Most error lines | {_naming(base['naming_most_errors'])}",
+        f"| A service at random (expected) | {_pct(random['top1'])} | {_pct(random['top3'])} |",
+        "",
+    ]
+
+
 def render(results: Mapping[str, Any]) -> list[str]:
     """The new-domain sections from a results document."""
     domains = results.get("domains") or {}
@@ -279,6 +328,7 @@ def render(results: Mapping[str, Any]) -> list[str]:
         "ait-ads": _ait,
         "rcaeval": _rcaeval,
         "anomod": _anomod,
+        "itbench": _itbench,
     }
     for name, renderer in renderers.items():
         if isinstance(domains.get(name), Mapping):
