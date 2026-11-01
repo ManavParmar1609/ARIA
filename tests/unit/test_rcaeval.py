@@ -40,6 +40,19 @@ def test_cases_are_read_from_inside_the_zip_with_their_label(tmp_path: Path) -> 
     assert data.find_cases(tmp_path / "none") == []
 
 
+def test_a_variant_of_a_fault_type_keeps_its_own_code(tmp_path: Path) -> None:
+    # Train Ticket's route service has a second variant of fault f3, in folders named f3_1.
+    with zipfile.ZipFile(tmp_path / "RE3-TT.zip", "w") as bundle:
+        for folder in ("RE3-TT/ts-route-service_f3_1/1/", "RE3-TT/ts-route-service_f3/1/"):
+            bundle.writestr(folder + "logs.csv", "time,timestamp,container_name,message\n")
+            bundle.writestr(folder + "inject_time.txt", "1700000000\n")
+    cases = data.find_cases(tmp_path)
+    assert [(c.service, c.fault) for c in cases] == [
+        ("ts-route-service", "f3"),
+        ("ts-route-service", "f3_1"),
+    ]
+
+
 def test_logs_split_at_the_fault_and_each_line_is_led_by_its_container(tmp_path: Path) -> None:
     split = data.windows(data.find_cases(_dataset(tmp_path / "rca"))[0])
     assert split.injected_at == 1732243203.0

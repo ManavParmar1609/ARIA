@@ -30,7 +30,9 @@ RCAEVAL_CITATION = (
     "10.5281/zenodo.14590730."
 )
 SYSTEMS = {"SS": "Sock Shop", "OB": "Online Boutique", "TT": "Train Ticket"}
-_CASE = re.compile(r"^RE3-(?P<system>[A-Z]{2})/(?P<service>.+)_(?P<fault>f\d)/(?P<rep>\d+)/$")
+_CASE = re.compile(
+    r"^RE3-(?P<system>[A-Z]{2})/(?P<service>.+?)_(?P<fault>f\d+(?:_\d+)?)/(?P<rep>\d+)/$"
+)
 MAX_LINE = 2_000
 
 

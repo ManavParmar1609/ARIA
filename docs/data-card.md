@@ -323,7 +323,8 @@ Each runs alone with `aria eval run --suite <name>` (`ait-ads`, `rcaeval`, `anom
   sees it.
 - **Known label problems.** The faults are injected into demo shops under a synthetic workload.
   The label is the service the fault went into, not every service that suffered. The fault types
-  are the dataset's own codes; this card does not guess what each means.
+  are the dataset's own codes; this card does not guess what each means. Three Train Ticket cases
+  carry the code `f3_1`, a second variant of `f3`, and are scored under it.
 
 ### Anomalies at four levels in two microservice systems (`anomod`)
 
