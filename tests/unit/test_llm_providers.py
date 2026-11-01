@@ -1,4 +1,5 @@
-"""Contract tests for the OpenAI-compatible client against mocked HTTP (no network)."""
+"""Contract tests for the provider clients against mocked HTTP (no network): the
+OpenAI-compatible one, and how Claude's and the offline stand-in's replies end."""
 
 from __future__ import annotations
 
@@ -6,11 +7,20 @@ import json
 from typing import Any
 
 import httpx
+import httpx2
 import pytest
 import respx
+from pydantic import SecretStr
 
-from aria.config import ProviderConfig, ProviderKind, StructuredOutputMode
-from aria.llm.base import Message, ProviderError
+from aria.config import ProviderConfig, ProviderKind, StructuredOutputMode, get_app_config
+from aria.llm.base import (
+    Message,
+    ModelRefusalError,
+    OutputTruncatedError,
+    ProviderError,
+)
+from aria.llm.claude import ClaudeProvider
+from aria.llm.fake import FakeProvider, FakeReply
 from aria.llm.openai_compat import OpenAICompatibleProvider
 
 NIM = "https://integrate.api.nvidia.com/v1"
@@ -484,6 +494,175 @@ async def test_a_streamed_finish_reason_is_read(nim: OpenAICompatibleProvider) -
     )
     text, usage = await nim.chat(MESSAGES, on_token=lambda _: None)
     assert (text, usage.finish_reason) == ('{"x"', "length")
+
+
+def _ended(content: str, finish: str, **message: Any) -> dict[str, Any]:
+    return {
+        "id": "chatcmpl-42",
+        "model": "nvidia/test-chat",
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": content, **message},
+                "finish_reason": finish,
+            }
+        ],
+        "usage": {"prompt_tokens": 30, "completion_tokens": 9},
+    }
+
+
+@respx.mock
+async def test_a_content_filter_raises_a_typed_refusal_that_carries_its_cost(
+    nim: OpenAICompatibleProvider,
+) -> None:
+    respx.post(f"{NIM}/chat/completions").mock(
+        side_effect=[
+            httpx.Response(200, json=_ended('{"x": 1}', "content_filter")),
+            httpx.Response(200, json=_ended("", "stop", refusal="I can't help with that.")),
+        ]
+    )
+    with pytest.raises(ModelRefusalError) as filtered:
+        await nim.chat(MESSAGES, json_schema=SCHEMA)
+    assert filtered.value.refused
+    assert filtered.value.reason == "content_filter"
+    assert filtered.value.usage is not None
+    assert (filtered.value.usage.input_tokens, filtered.value.usage.output_tokens) == (30, 9)
+    with pytest.raises(ModelRefusalError, match="can't help") as refused:
+        await nim.chat(MESSAGES)  # a refusal is a refusal for plain text too
+    assert refused.value.reason == "refusal"  # though the reply said it stopped normally
+    assert isinstance(refused.value, ProviderError)  # the router fails over from it like any
+
+
+@respx.mock
+async def test_json_cut_short_is_never_returned_even_when_it_parses(
+    nim: OpenAICompatibleProvider,
+) -> None:
+    streamed = [
+        {"id": "chatcmpl-43", "choices": [{"delta": {"content": '{"x": 1}'}}]},
+        {"id": "chatcmpl-43", "choices": [{"delta": {}, "finish_reason": "length"}]},
+    ]
+    body = "".join(f"data: {json.dumps(c)}\n\n" for c in streamed) + "data: [DONE]\n\n"
+    respx.post(f"{NIM}/chat/completions").mock(
+        side_effect=[
+            httpx.Response(200, json=_ended('{"x": 1}', "length")),
+            httpx.Response(200, text=body, headers={"content-type": "text/event-stream"}),
+            httpx.Response(200, json=_ended("a sentence that stops", "length")),
+        ]
+    )
+    with pytest.raises(OutputTruncatedError) as cut:
+        await nim.chat(MESSAGES, json_schema=SCHEMA)
+    assert not cut.value.refused
+    assert cut.value.usage is not None
+    assert cut.value.usage.output_tokens == 9  # billed, so the router counts it
+    with pytest.raises(OutputTruncatedError):
+        await nim.chat(MESSAGES, json_schema=SCHEMA, on_token=lambda _: None)
+    text, usage = await nim.chat(MESSAGES)  # text cut short is still an answer, marked so
+    assert (text, usage.finish_reason) == ("a sentence that stops", "length")
+
+
+def _claude_stream(text: str, stop_reason: str, details: dict[str, Any] | None = None) -> bytes:
+    events: list[tuple[str, dict[str, Any]]] = [
+        (
+            "message_start",
+            {
+                "type": "message_start",
+                "message": {
+                    "id": "msg_7",
+                    "type": "message",
+                    "role": "assistant",
+                    "model": "claude-opus-5-5",
+                    "content": [],
+                    "stop_reason": None,
+                    "stop_sequence": None,
+                    "usage": {"input_tokens": 12, "output_tokens": 1},
+                },
+            },
+        ),
+        (
+            "content_block_start",
+            {
+                "type": "content_block_start",
+                "index": 0,
+                "content_block": {"type": "text", "text": ""},
+            },
+        ),
+        (
+            "content_block_delta",
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "text_delta", "text": text},
+            },
+        ),
+        ("content_block_stop", {"type": "content_block_stop", "index": 0}),
+        (
+            "message_delta",
+            {
+                "type": "message_delta",
+                "delta": {
+                    "stop_reason": stop_reason,
+                    "stop_sequence": None,
+                    "stop_details": details,
+                },
+                "usage": {"output_tokens": 7},
+            },
+        ),
+        ("message_stop", {"type": "message_stop"}),
+    ]
+    return "".join(f"event: {n}\ndata: {json.dumps(d)}\n\n" for n, d in events).encode()
+
+
+async def test_claude_refusals_and_cut_short_json_raise_typed_errors() -> None:
+    replies = iter(
+        [
+            ("", "refusal", {"type": "refusal", "category": "cyber", "explanation": None}),
+            ('{"x": 1}', "max_tokens", None),
+            ('{"x": 1}', "model_context_window_exceeded", None),
+            ("a sentence that stops", "max_tokens", None),
+        ]
+    )
+
+    def handler(_: httpx2.Request) -> httpx2.Response:
+        text, stop, details = next(replies)
+        content = _claude_stream(text, stop, details)
+        return httpx2.Response(200, headers={"content-type": "text/event-stream"}, content=content)
+
+    cfg = get_app_config().llm.providers["claude"]
+    client = httpx2.AsyncClient(transport=httpx2.MockTransport(handler))
+    claude = ClaudeProvider(
+        "claude", cfg, api_key=SecretStr("sk-ant-test-0123456789abcdef"), http_client=client
+    )
+    with pytest.raises(ModelRefusalError, match="cyber") as refused:
+        await claude.chat(MESSAGES, json_schema=SCHEMA)
+    assert refused.value.reason == "refusal"
+    assert refused.value.usage is not None
+    assert refused.value.usage.input_tokens == 12
+    for _ in range(2):  # out of tokens, or out of context: either way never parsed
+        with pytest.raises(OutputTruncatedError) as cut:
+            await claude.chat(MESSAGES, json_schema=SCHEMA)
+        assert cut.value.usage is not None
+        assert cut.value.usage.output_tokens == 7
+    text, usage = await claude.chat(MESSAGES)
+    assert (text, usage.finish_reason) == ("a sentence that stops", "length")
+    await claude.aclose()
+
+
+async def test_the_offline_stand_in_ends_replies_the_way_a_provider_does() -> None:
+    fake = FakeProvider(
+        script={
+            "pick": [
+                FakeReply('{"choice": "a"}', "length"),
+                FakeReply("", "content_filter"),
+                FakeReply('{"choice": "b"}', "stop"),
+            ]
+        }
+    )
+    with pytest.raises(OutputTruncatedError):
+        await fake.chat(MESSAGES, json_schema=SCHEMA, schema_name="pick")
+    with pytest.raises(ModelRefusalError):
+        await fake.chat(MESSAGES, json_schema=SCHEMA, schema_name="pick")
+    text, usage = await fake.chat(MESSAGES, json_schema=SCHEMA, schema_name="pick")
+    assert (text, usage.finish_reason) == ('{"choice": "b"}', "stop")
 
 
 def test_blank_env_values_mean_not_configured() -> None:

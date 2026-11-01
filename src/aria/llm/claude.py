@@ -12,10 +12,14 @@ key is the only credential that goes with a visitor's request.
 
 As with ARIA's other client, each ``chat`` sends one request: the SDK's own retries are off, since
 the router's fallback to the next provider is ARIA's one retry layer and every request must be
-counted against the limits first. A 429 with ``retry-after`` is a rate limit; one without, or a
+counted against the limits first. The SDK reads its stream with ``httpx2`` and lets an error in
+reading it through as raised; this client turns that into a provider error too, so a stream
+that breaks part way falls over to the next provider instead of failing the run's step. A 429 with ``retry-after`` is a rate limit; one without, or a
 message saying when access returns, is the organisation's spend limit, which holds until then
-(aria.llm.ratelimit). A refusal is never repaired on Claude, and a reply cut short by
-``max_tokens`` says so.
+(aria.llm.ratelimit). A refusal (``stop_reason == "refusal"``) raises ``ModelRefusalError`` and
+is never repaired on Claude. JSON cut short (``max_tokens`` or
+``model_context_window_exceeded``) raises ``OutputTruncatedError`` and is never parsed; text cut
+short is returned with ``finish_reason == "length"``.
 """
 
 from __future__ import annotations
@@ -26,10 +30,18 @@ from collections.abc import Sequence
 from typing import Any
 
 import anthropic
+import httpx2  # the HTTP library Anthropic's SDK is built on (anthropic.Timeout is httpx2's)
 from pydantic import SecretStr
 
 from aria.config import ProviderConfig, ProviderKind, StructuredOutputMode
-from aria.llm.base import Message, ProviderError, TokenCallback, Usage
+from aria.llm.base import (
+    Message,
+    ProviderError,
+    TokenCallback,
+    Usage,
+    check_stop,
+    finish_reason,
+)
 from aria.llm.ratelimit import classify, retry_after_seconds
 
 _RETRYABLE = frozenset({408, 409, 429})
@@ -178,19 +190,32 @@ class ClaudeProvider:
             raise error from exc
         except anthropic.AnthropicError as exc:
             raise self._error(exc) from exc
-        if final.stop_reason == "refusal":
-            details = getattr(final, "stop_details", None)
-            category = getattr(details, "category", None) or "unspecified"
-            msg = f"{self.name}: the model declined the request ({category})"
-            raise ProviderError(msg, refused=True)
+        except httpx2.TimeoutException as exc:
+            # The SDK wraps errors in sending a request, but lets one in reading the stream
+            # through as httpx2 raised it. Turned into the router's error here, it falls over
+            # to the next provider like any other; raw, it would escape to the graph.
+            msg = self._scrub(f"{self.name}: stream stalled: {type(exc).__name__}")
+            raise ProviderError(msg, timed_out=True) from exc
+        except httpx2.HTTPError as exc:
+            msg = self._scrub(f"{self.name}: stream broke: {type(exc).__name__}: {exc}")
+            raise ProviderError(msg, retryable=True) from exc
         text = "".join(block.text for block in final.content if block.type == "text")
         usage = Usage(
             input_tokens=final.usage.input_tokens,
             output_tokens=final.usage.output_tokens,
             latency_ms=round((time.perf_counter() - started) * 1000, 1),
-            finish_reason="length" if final.stop_reason == "max_tokens" else final.stop_reason,
+            # "max_tokens" and "model_context_window_exceeded" both read "length".
+            finish_reason=finish_reason(final.stop_reason),
+            response_id=final.id or None,
+            response_model=str(final.model or "") or None,
         )
         usage.cost_usd = self._cost(usage)
+        refusal = ""
+        if final.stop_reason == "refusal":
+            details = getattr(final, "stop_details", None)
+            refusal = str(getattr(details, "category", None) or "unspecified")
+        # A refusal, or JSON cut short, raises a typed error that carries what it cost.
+        check_stop(self.name, usage, structured=json_schema is not None, refusal=refusal)
         return text, usage
 
     async def list_models(self) -> list[str]:

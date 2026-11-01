@@ -412,6 +412,23 @@ class CommsConfig(_Strict):
     # Name of the variable holding the HMAC key that signs generic webhook deliveries.
     generic_webhook_secret_env: str = "ARIA_OUTBOUND_WEBHOOK_SECRET"  # noqa: S105
     timeout_s: float = Field(default=10.0, gt=0, le=60)
+    # Hosts an outbound draft may link to, besides ARIA's own console and API (the hosts of
+    # ARIA_CONSOLE_URL and ARIA_PUBLIC_BASE_URL, always allowed); a subdomain counts as its host.
+    # Any other link is taken out of the draft before review and listed for the reviewer.
+    link_hosts: list[str] = Field(default_factory=list)
+    # Whom a draft may address besides the channel it goes to: @handles, #channels or e-mail
+    # addresses. Any other mention or address is taken out and listed for the reviewer.
+    recipients: list[str] = Field(default_factory=list)
+
+    @field_validator("link_hosts", "recipients", mode="before")
+    @classmethod
+    def _split_list(cls, value: Any) -> Any:
+        # From an environment variable: "wiki.example.com, status.example.com".
+        if isinstance(value, str):
+            value = value.split(",")
+        if isinstance(value, list):
+            return [str(item).strip().lower() for item in value if str(item).strip()]
+        return value
 
 
 # A purge reads every run's last change: once a minute is the most that is worth doing.
@@ -481,6 +498,10 @@ class Settings(BaseSettings):
     log_format: Literal["json", "console"] = "console"
     otel_exporter: Literal["none", "console", "otlp", "azure"] = "none"
     otlp_endpoint: str | None = None
+    # Where the otlp exporter sends the GenAI metrics (an OTLP/HTTP /v1/metrics URL). Unset: no
+    # metrics over OTLP, since a traces-only backend such as Phoenix refuses them. Azure Monitor
+    # takes them without it.
+    otlp_metrics_endpoint: str | None = None
     worker_mode: Literal["inprocess", "external"] = "inprocess"
     # Bring the schema to the latest migration when the API starts (containers). Run one API
     # replica while a release migrates, or run `aria db upgrade` as a job instead.
@@ -518,7 +539,13 @@ class Settings(BaseSettings):
     mcp_token: SecretStr | None = None
 
     @field_validator(
-        "api_keys", "pseudonym_key", "mcp_token", "mcp_url", "quota_file", mode="before"
+        "api_keys",
+        "pseudonym_key",
+        "mcp_token",
+        "mcp_url",
+        "quota_file",
+        "otlp_metrics_endpoint",
+        mode="before",
     )
     @classmethod
     def _blank_is_unset(cls, value: Any) -> Any:

@@ -39,6 +39,7 @@ from aria.evals import parsing as ps
 from aria.evals import pipeline as pl
 from aria.evals import postmortems as pmx
 from aria.evals import real as rl
+from aria.evals import redteam as rt
 from aria.evals import rings
 from aria.evals import severity as sv
 from aria.evals import tickets as tk
@@ -57,6 +58,7 @@ SUITES = (
     "edge",
     "real",
     *dm.SUITES,
+    "redteam",
     "all",
 )
 # The training split's size, so held-out models are fitted the way the shipped one is.
@@ -199,6 +201,8 @@ async def run(
         results["edge"] = ed.evaluate(ed.generate())
     if suite in ("edge", "all"):
         results["injection_benchmarks"] = inj.evaluate()
+    if suite in ("redteam", "all"):  # adaptive attacks, scored on what they achieve
+        results["redteam"] = await rt.evaluate(builder, n=limit or rt.ATTACKS)
     if suite in ("real", "all"):
         pool = loghub_dir / "HDFS" / "HDFS_2k.log_structured.csv"
         results["real"] = rl.summarize(

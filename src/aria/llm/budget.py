@@ -7,7 +7,7 @@ from typing import Any
 
 from aria.config import BudgetConfig
 from aria.contracts.run import BudgetUsage
-from aria.llm.base import BudgetExceededError, Usage
+from aria.llm.base import REFUSAL_REASONS, BudgetExceededError, Usage
 
 
 class BudgetGuard:
@@ -65,6 +65,8 @@ class BudgetGuard:
             call["cached"] = True  # answered from the response cache: no provider call
         if usage.finish_reason == "length":
             call["stop"] = "length"  # cut short by its token budget
+        elif usage.finish_reason in REFUSAL_REASONS:
+            call["stop"] = "refusal"  # declined, or withheld by a filter: billed, never used
         self.calls.append(call)
         self.usage.llm_calls += 1
         self.usage.tokens_in += usage.input_tokens
