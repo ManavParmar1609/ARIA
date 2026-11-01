@@ -22,6 +22,8 @@ status. Measured results live in [the evaluation](../evaluation.md), not here.
 | [0012](0012-content-safety-check-is-optional-and-fails-closed.md) | The content-safety check is optional and fails closed | Accepted (off by default) | A safety model can screen LLM-written text; any doubt falls back to deterministic text. |
 | [0013](0013-run-background-jobs-where-runs-execute.md) | Run the scan and recalibration jobs where runs execute | Accepted | Periodic jobs start in the API in `inprocess` mode and in `aria worker` in `external` mode. |
 | [0014](0014-promise-coverage-per-level-and-send-unfamiliar-windows-to-a-person.md) | Promise coverage per severity level, and send unfamiliar windows to a person | Accepted | Per-level conformal thresholds with a certified severe-miss guard, a novelty check that asks a person, blind checks with adaptive recalibration, and label-free drift. |
+| [0015](0015-measure-in-three-rings-and-record-what-was-tuned.md) | Measure in three rings, and record what each suite was tuned on | Accepted | Familiar systems, systems held out in turn, and real data, with exact bounds, a registry of what was tuned on what, and a fixed rule for adopting a change. |
+| [0016](0016-keep-each-model-on-a-shared-key-inside-its-own-limits.md) | Keep each model on a shared key inside its own limits | Accepted | A pool of Gemini models on one key, a quota ledger with admission, run reservations and classified refusals, so the shared demo degrades to offline reports instead of errors. |
 
 ## Adding a record
 
