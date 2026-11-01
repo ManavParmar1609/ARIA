@@ -10,7 +10,6 @@ from datetime import datetime
 from typing import Any, ClassVar
 
 from sqlalchemy import (
-    DDL,
     JSON,
     Boolean,
     Float,
@@ -416,13 +415,13 @@ def append_only_ddl(dialect: str) -> list[str]:
     return []
 
 
-for _dialect in ("sqlite", "mssql"):
-    for _statement in append_only_ddl(_dialect):
-        event.listen(
-            DecisionRecordRow.__table__,
-            "after_create",
-            DDL(_statement).execute_if(dialect=_dialect),
-        )
+def _install_append_only(_target: Any, connection: Any, **_: Any) -> None:
+    """Install the triggers when ``create_all`` makes the table (tests and ``init_db``)."""
+    for statement in append_only_ddl(connection.dialect.name):
+        connection.execute(text(statement))
+
+
+event.listen(DecisionRecordRow.__table__, "after_create", _install_append_only)
 
 
 class EvalRunRow(Base):
