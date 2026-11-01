@@ -807,7 +807,12 @@ function UnseenSection({ unseen }: { unseen: NonNullable<ReturnType<typeof gener
           ["Short list held the label", `${pct(s.coverage)} (target ${pct(s.target, 0)})`],
         ]}
       />
-      <div className="overflow-x-auto">
+      <div
+        className="overflow-x-auto"
+        tabIndex={0}
+        role="region"
+        aria-label="Each system held out in turn"
+      >
         <table className="w-full min-w-[32rem] text-left text-sm">
           <caption className="sr-only">Each system held out in turn</caption>
           <thead className="text-muted-foreground">
