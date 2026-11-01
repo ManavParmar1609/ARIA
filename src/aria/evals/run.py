@@ -27,6 +27,7 @@ from aria.config import get_app_config
 from aria.data.loghub import iter_structured_csv
 from aria.data.scenarios import LinePools, Scenario, ScenarioBuilder
 from aria.evals import bgl as bg
+from aria.evals import domains as dm
 from aria.evals import edge as ed
 from aria.evals import gitlab as gl
 from aria.evals import hadoop as hd
@@ -43,7 +44,17 @@ from aria.retrieval.seed import MEMORY_SEEDS
 from aria.severity.engine import SeverityEngine
 from aria.severity.training import SplitSeeds, known_templates
 
-SUITES = ("smoke", "severity", "pipeline", "robustness", "parsing", "edge", "real", "all")
+SUITES = (
+    "smoke",
+    "severity",
+    "pipeline",
+    "robustness",
+    "parsing",
+    "edge",
+    "real",
+    *dm.SUITES,
+    "all",
+)
 THRESHOLDS = Path("config/eval_thresholds.yaml")
 FIXTURES_DIR = Path("tests/fixtures/loghub")  # tiny samples for tests, not for measurement
 
@@ -162,6 +173,10 @@ async def run(
         results["real"]["logchunks"] = await _logchunks(builder, loghub_dir, size, workers)
         results["real"]["gitlab"] = gl.summarize()
         results["real"]["postmortems"] = pmx.summarize()
+    if suite in dm.SUITES or suite == "all":  # ring C: new domains, each run when downloaded
+        await dm.add_to(results, suite, loghub_dir=loghub_dir, workers=workers, limit=limit)
+        if suite != "all":
+            return results
     test = sv.held_out(
         builder,
         seeds=size.severity_seeds,

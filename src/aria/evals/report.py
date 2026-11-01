@@ -15,6 +15,8 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from aria.evals import report_domains
+
 # Docs with generated blocks, rewritten by `make eval` alongside docs/evaluation.md.
 QUOTING_DOCS = (Path("README.md"), Path("docs/model-card.md"))
 _BLOCK = re.compile(
@@ -1387,6 +1389,7 @@ def render(results: Mapping[str, Any], live: Mapping[str, Any] | None = None) ->
             lines += _gitlab(results["real"]["gitlab"])
         if "postmortems" in results["real"]:
             lines += _postmortems(results["real"]["postmortems"])
+    lines += report_domains.render(results)
     if "severity" in results:
         lines += _severity(results["severity"])
     if "pipeline" in results:

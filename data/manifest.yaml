@@ -231,3 +231,16 @@ sources:
     license: Public issues with no licence stated; read only to evaluate, never redistributed
     citation: "GitLab Inc. GitLab.com production incident tracker, https://gitlab.com/gitlab-com/gl-infra/production/-/issues."
     description: GitLab.com's production incidents (gitlab-com/gl-infra/production), created before October 2026, with the responders' severity, service and root-cause labels. A live API, so the download records its snapshot's sha256 and date; the memory evaluation asks for similar past incidents from each later incident's title.
+
+  # --- new domains: data no rule, threshold or model was tuned on (ring C) -----------------------
+  ait-ads:
+    kind: zenodo
+    record: "8263181"
+    files: [ait_ads.zip, labels.csv]
+    checksums:
+      ait_ads.zip: md5:43db6b1f0996e0024befd617706c50e9
+      labels.csv: md5:60ff33796c77fd2136c4d1a4bc841bd9
+    extract: false
+    license: CC BY 4.0 (the Zenodo record's licence)
+    citation: "M. Landauer, F. Skopik, M. Wurzenberger. Introducing a New Alert Data Set for Multi-Step Attack Analysis. CSET 2024. Zenodo, DOI 10.5281/zenodo.8263181."
+    description: The AIT Alert Data Set. 2,655,821 intrusion-detection alerts (Wazuh, Suricata and AMiner) from eight simulated company networks, each attacked once in several steps (scans, a web shell, password cracking, a reverse shell, privilege escalation, a stopped service and data theft over DNS), with the start and end of every attack step. Kept zipped (2.9 GB unpacked); the security-alert evaluation reads it from inside the zip (src/aria/evals/ait_ads.py).
