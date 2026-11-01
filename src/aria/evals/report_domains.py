@@ -167,20 +167,48 @@ def _rcaeval(s: Mapping[str, Any]) -> list[str]:
     title = "### Code-level faults in microservice shops"
     if (gone := _missing(title, s)) is not None:
         return gone
-    aria, base = s["aria"], s["baselines"]
     systems = _join([f"{n} in {_SYSTEMS.get(k, k)}" for k, n in s["by_system"].items()])
+    intro = (
+        f"{s['cases']} code-level faults injected into microservice shops ({systems}). "
+        f"Source: {s['source']}; {s['citation']} Each case gives two windows, every service's "
+        "logs from before the fault and from the fault on, each triaged offline, end to end, "
+        "with its lines led by their container's name."
+    )
+    return _fault_windows(s, title, intro)
+
+
+def _nezha(s: Mapping[str, Any]) -> list[str]:
+    title = "### Faults injected into a shop's pods"
+    if (gone := _missing(title, s)) is not None:
+        return gone
+    kinds = _join(sorted(k.replace("_", " ") for k in s["by_fault"]))
+    span = "minute" if s["window_min"] == 1 else f"{s['window_min']} minutes"
+    intro = (
+        f"{s['cases']} faults ({kinds}) injected one at a time into Online Boutique's pods "
+        f"over {len(s['days'])} days. Source: {s['source']}; {s['citation']} Each fault gives "
+        f"two windows, the service logs of the {span} before it and of the {span} from it on, "
+        "each triaged offline, end to end."
+    )
+    if disagree := s.get("times_disagree"):
+        intro += (
+            f" For {disagree} of the faults the fault list's timestamp and its readable time "
+            "differ; there the healthy window ends at the earlier time and the faulty one starts "
+            "at the later."
+        )
+    return _fault_windows(s, title, intro)
+
+
+def _fault_windows(s: Mapping[str, Any], title: str, intro: str) -> list[str]:
+    """A suite of faulty and healthy windows: detection, pairing and naming the service."""
+    aria, base = s["aria"], s["baselines"]
     paired = aria["paired"]
     random = base["naming_random_expected"]
     return [
         title,
         "",
         (
-            f"{s['cases']} code-level faults injected into microservice shops ({systems}). "
-            f"Source: {s['source']}; {s['citation']} Each case gives two windows, every service's "
-            "logs from before the fault and from the fault on, each triaged offline, end to end, "
-            "with its lines led by their container's name. "
-            f"{s['windows_over_line_cap']} of the {s['windows']} windows hold more than the "
-            f"per-run line cap of {s['line_cap']:,}; ARIA reads up to the cap."
+            f"{intro} {s['windows_over_line_cap']} of the {s['windows']} windows hold more than "
+            f"the per-run line cap of {s['line_cap']:,}; ARIA reads up to the cap."
         ),
         "",
         "| Method | Faulty windows flagged (95% CI) | Healthy windows flagged |",
@@ -409,6 +437,7 @@ def render(results: Mapping[str, Any]) -> list[str]:
         "anomod": _anomod,
         "itbench": _itbench,
         "jira": _jira,
+        "nezha": _nezha,
     }
     for name, renderer in renderers.items():
         if isinstance(domains.get(name), Mapping):

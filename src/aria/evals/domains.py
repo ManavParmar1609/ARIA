@@ -20,12 +20,13 @@ from typing import Any
 from aria.config import get_settings
 from aria.data import anomod as anomod_data
 from aria.data import itbench as itbench_data
+from aria.data import nezha as nezha_data
 from aria.data import rcaeval as rcaeval_data
 from aria.data.scenarios import LinePools, ScenarioBuilder
-from aria.evals import ait_ads, anomod, itbench, jira, rcaeval
+from aria.evals import ait_ads, anomod, itbench, jira, nezha, rcaeval
 from aria.evals.pipeline import EvalEnvironment
 
-SUITES = ("ait-ads", "rcaeval", "anomod", "itbench", "jira")
+SUITES = ("ait-ads", "rcaeval", "anomod", "itbench", "jira", "nezha")
 # The manifest source each suite reads.
 SOURCES = {
     "ait-ads": "ait-ads",
@@ -33,6 +34,7 @@ SOURCES = {
     "anomod": "anomod",
     "itbench": "itbench-lite",
     "jira": "jira-public",
+    "nezha": "nezha",
 }
 # Suites that triage cases end to end, with what lists their cases and what triages a share.
 Triage = Callable[[EvalEnvironment, Sequence[int], Path], Awaitable[list[dict[str, Any]]]]
@@ -55,6 +57,12 @@ _PIPELINE: dict[str, tuple[Callable[[Path], int], Triage, Callable[..., dict[str
         itbench.summarize,
         itbench_data.ITBENCH_DIR,
     ),
+    "nezha": (
+        lambda root: len(nezha_data.find_faults(root)),
+        nezha.triage,
+        nezha.summarize,
+        nezha_data.NEZHA_DIR,
+    ),
 }
 _MISSING = {
     "ait-ads": ait_ads.MISSING,
@@ -62,6 +70,7 @@ _MISSING = {
     "anomod": anomod.MISSING,
     "itbench": itbench.MISSING,
     "jira": jira.MISSING,
+    "nezha": nezha.MISSING,
 }
 
 

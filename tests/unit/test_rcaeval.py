@@ -67,7 +67,7 @@ def test_logs_split_at_the_fault_and_each_line_is_led_by_its_container(tmp_path:
 
 
 def test_volume_change_ranks_the_container_whose_share_moved_most() -> None:
-    ranked = suite._most_changed({"a": 50, "b": 50}, {"a": 10, "b": 50, "c": 40})
+    ranked = suite.most_changed({"a": 50, "b": 50}, {"a": 10, "b": 50, "c": 40})
     assert ranked[0] in {"a", "c"}
     assert ranked[-1] == "b"
 

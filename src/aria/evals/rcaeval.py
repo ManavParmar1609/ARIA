@@ -37,7 +37,7 @@ RUN_SYSTEM = {"SS": "sock-shop", "OB": "online-boutique", "TT": "train-ticket"}
 ERRORS = {"ERROR", "FATAL"}
 
 
-def _error_counts(lines: Sequence[str]) -> Counter[str]:
+def error_counts(lines: Sequence[str]) -> Counter[str]:
     counts: Counter[str] = Counter()
     for line in lines:
         record = parse_generic_line("generic", line)
@@ -46,7 +46,7 @@ def _error_counts(lines: Sequence[str]) -> Counter[str]:
     return counts
 
 
-def _most_changed(before: dict[str, int], after: dict[str, int]) -> list[str]:
+def most_changed(before: dict[str, int], after: dict[str, int]) -> list[str]:
     """Containers by how far their share of the lines moved between the windows."""
     total_before = sum(before.values()) or 1
     total_after = sum(after.values()) or 1
@@ -84,7 +84,7 @@ async def triage(
                 lines=lines,
             )
             read = lines[:cap]
-            errors = _error_counts(read)
+            errors = error_counts(read)
             ranked_errors = [name for name, _ in errors.most_common()]
             rows.append(
                 {
@@ -101,7 +101,7 @@ async def triage(
                     "rank": ringc.rank_of(verdict["candidates"], [case.service]),
                     "rank_most_errors": ringc.rank_of(ranked_errors, [case.service]),
                     "rank_most_changed": ringc.rank_of(
-                        _most_changed(split.services_before, split.services_after),
+                        most_changed(split.services_before, split.services_after),
                         [case.service],
                     ),
                     **verdict,

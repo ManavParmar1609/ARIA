@@ -288,9 +288,13 @@ StreamReader = Callable[[DataSource, Path, httpx.Client, str | None], list[Path]
 
 def _stream_readers() -> dict[str, StreamReader]:
     # Imported here: the readers use this module's helpers.
-    from aria.data import itbench, jira  # noqa: PLC0415
+    from aria.data import itbench, jira, nezha  # noqa: PLC0415
 
-    return {"jira-mongodump": jira.write_subset, "itbench-logs": itbench.write_log_windows}
+    return {
+        "jira-mongodump": jira.write_subset,
+        "itbench-logs": itbench.write_log_windows,
+        "nezha-logs": nezha.write_minutes,
+    }
 
 
 def stream_source(source: DataSource, dest: Path, url: str | None = None) -> Path:

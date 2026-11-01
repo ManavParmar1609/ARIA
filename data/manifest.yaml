@@ -303,3 +303,22 @@ sources:
     license: CC BY 4.0 (the Zenodo record's licence)
     citation: "L. Montgomery, C. Lüders, W. Maalej. An Alternative Issue Tracking Dataset of Public Jira Repositories. MSR 2022. Zenodo, DOI 10.5281/zenodo.15719919."
     description: A subset of the Public Jira Dataset (2.7 million issues from 16 public Jira instances, one 5.8 GB zip). The download never fetches the zip whole; it streams the MongoDB dump inside it and keeps the first 20,000 issues of two instances, Apache's and Atlassian's own, in the dump's order, with each issue's type, components, title, description, final priority and the priority it was opened with (src/aria/data/jira.py). The ticket evaluation scores ARIA's ticket model against the priority people set (src/aria/evals/jira.py).
+
+  nezha:
+    kind: zenodo
+    record: "7029202"
+    files: [nezhadata.zip]
+    stream:
+      reader: nezha-logs
+      keep: [dataset1.tar.xz, dataset2.tar.xz]
+      minutes: 1
+    checksums:
+      # Matched against the checksum Zenodo publishes; each archive streamed out of the zip is
+      # checked against the CRC-32 the zip records for it.
+      nezhadata.zip: md5:a199b38cbb94af303ec5be5db43ebbd7
+      # The labels: each day's fault list as the download writes it.
+      dataset1/fault_list.json: sha256:c5f8e8e6c0f5f89cc647ba9a3ec38c748cec450ceed72fff37fa4b1c8ee1b1f2
+      dataset2/fault_list.json: sha256:b7473cf586eba253ddc60ddca02ff846ac5229bcd240a694c9d76d99a828abec
+    license: CC BY 4.0 (the Zenodo record's licence; the authors' repository is MIT)
+    citation: "G. Yu, P. Chen, Y. Li, H. Chen, X. Li, Z. Zheng. Nezha: Interpretable Fine-Grained Root Causes Analysis for Microservices on Multi-Modal Observability Data. ESEC/FSE 2023. Zenodo, DOI 10.5281/zenodo.7029202."
+    description: Nezha's Online Boutique data. Two days of faults (CPU contention and consumption, network delay, a thrown exception, a wrong return value) injected one at a time into the shop's pods, with each day's fault list and every service's logs, metrics and traces (about 4 GB a day unpacked). The download streams the zip's two archives without storing them and keeps each day's fault list and the log files of the minutes around each fault, cut to time, pod and log record and gzipped (src/aria/data/nezha.py). The evaluation reads the minute before each fault and the minute from it on (src/aria/evals/nezha.py).

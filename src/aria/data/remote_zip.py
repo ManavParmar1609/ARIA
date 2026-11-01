@@ -4,6 +4,7 @@ A zip lists its members at its end, so a few HTTP range requests find a member's
 one more request streams that member's bytes, which are inflated as they arrive. The caller
 reads as much as it needs and closes the stream. Used for the Public Jira Dataset, whose only
 data is one 5.8 GB member: ARIA keeps a small subset of it and never stores the whole file.
+Nezha's two archives are read to their end the same way, so their CRC-32 is checked.
 """
 
 from __future__ import annotations
