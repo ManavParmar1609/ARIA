@@ -19,7 +19,7 @@ import { count as words } from "@/lib/format";
 // beside the strongest simple methods, and where ARIA falls short. As with the other results on
 // Test results, every word that compares or judges is chosen from the numbers, so a rerun of
 // `make eval` can never leave a sentence saying the opposite of its numbers. A verdict is one
-// sentence with no figures in it; the figures follow it.
+// sentence that gives shares in tenths ("about 3 in 10"); the exact figures follow it.
 
 /** How a card presents its suite, and the heading of its section in docs/evaluation.md. */
 export interface DomainCard {
@@ -209,6 +209,9 @@ export const rankCell = (r: Ranking) =>
 
 /** A random pick's expected share as a sentence gives it. */
 const byChance = (share: number) => `about ${per100(share)} in 100`;
+/** "3 of 90 cases", or "none of the 17 runs". */
+const outOf = (r: Rate, noun: string) =>
+  r.hits === 0 ? `none of the ${n(r.of)} ${noun}` : `${n(r.hits)} of ${n(r.of)} ${noun}`;
 
 // --- security alerts ---------------------------------------------------------------------------
 
@@ -318,10 +321,10 @@ export function faultShortfall(s: FaultWindows): string | null {
   }
   const { naming, healthy, ranking } = s.aria;
   if (per100(naming.first.share) < per100(s.random.first)) {
-    return `Its first suspect was the service at fault in ${n(naming.first.hits)} of ${n(naming.first.of)} cases, fewer than a random pick would get (${byChance(s.random.first)}).`;
+    return `Its first suspect was the service at fault in ${outOf(naming.first, "cases")}, fewer than a random pick would get (${byChance(s.random.first)}).`;
   }
   if (per100(naming.firstThree.share) < per100(s.random.firstThree)) {
-    return `The service at fault was among its first three suspects in ${n(naming.firstThree.hits)} of ${n(naming.firstThree.of)} cases, fewer than a random pick would get (${byChance(s.random.firstThree)}).`;
+    return `The service at fault was among its first three suspects in ${outOf(naming.firstThree, "cases")}, fewer than a random pick would get (${byChance(s.random.firstThree)}).`;
   }
   if (healthy.share >= 0.1) {
     return `It also flagged ${n(healthy.hits)} of ${n(healthy.of)} healthy stretches.`;
@@ -378,10 +381,10 @@ export function anomaliesResult(s: Anomalies): string {
 export function anomaliesShortfall(s: Anomalies): string | null {
   const { first, firstThree } = s.naming;
   if (per100(firstThree.share) < per100(s.random.firstThree)) {
-    return `The targeted service was among its first three suspects in ${n(firstThree.hits)} of ${n(firstThree.of)} runs, fewer than a random pick would get (${byChance(s.random.firstThree)}).`;
+    return `The targeted service was among its first three suspects in ${outOf(firstThree, "runs")}, fewer than a random pick would get (${byChance(s.random.firstThree)}).`;
   }
   if (per100(first.share) < per100(s.random.first)) {
-    return `Its first suspect was the targeted service in ${n(first.hits)} of ${n(first.of)} runs, fewer than a random pick would get (${byChance(s.random.first)}).`;
+    return `Its first suspect was the targeted service in ${outOf(first, "runs")}, fewer than a random pick would get (${byChance(s.random.first)}).`;
   }
   if (s.normalFlagged > 0) {
     return `It flagged ${normalRuns(s.normalFlagged, s.normal)}, which had nothing wrong.`;
@@ -422,13 +425,13 @@ export function kubernetesResult(s: KubernetesIncidents): string {
 export function kubernetesShortfall(s: KubernetesIncidents): string | null {
   const { first, firstThree } = s.naming;
   if (per100(first.share) < per100(s.random.first)) {
-    return `Its first suspect was the service at fault in only ${n(first.hits)} of ${n(first.of)} incidents, fewer than a random pick would get (${byChance(s.random.first)}).`;
+    return `Its first suspect was the service at fault in ${outOf(first, "incidents")}, fewer than a random pick would get (${byChance(s.random.first)}).`;
   }
   if (s.missed.hits > 0) {
     return `It rated ${n(s.missed.hits)} of ${n(s.missed.of)} incidents SEV4, as if nothing were wrong: at most ${per100(s.missed.upper)} in 100, with 95% confidence.`;
   }
   return per100(firstThree.share) < per100(s.random.firstThree)
-    ? `The service at fault was among its first three suspects in ${n(firstThree.hits)} of ${n(firstThree.of)} incidents, fewer than a random pick would get (${byChance(s.random.firstThree)}).`
+    ? `The service at fault was among its first three suspects in ${outOf(firstThree, "incidents")}, fewer than a random pick would get (${byChance(s.random.firstThree)}).`
     : null;
 }
 
