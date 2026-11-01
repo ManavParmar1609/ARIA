@@ -69,10 +69,10 @@ cd "${web}"
 run_id=$(API="${api}" node --input-type=module - <<'JS'
 import { readFileSync } from "node:fs";
 const api = process.env.API;
-const { id } = JSON.parse(readFileSync("src/data/samples.json", "utf8")).find(
+const { id: sampleId } = JSON.parse(readFileSync("src/data/samples.json", "utf8")).find(
   (s) => s.system === "hdfs",
 );
-const sample = JSON.parse(readFileSync(`src/data/samples/${id}.json`, "utf8"));
+const sample = JSON.parse(readFileSync(`src/data/samples/${sampleId}.json`, "utf8"));
 const post = async (path, body) => {
   const response = await fetch(api + path, {
     method: "POST",
