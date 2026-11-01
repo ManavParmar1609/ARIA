@@ -34,6 +34,7 @@ from aria.db.engine import get_engine, init_db, session_scope
 from aria.db.models import ActionRow, FeedbackRow, LogEventRow
 from aria.evidence import EvidenceStore
 from aria.graph import workflow
+from aria.graph.checkpoint import SqlCheckpointSaver
 from aria.graph.runner import RunBusyError, RunNotFoundError, RunStateError, TriageRunner
 from aria.graph.workflow import run_salt
 from aria.notify import sign
@@ -366,6 +367,107 @@ async def test_a_review_long_after_the_pause_is_published_by_one_process_only(
     assert route.call_count == 1
     assert seen == [([], False)]
     assert (repo.get_run(engine, run_id) or {})["claimed_by"] is None
+
+
+class SlowSaves(SqlCheckpointSaver):
+    """A checkpoint store that takes its time once ``slow`` is set, and logs each save as it
+    completes, so a test can see what the graph did before a save was durable."""
+
+    def __init__(self, engine: Any, log: list[tuple[str, Any]]) -> None:
+        super().__init__(engine)
+        self.log = log
+        self.slow = False
+
+    async def aput(self, config: Any, checkpoint: Any, metadata: Any, new_versions: Any) -> Any:
+        if self.slow:
+            await asyncio.sleep(0.3)
+        saved = await super().aput(config, checkpoint, metadata, new_versions)
+        self.log.append(("saved", metadata.get("step")))
+        return saved
+
+
+def recording_sends(log: list[tuple[str, Any]]) -> Any:
+    async def deliver(action: OutboundAction, comms: Any, *, run_url: str) -> OutboundAction:
+        log.append(("sent", action.action_id))
+        return action.model_copy(update={"status": "sent", "result": {"status_code": 202}})
+
+    return deliver
+
+
+async def test_the_review_is_saved_before_anything_is_sent(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The step that applies a review writes its checkpoint before publishing starts, so a
+    crash part way through publishing can never lose the approval it was sending under. The
+    rest of the run saves while the next step works, which costs it nothing."""
+    log: list[tuple[str, Any]] = []
+    saver = SlowSaves(env.services.engine, log)
+    runner = TriageRunner(env.services, checkpointer=saver)
+    modes: list[Any] = []
+    astream = runner.graph.astream
+
+    def watched(*args: Any, **kwargs: Any) -> Any:
+        modes.append(kwargs.get("durability"))
+        return astream(*args, **kwargs)
+
+    monkeypatch.setattr(runner.graph, "astream", watched)
+    monkeypatch.setattr(workflow, "send_action", recording_sends(log))
+    outcome = await runner.start(kernel_panic(env))
+    assert outcome.interrupt is not None
+    paused = (await runner.snapshot(outcome.run_id)).metadata or {}
+    hook = action_of(outcome.interrupt, "stakeholders")
+    saver.slow = True
+    log.clear()
+    done = await runner.resume(
+        outcome.run_id, {"decision": "approve", "reviewer": "ana", "approve_actions": [hook]}
+    )
+    assert done.status is RunStatus.PUBLISHED
+    assert ("sent", hook) in log
+    reviewed = log.index(("saved", int(paused["step"]) + 1))  # the step that applied the review
+    assert reviewed < log.index(("sent", hook))
+    assert modes == ["async", "sync"]  # the run itself stays cheap; the review drive is durable
+
+
+async def test_a_run_stopped_in_front_of_publish_resumes_with_its_approval_and_sends_once(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    log: list[tuple[str, Any]] = []
+    monkeypatch.setattr(workflow, "send_action", recording_sends(log))
+    outcome = await env.runner.start(kernel_panic(env))
+    assert outcome.interrupt is not None
+    run_id, hook = outcome.run_id, action_of(outcome.interrupt, "stakeholders")
+    remember = env.services.memory.remember
+    publishing = asyncio.Event()
+
+    async def stall(*args: Any, **kwargs: Any) -> Any:
+        publishing.set()  # publishing has begun; nothing has been sent yet
+        await asyncio.Event().wait()  # and the process stops here
+
+    monkeypatch.setattr(env.services.memory, "remember", stall)
+    review = {"decision": "approve", "reviewer": "ana", "approve_actions": [hook]}
+    drive = asyncio.create_task(env.runner.resume(run_id, review))
+    await asyncio.wait_for(publishing.wait(), timeout=30)
+    drive.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await drive
+    monkeypatch.setattr(env.services.memory, "remember", remember)
+    assert log == []
+    snapshot = await env.runner.snapshot(run_id)
+    assert snapshot.next == ("publish",)  # the approval was saved before publishing began
+    assert snapshot.values["review"]["reviewer"] == "ana"
+    modes: list[Any] = []
+    astream = env.runner.graph.astream
+
+    def watched(*args: Any, **kwargs: Any) -> Any:
+        modes.append(kwargs.get("durability"))
+        return astream(*args, **kwargs)
+
+    monkeypatch.setattr(env.runner.graph, "astream", watched)
+    recovered = await env.runner.execute(run_id)  # a worker picks the run up again
+    assert modes == ["sync"]  # recovering in front of publish saves before it moves on
+    assert recovered.status is RunStatus.PUBLISHED
+    assert log == [("sent", hook)]  # sent once, under the approval saved before the stop
+    assert repo.action_statuses(env.services.engine, run_id)[hook] == "sent"
 
 
 def test_an_approved_message_is_claimed_for_sending_once(env: Env) -> None:

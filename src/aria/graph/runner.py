@@ -24,7 +24,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.errors import InvalidUpdateError
 from langgraph.store.base import BaseStore
-from langgraph.types import Command, Overwrite, StateSnapshot, StreamMode
+from langgraph.types import Command, Durability, Overwrite, StateSnapshot, StreamMode
 from sqlalchemy import delete
 
 from aria.contracts.inputs import RunOptions, TriageRequest
@@ -76,6 +76,20 @@ FORK_FROM: dict[str, frozenset[str]] = {
     "reject": frozenset({"review"}),
 }
 _SUBSCRIBER_QUEUE = 2_000
+# Steps whose effects reach past the run: a reviewer's decision applied, a report published,
+# messages sent. A drive that may run one saves each step's checkpoint before the next step
+# starts (LangGraph's "sync" durability), so publishing never begins on an approval that is not
+# yet saved: a crash part way through can neither lose it nor, on recovery, send under one the
+# reviewer never gave. Every other drive saves while the next step works ("async"), so the bulk
+# of a run pays nothing. Unattended runs reach publish in their first drive, asynchronously:
+# they send nothing outbound, and publishing again on recovery changes nothing.
+DURABLE_STEPS = frozenset({"review", "publish", "reject"})
+
+
+def durability_for(next_steps: tuple[str, ...], *, review: bool = False) -> Durability:
+    """How a drive saves its checkpoints: "sync" when it applies a review or continues into a
+    step that publishes or sends, else "async"."""
+    return "sync" if review or DURABLE_STEPS.intersection(next_steps) else "async"
 
 
 class RunNotFoundError(KeyError):
@@ -406,7 +420,8 @@ class TriageRunner:
                     return await self._settle(run_id)
                 finally:  # nothing to drive: give up a claim taken to drive it (a recovery)
                     await self.let_go(run_id)
-            return await self._drive(run_id, None)  # crash recovery: continue from the checkpoint
+            # Crash recovery: continue from the checkpoint, durably in front of publishing.
+            return await self._drive(run_id, None, durability=durability_for(snapshot.next))
         return await self._drive(
             run_id,
             {"run_id": run_id, "request": run["request"]},
@@ -428,7 +443,9 @@ class TriageRunner:
             if isinstance(decision, ReviewDecision)
             else ReviewDecision.model_validate(decision).model_dump(mode="json")
         )
-        return await self._drive(run_id, Command(resume=value), review=True)
+        return await self._drive(
+            run_id, Command(resume=value), review=True, durability=durability_for((), review=True)
+        )
 
     def renew_held(self) -> None:
         """Keep this process's claims fresh: on runs it drives and on runs it has yet to start."""
@@ -476,6 +493,7 @@ class TriageRunner:
         config: RunnableConfig | None = None,
         started: Json | None = None,
         review: bool = False,
+        durability: Durability = "async",
     ) -> RunOutcome:
         async with self._holding(run_id):
             # The claim spans processes: an API resuming a review and a worker recovering a run
@@ -506,7 +524,7 @@ class TriageRunner:
                     )
                 if started is not None:  # only the process that won the run says it started
                     await self._event(run_id, "run_started", payload=started)
-                return await self._stream(run_id, graph_input, config)
+                return await self._stream(run_id, graph_input, config, durability)
             finally:
                 renewal.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
@@ -543,7 +561,11 @@ class TriageRunner:
         return {**graph_input, "request": offline.model_dump(mode="json")}, None
 
     async def _stream(
-        self, run_id: str, graph_input: Any, config: RunnableConfig | None
+        self,
+        run_id: str,
+        graph_input: Any,
+        config: RunnableConfig | None,
+        durability: Durability = "async",
     ) -> RunOutcome:
         # A run started with a visitor's key gets a router of its own, closed when it stops.
         # Any other new run reserves the shared models' requests it needs, released when it
@@ -563,6 +585,7 @@ class TriageRunner:
                 context=context,
                 stream_mode=STREAM_MODES,
                 version="v2",
+                durability=durability,
             ):
                 await self._handle(run_id, part)
         except Exception as exc:  # the graph's own handler covers node errors; this is the rest
