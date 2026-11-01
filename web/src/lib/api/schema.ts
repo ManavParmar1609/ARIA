@@ -1809,7 +1809,7 @@ export type components = {
              * Kind
              * @enum {string}
              */
-            kind: "run_started" | "node_started" | "node_finished" | "token" | "tool_call" | "llm_call" | "replan" | "budget" | "guardrail" | "interrupt" | "review" | "action" | "run_finished" | "checkpoint" | "error";
+            kind: "run_started" | "node_started" | "node_finished" | "token" | "tool_call" | "llm_call" | "replan" | "budget" | "guardrail" | "interrupt" | "review" | "action" | "run_finished" | "checkpoint" | "error" | "followup";
             /** Node */
             node?: string | null;
             /** Payload */

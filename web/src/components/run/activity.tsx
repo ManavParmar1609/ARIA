@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ActivityIcon,
   BotIcon,
   CircleCheckIcon,
   FlagIcon,
@@ -138,6 +139,17 @@ function rows(events: RunEvent[], { offline = false, titles = {} }: RowOptions =
           icon: ShieldAlertIcon,
           tone: "warn",
           title: `Guardrail: ${Number(p.quarantined ?? 0)} line${Number(p.quarantined) === 1 ? "" : "s"} quarantined as possible prompt injection`,
+          node: e.node,
+        });
+        break;
+      case "followup":
+        out.push({
+          key,
+          t,
+          icon: ActivityIcon,
+          tone: "warn",
+          title: "The log scan saw this system burst again while the incident was open",
+          detail: `Burst score ${Number(p.burst_score ?? 0)}, ${Number(p.lines ?? 0).toLocaleString("en")} lines${p.source ? ` from ${String(p.source)}` : ""}. ARIA keeps its proposed level; review it with the new burst in mind.`,
           node: e.node,
         });
         break;

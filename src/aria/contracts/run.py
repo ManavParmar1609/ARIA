@@ -72,6 +72,7 @@ EventKind = Literal[
     "run_finished",
     "checkpoint",
     "error",
+    "followup",
 ]
 
 

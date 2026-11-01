@@ -23,6 +23,7 @@ const KINDS = [
   "run_finished",
   "checkpoint",
   "error",
+  "followup",
 ] as const;
 
 /** Events after which the run's detail, state and report are worth fetching again. */

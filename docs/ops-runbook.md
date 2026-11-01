@@ -261,7 +261,7 @@ Processes log to standard output. With `ARIA_LOG_FORMAT=json`, each line is one 
 | `worker.job_failed`, `runner.failed` | A run failed |
 | `llm.provider_error`, `llm.invalid_output` | A provider failed, or returned output that did not validate |
 | `notify.sent`, `notify.failed` | An approved message was delivered, or was not |
-| `scan.started`, `scan.run_opened`, `scan.covered`, `scan.failed` | The log scan |
+| `scan.started`, `scan.run_opened`, `scan.followup`, `scan.covered`, `scan.failed` | The log scan |
 | `severity.adapted`, `severity.recalibrated`, `severity.model_reloaded`, `severity.recalibration_failed`, `severity.model_missing` | The severity model |
 | `services.ticket_models_missing` | No ticket model was found at start |
 
@@ -435,7 +435,7 @@ The scan tails log files and opens a run when the recent window's error burst sc
 2. Make the files readable where runs execute: the API in `inprocess` mode, each worker in `external` mode. In compose, mount them read-only into the `worker` service and add the variables to it, both in an override file.
 3. Restart. Expect `scan.started` with the number of sources.
 
-The first look at each file starts at its end, so history never opens a run. A file that shrinks (rotated or truncated) is read again from the top. Each system gets at most one scan run at a time, and none within `triggers.alert_group_window_s` of the last.
+The first look at each file starts at its end, so history never opens a run. A file that shrinks (rotated or truncated) is read again from the top. Each system gets at most one scan run at a time, and none within `triggers.alert_group_window_s` of the last. A burst on a system whose scan run is still open is added to that run as a follow-up (`scan.followup`), so its reviewer sees the incident grow; ARIA keeps the level it proposed and never lowers it.
 
 ### Enable the content-safety check
 

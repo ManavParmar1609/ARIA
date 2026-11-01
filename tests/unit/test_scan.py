@@ -174,9 +174,16 @@ async def test_a_finding_opens_one_run_until_its_system_is_quiet(runner: TriageR
     assert run["request"]["logs"] == lines
 
     assert open_run(runner, finding(lines), window_s=300) is None  # still open
+    # The second burst joins the open incident, so its reviewer sees it grow.
+    followups = [e for e in repo.list_events(runner.engine, run_id) if e.kind == "followup"]
+    assert [(e.node, e.payload["burst_score"], e.payload["lines"]) for e in followups] == [
+        ("scan", 12.0, len(lines))
+    ]
 
     repo.update_run(runner.engine, run_id, status=RunStatus.PUBLISHED)
     assert open_run(runner, finding(lines), window_s=300) is None  # finished, but just now
+    after = [e for e in repo.list_events(runner.engine, run_id) if e.kind == "followup"]
+    assert len(after) == 1  # a finished incident is not reopened by a follow-up
     assert open_run(runner, finding(lines), window_s=0) is not None
 
 
