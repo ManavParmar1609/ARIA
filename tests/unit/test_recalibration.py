@@ -154,6 +154,7 @@ def test_after_an_upgrade_reviews_recalibrate_the_new_model(
 ) -> None:
     """The job kept recalibrating the previous release's model, which the engine then refused,
     so reviews never reached the model the upgrade shipped."""
+    init_db(get_engine())  # a recalibration goes on the decision record
     shipped, shared = tmp_path / "app", tmp_path / "volume"
     shipped.mkdir()
     shared.mkdir()
