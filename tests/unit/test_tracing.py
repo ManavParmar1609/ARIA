@@ -99,6 +99,7 @@ def _gemini_router(model: Gemini) -> LLMRouter:
     config = LLMConfig(
         providers={"gemini": get_app_config().llm.providers["gemini"]},
         routing={"default": ["gemini"]},
+        data_terms=get_app_config().llm.data_terms,
     )
     return LLMRouter(config, providers={"gemini": model}, ledger=QuotaLedger({}))
 

@@ -244,6 +244,7 @@ async def test_a_claude_stream_that_breaks_falls_over_after_one_request() -> Non
             "fake": ProviderConfig(kind=ProviderKind.FAKE),
         },
         routing={"default": ["claude", "fake"]},
+        data_terms=get_app_config().llm.data_terms,
     )
     llm = LLMRouter(cfg, providers={"claude": claude, "fake": stand_in()}, ledger=QuotaLedger({}))
     result = await llm.structured("default", "pick", MESSAGES, Pick)
