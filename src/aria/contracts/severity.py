@@ -35,6 +35,25 @@ class SeverityAssessment(Contract):
     # class as a stand-in, and says "the model does not know", not "the model is sure".
     set_empty: bool = False
     alpha: float = Field(gt=0, lt=1)
+    # The miss rate the set allows per level: serious levels get a tighter one. Empty for older
+    # assessments and rules-only sets, where ``alpha`` applies to every level.
+    alphas: dict[Severity, float] = Field(default_factory=dict)
+    # Which calibration made the set: "familiar" (per level), "rules" (no model was used) or
+    # "single" (an older model with one threshold for every level).
+    calibration: Literal["familiar", "rules", "single"] = "familiar"
+    # Why a person should confirm the level even if the model was confident: the window is
+    # beyond the training data's range, its mix of signals or its share of new log patterns is
+    # unusual, the set is empty or holds every level, or the model never trained on the system.
+    novelty: list[
+        Literal[
+            "outside_training",
+            "unusual_mix",
+            "new_patterns",
+            "empty_set",
+            "every_level",
+            "new_system",
+        ]
+    ] = Field(default_factory=list)
     floor: Severity | None = None
     confidence: float = Field(ge=0, le=1)
     auditable: bool

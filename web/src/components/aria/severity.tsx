@@ -3,7 +3,7 @@ import { type CSSProperties } from "react";
 import { SEVERITIES, SEVERITY_MEANING, type Severity } from "@/lib/api/types";
 import { cx } from "@/lib/cx";
 import { chance } from "@/lib/format";
-import { LEVEL_WORD } from "@/lib/levels";
+import { coverageText, LEVEL_WORD } from "@/lib/levels";
 
 export const SEVERITY_BG: Record<Severity, string> = {
   SEV1: "bg-sev1",
@@ -183,6 +183,7 @@ export function SeverityScale({
   decided,
   floor,
   alpha = 0.1,
+  alphas,
   setEmpty = false,
   rulesOnly = false,
   compact = false,
@@ -194,6 +195,8 @@ export function SeverityScale({
   decided: Severity;
   floor?: Severity | null;
   alpha?: number;
+  /** Per-level miss rates, when serious levels have their own tighter one. */
+  alphas?: Partial<Record<Severity, number>>;
   /** No class reached the conformal threshold: the bracket is drawn dashed, as a stand-in. */
   setEmpty?: boolean;
   /** The calibrated model was not used: the bars are normalised rule scores. */
@@ -208,7 +211,7 @@ export function SeverityScale({
   const first = Math.min(...setIdx);
   const last = Math.max(...setIdx);
   const barMax = compact ? 44 : 72;
-  const coverage = Math.round((1 - alpha) * 100);
+  const coverage = coverageText(alpha, alphas);
   const described = SEVERITIES.map(
     (s) =>
       `${s} ${rulesOnly ? `${Math.round((probabilities[s] ?? 0) * 100)}%` : chance(probabilities[s] ?? 0)}`,
@@ -216,7 +219,7 @@ export function SeverityScale({
   return (
     <figure
       className={cx("grid gap-1", className)}
-      aria-label={`${rulesOnly ? "Rule scores (the calibrated model was not used)" : "Model probabilities"}: ${described}. ${rulesOnly ? `Levels the rules leave open: ${predictionSet.join(", ")}.` : setEmpty ? `No level is likely enough to make the short list on its own, so the model's best guess and the rules' level stand in.` : `Short list, built to hold the right level ${coverage}% of the time: ${predictionSet.join(", ")}.`} Decided: ${decided}.${floor ? ` Safety floor: ${floor}.` : ""}`}
+      aria-label={`${rulesOnly ? "Rule scores (the calibrated model was not used)" : "Model probabilities"}: ${described}. ${rulesOnly ? `Levels the rules leave open: ${predictionSet.join(", ")}.` : setEmpty ? `No level is likely enough to make the short list on its own, so the model's best guess and the rules' level stand in.` : `Short list, built to hold the right level ${coverage}: ${predictionSet.join(", ")}.`} Decided: ${decided}.${floor ? ` Safety floor: ${floor}.` : ""}`}
     >
       <div className="relative grid grid-cols-4 gap-1.5" aria-hidden>
         {setIdx.length > 0 ? (
@@ -282,7 +285,7 @@ export function SeverityScale({
             ? "Bars: rule scores, as shares. Bracket: the levels the rules leave open."
             : setEmpty
               ? `Bars: calibrated model probability. Dashed bracket: no level is likely enough to make the short list on its own, so the model's best guess and the rules' level stand in.`
-              : `Bars: calibrated model probability. Bracket: the short list, built to hold the right level ${coverage}% of the time.`}
+              : `Bars: calibrated model probability. Bracket: the short list, built to hold the right level ${coverage}.`}
         </figcaption>
       ) : null}
     </figure>

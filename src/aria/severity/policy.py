@@ -6,14 +6,16 @@
    agree, otherwise by ``model``. Both are auditable. Nothing is decided automatically when the
    window is unlike anything the model learned from: the rules then supply the set, and a
    person always confirms.
-3. Otherwise an LLM may choose, but only a class inside the set and never below the floor.
+3. Otherwise an LLM may choose, but only a class inside the set and never below the floor. A
+   person confirms when the set is wide, the window is unlike the training data, or the pick is
+   below a serious level the set kept possible.
 4. With no LLM (none configured, budget spent, or invalid output), the most severe class in the
    set is chosen and flagged for human review: under-triage costs more than over-triage.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -41,6 +43,14 @@ class Preliminary:
     set_empty: bool = False
     # Features too far from the model's training data for it to be used; rules decided the set.
     outside_training: list[str] = field(default_factory=list)
+    # The miss rate the set allows per level (empty: ``alpha`` for every level), and the
+    # calibration that made it: "familiar" (per level), "rules" (no model) or "single" (a model
+    # with one threshold for every level).
+    alphas: dict[Severity, float] = field(default_factory=dict)
+    calibration: str = "familiar"
+    # Why a person should confirm even though the model was used (see SeverityEngine._novelty),
+    # or "outside_training" when it was not. Any reason rules out an automatic decision.
+    novelty: list[str] = field(default_factory=list)
 
     @property
     def prediction_set(self) -> list[Severity]:
@@ -75,7 +85,7 @@ class Preliminary:
 
     def auto_decision(self, gate: float) -> DecidedBy | None:
         pset = self.prediction_set
-        if len(pset) != 1 or self.outside_training:
+        if len(pset) != 1 or self.outside_training or self.novelty:
             return None
         if self.floor_applied():
             return "rules"  # the floor alone settled it
@@ -83,6 +93,32 @@ class Preliminary:
         if self.probabilities.get(only, 0.0) < gate:
             return None
         return "rules" if only == self.rule_severity else "model"
+
+
+def coverage_words(alphas: Mapping[Severity, float]) -> str:
+    """The prediction set's promise in a few words, for evidence and claims.
+
+    One rate for every level reads "90% prediction set"; per-level rates read "prediction set
+    (95% coverage for SEV1 and SEV2, 90% for SEV3 and SEV4)".
+    """
+    rates = sorted({round(1 - a, 4) for a in alphas.values()})
+    if len(rates) <= 1:
+        words = f"{rates[0] if rates else 0.9:.0%} prediction set"
+    else:
+        serious = min(1 - alphas.get(s, 1.0) for s in (Severity.SEV1, Severity.SEV2))
+        rest = min(1 - alphas.get(s, 1.0) for s in (Severity.SEV3, Severity.SEV4))
+        words = f"prediction set ({serious:.0%} coverage for SEV1 and SEV2, {rest:.0%} for SEV3 and SEV4)"
+    return words
+
+
+SERIOUS = frozenset({Severity.SEV1, Severity.SEV2})
+NOVELTY_WORDS = {
+    "unusual_mix": "its mix of signals is unlike the windows the model learned from",
+    "new_patterns": "most of its log patterns are new for this system",
+    "empty_set": "no level was likely enough on its own",
+    "every_level": "every level stayed possible",
+    "new_system": "ARIA has not trained on this system, where its sets miss more often",
+}
 
 
 def _cite(ids: Sequence[str | None]) -> list[str]:
@@ -102,14 +138,23 @@ def _base_claims(pre: Preliminary) -> list[Claim]:
         )
     elif pre.model_evidence:
         pset = ", ".join(pre.prediction_set)
+        words = coverage_words(pre.alphas or dict.fromkeys(SEVERITY_ORDER, pre.alpha))
         text = (
             f"Calibrated model: {pre.top} is most likely (p={pre.confidence:.2f}), but no severity "
-            f"is likely enough to enter the {1 - pre.alpha:.0%} prediction set on its own."
+            f"is likely enough to enter the {words} on its own."
             if pre.set_empty
             else f"Calibrated model: {pre.top} is most likely (p={pre.confidence:.2f}); the "
-            f"{1 - pre.alpha:.0%} prediction set is {{{pset}}}."
+            f"{words} is {{{pset}}}."
         )
         claims.append(Claim(text=text, evidence_ids=_cite([pre.model_evidence])))
+    reasons = [NOVELTY_WORDS[r] for r in pre.novelty if r in NOVELTY_WORDS]
+    if reasons and pre.model_evidence and not pre.outside_training:
+        claims.append(
+            Claim(
+                text=f"A person should confirm this severity: {'; '.join(reasons)}.",
+                evidence_ids=_cite([pre.model_evidence]),
+            )
+        )
     floors = [hit for hit in pre.rule_hits if hit.effect == "floor"]
     if floors and pre.floor is not None:
         claims.append(
@@ -150,6 +195,9 @@ def decide(
         "prediction_set": pset,
         "set_empty": pre.set_empty,
         "alpha": pre.alpha,
+        "alphas": dict(pre.alphas),
+        "calibration": pre.calibration,
+        "novelty": list(pre.novelty),
         "floor": pre.floor,
         "model_version": pre.model_version,
     }
@@ -173,7 +221,12 @@ def decide(
             decided_by="llm",
             confidence=float(pre.probabilities.get(llm_choice, 0.0)),
             auditable=False,
-            needs_review=len(pset) >= 3 or bool(pre.outside_training),
+            # A person confirms a wide set, a window unlike the training data, and any pick
+            # below a serious level the set kept possible: that is where a severe miss hides.
+            needs_review=len(pset) >= 3
+            or bool(pre.outside_training)
+            or bool(pre.novelty)
+            or (bool(SERIOUS & set(pset)) and llm_choice not in SERIOUS),
             rationale=[*llm_claims, *_base_claims(pre)][:5],
             **common,
         )

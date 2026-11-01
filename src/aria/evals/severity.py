@@ -101,7 +101,7 @@ def score(
 ) -> list[SeverityCase]:
     cases = []
     for scenario, feats in zip(scenarios, features, strict=True):
-        pre = engine.preliminary(feats, evidence=EvidenceStore())
+        pre = engine.preliminary(feats, system=scenario.system, evidence=EvidenceStore())
         decision = decide(pre, gate=engine.gate, llm_unavailable_reason="offline evaluation")
         probabilities = {str(k): round(v, 6) for k, v in pre.probabilities.items()}
         model_top = max(probabilities, key=probabilities.__getitem__)

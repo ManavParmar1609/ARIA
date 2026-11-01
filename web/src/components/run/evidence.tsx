@@ -16,9 +16,10 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/popover";
-import type { Evidence, LogEvent, TemplateStat } from "@/lib/api/types";
+import type { Evidence, LogEvent, NoveltyReason, TemplateStat } from "@/lib/api/types";
 import { chance, evidenceDetail, evidenceTitle, featureName, rawResult } from "@/lib/evidence-text";
 import { failureName } from "@/lib/failure-modes";
+import { NOVELTY_WORDS } from "@/lib/levels";
 import { cn } from "@/lib/utils";
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -458,6 +459,9 @@ const FIELD_NAMES: Record<string, string> = {
   set_empty: "short list empty",
   coverage_target: "short list target",
   conformal: "calibrated short list",
+  calibration: "short list calibrated",
+  severe_miss_risk: "serious misses allowed",
+  novelty: "why a person should confirm",
   failure_mode: "kind of failure",
 };
 
@@ -493,6 +497,9 @@ const HIDDEN_FIELDS = new Set([
   "alpha",
   "conformal",
   "conformal_q",
+  "alphas",
+  "thresholds",
+  "guard",
   "set_empty",
   "temperature",
   "weight",
@@ -503,6 +510,15 @@ const HIDDEN_FIELDS = new Set([
  * name, the rest as recorded. `toward` is the level the measurements are weighed for. */
 function fieldValue(key: string, value: unknown, toward: string | null): string {
   if (key === "failure_mode" && typeof value === "string") return failureName(value);
+  if (key === "calibration" && typeof value === "string") {
+    return value === "familiar" ? "each level on its own" : value;
+  }
+  if (key === "severe_miss_risk" && typeof value === "number") return `at most ${chance(value)}`;
+  if (key === "novelty" && Array.isArray(value)) {
+    return value.length
+      ? value.map((reason) => NOVELTY_WORDS[reason as NoveltyReason] ?? String(reason)).join("; ")
+      : "none";
+  }
   if ((key === "coverage_target" || key === "sla_breach_risk") && typeof value === "number") {
     return chance(value);
   }

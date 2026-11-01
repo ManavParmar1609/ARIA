@@ -225,7 +225,12 @@ class GuardrailConfig(_Strict):
 
 
 class SeverityConfig(_Strict):
+    # The miss rate the prediction set allows: ``alpha`` for SEV3 and SEV4, ``serious_alpha`` for
+    # SEV1 and SEV2, and ``severe_miss_risk`` for "a serious incident's set holds no serious
+    # level" (conformal risk control; None turns that guard off). See aria.severity.conformal.
     alpha: float = Field(default=0.10, gt=0, lt=0.5)
+    serious_alpha: float = Field(default=0.05, gt=0, lt=0.5)
+    severe_miss_risk: float | None = Field(default=0.05, gt=0, lt=0.5)
     rules_file: Path = Path("config/severity_rules.yaml")
     log_model_file: Path = Path("models/severity_log.json")
     ticket_model_file: Path = Path("models/severity_ticket.json")

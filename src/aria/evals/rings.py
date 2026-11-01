@@ -84,6 +84,8 @@ def model_without(
     *,
     alpha: float,
     rules_version: str,
+    serious_alpha: float | None = None,
+    severe_miss_risk: float | None = None,
 ) -> LinearModel | None:
     """The production fitting procedure on the windows ``keep`` accepts; None when too few
     classes remain to fit one."""
@@ -91,7 +93,13 @@ def model_without(
     if len({str(w.severity) for w in kept.train}) < 2 or not kept.temperature or not kept.conformal:
         return None
     model, _ = fit_log_model(
-        kept.train, kept.temperature, kept.conformal, alpha=alpha, rules_version=rules_version
+        kept.train,
+        kept.temperature,
+        kept.conformal,
+        alpha=alpha,
+        rules_version=rules_version,
+        serious_alpha=serious_alpha,
+        severe_miss_risk=severe_miss_risk,
     )
     return model
 
@@ -126,6 +134,8 @@ def hold_out(
     alpha: float,
     scenario_group: Callable[[Scenario], str | None],
     window_group: Callable[[LabelledWindow], str],
+    serious_alpha: float | None = None,
+    severe_miss_risk: float | None = None,
 ) -> Ring:
     """Score each group's test windows with a model fitted without that group.
 
@@ -143,7 +153,14 @@ def hold_out(
         def outside(w: LabelledWindow, held: str = group) -> bool:
             return window_group(w) != held
 
-        model = model_without(windows, outside, alpha=alpha, rules_version=rules.version)
+        model = model_without(
+            windows,
+            outside,
+            alpha=alpha,
+            rules_version=rules.version,
+            serious_alpha=serious_alpha,
+            severe_miss_risk=severe_miss_risk,
+        )
         idx = by_group[group]
         engine = SeverityEngine(rules, model, alpha=alpha)
         cases = score(engine, [scenarios[i] for i in idx], [features[i] for i in idx])
@@ -345,6 +362,8 @@ def evaluate(
     quiet_per_system: int,
     workers: int = 1,
     windows: TrainingWindows | None = None,
+    serious_alpha: float | None = None,
+    severe_miss_risk: float | None = None,
 ) -> dict[str, Any]:
     """Ring B: leave one system out, and leave one failure mode out, on the test seeds."""
     windows = windows or training_windows(
@@ -358,6 +377,8 @@ def evaluate(
         windows,
         rules,
         alpha=alpha,
+        serious_alpha=serious_alpha,
+        severe_miss_risk=severe_miss_risk,
         scenario_group=lambda s: s.system,
         window_group=lambda w: w.system,
     )
@@ -369,6 +390,8 @@ def evaluate(
         windows,
         rules,
         alpha=alpha,
+        serious_alpha=serious_alpha,
+        severe_miss_risk=severe_miss_risk,
         # Quiet windows are no failure mode; benign noise modes are held out like any other.
         scenario_group=lambda s: (
             None if s.failure_mode == "none" else mode_of(s.system, s.failure_mode)

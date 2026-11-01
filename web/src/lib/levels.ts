@@ -1,4 +1,4 @@
-import type { Severity, SeverityAssessment } from "@/lib/api/types";
+import type { NoveltyReason, Severity, SeverityAssessment } from "@/lib/api/types";
 
 // Severity in words a newcomer can act on: each level's name, the same one the report's first line
 // uses, and what teams usually do about it (item 16).
@@ -15,6 +15,30 @@ export const LEVEL_RESPONSE: Record<Severity, string> = {
   SEV2: "Major degradation or a failing critical part. Usual response: page the on-call team.",
   SEV3: "A contained problem with limited user impact. Usual response: fix it during working hours.",
   SEV4: "Informational, or noise. Usual response: no action needed now.",
+};
+
+/**
+ * How often a short list is built to hold the right level, in words: "90 times in 100", or, when
+ * serious levels have their own tighter rate, "95 times in 100 when it is SEV1 or SEV2, and 90
+ * otherwise".
+ */
+export function coverageText(alpha: number, alphas?: Partial<Record<Severity, number>>): string {
+  const serious = Math.max(alphas?.SEV1 ?? alpha, alphas?.SEV2 ?? alpha);
+  const rest = Math.max(alphas?.SEV3 ?? alpha, alphas?.SEV4 ?? alpha);
+  const times = (a: number) => Math.round((1 - a) * 100);
+  return times(serious) === times(rest)
+    ? `${times(rest)} times in 100`
+    : `${times(serious)} times in 100 when it is SEV1 or SEV2, and ${times(rest)} otherwise`;
+}
+
+/** Why a person should confirm, as plain clauses (the same words the report's claim uses). */
+export const NOVELTY_WORDS: Record<NoveltyReason, string> = {
+  outside_training: "it is unlike anything the model learned from",
+  unusual_mix: "its mix of signals is unlike the windows the model learned from",
+  new_patterns: "most of its log patterns are new for this system",
+  empty_set: "no level was likely enough on its own",
+  every_level: "every level stayed possible",
+  new_system: "ARIA has not trained on this system, where its short lists miss more often",
 };
 
 /** "SEV1, SEV2 or SEV3". */

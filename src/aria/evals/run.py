@@ -177,7 +177,12 @@ async def run(
             return bool(w.system != system)
 
         model = rings.model_without(
-            training(), other, alpha=config.severity.alpha, rules_version=rules.version
+            training(),
+            other,
+            alpha=config.severity.alpha,
+            rules_version=rules.version,
+            serious_alpha=config.severity.serious_alpha,
+            severe_miss_risk=config.severity.severe_miss_risk,
         )
         return SeverityEngine(rules, model, alpha=config.severity.alpha)
 
@@ -246,6 +251,8 @@ async def run(
             test,
             features,
             alpha=config.severity.alpha,
+            serious_alpha=config.severity.serious_alpha,
+            severe_miss_risk=config.severity.severe_miss_risk,
             windows=training(),
             workers=workers,
             per_mode=TRAINING_SIZE["per_mode"],

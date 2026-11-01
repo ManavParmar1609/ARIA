@@ -19,9 +19,10 @@ from aria.llm.budget import BudgetGuard
 from aria.llm.router import LLMRouter
 from aria.observability.logging import get_logger
 from aria.severity.adjudicator import Adjudication, adjudicate
+from aria.severity.conformal import FAMILIAR
 from aria.severity.features import log_feature_row
 from aria.severity.model import LinearModel, live_model_path
-from aria.severity.policy import Preliminary, decide
+from aria.severity.policy import Preliminary, coverage_words, decide
 from aria.severity.rules import RuleSet, feature_space, load_rules
 
 log = get_logger(__name__)
@@ -129,10 +130,23 @@ class SeverityEngine:
     def gate(self) -> float:
         return self.rules.auto_confidence
 
+    def trained_on(self, system: str) -> bool:
+        """Whether the model learned from this system's logs (by name, as its file records).
+
+        Its calibration was measured on systems it trained on; on any other, including logs
+        pasted as generic text, its sets miss more often (the published held-out-system results),
+        so a person confirms. Model files that do not list their systems count as trained on all.
+        """
+        if self.model is None:
+            return True
+        trained = {str(s).strip().lower() for s in self.model.metadata.get("trained_systems") or []}
+        return not trained or system.strip().lower() in trained
+
     def preliminary(
         self,
         features: WindowFeatures,
         *,
+        system: str,
         alerts: Sequence[AlertSignal] = (),
         evidence: EvidenceStore,
         related: Sequence[str] = (),
@@ -161,7 +175,10 @@ class SeverityEngine:
             rule_ids.append(eid)
 
         outside: list[str] = []
+        novelty: list[str] = []
         extra: dict[str, Any] = {}
+        alphas: dict[Severity, float] = {}
+        kind = FAMILIAR
         if self.model is not None:
             x = self.model.matrix([log_feature_row(values, evaluation)])
             outside = self.model.outside_training(x[0], MODEL_RANGE_Z, MODEL_RANGE_TOLERANCE)
@@ -170,19 +187,38 @@ class SeverityEngine:
             raw_set = [s for s in SEVERITY_ORDER if probabilities[s] >= RULES_ONLY_MIN_P]
             set_empty = not raw_set
             raw_set = raw_set or [evaluation.rule_severity]
-            version, conformal = f"rules-only:{self.rules.version}", False
+            version, conformal, kind = f"rules-only:{self.rules.version}", False, "rules"
             if outside:
                 extra = {"outside_training": outside[:6]}
+                novelty = ["outside_training"]
         else:
-            probs = self.model.predict_proba(x)[0]
+            calibration = self.model.calibrations.get(kind)
+            probs = self.model.predict_proba(x, kind)[0]
             probabilities = {
                 Severity(c): float(p) for c, p in zip(self.model.classes, probs, strict=True)
             }
-            raw_set = [Severity(c) for c in self.model.prediction_sets(probs[None, :])[0]]
             top = max(probabilities, key=lambda s: probabilities[s])
-            version, conformal = self.model.version, self.model.conformal_q is not None
-            q = self.model.conformal_q
-            set_empty = q is not None and not any(float(p) >= 1.0 - q for p in probs)
+            version = self.model.version
+            if calibration is not None:
+                chosen = calibration.classes_in(probs, self.model.classes)
+                set_empty, conformal = not chosen, True
+                raw_set = [Severity(c) for c in chosen] or [Severity(str(top))]
+                # An adaptive miss rate below zero means "keep every level": promise 100%.
+                alphas = {Severity(c): min(max(a, 0.0), 1.0) for c, a in calibration.alphas.items()}
+                extra = {
+                    "calibration": kind,
+                    "thresholds": {
+                        c: round(calibration.threshold(c), 4) for c in self.model.classes
+                    },
+                    "severe_miss_risk": calibration.epsilon,
+                    "guard": None if calibration.guard is None else round(calibration.guard, 4),
+                }
+            else:  # a model saved before per-level calibrations: one threshold for every level
+                raw_set = [Severity(c) for c in self.model.prediction_sets(probs[None, :])[0]]
+                conformal = self.model.conformal_q is not None
+                q = self.model.conformal_q
+                set_empty = q is not None and not any(float(p) >= 1.0 - q for p in probs)
+                kind = "single"
             if set_empty:
                 # No level is likely enough on its own: the model's most likely level and the
                 # rules' level both stay possible, and the conservative policy plans for the more
@@ -191,12 +227,27 @@ class SeverityEngine:
                 raw_set = sorted(
                     {Severity(str(top)), evaluation.rule_severity}, key=lambda s: s.rank
                 )
-            extra = {
+            novelty = self._novelty(x[0], features, raw_set, set_empty)
+            if not self.trained_on(system):
+                novelty.append("new_system")
+            if {"unusual_mix", "new_patterns"} & set(novelty):
+                # The model's probabilities are least trustworthy on a window unlike its
+                # training data, so the levels the rules leave open stay possible too.
+                rules_open = [
+                    s for s in SEVERITY_ORDER if evaluation.probabilities[s] >= RULES_ONLY_MIN_P
+                ]
+                raw_set = _span({*raw_set, *rules_open, evaluation.rule_severity})
+            extra |= {
+                "novelty": novelty,
                 "conformal_q": self.model.conformal_q,
-                "temperature": round(self.model.temperature, 4),
+                "temperature": round(
+                    calibration.temperature if calibration is not None else self.model.temperature,
+                    4,
+                ),
                 "top_contributions": self.model.contributions(x[0], str(top)),
             }
         shown = ", ".join(f"{s} {probabilities[s]:.2f}" for s in SEVERITY_ORDER)
+        words = coverage_words(alphas or dict.fromkeys(SEVERITY_ORDER, self.alpha))
         # Without the calibrated model the numbers are rule scores; the title says so too.
         model_eid = evidence.add(
             EvidenceKind.MODEL,
@@ -204,11 +255,10 @@ class SeverityEngine:
             source="severity.model",
             detail=(
                 (
-                    f"No severity is likely enough for the {1 - self.alpha:.0%} prediction set on "
-                    f"its own; the model's most likely class and the rules' stay possible: "
-                    f"{{{', '.join(raw_set)}}}."
+                    f"No severity is likely enough for the {words} on its own; the model's most "
+                    f"likely class and the rules' stay possible: {{{', '.join(raw_set)}}}."
                     if set_empty
-                    else f"{1 - self.alpha:.0%} prediction set: {{{', '.join(raw_set)}}}"
+                    else f"The {words}: {{{', '.join(raw_set)}}}"
                 )
                 if conformal
                 else (
@@ -224,6 +274,7 @@ class SeverityEngine:
                 "set_empty": set_empty,
                 "alpha": self.alpha,
                 "coverage_target": round(1 - self.alpha, 4),
+                "alphas": {str(k): v for k, v in alphas.items()},
                 "model_version": version,
                 "conformal": conformal,
                 **extra,
@@ -243,7 +294,39 @@ class SeverityEngine:
             conformal=conformal,
             set_empty=set_empty,
             outside_training=outside,
+            alphas=alphas,
+            calibration=kind,
+            novelty=novelty,
         )
+
+    def _novelty(
+        self,
+        x_row: np.ndarray,
+        features: WindowFeatures,
+        raw_set: Sequence[Severity],
+        set_empty: bool,
+    ) -> list[str]:
+        """Why this window should go to a person even though the model was used.
+
+        ``unusual_mix``: its features sit further from the training windows than nearly all
+        held-out windows do (a conformal p-value below the model's level). ``new_patterns``: so
+        does the share of its log patterns that are new to the system. ``empty_set`` and
+        ``every_level``: the set says the model cannot tell. (``new_system``, added by the
+        caller: the model never trained on the window's system.)
+        """
+        reasons: list[str] = []
+        stats = self.model.novelty if self.model is not None else None
+        if stats is not None:
+            if stats.p_value(self.model.standardise(x_row)) < stats.level:  # type: ignore[union-attr]
+                reasons.append("unusual_mix")
+            share = features.novel_templates / max(features.n_templates, 1)
+            if stats.share_p_value(share) < stats.level:
+                reasons.append("new_patterns")
+        if set_empty:
+            reasons.append("empty_set")
+        elif len(set(raw_set)) == len(SEVERITY_ORDER):
+            reasons.append("every_level")
+        return reasons
 
     async def assess(
         self,
@@ -257,7 +340,9 @@ class SeverityEngine:
         budget: BudgetGuard | None = None,
         use_llm: bool = True,
     ) -> SeverityResult:
-        pre = self.preliminary(features, alerts=alerts, evidence=evidence, related=related)
+        pre = self.preliminary(
+            features, system=system, alerts=alerts, evidence=evidence, related=related
+        )
         if pre.auto_decision(self.gate) is not None:
             return SeverityResult(decide(pre, gate=self.gate), pre, None)
         if not use_llm or router is None:
@@ -286,6 +371,12 @@ class SeverityEngine:
             llm_unavailable_reason=result.reason,
         )
         return SeverityResult(assessment, pre, result)
+
+
+def _span(levels: set[Severity]) -> list[Severity]:
+    """Every level between the most and the least severe of ``levels``, most severe first."""
+    ranks = sorted(level.rank for level in levels)
+    return [s for s in SEVERITY_ORDER if ranks[0] <= s.rank <= ranks[-1]]
 
 
 def _mtime(path: Path | None) -> int | None:

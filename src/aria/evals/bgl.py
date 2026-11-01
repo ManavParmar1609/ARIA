@@ -183,12 +183,12 @@ def _judge(
     feats: WindowFeatures,
     unseen: SeverityEngine | None = None,
 ) -> _Judged:
-    pre = engine.preliminary(feats, evidence=EvidenceStore())
+    pre = engine.preliminary(feats, system="bgl", evidence=EvidenceStore())
     decision = decide(pre, gate=engine.gate, llm_unavailable_reason="offline evaluation")
     probabilities = {str(k): v for k, v in pre.probabilities.items()}
     other: dict[str, Any] = {}
     if unseen is not None:
-        pre2 = unseen.preliminary(feats, evidence=EvidenceStore())
+        pre2 = unseen.preliminary(feats, system="bgl", evidence=EvidenceStore())
         decision2 = decide(pre2, gate=unseen.gate, llm_unavailable_reason="offline evaluation")
         probs2 = {str(k): v for k, v in pre2.probabilities.items()}
         other = {

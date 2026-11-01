@@ -246,6 +246,8 @@ guardrails:
 
 severity:
   alpha: 0.10
+  serious_alpha: 0.05
+  severe_miss_risk: 0.05
 
 retrieval:
   k: 3

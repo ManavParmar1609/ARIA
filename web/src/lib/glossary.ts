@@ -42,7 +42,7 @@ export const GLOSSARY = {
   "prediction-set": {
     term: "Short list (prediction set)",
     definition:
-      "The levels ARIA cannot rule out. Conformal prediction builds the list to hold the right level 90 times in 100 on incidents like the ones it was calibrated on; other logs can fall short. One level and a confident model: ARIA decides alone. Otherwise a model picks from the list, or a person decides.",
+      "The levels ARIA cannot rule out, built to hold the right level 95 times in 100 for a serious incident and 90 otherwise, on incidents like those it was calibrated on, and wider on systems ARIA has not trained on. One level and a confident model: ARIA decides alone. Otherwise a model picks, or a person decides.",
   },
   "safety-floor": {
     term: "Safety floor",
