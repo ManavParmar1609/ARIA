@@ -148,7 +148,7 @@ _ZERO_WIDTH = dict.fromkeys(map(ord, "\u200b‌‍⁠﻿"))
 # Latin letters drawn without their dot or in another shape. NFKC leaves these alone, so without
 # the fold a line written with them is a different string to the guard and the same line to a
 # reader. The stored line is never changed: only what the guard scans is folded.
-_LOOK_ALIKES = {
+_LOOK_ALIKES: dict[str, str | None] = {
     # Cyrillic
     "а": "a", "ԁ": "d", "е": "e", "һ": "h", "і": "i", "ј": "j", "о": "o", "р": "p", "ԛ": "q",
     "ѕ": "s", "у": "y", "ѵ": "v", "ԝ": "w", "с": "c", "х": "x", "ӏ": "l",
