@@ -133,7 +133,11 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         configure_logging(settings.log_level, settings.log_format)
-        configure_tracing(settings.otel_exporter, endpoint=settings.otlp_endpoint)
+        configure_tracing(
+            settings.otel_exporter,
+            endpoint=settings.otlp_endpoint,
+            metrics_endpoint=settings.otlp_metrics_endpoint,
+        )
         if settings.migrate_on_start and services is None:
             from aria.db.migrate import upgrade  # noqa: PLC0415 - Alembic only when asked
 
@@ -177,7 +181,11 @@ def create_app(
                     await svc.aclose()
 
     # Before the app exists: Azure Monitor instruments FastAPI apps created after it is set up.
-    configure_tracing(settings.otel_exporter, endpoint=settings.otlp_endpoint)
+    configure_tracing(
+        settings.otel_exporter,
+        endpoint=settings.otlp_endpoint,
+        metrics_endpoint=settings.otlp_metrics_endpoint,
+    )
     docs = not settings.is_prod  # production serves no API docs; docs/openapi.json has them
     app = FastAPI(
         title="ARIA",

@@ -8,7 +8,9 @@ until a reviewer approves it. Each audience has its own rules:
 * customers (status page): calm, no internal identifiers and no speculation about causes.
 
 An LLM may polish the deterministic drafts, but a polished draft that breaks its audience's
-rules is dropped in favour of the deterministic one.
+rules is dropped in favour of the deterministic one. Every draft, polished or not, then keeps
+only links to allowed hosts and configured recipients (aria.reporting.outbound): anything else
+is taken out and listed on the action for the reviewer.
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ from aria.llm.prompts import build_messages
 from aria.llm.router import LLMRouter
 from aria.llm.schemas import CommsOutput, MessageDraft
 from aria.reporting.grounding import validate_external_text
+from aria.reporting.outbound import DraftPolicy, screen_all
 from aria.reporting.writer import cited_evidence
 from aria.security.safety import check_text
 from aria.text import headline
@@ -123,7 +126,11 @@ async def draft_comms(
     budget: BudgetGuard | None = None,
     use_llm: bool = True,
     safety_check: bool = False,
+    policy: DraftPolicy | None = None,
 ) -> CommsOutcome:
+    """The audiences' drafts as proposals. ``policy`` says which hosts a draft may link to and
+    whom it may address; without one, only the run's own link stays."""
+    policy = policy or DraftPolicy.for_link(run_url)
     drafts = deterministic_drafts(report, service=service, run_url=run_url)
     known = {e.id for e in report.evidence}
     outcome = CommsOutcome(actions=[])
@@ -174,27 +181,39 @@ async def draft_comms(
         if problems:  # deterministic drafts should never fail; keep them out if they somehow do
             outcome.rejected.setdefault(key, []).extend(problems)
             continue
-        outcome.actions.append(_action(report, key, draft))
+        outcome.actions.append(_action(report, key, draft, policy))
     return outcome
 
 
-def _action(report: IncidentReport, key: str, draft: MessageDraft) -> OutboundAction:
+def _action(
+    report: IncidentReport, key: str, draft: MessageDraft, policy: DraftPolicy
+) -> OutboundAction:
+    """The draft as a proposal, with every link and recipient off the allow-list taken out and
+    listed on the action (``removed``) for the reviewer."""
+    (title, body), removed = screen_all((draft.title, draft.body), policy)
     return OutboundAction(
         action_id=action_id(report.report_id, key),
         kind=KIND[key],  # type: ignore[arg-type]
         audience=AUDIENCE[key],  # type: ignore[arg-type]
-        title=draft.title,
-        body=draft.body,
-        payload={"text": f"*{draft.title}*\n{draft.body}"} if KIND[key] == "slack" else {},
+        title=title,
+        body=body,
+        payload={"text": f"*{title}*\n{body}"} if KIND[key] == "slack" else {},
         evidence_ids=draft.evidence_ids,
+        removed=removed,
     )
 
 
 def redraft(
-    actions: Sequence[OutboundAction], report: IncidentReport, *, service: str, run_url: str
+    actions: Sequence[OutboundAction],
+    report: IncidentReport,
+    *,
+    service: str,
+    run_url: str,
+    policy: DraftPolicy | None = None,
 ) -> list[OutboundAction]:
     """The actions rewritten from the reviewed report. Used when a reviewer changed its severity or
     title: a draft written for the old facts must not go out under the new ones."""
+    policy = policy or DraftPolicy.for_link(run_url)
     drafts = {
         action_id(report.report_id, key): (key, draft)
         for key, draft in deterministic_drafts(report, service=service, run_url=run_url).items()
@@ -205,6 +224,6 @@ def redraft(
         rewritten.append(
             action
             if found is None
-            else _action(report, *found).model_copy(update={"status": action.status})
+            else _action(report, *found, policy).model_copy(update={"status": action.status})
         )
     return rewritten

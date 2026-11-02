@@ -170,7 +170,12 @@ function AlarmTable({ bgl }: { bgl: RealData["bgl"] }) {
     ["Always “quiet”", bgl.majority],
   ];
   return (
-    <div className="max-w-3xl overflow-x-auto">
+    <div
+      className="max-w-3xl overflow-x-auto"
+      tabIndex={0}
+      role="region"
+      aria-label="BlueGene/L severity by method"
+    >
       <table className="w-full text-sm">
         <caption className="pb-2 text-left text-xs text-muted-foreground">
           BlueGene/L, {count(bgl.windows)} stretches of {bgl.windowMin} minutes, rated from the
@@ -273,7 +278,12 @@ function MemoryRows({ data, more }: { data: Evaluation; more: RealData }) {
   ];
   return (
     <div className="grid max-w-3xl gap-3">
-      <div className="overflow-x-auto">
+      <div
+        className="overflow-x-auto"
+        tabIndex={0}
+        role="region"
+        aria-label="Finding the right past incident, by method"
+      >
         <table className="w-full text-sm">
           <caption className="pb-2 text-left text-xs text-muted-foreground">
             The right kind of past incident among the top three, per 100 questions

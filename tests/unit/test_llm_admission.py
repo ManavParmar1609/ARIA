@@ -4,17 +4,20 @@ short or declined, schema step-downs counted as requests, and the response cache
 from __future__ import annotations
 
 import json
-from collections import deque
+from collections import Counter, deque
+from collections.abc import AsyncIterator
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
 import httpx
+import httpx2
 import pytest
 from pydantic import BaseModel, SecretStr
 
 from aria.config import (
+    BudgetConfig,
     LLMConfig,
     ProviderConfig,
     ProviderKind,
@@ -22,20 +25,33 @@ from aria.config import (
     QuotaConfig,
     get_app_config,
 )
+from aria.contracts.inputs import TriageRequest
+from aria.contracts.run import RunStatus
+from aria.data.scenarios import LinePools, ScenarioBuilder
+from aria.db import repository as repo
+from aria.db.engine import get_engine, init_db
+from aria.graph.runner import TriageRunner
 from aria.graph.workflow import TRANSIENT
 from aria.llm.base import (
     LLMError,
     Message,
+    ModelRefusalError,
     NoProviderAvailableError,
+    OutputTruncatedError,
     ProviderError,
+    StructuredOutputError,
     Usage,
 )
+from aria.llm.budget import BudgetGuard
 from aria.llm.cache import ResponseCache, cache_key
+from aria.llm.claude import ClaudeProvider
 from aria.llm.fake import FakeProvider
 from aria.llm.quota import QuotaLedger
 from aria.llm.router import LLMRouter
 from aria.llm.visitor import VisitorKey
+from aria.services import Services
 
+FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "loghub"
 PACIFIC = ZoneInfo("America/Los_Angeles")
 NOON = datetime(2026, 10, 30, 12, 0, tzinfo=PACIFIC).timestamp()
 MESSAGES = [Message("system", "Pick one."), Message("user", "a or b?")]
@@ -166,8 +182,6 @@ async def test_a_transport_error_a_client_lets_through_never_reaches_the_graph()
 
 
 async def test_clients_are_built_to_send_each_request_once() -> None:
-    from aria.llm.claude import ClaudeProvider
-
     claude = ClaudeProvider(
         "claude",
         get_app_config().llm.providers["claude"],
@@ -175,6 +189,126 @@ async def test_clients_are_built_to_send_each_request_once() -> None:
     )
     assert claude._sdk().max_retries == 0  # the SDK's own retries are off
     await claude.aclose()
+
+
+class BreaksMidStream(httpx2.AsyncByteStream):
+    """A Claude stream whose connection drops after the first event."""
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        start = {
+            "type": "message_start",
+            "message": {
+                "id": "msg_1",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-opus-5-5",
+                "content": [],
+                "stop_reason": None,
+                "stop_sequence": None,
+                "usage": {"input_tokens": 12, "output_tokens": 1},
+            },
+        }
+        yield f"event: message_start\ndata: {json.dumps(start)}\n\n".encode()
+        msg = "peer closed the connection mid-stream"
+        raise httpx2.ReadError(msg)
+
+
+def breaking_claude(requests: list[int]) -> ClaudeProvider:
+    def handler(_: httpx2.Request) -> httpx2.Response:
+        requests.append(1)
+        headers = {"content-type": "text/event-stream"}
+        return httpx2.Response(200, headers=headers, stream=BreaksMidStream())
+
+    client = httpx2.AsyncClient(transport=httpx2.MockTransport(handler))
+    return ClaudeProvider(
+        "claude",
+        get_app_config().llm.providers["claude"],
+        api_key=SecretStr("sk-ant-test-0123456789abcdef"),
+        http_client=client,
+    )
+
+
+async def test_a_claude_stream_that_breaks_falls_over_after_one_request() -> None:
+    """Anthropic's SDK reads a stream with httpx2 and lets a broken stream's error through as it
+    is. The client turns it into a provider error, so the router's fallback (the one retry
+    layer) moves on, instead of the error escaping to the graph, where nothing retries it."""
+    requests: list[int] = []
+    claude = breaking_claude(requests)
+    with pytest.raises(ProviderError) as info:
+        await claude.chat(MESSAGES, json_schema={"type": "object"})
+    assert info.value.retryable
+    assert requests == [1]
+    cfg = LLMConfig(
+        providers={
+            "claude": get_app_config().llm.providers["claude"],
+            "fake": ProviderConfig(kind=ProviderKind.FAKE),
+        },
+        routing={"default": ["claude", "fake"]},
+        data_terms=get_app_config().llm.data_terms,
+    )
+    llm = LLMRouter(cfg, providers={"claude": claude, "fake": stand_in()}, ledger=QuotaLedger({}))
+    result = await llm.structured("default", "pick", MESSAGES, Pick)
+    assert result.provider == "fake"
+    assert requests == [1, 1]  # one request for this call, then the next provider
+    assert result.attempts[0]["provider"] == "claude"
+    await claude.aclose()
+
+
+async def test_a_transport_error_is_sent_once_per_call_and_never_reruns_a_step() -> None:
+    """Counted end to end: every model call the run makes reaches the broken provider exactly
+    once (the SDK does not retry), the router then hands it to the next provider (the one retry
+    layer), and no step of the graph runs twice (the node policy never retries a model call)."""
+    requests: list[int] = []
+    claude = breaking_claude(requests)
+    roles = ("adjudicator", "investigator", "reporter", "critic", "comms", "retriever", "default")
+    cfg = get_app_config().llm.model_copy(
+        update={
+            "routing": {
+                role: ["claude"] if role == "adjudicator" else ["claude", "fake"] for role in roles
+            }
+        }
+    )
+    # A high breaker threshold keeps the broken provider in every chain, so each call is seen.
+    llm = LLMRouter(
+        cfg,
+        providers={"claude": claude, "fake": FakeProvider()},
+        ledger=QuotaLedger({}),
+        breaker_threshold=1_000,
+    )
+    init_db(get_engine())
+    services = await Services.create(router=llm)
+    assessed: list[int] = []
+    assess = services.severity.assess
+
+    async def counted(*args: Any, **kwargs: Any) -> Any:
+        assessed.append(1)
+        return await assess(*args, **kwargs)
+
+    services.severity.assess = counted  # type: ignore[method-assign]
+    try:
+        builder = ScenarioBuilder(LinePools.from_loghub(FIXTURES))
+        scenario = builder.build(
+            "bgl.kernel_panic", seed=8, nodes=4, duration_min=6, incident_per_min=8
+        )
+        request = TriageRequest(title="Kernel panics", system="bgl", logs=scenario.lines)
+        outcome = await TriageRunner(services).start(request)
+    finally:
+        await services.aclose()
+    assert outcome.status is RunStatus.AWAITING_REVIEW  # the run fell over, it did not fail
+    events = repo.list_events(get_engine(), outcome.run_id)
+    to_claude = [
+        e for e in events if e.kind == "llm_call" and e.payload.get("provider") == "claude"
+    ]
+    assert to_claude  # the run did ask the broken provider
+    assert all(e.payload.get("error") for e in to_claude)
+    assert len(requests) == len(to_claude)  # one request per call: no retry in the client
+    # The severity step's model call (the adjudicator's, on the broken provider alone) failed,
+    # and the step still ran once: the graph retried nothing.
+    assert assessed == [1]
+    assert not [e for e in events if e.kind == "error"]
+    started = Counter(e.node for e in events if e.kind == "node_started")
+    replan_loop = {"investigate", "assess", "widen"}  # a replan runs these again, by design
+    assert all(count == 1 for node, count in started.items() if node not in replan_loop)
 
 
 # --- replies cut short, declined, or asked for again in another form ----------------------------
@@ -187,7 +321,13 @@ async def test_an_answer_cut_short_is_asked_for_once_more_with_twice_the_budget(
     assert result.value.choice == "b"
     assert [c["max_tokens"] for c in gemini.calls] == [700, 1_400]
     assert gemini.calls[1]["messages"] == MESSAGES  # the same request, not a repair
-    assert result.attempts[0] == {"provider": "gemini", "ok": False, "repair": 0, "stop": "length"}
+    first = result.attempts[0]
+    assert {k: first[k] for k in ("provider", "ok", "repair", "stop")} == {
+        "provider": "gemini",
+        "ok": False,
+        "repair": 0,
+        "stop": "length",
+    }
 
 
 async def test_an_answer_cut_short_twice_moves_on_without_a_repair() -> None:
@@ -198,6 +338,50 @@ async def test_an_answer_cut_short_twice_moves_on_without_a_repair() -> None:
     assert result.provider == "gemini-lite"
     assert len(gemini.calls) == 2
     assert lite.calls[0]["max_tokens"] == 1_400  # the larger budget carries on
+
+
+async def test_a_reply_cut_short_is_never_parsed_even_when_it_is_valid_json() -> None:
+    """The router checks how every reply ended itself, so a client that hands back JSON cut
+    short (and one that passes the provider's own word for it) never has it parsed."""
+    gemini = Model("gemini", ('{"choice": "x"}', "length"), ('{"choice": "y"}', "max_tokens"))
+    lite = Model("gemini-lite")
+    llm = router(config(), gemini, lite)
+    result = await llm.structured("default", "pick", MESSAGES, Pick, max_tokens=700)
+    assert (result.provider, result.value.choice) == ("gemini-lite", "a")
+    assert [a.get("stop") for a in result.attempts[:2]] == ["length", "length"]
+    assert llm.breaker("gemini").failures == 0  # a long answer is no fault of the provider
+
+
+async def test_a_cut_or_a_refusal_ends_on_the_deterministic_path_with_its_cost_counted() -> None:
+    """Typed stops are failures like any other: when no provider is left the caller hears a
+    StructuredOutputError (an LLMError) and takes its deterministic path. The tokens each
+    declined or cut-short reply was billed still count against the run's budget."""
+    cut = OutputTruncatedError("gemini: cut short", usage=Usage(input_tokens=40, output_tokens=700))
+    gemini = Model("gemini", cut, cut)
+    llm = router(config(), gemini)
+    budget = BudgetGuard(BudgetConfig())
+    with pytest.raises(StructuredOutputError) as info:
+        await llm.structured("adjudicator", "pick", MESSAGES, Pick, budget=budget, max_tokens=700)
+    assert isinstance(info.value, LLMError)
+    assert [c["max_tokens"] for c in gemini.calls] == [700, 1_400]
+    assert [a["stop"] for a in info.value.attempts] == ["length", "length"]
+    assert (budget.usage.tokens_in, budget.usage.tokens_out) == (80, 1_400)
+    assert llm.breaker("gemini").failures == 0
+
+    declined = ModelRefusalError(
+        "gemini: declined",
+        reason="content_filter",
+        usage=Usage(input_tokens=40, finish_reason="content_filter"),
+    )
+    refusing = Model("gemini", declined, '{"choice": "never asked"}')
+    llm = router(config(), refusing)
+    budget = BudgetGuard(BudgetConfig())
+    with pytest.raises(StructuredOutputError) as info:
+        await llm.structured("adjudicator", "pick", MESSAGES, Pick, budget=budget)
+    assert len(refusing.calls) == 1  # neither repaired nor asked again
+    assert info.value.attempts[0]["refused"] is True
+    assert budget.usage.tokens_in == 40
+    assert budget.calls[-1]["stop"] == "refusal"  # the run's call list says what happened
 
 
 async def test_a_refusal_is_never_repaired_on_the_same_provider() -> None:
