@@ -36,6 +36,7 @@ from typing import Any
 import numpy as np
 from sqlalchemy import Engine
 
+from aria.db import record
 from aria.db import repository as repo
 from aria.observability.logging import get_logger
 from aria.severity.conformal import FAMILIAR
@@ -173,11 +174,13 @@ def adapt_from_blind_checks(
     targets: Mapping[str, float],
     trained: Path | None = None,
     dry_run: bool = False,
+    actor: str = "system",
 ) -> dict[str, Any] | None:
     """Apply new blind checks to the live model and save it; None when there is nothing new.
 
     Like :func:`recalibrate_from_feedback`, the live file starts from the shipped model until it
-    exists, and starts again when an upgrade shipped a different one.
+    exists, and starts again when an upgrade shipped a different one. A saved model goes on the
+    decision record under ``actor`` (the job, or ``cli`` for the operator).
     """
     live = LinearModel.load(model_path) if model_path.exists() else None
     shipped = (
@@ -200,6 +203,20 @@ def adapt_from_blind_checks(
             version=adapted.version,
             applied=summary["applied"],
             missed=summary["missed"],
+        )
+        record.append(
+            engine,
+            kind="recalibration",
+            actor=actor,
+            payload={
+                "method": "blind_checks",
+                "from_version": model.version,
+                "model_version": adapted.version,
+                "applied": summary["applied"],
+                "missed": summary["missed"],
+                "replaced_scores": summary["replaced_scores"],
+                "file": model_path.name,
+            },
         )
     return {"model_version": adapted.version, **summary}
 
@@ -317,6 +334,7 @@ def recalibrate_from_feedback(
     min_new_reviews: int,
     dry_run: bool = False,
     trained: Path | None = None,
+    actor: str = "system",
 ) -> Recalibration | None:
     """Recalibrate when enough reviews have gathered since the loaded model was calibrated.
 
@@ -324,7 +342,8 @@ def recalibrate_from_feedback(
     recalibrates a different trained model (one an upgrade replaced), the ``trained`` model is
     the starting point (and is never written). New reviews are counted against the model file's
     own record, not the ``used`` marks, so a model restored from an older file recalibrates again
-    from the shared database. Returns None when there is nothing to do."""
+    from the shared database. Returns None when there is nothing to do. A saved model goes on
+    the decision record under ``actor``."""
     live = LinearModel.load(model_path) if model_path.exists() else None
     shipped = (
         LinearModel.load(trained)
@@ -356,5 +375,22 @@ def recalibrate_from_feedback(
         coverage_after=round(result.coverage_after, 3),
         threshold_before=result.threshold_before,
         threshold_after=round(result.threshold_after, 4),
+    )
+    record.append(
+        engine,
+        kind="recalibration",
+        actor=actor,
+        payload={
+            "method": "reviews",
+            "from_version": model.version,
+            "model_version": result.model.version,
+            "reviewed": result.reviewed,
+            "new_reviews": result.new_reviews,
+            "coverage_before": round(result.coverage_before, 4),
+            "coverage_after": round(result.coverage_after, 4),
+            "threshold_before": result.threshold_before,
+            "threshold_after": round(result.threshold_after, 4),
+            "file": model_path.name,
+        },
     )
     return result

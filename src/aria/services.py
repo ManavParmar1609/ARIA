@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 from sqlalchemy.engine import Engine
 
 from aria.config import AppConfig, Settings, get_app_config, get_settings
+from aria.db import record
 from aria.db.engine import get_engine
 from aria.llm.router import LLMRouter, get_router
 from aria.observability.logging import get_logger
@@ -25,6 +27,27 @@ def _load_ticket_models(path: Path) -> TicketModels | None:
         log.info("services.ticket_models_missing", path=str(path))
         return None
     return TicketModels.load(path)
+
+
+def _record_model_swap(
+    engine: Engine, severity: SeverityEngine
+) -> Callable[[str | None, str], None]:
+    """Put a running engine's model swap on the decision record: which version it used, which
+    it uses now, and the file it read. A failure raises out of the swap, loudly."""
+
+    def on_swap(previous: str | None, current: str) -> None:
+        record.append(
+            engine,
+            kind="model_swap",
+            actor="system",
+            payload={
+                "from_version": previous,
+                "model_version": current,
+                "file": severity.model_path.name if severity.model_path else None,
+            },
+        )
+
+    return on_swap
 
 
 @dataclass
@@ -59,6 +82,8 @@ class Services:
             memory, runbooks, engine=engine, router=router, config=config.retrieval
         )
         tickets = _load_ticket_models(Path(config.severity.ticket_model_file))
+        severity = SeverityEngine.load(config.severity, models_dir=settings.models_dir)
+        severity.on_swap = _record_model_swap(engine, severity)
         return cls(
             settings=settings,
             config=config,
@@ -67,7 +92,7 @@ class Services:
             runbooks=runbooks,
             memory=memory,
             retriever=retriever,
-            severity=SeverityEngine.load(config.severity, models_dir=settings.models_dir),
+            severity=severity,
             tickets=tickets,
         )
 

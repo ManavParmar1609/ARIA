@@ -48,6 +48,7 @@ import { systemName, triggerLabel } from "@/lib/systems";
 import { cn } from "@/lib/utils";
 
 import { Activity } from "./activity";
+import { DecisionRecord } from "./decision-record";
 import { Deliveries } from "./deliveries";
 import { EvidencePanel, EvidenceProvider } from "./evidence";
 import { ExpertCheck } from "./expert-check";
@@ -688,6 +689,8 @@ export function RunView({
             readOnly={detail.example}
           />
         ) : null}
+        {/* Once a person can decide (or has): what was decided, when and by whom. */}
+        {!viewing && !WORKING.has(detail.status) ? <DecisionRecord runId={detail.id} /> : null}
 
         {state.isError && !state.data ? (
           <ErrorState

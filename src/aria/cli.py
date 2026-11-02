@@ -25,11 +25,13 @@ train_app = typer.Typer(
 )
 providers_app = typer.Typer(no_args_is_help=True, help="Inspect LLM providers.")
 eval_app = typer.Typer(no_args_is_help=True, help="Evaluate ARIA and gate regressions.")
+audit_app = typer.Typer(no_args_is_help=True, help="The decision record.")
 app.add_typer(eval_app, name="eval")
 app.add_typer(db_app, name="db")
 app.add_typer(data_app, name="data")
 app.add_typer(train_app, name="train")
 app.add_typer(providers_app, name="providers")
+app.add_typer(audit_app, name="audit")
 console = Console()
 
 
@@ -83,6 +85,40 @@ def db_current() -> None:
     from aria.db.migrate import current
 
     current()
+
+
+# --- the decision record -------------------------------------------------------------------------
+
+
+@audit_app.command("verify")
+def audit_verify() -> None:
+    """Walk the decision record from its first entry and report the first broken link, if any.
+
+    Exits 1 when the chain does not hold (or the table is missing). Prints the newest hash, so
+    it can be kept somewhere outside the database and compared next time.
+    """
+    from sqlalchemy import inspect
+
+    from aria.db.engine import get_engine
+    from aria.db.record import verify
+
+    engine = get_engine()
+    if not inspect(engine).has_table("decision_record"):
+        console.print("The decision record is not set up yet. Run `aria db upgrade`.")
+        raise typer.Exit(code=1)
+    result = verify(engine)
+    entries = "entry" if result.length == 1 else "entries"
+    if result.ok:
+        console.print(f"The decision record holds {result.length} {entries} and every link holds.")
+        if result.head_hash:
+            console.print(f"Newest hash: {result.head_hash}")
+        return
+    console.print(
+        f"The decision record is broken at entry {result.first_broken}: {result.problem}. "
+        f"{result.length} {entries} were read. See docs/ops-runbook.md, "
+        '"The decision record", for what to do.'
+    )
+    raise typer.Exit(code=1)
 
 
 # --- data --------------------------------------------------------------------------------------
@@ -220,6 +256,7 @@ def train_recalibrate(
             targets=level_alphas(trained.classes, config.alpha, config.serious_alpha),
             trained=config.log_model_file,
             dry_run=dry_run,
+            actor="cli",
         )
         if adapted is None:
             console.print("no new blind checks to learn from")
@@ -233,6 +270,7 @@ def train_recalibrate(
         min_new_reviews=config.recalibrate_after if min_new_reviews is None else min_new_reviews,
         dry_run=dry_run,
         trained=config.log_model_file,
+        actor="cli",
     )
     if result is None:
         console.print("not enough new reviews to recalibrate yet")
@@ -361,7 +399,7 @@ def purge(
         )
         return
     _require_database()
-    result = purge_runs(get_engine(), days=period, dry_run=dry_run)
+    result = purge_runs(get_engine(), days=period, dry_run=dry_run, actor="cli")
     when = f"{result.cutoff:%Y-%m-%d %H:%M} UTC"
     verb = "would be deleted" if dry_run else "deleted"
     console.print(

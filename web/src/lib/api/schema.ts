@@ -157,6 +157,28 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/audit/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Verify Record
+         * @description Walk the decision record from its first entry and say whether every link holds: how
+         *     long it is, the first entry that breaks it (if any) and the newest hash, to anchor
+         *     elsewhere. It reads every entry, so call it on a schedule, not on every page view.
+         */
+        get: operations["verify_record_api_v1_audit_verify_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/blind-check": {
         parameters: {
             query?: never;
@@ -535,6 +557,7 @@ export type paths = {
         /**
          * Delete Run
          * @description Delete the run and everything derived from it (report, events, memory, checkpoints).
+         *     The deletion itself stays on the decision record, under the caller's name.
          */
         delete: operations["delete_run_api_v1_runs__run_id__delete"];
         options?: never;
@@ -650,6 +673,27 @@ export type paths = {
         };
         /** Get Postmortem */
         get: operations["get_postmortem_api_v1_runs__run_id__postmortem_md_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/record": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Run Record
+         * @description A run's decisions, oldest first: each review, edit, publish, message sent and blind check,
+         *     with who made it and the hashes that chain it to the rest of the record.
+         */
+        get: operations["run_record_api_v1_runs__run_id__record_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1124,6 +1168,27 @@ export type components = {
             /** Timezone */
             timezone: string;
         };
+        /**
+         * ChainCheck
+         * @description Whether the record holds together, from the first entry to the last.
+         */
+        ChainCheck: {
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /** First Broken */
+            first_broken?: number | null;
+            /** Head Hash */
+            head_hash?: string | null;
+            /** Length */
+            length: number;
+            /** Ok */
+            ok: boolean;
+            /** Problem */
+            problem?: string | null;
+        };
         /** Checkpoint */
         Checkpoint: {
             /** Checkpoint Id */
@@ -1198,6 +1263,36 @@ export type components = {
             improves_models?: boolean | null;
             /** Keeps Prompts */
             keeps_prompts?: string | null;
+        };
+        /**
+         * DecisionRecord
+         * @description One entry. Its hash covers every other field and the previous entry's hash.
+         */
+        DecisionRecord: {
+            /** Actor */
+            actor: string;
+            /** Hash */
+            hash: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "review" | "edit" | "publish" | "send" | "blind_check" | "recalibration" | "model_swap" | "purge" | "delete";
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+            /** Prev Hash */
+            prev_hash: string;
+            /** Run Id */
+            run_id?: string | null;
+            /** Seq */
+            seq: number;
+            /**
+             * Ts
+             * Format: date-time
+             */
+            ts: string;
         };
         DeleteTaskPushNotificationConfigRequest: {
             /** @example id */
@@ -2722,6 +2817,26 @@ export interface operations {
             };
         };
     };
+    verify_record_api_v1_audit_verify_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChainCheck"];
+                };
+            };
+        };
+    };
     blind_check_api_v1_blind_check_get: {
         parameters: {
             query?: never;
@@ -3557,6 +3672,43 @@ export interface operations {
                 };
                 content: {
                     "text/plain": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_record_api_v1_runs__run_id__record_get: {
+        parameters: {
+            query?: {
+                after?: number;
+                limit?: number;
+            };
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionRecord"][];
                 };
             };
             /** @description Validation Error */
