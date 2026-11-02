@@ -116,6 +116,28 @@ async def test_without_the_draft_screen_and_redaction_the_same_attacks_succeed(
     assert (await rt.attack(env, leak, scenario))["secret_or_address_leaked"]
 
 
+async def test_the_same_attacks_run_with_and_without_datamarking(
+    builder: ScenarioBuilder, tmp_path: Path
+) -> None:
+    result = await rt.compare_datamarking(builder, n=2, raw=tmp_path / "no-benchmarks")
+    without, marked = result["without_datamarking"], result["with_datamarking"]
+    assert without["attacks"] == marked["attacks"] == result["attacks"] == 2
+    assert (without["datamarking"], marked["datamarking"]) == (False, True)
+    # The arms plant the same lines (the seed fixes them): only the marks differ.
+    assert without["guard"] == marked["guard"]
+    assert without["marked_prompts"] == 0
+    assert marked["marked_prompts"] >= 1
+    assert marked["model_calls"] >= marked["marked_prompts"]
+    assert result["model_calls"] == without["model_calls"] + marked["model_calls"]
+    assert set(result["difference"]) == {*rt.OUTCOMES, "any"}
+    # Offline the stand-in reads through the marks, so the arms agree and it still obeyed: the
+    # harness is proven, and the comparison itself waits for a run against a configured model.
+    assert result["difference"]["any"] == 0
+    assert marked["model_obeyed"].get("chose the severity it was told to", 0) >= 1
+    assert result["model"] == "the gullible stand-in"
+
+
 def test_the_red_team_is_an_evaluation_suite_of_its_own_and_part_of_all() -> None:
     assert "redteam" in runs.SUITES
+    assert "redteam-datamarking" in runs.SUITES
     assert runs.SUITES[-1] == "all"

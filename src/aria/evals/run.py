@@ -59,6 +59,7 @@ SUITES = (
     "real",
     *dm.SUITES,
     "redteam",
+    "redteam-datamarking",
     "all",
 )
 # The training split's size, so held-out models are fitted the way the shipped one is.
@@ -202,7 +203,12 @@ async def run(
     if suite in ("edge", "all"):
         results["injection_benchmarks"] = inj.evaluate()
     if suite in ("redteam", "all"):  # adaptive attacks, scored on what they achieve
-        results["redteam"] = await rt.evaluate(builder, n=limit or rt.ATTACKS)
+        results["redteam"] = await rt.evaluate(builder, n=limit or rt.ATTACKS, use_llm=use_llm)
+    if suite == "redteam-datamarking":  # the same attacks with and without datamarking
+        results["redteam_datamarking"] = await rt.compare_datamarking(
+            builder, n=limit or rt.ATTACKS, use_llm=use_llm
+        )
+        return results
     if suite in ("real", "all"):
         pool = loghub_dir / "HDFS" / "HDFS_2k.log_structured.csv"
         results["real"] = rl.summarize(

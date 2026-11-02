@@ -422,6 +422,9 @@ guardrails:
   pseudonymize_ips: true
   detect_injection: true
   safety_model: false
+  # Mark the spaces inside every untrusted prompt block (spotlighting by datamarking) and tell
+  # the model what the marker means. Compare it first: `aria eval run --suite redteam-datamarking`.
+  datamark_untrusted: false
   max_line_chars: 2000
   max_lines: 20000
 

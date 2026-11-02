@@ -30,7 +30,12 @@ from aria.llm.base import (
     estimate_tokens,
     finish_reason,
 )
-from aria.llm.prompts import parse_context, parse_evidence_block, parse_untrusted_data
+from aria.llm.prompts import (
+    parse_context,
+    parse_evidence_block,
+    parse_untrusted_data,
+    strip_datamarks,
+)
 
 Responder = Callable[[dict[str, Any]], dict[str, Any]]
 _WORD = re.compile(r"[a-z0-9_]{3,}")
@@ -314,8 +319,11 @@ class FakeProvider:
             if responder is None:
                 msg = f"fake provider has no responder for task {schema_name!r}"
                 raise ProviderError(msg, status=400)
-            ctx = {**parse_context(messages), **parse_untrusted_data(messages)}
-            ctx["_evidence_block"] = parse_evidence_block(messages)
+            # Datamarked prompts are read the way the rule tells a model to read them: each
+            # marker as the space it stands for. What was sent is kept in ``calls`` as sent.
+            plain = [Message(m.role, strip_datamarks(m.content)) for m in messages]
+            ctx = {**parse_context(plain), **parse_untrusted_data(plain)}
+            ctx["_evidence_block"] = parse_evidence_block(plain)
             text = json.dumps(responder(ctx), ensure_ascii=False)
         if on_token is not None:
             for piece in re.findall(r"\S+\s*", text):

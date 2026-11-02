@@ -82,7 +82,7 @@ from aria.llm.fake import FakeProvider
 from aria.llm.jsonschema import extract_json, strict_schema
 from aria.llm.local_embed import LocalEmbeddingProvider
 from aria.llm.openai_compat import OpenAICompatibleProvider
-from aria.llm.prompts import repair_message
+from aria.llm.prompts import datamark_messages, repair_message
 from aria.llm.quota import (
     Capacity,
     QuotaLedger,
@@ -293,9 +293,13 @@ class LLMRouter:
         ledger: QuotaLedger | None = None,
         cache: ResponseCache | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        datamark: bool = False,
     ) -> None:
         self.config = config
         self.allow_fake = env is not Environment.PROD
+        # Spotlighting by datamarking (guardrails.datamark_untrusted): every prompt's untrusted
+        # blocks are marked on the way out, once, here, for every provider alike.
+        self.datamark = datamark
         self._providers: dict[str, Any] = dict(providers or {})
         self._models_dir = models_dir
         self._breakers: dict[str, CircuitBreaker] = {}
@@ -501,6 +505,8 @@ class LLMRouter:
         max_repairs: int = 1,
     ) -> LLMResult[M]:
         schema_dict = json_schema or strict_schema(schema)
+        if self.datamark:
+            messages = datamark_messages(messages)
         attempts: list[dict[str, Any]] = []
         total = Usage()
         chain = self.chain(role)
@@ -605,6 +611,8 @@ class LLMRouter:
         model_field: Literal["chat_model", "safety_model"] = "chat_model",
         chain: Sequence[str] | None = None,
     ) -> LLMResult[str]:
+        if self.datamark:
+            messages = datamark_messages(messages)
         attempts: list[dict[str, Any]] = []
         names = (
             [n for n in chain if self.is_available(n)] if chain is not None else self.chain(role)
@@ -992,12 +1000,14 @@ def _add(a: Usage, b: Usage) -> Usage:
 @lru_cache(maxsize=1)
 def get_router() -> LLMRouter:
     settings = get_settings()
-    config = get_app_config().llm
+    app = get_app_config()
+    config = app.llm
     return LLMRouter(
         config,
         env=settings.env,
         models_dir=settings.models_dir,
         ledger=QuotaLedger.from_config(config, path=settings.quota_path),
+        datamark=app.guardrails.datamark_untrusted,
     )
 
 
