@@ -279,6 +279,8 @@ Processes log to standard output. With `ARIA_LOG_FORMAT=json`, each line is one 
 | `notify.sent`, `notify.failed` | An approved message was delivered, or was not |
 | `scan.started`, `scan.run_opened`, `scan.followup`, `scan.covered`, `scan.failed` | The log scan |
 | `severity.adapted`, `severity.recalibrated`, `severity.model_reloaded`, `severity.recalibration_failed`, `severity.model_missing` | The severity model |
+| `severity.severe_miss_alarm` | Blind checks show more severe misses than the model's calibration promises, with confidence (see [The severe-miss alarm](#the-severe-miss-alarm)). Logged on every recalibration round while it stands. |
+| `severity.history_unavailable` | A run was rated without the system's baseline and dismissed patterns because the database did not answer; the run went on without them |
 | `services.ticket_models_missing` | No ticket model was found at start |
 | `retention.purged`, `retention.purge_failed` | The retention purge deleted runs (with how many rows of each kind, and how many runs it left because a process held them), or failed and will try again on its next round |
 | `record.appended`, `record.failed` | A decision went on the decision record, or could not be written. `record.failed` is an error: the step that made the decision failed with it (a run marked failed, a request answered with an error, a job that logs the failure), so look into it at once. See [The decision record](#the-decision-record). |
@@ -454,6 +456,7 @@ It saves the model to `severity_log.json` in `ARIA_MODELS_DIR` under a version s
 - `GET /api/v1/feedback` reports the reviews and the model version; `GET /api/v1/blind-check` reports how many blind checks there are.
 - The log line `severity.adapted` records each change (`severity.recalibrated` for the older single-threshold models).
 - `GET /api/v1/drift` and "Has anything shifted?" in Settings compare each system's recent levels with its earlier ones.
+- The log line `severity.severe_miss_alarm` says the blind checks show more severe misses than the calibration promises ([below](#the-severe-miss-alarm)).
 
 In `external` mode the workers run the job. The API checks the shared model file before it answers `/api/v1/feedback`, so it reports the version the workers wrote.
 
@@ -471,6 +474,29 @@ It prints how many checks would apply, how many the sets missed and the new miss
 2. Then set `severity.recalibrate_check_s: 0` and restart: the restored file has not seen the later checks, so the next check would apply them again.
 
 In containers, the live model sits on the shared volume, so it survives a recreated container. In a checkout, `ARIA_MODELS_DIR` is `models/`, so a change rewrites the committed model file (the previous version stays beside it).
+
+### The severe-miss alarm
+
+A severe miss is an incident a person rated SEV1 or SEV2 that ARIA rated SEV3 or SEV4. The model's calibration promises that they stay rare (`severity.severe_miss_risk`, the risk its guard was certified for; without a certificate, the serious levels' target, `severity.serious_alpha`). Every recalibration round reads the blind checks of incidents people rated SEV1 or SEV2, in the order they arrived, and tests whether the share ARIA missed has gone above that promise with confidence. The test is anytime-valid (a mixture likelihood-ratio martingale read against Ville's inequality, [`drift.py`](../src/aria/severity/drift.py)): you may look after every check, and over an endless run of checks it sounds falsely at most one time in twenty. Once it sounds it stays up; later checks cannot withdraw it.
+
+**What it does.** Nothing by itself. It is logged as `severity.severe_miss_alarm` (a warning, with the checks, the misses, the promised rate and the check at which it first sounded) on every round while it stands, and `aria train recalibrate --dry-run` returns it under `severe_miss_alarm` whenever there are new checks to report on. It needs blind checks that record ARIA's level, which every check made through the console does.
+
+**What to do.** Treat it as a recommendation to recalibrate or retrain:
+
+1. Look at the missed incidents in the console (Settings, "Check ARIA blind" shows the count; the run view shows each run's rating against the reviewer's).
+2. Let the blind checks keep coming: each one already moves its level's miss rate, and after enough of a level its calibration scores are replaced by the checks' own ([Recalibration](#recalibration)).
+3. If the misses share a system or a kind of incident, add its lines to the training pools and retrain (`make train`), or add a rule for what the model misses, chosen on validation seeds only ([`docs/validation-log.md`](validation-log.md)).
+
+The alarm does not expose itself on `/metrics` or `GET /api/v1/drift` yet: alert on the log line.
+
+### The system's own baseline and dismissed patterns
+
+Two things ARIA reads from its own database before rating a window on a system ([`src/aria/severity/history.py`](../src/aria/severity/history.py)). Neither needs setup, and neither exists on a fresh database.
+
+- **The baseline.** The median error ratio of the system's last 30 finished runs (the events and errors each run's parsing step recorded), once it has at least 5. The window's error ratio against it is a burn rate in the SRE workbook's sense, and two rules read it: errors at six times the usual ratio with at least ten of them in a hundred lines, and at fourteen times with at least twenty. The run view shows the figure as a feature item, "Errors at N× this system's usual ratio", with the median and the runs behind it. Visitors' own runs on a shared demo, and runs still queued or running, never count. The baseline follows what you send: a system triaged only when it is on fire has a high baseline, and deleting or purging runs changes it.
+- **Dismissed patterns.** The log patterns on the issue lines of the system's runs whose reviewers discarded the draft or lowered the level to SEV4 (its newest 200 reviews). When most of a window's issue lines follow them, the run view shows a feedback item, "Reviewers dismissed this pattern N times before on <system>", and the severity's rationale repeats it. It informs the reviewer and never lowers the level. It needs the runs' stored lines, so a purge or a deletion forgets those reviews.
+
+When the database does not answer, the run goes on without both and logs `severity.history_unavailable`.
 
 ### Enable the log scan
 

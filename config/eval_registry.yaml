@@ -15,17 +15,19 @@ suites:
     status: tuned
     note: >-
       Fresh windows of the training systems. Rules and features were developed on its validation
-      seeds; the published test seeds were never used to choose anything. A regression tripwire,
-      not a measure of new systems.
+      seeds, including rules version 2026.11.3 and lexicon 2.2 (docs/validation-log.md records
+      every candidate run); the published test seeds were never used to choose anything. A
+      regression tripwire, not a measure of new systems.
   generalisation:
     ring: B
     status: tuned
     since: "2026-11-01"
     note: >-
       Each system and failure mode held out in turn. The per-level calibration, the novelty
-      check, lexicon version 2 and the rule changes of 2026-11-01 were chosen on held-out-system
-      folds of validation seeds 51-56; the published folds use the test seeds, never used to
-      choose anything.
+      check, lexicon version 2 and the rule changes of 2026-11-01, and the patterns-beside-lines,
+      cancellation, baseline and unlevelled-line changes of rules version 2026.11.3, were chosen
+      on held-out-system folds of validation seeds 51-56; the published folds use the test seeds,
+      never used to choose anything.
   real.hdfs:
     ring: C
     status: seen

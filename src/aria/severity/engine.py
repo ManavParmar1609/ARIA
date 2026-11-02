@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+import asyncio
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -21,9 +22,10 @@ from aria.observability.logging import get_logger
 from aria.severity.adjudicator import Adjudication, adjudicate
 from aria.severity.conformal import FAMILIAR
 from aria.severity.features import log_feature_row
+from aria.severity.history import HistoryContext, SystemHistory
 from aria.severity.model import LinearModel, live_model_path
-from aria.severity.policy import Preliminary, coverage_words, decide
-from aria.severity.rules import RuleSet, feature_space, load_rules
+from aria.severity.policy import DismissedNote, Preliminary, coverage_words, decide
+from aria.severity.rules import HISTORY_FEATURES, RuleSet, feature_space, load_rules
 
 log = get_logger(__name__)
 RULES_ONLY_MIN_P = 0.2
@@ -55,12 +57,16 @@ class SeverityEngine:
         alpha: float,
         model_path: Path | None = None,
         trained_version: str | None = None,
+        history: SystemHistory | None = None,
     ) -> None:
         self.rules = rules
         self.default_alpha = alpha
         self.model_path = model_path
         # The version this release trained: a recalibration of any other is stale.
         self.trained_version = trained_version
+        # The deployment's own runs and reviews (the runner sets it); None reads nothing, as
+        # evaluations do.
+        self.history = history
         self._model_mtime = _mtime(model_path)
         # Told (previous version, new version) whenever a running engine swaps its model, so the
         # swap goes on the decision record (aria.services wires it up).
@@ -156,12 +162,15 @@ class SeverityEngine:
         alerts: Sequence[AlertSignal] = (),
         evidence: EvidenceStore,
         related: Sequence[str] = (),
+        history: HistoryContext | None = None,
     ) -> Preliminary:
         self.refresh()
-        values = feature_space(features, alerts)
+        values = feature_space(features, alerts, history.features if history else None)
         evaluation = self.rules.evaluate(values)
         hits: list[RuleHit] = []
         rule_ids: list[str] = []
+        if history is not None and history.features:
+            _history_evidence(evidence, system, features, history.features)
         for hit in evaluation.hits:
             eid = evidence.add(
                 EvidenceKind.RULE,
@@ -303,7 +312,21 @@ class SeverityEngine:
             alphas=alphas,
             calibration=kind,
             novelty=novelty,
+            dismissed=_dismissed_note(evidence, system, features, history),
         )
+
+    async def _lookup(self, system: str, features: WindowFeatures) -> HistoryContext | None:
+        """The system's history, read in a thread. None without a database, and when the
+        database does not answer: a triage never fails for want of history."""
+        if self.history is None:
+            return None
+        try:
+            return await asyncio.to_thread(
+                self.history.lookup, system, error_ratio=features.error_ratio
+            )
+        except Exception:  # history is a convenience: log it and rate the window without it
+            log.exception("severity.history_unavailable", system=system)
+            return None
 
     def _novelty(
         self,
@@ -346,8 +369,14 @@ class SeverityEngine:
         budget: BudgetGuard | None = None,
         use_llm: bool = True,
     ) -> SeverityResult:
+        history = await self._lookup(system, features)
         pre = self.preliminary(
-            features, system=system, alerts=alerts, evidence=evidence, related=related
+            features,
+            system=system,
+            alerts=alerts,
+            evidence=evidence,
+            related=related,
+            history=history,
         )
         if pre.auto_decision(self.gate) is not None:
             return SeverityResult(decide(pre, gate=self.gate), pre, None)
@@ -360,7 +389,7 @@ class SeverityEngine:
             return SeverityResult(
                 decide(pre, gate=self.gate, llm_unavailable_reason=reason), pre, None
             )
-        values = feature_space(features, alerts)
+        values = feature_space(features, alerts, history.features if history else None)
         result = await adjudicate(
             pre,
             system=system,
@@ -377,6 +406,62 @@ class SeverityEngine:
             llm_unavailable_reason=result.reason,
         )
         return SeverityResult(assessment, pre, result)
+
+
+def _history_evidence(
+    evidence: EvidenceStore, system: str, features: WindowFeatures, found: Mapping[str, float]
+) -> str:
+    """The window's error ratio against the system's own baseline, as a feature item."""
+    burn = found.get("error_ratio_vs_baseline", 0.0)
+    return evidence.add(
+        EvidenceKind.FEATURE,
+        f"Errors at {burn:.1f}x this system's usual ratio",
+        source="severity.history",
+        detail=(
+            f"error ratio {features.error_ratio:.4f} against a median of "
+            f"{found.get('baseline_error_ratio', 0.0):.4f} over {system}'s last "
+            f"{int(found.get('baseline_runs', 0))} finished runs (the Google SRE workbook's "
+            "burn rate, with this system's usual ratio as the budget)"
+        ),
+        data={
+            "error_ratio": features.error_ratio,
+            **{k: found[k] for k in HISTORY_FEATURES if k in found},
+        },
+    )
+
+
+def _dismissed_note(
+    evidence: EvidenceStore,
+    system: str,
+    features: WindowFeatures,
+    history: HistoryContext | None,
+) -> DismissedNote | None:
+    """A feedback item when most of the window's issue lines follow patterns reviewers dismissed
+    on this system before. It is shown to the reviewer and scored by nothing."""
+    if history is None or history.dismissed is None:
+        return None
+    match = history.dismissed.match(features.issue_templates, features.issue_events)
+    if match is None:
+        return None
+    times = "once" if match.reviews == 1 else f"{match.reviews} times"
+    eid = evidence.add(
+        EvidenceKind.FEEDBACK,
+        f"Reviewers dismissed this pattern {times} before on {system}",
+        source="memory.feedback",
+        detail=(
+            f"{match.matched_lines} of the window's {match.issue_lines} issue lines follow log "
+            f"patterns from {system} reports that reviewers discarded or lowered to SEV4 "
+            f"({match.reviews} such reviews). This informs the review; it does not lower the "
+            "level."
+        ),
+        data={
+            "dismissed_reviews": match.reviews,
+            "matched_lines": match.matched_lines,
+            "issue_lines": match.issue_lines,
+            "templates": list(match.templates),
+        },
+    )
+    return DismissedNote(match.reviews, match.matched_lines, match.issue_lines, eid)
 
 
 def _span(levels: set[Severity]) -> list[Severity]:

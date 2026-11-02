@@ -10,8 +10,14 @@
 # Version 2.1 adds the fatal forms that the generic families blur: a filesystem that shut itself
 # down, a hardware event the firmware calls fatal, redundancy gone, and commands that delete the
 # backups an attacker would need gone (MITRE ATT&CK T1490).
+# Version 2.2 adds client-side cancellations, which OpenTelemetry records at DEBUG: a window whose
+# errors are mostly cancellations is discounted by the rules (config/severity_rules.yaml).
+#
+# Each category is also counted as distinct log patterns (keyword_templates,
+# issue_keyword_templates) and as its share of the issue lines (issue_keyword_share), so a rule
+# can tell one message repeated by one node from many.
 
-version: 2.1
+version: 2.2
 
 categories:
   # "Software caused connection abort" is a dropped connection, not a crash.
@@ -44,6 +50,10 @@ categories:
   storage_fatal: "ext[234]-fs error|shutting down filesystem|xfs_do_force_shutdown|filesystem (has been )?shut ?down|remount(ing|ed)? (filesystem )?read-only|journal (has )?abort(ed)?"
   hardware_fatal: "event severity: fatal|uncorrect(ed|able) (machine check|memory error|ecc)|machine check exception|\\[hardware error\\][^.]*fatal"
   redundancy_lost: "no redundancy|redundancy (lost|degraded|is lost)|replication (broken|failed|stopped|halted|error)|(raid|array|mirror)[^.]*degraded|degraded (raid|array|mirror)|under-?replicated|insufficient (replicas|redundancy)"
+  # --- new in version 2.2: client-side cancellations --------------------------------------------
+  # The client gave up or went away: the server did nothing wrong, and OpenTelemetry records these
+  # at DEBUG. A deadline that expired is a timeout (unavailable), not a cancellation.
+  cancellation: "context cancell?ed|client closed (the )?(request|connection)|\\b(http|status|code|response_code)[ _=:]*499\\b|\" 499 |code = cancell?ed|status(_?code)?[ .=:]+cancell?ed|grpc[^.]{0,30}\\bcancell?ed\\b|request (was )?cancell?ed by (the )?(client|caller|user)|cancell?ed by (the )?(client|caller|user)|operation was cancell?ed|client disconnected (before|while)|cancellation ?(token|requested)"
 
 sources:
   crash: ["Linux kernel oops and panic messages", "Kubernetes container states (CrashLoopBackOff)"]
@@ -77,3 +87,8 @@ sources:
   storage_fatal: ["Linux ext4 and XFS error and shutdown messages", "Kubernetes node-problem-detector kernel monitor"]
   hardware_fatal: ["UEFI CPER event severity (fatal, not corrected)", "Linux machine-check exceptions"]
   redundancy_lost: ["PagerDuty severity levels: no redundancy left", "database replication and RAID status messages", "HDFS under-replicated blocks"]
+  cancellation:
+    - "OpenTelemetry semantic conventions for exceptions in logs: a client cancellation is recorded at DEBUG, a handled exception at WARN"
+    - "gRPC status codes: CANCELLED (code 1), as Go prints it (rpc error: code = Canceled desc = context canceled)"
+    - "nginx status 499: the client closed the request"
+    - "Go's context package and .NET's CancellationToken"

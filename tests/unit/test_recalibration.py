@@ -411,3 +411,38 @@ def test_blind_checks_in_the_database_adapt_the_live_model(tmp_path: Path) -> No
     assert result["applied"] == 12
     assert LinearModel.load(live).metadata["aci"]["checks"] == 12
     assert adapt_from_blind_checks(engine, live, targets=targets, trained=trained) is None
+
+
+def test_blind_checks_of_serious_incidents_feed_the_severe_miss_alarm_in_arrival_order(
+    tmp_path: Path,
+) -> None:
+    engine = get_engine()
+    init_db(engine)
+    trained = tmp_path / "severity_log.json"
+    calibrated_tiny(alpha=0.1).save(trained)
+    live = tmp_path / "live" / "severity_log.json"
+    # Five serious incidents, four of them rated SEV3 or SEV4 by ARIA; one the person rated SEV3
+    # (not a serious incident, so not a check of the promise); one check without ARIA's level.
+    rows = [
+        ("SEV1", "SEV4"),
+        ("SEV2", "SEV4"),
+        ("SEV3", "SEV3"),
+        ("SEV1", "SEV2"),
+        ("SEV2", "SEV3"),
+        ("SEV1", None),
+        ("SEV1", "SEV4"),
+    ]
+    for i, (theirs, aria) in enumerate(rows):
+        value = {"to": theirs, "model_row": {"x": -2.0}, "calibration": FAMILIAR}
+        if aria is not None:
+            value["aria"] = aria
+        repo.save_feedback(engine, f"run-{i}", "blind_check", value, author="ana")
+    targets = dict.fromkeys(CLASSES, 0.1)
+    result = adapt_from_blind_checks(engine, live, targets=targets, trained=trained, dry_run=True)
+    assert result is not None
+    alarm = result["severe_miss_alarm"]
+    assert (alarm["checks"], alarm["misses"]) == (5, 4)
+    assert alarm["promised"] == 0.1  # no certified guard: the serious levels' target
+    assert alarm["raised"]
+    assert alarm["raised_at"] <= 5
+    assert not live.exists()  # a dry run, and the alarm itself, change nothing

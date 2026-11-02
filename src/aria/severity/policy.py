@@ -11,6 +11,10 @@
    below a serious level the set kept possible.
 4. With no LLM (none configured, budget spent, or invalid output), the most severe class in the
    set is chosen and flagged for human review: under-triage costs more than over-triage.
+
+A note from the system's own history rides along without moving anything: when most of the
+window's issue lines follow patterns reviewers dismissed before (``aria.severity.history``), the
+rationale says how many times, for the reviewer to weigh.
 """
 
 from __future__ import annotations
@@ -21,6 +25,17 @@ from typing import Any
 
 from aria.contracts.base import SEVERITY_ORDER, Claim, Severity
 from aria.contracts.severity import DecidedBy, RuleHit, SeverityAssessment
+
+
+@dataclass(frozen=True)
+class DismissedNote:
+    """Reviewers dismissed most of this window's issue patterns before (``aria.severity.history``):
+    a note for the reviewer, never a reason to lower the level."""
+
+    reviews: int  # dismissed reviews whose runs shared a matched pattern
+    matched_lines: int
+    issue_lines: int
+    evidence_id: str
 
 
 @dataclass
@@ -51,6 +66,8 @@ class Preliminary:
     # Why a person should confirm even though the model was used (see SeverityEngine._novelty),
     # or "outside_training" when it was not. Any reason rules out an automatic decision.
     novelty: list[str] = field(default_factory=list)
+    # Reviewers dismissed most of this window's issue patterns before: shown, never scored.
+    dismissed: DismissedNote | None = None
 
     @property
     def prediction_set(self) -> list[Severity]:
@@ -174,6 +191,20 @@ def _base_claims(pre: Preliminary) -> list[Claim]:
             Claim(
                 text=f"A person should confirm this severity: {'; '.join(reasons)}.",
                 evidence_ids=_cite([pre.model_evidence]),
+            )
+        )
+    if pre.dismissed is not None:
+        note = pre.dismissed
+        times = "once" if note.reviews == 1 else f"{note.reviews} times"
+        claims.append(
+            Claim(
+                text=(
+                    f"Reviewers dismissed this pattern {times} before: {note.matched_lines} of "
+                    f"the window's {note.issue_lines} issue lines follow log patterns from "
+                    "reports they discarded or lowered to SEV4. This informs the review and does "
+                    "not lower the level."
+                ),
+                evidence_ids=[note.evidence_id],
             )
         )
     floors = [hit for hit in pre.rule_hits if hit.effect == "floor"]

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import secrets
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -26,6 +26,7 @@ from aria.db.models import (
     STORE_SEP,
     ActionRow,
     FeedbackRow,
+    LogEventRow,
     ReportRow,
     RunEventRow,
     RunRow,
@@ -603,6 +604,83 @@ def mark_feedback_used(engine: Engine, ids: Sequence[int]) -> None:
     with session_scope(engine) as session:
         for row in session.scalars(select(FeedbackRow).where(FeedbackRow.id.in_(list(ids)))):
             row.used_for_training = True
+
+
+# --- a system's own history (read at triage time; see aria.severity.history) ---------------------
+
+
+def recent_error_ratios(engine: Engine, system: str, *, limit: int = 30) -> list[float]:
+    """The error ratio of each of the system's latest runs that got past parsing, newest first.
+
+    Read from the ``merge`` step's finished event, which records the window's events and errors,
+    so it needs no column of its own. Runs still queued or running stay out, the run being
+    triaged among them, as do visitors' own runs on a shared demo.
+    """
+    stmt = (
+        select(RunEventRow.payload)
+        .join(RunRow, RunRow.id == RunEventRow.run_id)
+        .where(
+            RunRow.system == system,
+            RunRow.visitor.is_(None),
+            RunRow.status.not_in(("queued", "running")),
+            RunEventRow.kind == "node_finished",
+            RunEventRow.node == "merge",
+        )
+        .order_by(RunRow.created_at.desc(), RunEventRow.id.desc())
+        .limit(limit)
+    )
+    ratios: list[float] = []
+    with session_scope(engine) as session:
+        for (payload,) in session.execute(stmt):
+            events, errors = payload.get("events"), payload.get("errors")
+            if isinstance(events, int) and events > 0 and isinstance(errors, int):
+                ratios.append(min(1.0, max(0.0, errors / events)))
+    return ratios
+
+
+def dismissed_reviews(engine: Engine, system: str, *, limit: int = 200) -> list[str]:
+    """Runs on this system whose review dismissed ARIA's rating, newest first: the reviewer
+    discarded the draft, or lowered the level to SEV4. Read from the system's newest ``limit``
+    reviews; each run once. Visitors' own runs record no reviews, so none appear."""
+    stmt = (
+        select(FeedbackRow.run_id, FeedbackRow.value)
+        .join(RunRow, RunRow.id == FeedbackRow.run_id)
+        .where(FeedbackRow.field == "review", RunRow.system == system, RunRow.visitor.is_(None))
+        .order_by(FeedbackRow.id.desc())
+        .limit(limit)
+    )
+    dismissed: list[str] = []
+    with session_scope(engine) as session:
+        for run_id, value in session.execute(stmt):
+            lowered = value.get("to") == "SEV4" and value.get("from") != "SEV4"
+            if (value.get("decision") == "reject" or lowered) and run_id not in dismissed:
+                dismissed.append(str(run_id))
+    return dismissed
+
+
+def issue_templates_of(
+    engine: Engine, run_ids: Sequence[str], *, levels: Collection[str], dataset: str = "run"
+) -> dict[str, set[str]]:
+    """Each run's log patterns on its stored lines at ``levels`` or with no level (its issue
+    lines), from the run's own analysed lines (``aria.retrieval.runlog``). A run whose lines are
+    gone is left out."""
+    if not run_ids:
+        return {}
+    stmt = (
+        select(LogEventRow.window_id, LogEventRow.template_id)
+        .where(
+            LogEventRow.dataset == dataset,
+            LogEventRow.window_id.in_(list(run_ids)[:500]),
+            LogEventRow.template_id.is_not(None),
+            or_(LogEventRow.level.in_(sorted(levels)), LogEventRow.level.is_(None)),
+        )
+        .distinct()
+    )
+    out: dict[str, set[str]] = {}
+    with session_scope(engine) as session:
+        for window_id, template in session.execute(stmt):
+            out.setdefault(str(window_id), set()).add(str(template))
+    return out
 
 
 # --- the external worker's queue -----------------------------------------------------------------
