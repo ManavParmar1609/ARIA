@@ -57,7 +57,7 @@ export const Measured = () => {
         <Row
           start={20}
           figure={measured.accuracy}
-          label={`severity accuracy on ${measured.windows} held-out windows`}
+          label={`severity accuracy on ${measured.windows} held-out windows of familiar systems`}
           note={`A text classifier on the same lines: ${measured.tfidf}. Rules alone: ${measured.rules}.`}
         />
         <Row
@@ -88,9 +88,10 @@ export const Measured = () => {
           ...enter(frame, 10),
         }}
       >
-        The first two use semi-synthetic incidents built from real Loghub lines, so they are not
-        accuracy on production incidents; the last two are one real log and attacks written by
-        others. Method and every number: docs/evaluation.md ({measured.commit}).
+        The first two use semi-synthetic incidents built from real Loghub lines, fresh windows of
+        the systems ARIA learned from: not accuracy on production incidents, nor on a system it
+        never saw. The last two are one real log and attacks written by others. Method and every
+        number: docs/evaluation.md ({measured.commit}).
       </p>
     </Stage>
   );

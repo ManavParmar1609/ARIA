@@ -42,12 +42,47 @@ export const GLOSSARY = {
   "prediction-set": {
     term: "Short list (prediction set)",
     definition:
-      "The levels ARIA cannot rule out, built to hold the right level 95 times in 100 for a serious incident and 90 otherwise, on incidents like those it was calibrated on, and wider on systems ARIA has not trained on. One level and a confident model: ARIA decides alone. Otherwise a model picks, or a person decides.",
+      "The levels ARIA cannot rule out, each kept on the list by a promise of its own: tighter for SEV1 and SEV2 than for SEV3 and SEV4, on incidents like those ARIA was calibrated on. One level and a confident model: ARIA decides alone. Otherwise a model picks from the list, or a person decides.",
+  },
+  "level-promise": {
+    term: "Promise for each level",
+    definition:
+      "How often a short list is built to hold the right level, set separately for each level, so a rare serious incident is not left out to make common ones look good. It holds on incidents like those ARIA was calibrated on; blind checks tune it to yours.",
+  },
+  "novelty-check": {
+    term: "Novelty check",
+    definition:
+      "Before deciding, ARIA asks whether the logs look like anything its model learned from. A window too far from the training data, with too many patterns new to its system, or from a system the model never saw is never decided alone: a person confirms it, and the short list widens to what the rules leave open.",
+  },
+  "impact-dimensions": {
+    term: "Two kinds of impact",
+    definition:
+      "To call an incident SEV1, the rules that fired must show two different kinds of harm between them, such as an outage and how far it spreads, or data at risk and a critical part. One kind alone counts towards SEV2.",
+  },
+  "severe-miss": {
+    term: "Severe miss",
+    definition:
+      "A serious incident (SEV1 or SEV2) rated minor (SEV3 or SEV4): the mistake that matters most. The short lists certify a limit on how often it happens, the tests report it first with an honest upper bound, and an alarm sounds when blind checks show more of them than promised.",
   },
   "safety-floor": {
     term: "Safety floor",
     definition:
       "A rule that sets the lowest severity a dangerous pattern can get, such as data loss or a security breach, whatever the model says.",
+  },
+  baseline: {
+    term: "A system's usual error rate",
+    definition:
+      "The share of errors in a system's recent incidents. When a window's errors run many times above it, the way burn-rate alerts measure, a rule scores the window higher. It exists only once a system has been triaged a few times.",
+  },
+  "dismissed-pattern": {
+    term: "Dismissed pattern",
+    definition:
+      "A log pattern that reviewers discarded before, or rated SEV4, on the same system. When most of a window's trouble lines follow one, the incident says so for the reviewer to weigh. It informs; it never lowers the level.",
+  },
+  critic: {
+    term: "Critic",
+    definition:
+      "A second reading of the draft report that removes claims their evidence does not support, by another model where one is set up. When it cannot judge, it says so, and the reviewer sees what to check.",
   },
   evidence: {
     term: "Evidence ID",
@@ -77,7 +112,32 @@ export const GLOSSARY = {
   review: {
     term: "Review",
     definition:
-      "Every report waits for a person. Nothing is posted to Slack, Teams, a ticket or a status page until a reviewer approves it.",
+      "Every report waits for a person. Nothing is posted to Slack, Teams, a ticket or a status page until a reviewer approves it, and each decision goes on the decision record.",
+  },
+  "blind-check": {
+    term: "Blind check",
+    definition:
+      "A person rates a recent incident from its logs alone, before seeing ARIA's level. A rating given blind carries no pull to agree with ARIA, so these are what recalibrate its short lists; approvals no longer count. Settings has it under Check ARIA blind.",
+  },
+  drift: {
+    term: "Drift",
+    definition:
+      "A shift in the levels ARIA decides for a system, its recent incidents against its earlier ones, beyond what chance explains. It needs no labels and says only that the mix has moved: new kinds of incident, a changed system or short lists that no longer fit. Settings asks “Has anything shifted?”.",
+  },
+  "decision-record": {
+    term: "Decision record",
+    definition:
+      "An append-only list of every review, edit, publish, message sent, blind check, recalibration, model change, purge and deletion: who decided, what and when, never the logs themselves. Each entry is chained by a hash to the one before it, so any later change shows when the chain is verified.",
+  },
+  retention: {
+    term: "Retention",
+    definition:
+      "How long incidents are kept: until someone deletes them, or, once an operator sets a period, until a purge deletes those older than it with everything that belongs only to them. The decision record keeps their entries.",
+  },
+  "model-pool": {
+    term: "Model pool",
+    definition:
+      "One shared key serves several models, each with limits of its own on requests and tokens a minute and requests a day. Before every call ARIA gives the call to the best model with room; a triage reserves its calls first, and when none fit it is written offline, with a note saying when the model is back.",
   },
   checkpoint: {
     term: "Checkpoint",
@@ -90,6 +150,11 @@ export const GLOSSARY = {
       "A new incident that starts again from one of another incident's saved steps, with different options, so you can see what would have changed.",
   },
   // How Test results scores a test, and what each test was tuned on.
+  rings: {
+    term: "Three rings",
+    definition:
+      "How ARIA is tested: fresh samples of the systems it learned from (a check for regressions), systems and kinds of failure it never saw (each held out in turn, the model fitted again without it), and real data with the labels its owners gave. Each test also records what was tuned on it.",
+  },
   paged: {
     term: "Paged",
     definition:

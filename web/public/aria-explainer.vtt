@@ -14,7 +14,7 @@ ARIA groups the lines into templates and marks the ones new to this system.
 
 4
 00:00:21.750 --> 00:00:35.250
-Rules and a calibrated model rate the severity and keep a short list of likely levels.
+Rules and a calibrated model rate the severity and keep a short list of likely levels, with a promise for each level. Logs unlike anything the model learned from go to a person.
 
 5
 00:00:35.250 --> 00:00:45.750
@@ -26,7 +26,7 @@ The report cites its evidence for every claim, and a check confirms each citatio
 
 7
 00:00:58.250 --> 00:01:05.750
-The messages wait as drafts until a person approves them. Then the incident is published and joins ARIA's memory.
+The messages wait as drafts until a person approves them. Then the incident is published and joins ARIA's memory, with the decision on the record.
 
 8
 00:01:05.750 --> 00:01:18.250

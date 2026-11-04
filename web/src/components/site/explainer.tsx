@@ -8,10 +8,10 @@ export function Explainer({ lines }: { lines: number }) {
     `An alert fires, and ${lines} lines of logs arrive with it.`,
     "One line is an instruction, not a log. ARIA sets it aside: a reviewer sees it, the analysis never does.",
     "ARIA groups the lines into patterns and marks the ones new to this system.",
-    "Rules and a calibrated model rate the severity and keep a short list of likely levels.",
+    "Rules and a calibrated model rate the severity and keep a short list of likely levels, with a promise for each level. Logs unlike anything the model learned from go to a person.",
     "An agent tests its ideas with tools that can only read, and finds the closest past incidents and the runbook they used.",
     "The report cites its evidence for every claim.",
-    "The messages wait as drafts until a person approves them. Then the incident is published and joins ARIA's memory.",
+    "The messages wait as drafts until a person approves them. Then the incident is published and joins ARIA's memory, with the decision on the record.",
     "The test results, caveats included.",
   ];
   return (

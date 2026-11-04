@@ -11,7 +11,7 @@ const POINTS: { icon: LucideIcon; title: string; body: string }[] = [
   {
     icon: GaugeIcon,
     title: "Severity you can check",
-    body: "Rules and a calibrated model agree on a short list of likely levels, and say when they aren't sure. Safety floors stop a dangerous pattern from being rated too low.",
+    body: "Rules and a calibrated model keep a short list of the levels they can't rule out, with a promise for each level, and hand anything unfamiliar to a person. Safety floors stop a dangerous pattern from being rated too low.",
   },
   {
     icon: FileCheck2Icon,

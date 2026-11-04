@@ -28,6 +28,19 @@ describe("definitionFor", () => {
     expect(definitionFor("What does tuned mean?")?.text).toContain("rather than a clean test");
   });
 
+  it("answers the words the guide and How ARIA works use for the safeguards", () => {
+    expect(definitionFor("What is a blind check?")?.term).toBe("Blind check");
+    expect(definitionFor("What is drift?")?.text).toContain("Has anything shifted?");
+    expect(definitionFor("What is the decision record?")?.text).toContain("append-only");
+    expect(definitionFor("What is a model pool?")?.text).toContain("limits of its own");
+    expect(definitionFor("What is the novelty check?")?.text).toContain("never decided alone");
+    expect(definitionFor("Define severe miss")?.term).toBe("Severe miss");
+    expect(definitionFor("What are the three rings?")?.term).toBe("Three rings");
+    expect(definitionFor("What is a promise for each level?")?.text).toContain(
+      "set separately for each level",
+    );
+  });
+
   it("leaves questions about incidents to the search", () => {
     expect(definitionFor("What does the runbook say to do first when DataNodes fail?")).toBeNull();
     expect(definitionFor("Have we seen ZooKeeper lose quorum before?")).toBeNull();
