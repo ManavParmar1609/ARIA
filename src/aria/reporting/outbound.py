@@ -57,12 +57,21 @@ _TRAILING = ".,;:!?)]}'\""
 
 
 def host_of(url: str | None) -> str:
-    """The lower-cased host of ``url`` (with or without a scheme), or "" when it has none."""
+    """The lower-cased host of ``url`` (with or without a scheme), read as a browser reads it,
+    or "" when it has none or no browser would open it.
+
+    A browser treats a backslash in a web address as a slash (the WHATWG URL standard), so
+    ``https://evil.example\\@console.example`` opens evil.example, while ``urlsplit`` alone would
+    read the host after the ``@``. A port that is not a number is a link no browser opens.
+    """
     if not url:
         return ""
-    target = url if "://" in url else f"http://{url}"
+    target = url.replace("\\", "/")
+    target = target if "://" in target else f"http://{target}"
     try:
-        return (urlsplit(target).hostname or "").lower().rstrip(".")
+        parts = urlsplit(target)
+        _ = parts.port  # raises ValueError for a port that is not a number
+        return (parts.hostname or "").lower().rstrip(".")
     except ValueError:
         return ""
 
