@@ -19,7 +19,7 @@ from aria.evidence import EvidenceStore
 from aria.llm.budget import BudgetGuard
 from aria.llm.router import LLMRouter
 from aria.observability.logging import get_logger
-from aria.severity.adjudicator import Adjudication, adjudicate
+from aria.severity.adjudicator import Adjudication, ReviewedExample, adjudicate
 from aria.severity.conformal import FAMILIAR
 from aria.severity.features import log_feature_row
 from aria.severity.history import HistoryContext, SystemHistory
@@ -368,6 +368,7 @@ class SeverityEngine:
         router: LLMRouter | None = None,
         budget: BudgetGuard | None = None,
         use_llm: bool = True,
+        examples: Sequence[ReviewedExample] = (),
     ) -> SeverityResult:
         history = await self._lookup(system, features)
         pre = self.preliminary(
@@ -397,6 +398,7 @@ class SeverityEngine:
             evidence=evidence.all(),
             router=router,
             budget=budget,
+            examples=examples,
         )
         assessment = decide(
             pre,

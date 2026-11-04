@@ -44,7 +44,11 @@ SYSTEM_PROMPTS: dict[str, str] = {
         "given in aria_context. Choose exactly one severity from that set and never one below "
         "the safety floor. When the evidence is ambiguous prefer the more severe option, "
         "because under-triage costs more than over-triage. Justify the choice in one to three "
-        "claims, each citing the evidence that supports it."
+        "claims, each citing the evidence that supports it. When untrusted_reviewed_incidents "
+        "lists past incidents like this one that a person reviewed, with the level the person "
+        "set (reviewed_severity, repeated in aria_context's reviewed_examples), weigh them as "
+        "examples of how this team rates such incidents; still choose only inside the "
+        "prediction set, even when they were rated outside it, and say so in uncertainty."
     ),
     "investigator_step": (
         "You are ARIA's investigator. You test hypotheses about the cause of an incident by "
