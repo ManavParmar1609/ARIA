@@ -15,7 +15,7 @@ import { stepShowcase } from "@/components/site/step-showcase";
 import { TriageReplay } from "@/components/site/triage-replay";
 import { WakeApi } from "@/components/site/wake-api";
 import { Why } from "@/components/site/why";
-import { evaluation, realData, realLogs, replay, type Replay } from "@/lib/site-data";
+import { evaluation, realLogs, replay, testedOn, testedOnText, type Replay } from "@/lib/site-data";
 import { cn } from "@/lib/utils";
 
 // The home page shows ARIA off (owner request, round 9): the headline with a real report, the
@@ -147,9 +147,6 @@ export default function Landing() {
   const data = replay();
   const evals = evaluation();
   const real = realLogs();
-  const datasets = realData();
-  // The HDFS log plus every other real dataset on Test results.
-  const nDatasets = Object.keys(datasets).length + 1;
   return (
     <>
       <a
@@ -213,7 +210,7 @@ export default function Landing() {
           tone="keylime"
           tag="Test results"
           title="Tested on real, labelled logs"
-          intro={`ARIA is tested on ${nDatasets} public, labelled datasets, each against a simpler method.`}
+          intro={testedOnText(testedOn())}
           more={{ href: "/console/evals", label: "See every test" }}
         >
           <p className="max-w-[62ch] text-xl leading-relaxed font-medium text-heading">

@@ -50,6 +50,11 @@ export const run = {
   quarantined: batch.guard.injections.length,
 };
 
+// The short list keeps a promise per level (ADR 0014), tighter for the serious levels; a run
+// recorded before that carries one miss rate for every level.
+const alphas = (severity as { alphas?: Partial<Record<Severity, number>> }).alphas ?? {};
+const miss = (s: Severity) => alphas[s] ?? severity.alpha;
+
 export const assessment = {
   severity: severity.severity as Severity,
   rule: severity.rule_severity as Severity,
@@ -59,7 +64,8 @@ export const assessment = {
     p: severity.probabilities[s],
   })),
   set: severity.prediction_set as Severity[],
-  coverage: pct(1 - severity.alpha, 0),
+  coverage: pct(1 - Math.max(miss("SEV3"), miss("SEV4")), 0),
+  seriousCoverage: pct(1 - Math.max(miss("SEV1"), miss("SEV2")), 0),
   confidence: severity.confidence,
   decidedBy: severity.decided_by,
   needsReview: severity.needs_review,

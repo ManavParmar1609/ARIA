@@ -1,10 +1,11 @@
 {
- "model_version": "severity-log-20261031-b6dcaca3",
- "rules_version": "2026.10.3",
- "c": 3.0,
+ "model_version": "severity-log-20261104-85725e7e",
+ "rules_version": "2026.11.3",
+ "c": 0.03,
+ "c_chosen_by": "cross-validation holding out whole systems",
  "alpha": 0.1,
- "temperature": 0.5606,
- "conformal_q": 0.21155339781309734,
+ "temperature": 0.5074,
+ "conformal_q": 0.6658114424850967,
  "labels": {
   "train": {
    "SEV2": 153,
@@ -27,27 +28,61 @@
  },
  "train": {
   "n": 624,
-  "accuracy": 0.9872,
-  "nll": 0.0492,
-  "ece": 0.0143,
-  "coverage": 0.9872,
-  "mean_set_size": 1.0
+  "accuracy": 0.9006,
+  "nll": 0.2506,
+  "ece": 0.0249,
+  "coverage": 0.9359,
+  "mean_set_size": 1.075
  },
  "temperature_split": {
   "n": 156,
-  "accuracy": 0.9615,
-  "nll": 0.0867,
-  "ece": 0.0272,
-  "coverage": 0.9615,
-  "mean_set_size": 1.0
+  "accuracy": 0.8974,
+  "nll": 0.2812,
+  "ece": 0.0361,
+  "coverage": 0.9231,
+  "mean_set_size": 1.064
  },
  "conformal_split": {
   "n": 312,
-  "accuracy": 0.9487,
-  "nll": 0.1278,
-  "ece": 0.0256,
-  "coverage": 0.9487,
-  "mean_set_size": 1.0
+  "accuracy": 0.8782,
+  "nll": 0.3488,
+  "ece": 0.0469,
+  "coverage": 0.9071,
+  "mean_set_size": 1.071
+ },
+ "calibrations": {
+  "familiar": {
+   "temperature": 0.5074,
+   "alphas": {
+    "SEV1": 0.05,
+    "SEV2": 0.05,
+    "SEV3": 0.1,
+    "SEV4": 0.1
+   },
+   "thresholds": {
+    "SEV1": 0.6498,
+    "SEV2": 0.9515,
+    "SEV3": 0.8898,
+    "SEV4": 0.1587
+   },
+   "guard": null,
+   "severe_miss_risk": 0.05,
+   "windows": {
+    "SEV1": 33,
+    "SEV2": 82,
+    "SEV3": 82,
+    "SEV4": 115
+   },
+   "conformal_split": {
+    "all": 0.9423,
+    "mean_set_size": 1.276,
+    "SEV1": 1.0,
+    "SEV2": 0.9878,
+    "SEV3": 0.9146,
+    "SEV4": 0.913
+   },
+   "source": "fresh windows of the systems the model trained on"
+  }
  },
  "synthetic": true,
  "seeds": {

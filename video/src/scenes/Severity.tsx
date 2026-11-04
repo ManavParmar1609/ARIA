@@ -52,6 +52,19 @@ export const Severity = () => {
               <span>{hit.title}</span>
             </div>
           ))}
+          {/* The novelty check, in the room the rules leave at the foot of their panel. */}
+          <div
+            style={{
+              marginTop: "auto",
+              fontSize: 32,
+              lineHeight: 1.3,
+              color: color.muted,
+              ...enter(frame, 150),
+            }}
+          >
+            Logs unlike anything the model learned from are never decided alone: a person confirms
+            them.
+          </div>
         </Panel>
         <Panel style={{ flex: 1, display: "flex", flexDirection: "column", gap: 20 }}>
           <div
@@ -127,8 +140,11 @@ export const Severity = () => {
             })}
           </div>
           <div style={{ fontSize: 32, color: color.heading, opacity: bracket }}>
-            Short list: {assessment.set.join(" or ")}, built to hold the right level{" "}
+            Short list: {assessment.set.join(" or ")}, built to hold the right level at least{" "}
             {assessment.coverage} of the time
+            {assessment.seriousCoverage === assessment.coverage
+              ? ", with a tighter promise for SEV1 and SEV2"
+              : `, and ${assessment.seriousCoverage} when it is SEV1 or SEV2`}
           </div>
         </Panel>
       </div>
