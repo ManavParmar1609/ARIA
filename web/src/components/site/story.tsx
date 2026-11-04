@@ -228,8 +228,9 @@ export function ResultsPart() {
           The tests sit in <Term name="rings">three rings</Term>: fresh samples of the systems ARIA
           learned from, which catch regressions; systems and kinds of failure it never saw, the
           honest estimate for a new deployment; and real data with the labels its owners gave. The
-          first figure reported is how often a serious incident was rated minor (a{" "}
-          <Term name="severe-miss">severe miss</Term>), with an upper bound the data can support.
+          figure that matters most is how often a serious incident was rated minor (a{" "}
+          <Term name="severe-miss">severe miss</Term>), reported with an upper bound the data can
+          support.
         </p>
         <p>
           {tested.tuned

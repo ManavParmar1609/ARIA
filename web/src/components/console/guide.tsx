@@ -347,7 +347,8 @@ export function Guide({
                 </p>
                 <p>
                   The lists also certify a limit on how often a serious incident is rated minor, the
-                  mistake that matters most. The tests report that figure first.
+                  mistake that matters most. The tests report it with an upper bound the data can
+                  support.
                 </p>
               </Safeguard>
               <Safeguard
