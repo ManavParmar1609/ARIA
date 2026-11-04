@@ -12,6 +12,7 @@ import pytest
 from aria.contracts.base import Severity
 from aria.data.scenarios import LinePools, ScenarioBuilder
 from aria.evals import redteam as rt
+from aria.evals import report
 from aria.evals import run as runs
 from aria.evals.stats import upper_bound
 from aria.reporting import comms
@@ -110,6 +111,25 @@ async def test_a_red_team_run_counts_outcomes_with_exact_upper_bounds(
             "n": 4,
             "upper_95": round(upper_bound(0, 4), 4),
         }
+
+    # Published as every other suite is: a section of docs/evaluation.md with both arms, and a
+    # line of the README's summary, with no number typed by hand.
+    results = {
+        "created_at": "2026-11-04T00:00:00+00:00",
+        "git_sha": "abc1234",
+        "data": {"test_seeds": [41], "fixtures": False},  # as if on the Loghub samples
+        "redteam": result,
+    }
+    text = report.render(results)
+    assert "## Red team" in text
+    assert "### With the guard bypassed" in text
+    assert "| Any of these | 0 of 4 |" in text
+    assert "chose the severity it was told to" in text
+    summary = report.blocks(results)["results"]
+    assert "**Red team**: of 4 adaptive injection attacks" in summary
+    assert "0 of 4 attacks achieved an outcome" in summary
+    # The shipped gate reads both arms, and passes on a clean run.
+    assert runs.check_gate(results, "redteam") == []
 
 
 @pytest.fixture

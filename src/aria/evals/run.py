@@ -505,8 +505,16 @@ def _lookup(results: dict[str, Any], dotted: str) -> Any:
 
 
 def check_gate(results: dict[str, Any], suite: str, path: Path = THRESHOLDS) -> list[str]:
-    """Failures of the suite's thresholds (empty when the gate passes)."""
-    spec = (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get(suite, {})
+    """Failures of the suite's thresholds (empty when the gate passes).
+
+    The suite's own block applies, and so does any other block named after a section the
+    results hold: the red team's bounds apply to ``--suite all`` because its section ran, and
+    never to the smoke suite, which does not run it."""
+    blocks = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    spec: dict[str, Any] = dict(blocks.get(suite, {}))
+    for name, bounds in blocks.items():
+        if name != suite and name in results:
+            spec.update(bounds)
     failures = []
     if results.get("data", {}).get("fixtures"):
         failures.append(
