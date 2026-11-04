@@ -1520,7 +1520,106 @@ def _data_paragraph(results: Mapping[str, Any]) -> str:
     )
 
 
-def render(results: Mapping[str, Any], live: Mapping[str, Any] | None = None) -> str:
+_CHOICE_METHODS = (
+    ("model_pick", "The model's pick inside the set"),
+    ("calibrated_top", "The calibrated model's top level in the set"),
+    ("most_severe_in_set", "The most severe level in the set (the policy with no model)"),
+)
+
+
+def _choice_part(part: Mapping[str, Any], k: int) -> list[str]:
+    o, c = part["override"], part["consistency"]
+    lines = [
+        (
+            f"{part['windows']} windows the policy left to a model ({part['contested']} with "
+            f"more than one level in the set; the set held the true level in "
+            f"{_pct(part['coverage'])}); {part['answered']} answered, {part['calls']} calls."
+        ),
+        "",
+        "| Method | Accuracy | Macro-F1 | SEV1/2 rated SEV3/4 |",
+        "|---|---|---|---|",
+    ]
+    for key, name in _CHOICE_METHODS:
+        r = part["methods"][key]
+        if r["accuracy"] is None:
+            continue
+        lines.append(
+            f"| {name} | {_pct(r['accuracy'])} | {r['macro_f1']:.3f} | {_bound(r['severe'])} |"
+        )
+    lines += [
+        "",
+        (
+            f"- Overrides: the pick differed from the calibrated top level on {o['windows']} "
+            f"windows: {o['put_right']} put right, {o['put_wrong']} put wrong (net {o['net']:+d}; "
+            f"exact McNemar p = {o['against_calibrated_top']['p_correct']})."
+        ),
+        (
+            f"- Consistency over {k} runs: the same level on every run for "
+            f"{_pct(c['same_level_every_run']['rate'])} of windows; right on every run "
+            f"(pass^{k}) {_pct(c['right_every_run']['rate'])}; right on any run (pass@{k}) "
+            f"{_pct(c['right_in_any_run']['rate'])}."
+        ),
+    ]
+    if part.get("unanswered"):
+        lines.append(
+            f"- No answer accepted on {sum(part['unanswered'].values())} windows: "
+            + "; ".join(f"{why} ({n})" for why, n in part["unanswered"].items())
+            + "."
+        )
+    return [*lines, ""]
+
+
+def _llm_choice(live: Mapping[str, Any]) -> list[str]:
+    """A live run of the model's choice inside the set (aria.evals.llm_choice)."""
+    section = live["llm_choice"]
+    k = section["k"]
+    answered: dict[str, int] = {}
+    for part in (section.get("held_out_systems"), section.get("bgl")):
+        for name, n in ((part or {}).get("answered_by") or {}).items():
+            answered[name] = answered.get(name, 0) + int(n)
+    who = (
+        ", ".join(f"{name} ({n})" for name, n in sorted(answered.items(), key=lambda kv: -kv[1]))
+        or "no provider"
+    )
+    lines = [
+        "## The model's choice inside the set",
+        "",
+        (
+            "A language model may choose a level only inside the prediction set, and only on the "
+            f"windows the policy leaves open. In a live run on {live['created_at']} (commit "
+            f"{live.get('git_sha') or 'unknown'}) the configured chain was asked {k} times on "
+            f"each such window ({section['calls']} calls; {who} answered), with the response "
+            "cache off so that every run was a request. Its pick is compared with the calibrated "
+            "model's top level inside the set and with the policy's own fallback, on the same "
+            "windows."
+        ),
+        "",
+    ]
+    held = section.get("held_out_systems") or {}
+    if held.get("windows"):
+        lines += ["### Systems the model never saw", "", *_choice_part(held, k)]
+    bgl = section.get("bgl") or {}
+    if bgl.get("windows"):
+        lines += [
+            "### The BGL log's windows",
+            "",
+            (
+                f"A seeded sample of {bgl['windows']} of the {bgl['windows_left_open']} windows "
+                f"the policy left open, scored by the model fitted without {bgl['fitted_without']}."
+            ),
+            "",
+            *_choice_part(bgl, k),
+        ]
+    elif "missing" in bgl:
+        lines += [f"- The BGL log was not downloaded for this run ({bgl['missing']}).", ""]
+    return lines
+
+
+def render(
+    results: Mapping[str, Any],
+    live: Mapping[str, Any] | None = None,
+    choice: Mapping[str, Any] | None = None,
+) -> str:
     lines = [
         "# Evaluation",
         "",
@@ -1575,6 +1674,8 @@ def render(results: Mapping[str, Any], live: Mapping[str, Any] | None = None) ->
             ),
             "",
         ]
+    if choice and "llm_choice" in choice:  # only a live run of the model's choice is quoted
+        lines += _llm_choice(choice)
     if "parsing" in results:
         lines += _parsing(results["parsing"])
     if "edge" in results:

@@ -33,6 +33,7 @@ from aria.evals import edge as ed
 from aria.evals import gitlab as gl
 from aria.evals import hadoop as hd
 from aria.evals import injection as inj
+from aria.evals import llm_choice as lcm
 from aria.evals import logchunks as lc
 from aria.evals import openstack as osf
 from aria.evals import parsing as ps
@@ -58,6 +59,7 @@ SUITES = (
     "edge",
     "real",
     *dm.SUITES,
+    "llm-choice",
     "redteam",
     "redteam-datamarking",
     "all",
@@ -245,6 +247,19 @@ async def run(
         quiet_per_system=size.severity_quiet,
     )
     features: list[Any] | None = None
+    if suite == "llm-choice":  # the model's choice inside the set, asked k times a window
+        results["llm_choice"] = await lcm.evaluate(
+            builder=builder,
+            rules=rules,
+            config=config,
+            loghub_dir=loghub_dir,
+            test=test,
+            features=sv.featurize(builder, test, workers=workers),
+            windows=training(),
+            use_llm=use_llm,
+            limit=limit,
+        )
+        return results
     if suite in ("smoke", "severity", "all"):
         engine = SeverityEngine.load(config.severity)
         features = sv.featurize(builder, test, workers=workers)
