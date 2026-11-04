@@ -39,7 +39,11 @@ def test_recalibrate_says_when_there_is_nothing_to_do() -> None:
     init_db(get_engine())
     result = CliRunner().invoke(app, ["train", "recalibrate", "--dry-run"])
     assert result.exit_code == 0, result.output
-    assert "not enough new reviews" in result.output
+    # A model with per-level calibrations learns from blind checks; an older one from reviews.
+    assert (
+        "no new blind checks to learn from" in result.output
+        or "not enough new reviews" in result.output
+    )
 
 
 @pytest.mark.parametrize(

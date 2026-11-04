@@ -240,7 +240,10 @@ async def test_a_moderate_window_without_errors_is_not_said_to_have_them(
     moderate = replace(
         ctx,
         batch=ctx.batch.model_copy(update={"features": quiet}),
-        severity=ctx.severity.model_copy(update={"severity": Severity.SEV3}),
+        # The level and its set together: a set of one level keeps the bare level in the words.
+        severity=ctx.severity.model_copy(
+            update={"severity": Severity.SEV3, "prediction_set": [Severity.SEV3]}
+        ),
     )
     level = compose_draft(moderate).summary[0].text
     assert level.startswith("SEV3 (moderate): a contained problem with limited user impact.")
