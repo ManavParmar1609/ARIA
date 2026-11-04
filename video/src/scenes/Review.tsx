@@ -71,8 +71,8 @@ export const Review = () => {
           {approved > 0.5 ? "Approved" : "Approve"}
         </div>
         <Lead style={{ opacity: approved }}>
-          Published and added to incident memory. Each message goes out only once a person approves
-          it too.
+          Published and added to incident memory, with the decision on the record. Each message goes
+          out only once a person approves it too.
         </Lead>
       </div>
       <Lead style={{ fontSize: 34, ...enter(frame, 60) }}>
