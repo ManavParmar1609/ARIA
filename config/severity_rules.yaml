@@ -19,12 +19,22 @@
 #                rule that decides SEV1 on its own must name that many itself (checked at load).
 #
 # Conditions are {feature, op, value}, combined with all: [...] or any: [...] and nested freely.
-# Features: every numeric WindowFeatures field, level_counts.<LEVEL>, keyword_hits.<category>
-# (see config/lexicon.yaml), issue_keyword_hits.<category> (the same, on lines at WARN or above
-# or with no level), n_critical_components, alerts.firing, alerts.critical and alerts.warning.
-# Unknown feature names fail at load time.
+# Features: every numeric WindowFeatures field (issue_events among them: the lines that count as
+# reporting trouble), level_counts.<LEVEL>, keyword_hits.<category> (see config/lexicon.yaml),
+# issue_keyword_hits.<category> (the same, on issue lines: WARN or above, plus unlevelled lines
+# when the window has no levels at all or also logs errors), keyword_templates.<category> and
+# issue_keyword_templates.<category> (the distinct log patterns behind those counts, so one
+# message repeated by one node is one), issue_keyword_share.<category> (the category's share of
+# the issue lines), n_critical_components, alerts.firing, alerts.critical and alerts.warning.
+# From the system's own history, when it has one: error_ratio_vs_baseline (the window's error
+# ratio over the median of the system's recent runs), baseline_error_ratio and baseline_runs.
+# They are absent, not zero, offline and until five runs exist, so a rule may only ask whether
+# they are at least something. Unknown feature names fail at load time.
+#
+# Node counts and node spread are stand-ins for blast radius, which logs cannot see: how many
+# customers or requests an incident touches is not in them. The rules that read them say so.
 
-version: "2026.11.2"
+version: "2026.11.3"
 
 # A severity is decided without the LLM only when the prediction set is a single class and the
 # calibrated model gives it at least this probability.
@@ -66,7 +76,7 @@ rules:
         - {feature: error_nodes, op: ">=", value: 8}
 
   - id: error_storm
-    title: Error storm across most of the fleet
+    title: Error storm across most of the logging nodes, a stand-in for blast radius
     effect: score
     severity: SEV1
     weight: 2.5
@@ -118,6 +128,10 @@ rules:
         - {feature: keyword_hits.crash, op: ">=", value: 1}
         - {feature: issue_keyword_hits.crash, op: "==", value: 0}
 
+  # Counts of error lines leave out windows whose trouble is mostly clients cancelling their own
+  # requests (OpenTelemetry records those at DEBUG): see mostly_cancellations below. The rules
+  # that need a spike (error_storm, sustained_burst) still count them: a spike of cancellations
+  # is a client giving up on a slow service.
   - id: critical_component_errors
     title: Errors from a critical component
     effect: score
@@ -127,13 +141,17 @@ rules:
       all:
         - {feature: max_component_criticality, op: ">=", value: 0.8}
         - {feature: error_events, op: ">=", value: 5}
+        - {feature: issue_keyword_share.cancellation, op: "<", value: 0.5}
 
   - id: errors_spread
-    title: Errors on eight or more nodes
+    title: Errors on eight or more nodes, a stand-in for blast radius
     effect: score
     severity: SEV2
     weight: 1.5
-    when: {feature: error_nodes, op: ">=", value: 8}
+    when:
+      all:
+        - {feature: error_nodes, op: ">=", value: 8}
+        - {feature: issue_keyword_share.cancellation, op: "<", value: 0.5}
 
   - id: sustained_burst
     title: Sustained error burst well above baseline
@@ -145,14 +163,20 @@ rules:
         - {feature: burst_score, op: ">=", value: 5}
         - {feature: error_events, op: ">=", value: 50}
 
+  # One message repeated by one node is one pattern however often it repeats, so the rules a
+  # repeated line could inflate read the distinct patterns beside the count (chosen on validation
+  # seeds, rules version 2026.11.3: quiet HPC and OpenSSH windows fired these on one pattern,
+  # their real incidents on several). A service reported unreachable (below) keeps its line count:
+  # real outages often repeat one message.
   - id: unavailability_widespread
-    title: Services unreachable from several nodes
+    title: Services unreachable from several nodes, in more than one kind of message
     effect: score
     severity: SEV2
     weight: 1.5
     when:
       all:
         - {feature: keyword_hits.unavailable, op: ">=", value: 20}
+        - {feature: keyword_templates.unavailable, op: ">=", value: 2}
         - {feature: error_nodes, op: ">=", value: 3}
 
   - id: unavailability_reported
@@ -183,13 +207,14 @@ rules:
         - {feature: broken_flow_ratio, op: ">=", value: 0.05}
 
   - id: attack_widespread
-    title: Authentication attacks against six or more hosts
+    title: Authentication attacks against six or more hosts, in more than one kind of message
     effect: score
     severity: SEV2
     weight: 1.5
     when:
       all:
         - {feature: keyword_hits.security, op: ">=", value: 30}
+        - {feature: keyword_templates.security, op: ">=", value: 2}
         - {feature: distinct_nodes, op: ">=", value: 6}
 
   - id: warning_alert_firing
@@ -225,11 +250,14 @@ rules:
         - {feature: keyword_hits.network, op: ">=", value: 5}
 
   - id: security_attempts
-    title: Repeated authentication failures
+    title: Repeated authentication failures of more than one kind
     effect: score
     severity: SEV3
     weight: 1.0
-    when: {feature: keyword_hits.security, op: ">=", value: 5}
+    when:
+      all:
+        - {feature: keyword_hits.security, op: ">=", value: 5}
+        - {feature: keyword_templates.security, op: ">=", value: 2}
 
   - id: unfinished_work
     title: Units of work (blocks, task attempts) that broke off partway
@@ -275,6 +303,50 @@ rules:
         - {feature: max_component_criticality, op: "<", value: 0.5}
         - {feature: keyword_hits.crash, op: "==", value: 0}
         - {feature: broken_flows, op: "<", value: 3}
+
+  # A client that gave up or went away is not a failure of the service: OpenTelemetry records
+  # client cancellations at DEBUG (lexicon 2.2, cancellation). When most of a window's issue
+  # lines are such lines, the window is noise unless something else says otherwise; a noise
+  # rule can outvote SEV3-level signals only, never SEV1 or SEV2 evidence.
+  - id: mostly_cancellations
+    title: Most of the trouble reported is clients cancelling their own requests
+    effect: score
+    severity: SEV4
+    weight: 2.0
+    when:
+      all:
+        - {feature: issue_keyword_share.cancellation, op: ">=", value: 0.5}
+        - {feature: issue_events, op: ">=", value: 5}
+
+  # --- the system's own baseline (history; absent offline and until five runs exist) ------------
+  # A burn rate in the Google SRE workbook's sense: errors arriving many times faster than this
+  # system usually logs them, which neither a count nor a bare ratio can say for a system that
+  # always logs some. The workbook pages at 14.4 times the budgeted rate over an hour and six
+  # times over six hours; a single window has one rate, so fourteen times reads as major (below
+  # SEV2's activation, so it needs another SEV2 signal) and six times as contained. The volume
+  # guards keep a handful of lines from reading as a burn. The thresholds are judgement: no
+  # offline window has a history, so validation could only show they change nothing there.
+  - id: error_burn_page
+    title: Errors at fourteen times this system's usual ratio or more
+    effect: score
+    severity: SEV2
+    weight: 1.5
+    when:
+      all:
+        - {feature: error_ratio_vs_baseline, op: ">=", value: 14.4}
+        - {feature: error_events, op: ">=", value: 20}
+        - {feature: n_events, op: ">=", value: 100}
+
+  - id: error_burn_ticket
+    title: Errors at six times this system's usual ratio or more
+    effect: score
+    severity: SEV3
+    weight: 1.0
+    when:
+      all:
+        - {feature: error_ratio_vs_baseline, op: ">=", value: 6}
+        - {feature: error_events, op: ">=", value: 10}
+        - {feature: n_events, op: ">=", value: 100}
 
   # --- version 2 categories (config/lexicon.yaml names each one's sources) -----------------------
   # No Loghub system logs these, so their weights are judgement, kept below SEV2's activation:

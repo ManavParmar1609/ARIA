@@ -30,6 +30,10 @@ from aria.parsing.catalog import load_lexicon
 
 FeatureSpace = dict[str, float]
 LEVELS = ("DEBUG", "INFO", "WARN", "ERROR", "FATAL", "UNKNOWN")
+# Features read from the system's own history (``aria.severity.history``) rather than from the
+# window. They are absent, not zero, without enough history, which is always the case offline,
+# so rules may only ask whether they are at least something, never whether they are below it.
+HISTORY_FEATURES = ("error_ratio_vs_baseline", "baseline_error_ratio", "baseline_runs")
 _NUMERIC_FIELDS = tuple(
     name
     for name, info in WindowFeatures.model_fields.items()
@@ -51,7 +55,9 @@ DIMENSIONS = frozenset(
         "availability",  # a service or host stops doing its work
         "integrity",  # data lost, corrupted or wrong (including money)
         "security",  # an attack, an exposure or data leaving
-        "spread",  # many nodes, hosts or most of a fleet (blast radius)
+        # Many nodes, hosts or most of a fleet. Node counts stand in for blast radius, which
+        # logs cannot see: how many customers or requests an incident touches is not in them.
+        "spread",
         "criticality",  # a component the catalog marks critical
         "persistence",  # lasting, not a blip
         "alerting",  # monitoring itself rates it critical
@@ -61,15 +67,33 @@ _CRITICAL_ALERT = {"critical", "crit", "page", "sev1", "p1", "emergency", "fatal
 _WARNING_ALERT = {"warning", "warn", "major", "high", "sev2", "p2", "error"}
 
 
-def feature_space(features: WindowFeatures, alerts: Sequence[AlertSignal] = ()) -> FeatureSpace:
-    """Flatten window features and alerts into the names rules and the model read."""
+def feature_space(
+    features: WindowFeatures,
+    alerts: Sequence[AlertSignal] = (),
+    history: Mapping[str, float] | None = None,
+) -> FeatureSpace:
+    """Flatten window features, alerts and any history into the names rules and the model read.
+
+    Each keyword category gives four names: its line counts on every line and on issue lines
+    (``keyword_hits``, ``issue_keyword_hits``), the distinct patterns behind them
+    (``keyword_templates``, ``issue_keyword_templates``) and its share of the issue lines
+    (``issue_keyword_share``). ``history`` holds the system's own baseline (``HISTORY_FEATURES``)
+    when there is one; its other keys are ignored.
+    """
     values: FeatureSpace = {name: float(getattr(features, name)) for name in _NUMERIC_FIELDS}
     for level in LEVELS:
         values[f"level_counts.{level}"] = float(features.level_counts.get(level, 0))
+    issue_lines = float(features.issue_events)
     for category in load_lexicon():
+        issue_hits = float(features.issue_keyword_hits.get(category, 0))
         values[f"keyword_hits.{category}"] = float(features.keyword_hits.get(category, 0))
-        values[f"issue_keyword_hits.{category}"] = float(
-            features.issue_keyword_hits.get(category, 0)
+        values[f"issue_keyword_hits.{category}"] = issue_hits
+        values[f"keyword_templates.{category}"] = float(features.keyword_templates.get(category, 0))
+        values[f"issue_keyword_templates.{category}"] = float(
+            features.issue_keyword_templates.get(category, 0)
+        )
+        values[f"issue_keyword_share.{category}"] = (
+            round(min(1.0, issue_hits / issue_lines), 4) if issue_lines else 0.0
         )
     values["n_critical_components"] = float(len(features.critical_components))
     firing = [a for a in alerts if a.status == "firing"]
@@ -77,12 +101,16 @@ def feature_space(features: WindowFeatures, alerts: Sequence[AlertSignal] = ()) 
     values["alerts.firing"] = float(len(firing))
     values["alerts.critical"] = float(sum(1 for label in labels if label in _CRITICAL_ALERT))
     values["alerts.warning"] = float(sum(1 for label in labels if label in _WARNING_ALERT))
+    if history:
+        values.update({k: float(history[k]) for k in HISTORY_FEATURES if k in history})
     return values
 
 
 @lru_cache(maxsize=1)
 def known_features() -> frozenset[str]:
-    return frozenset(feature_space(WindowFeatures.model_construct(**_zero_features())))
+    return frozenset(feature_space(WindowFeatures.model_construct(**_zero_features()))) | set(
+        HISTORY_FEATURES
+    )
 
 
 def _zero_features() -> dict[str, Any]:
@@ -94,6 +122,9 @@ def _zero_features() -> dict[str, Any]:
         "level_counts": {},
         "keyword_hits": {},
         "issue_keyword_hits": {},
+        "keyword_templates": {},
+        "issue_keyword_templates": {},
+        "issue_templates": {},
         "components": [],
         "critical_components": [],
     }

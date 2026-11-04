@@ -503,7 +503,7 @@
           "runs"
         ],
         "summary": "Delete Run",
-        "description": "Delete the run and everything derived from it (report, events, memory, checkpoints).",
+        "description": "Delete the run and everything derived from it (report, events, memory, checkpoints).\nThe deletion itself stays on the decision record, under the caller's name.",
         "operationId": "delete_run_api_v1_runs__run_id__delete",
         "parameters": [
           {
@@ -2487,6 +2487,118 @@
         }
       }
     },
+    "/api/v1/audit/verify": {
+      "get": {
+        "tags": [
+          "audit"
+        ],
+        "summary": "Verify Record",
+        "description": "Walk the decision record from its first entry and say whether every link holds: how\nlong it is, the first entry that breaks it (if any) and the newest hash, to anchor\nelsewhere. It reads every entry, so call it on a schedule, not on every page view.",
+        "operationId": "verify_record_api_v1_audit_verify_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChainCheck"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{run_id}/record": {
+      "get": {
+        "tags": [
+          "audit"
+        ],
+        "summary": "Run Record",
+        "description": "A run's decisions, oldest first: each review, edit, publish, message sent and blind check,\nwith who made it and the hashes that chain it to the rest of the record.",
+        "operationId": "run_record_api_v1_runs__run_id__record_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 9007199254740992,
+              "minimum": -1,
+              "default": -1,
+              "title": "After"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 200,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DecisionRecord"
+                  },
+                  "title": "Response Run Record Api V1 Runs  Run Id  Record Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/runs/{run_id}/expert-check": {
       "get": {
         "tags": [
@@ -3289,6 +3401,66 @@
         "title": "CapacityOut",
         "description": "The shared models' room now (``GET /api/v1/llm/capacity``)."
       },
+      "ChainCheck": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "length": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Length"
+          },
+          "first_broken": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Broken"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem"
+          },
+          "head_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Head Hash"
+          },
+          "checked_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Checked At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "ok",
+          "length",
+          "checked_at"
+        ],
+        "title": "ChainCheck",
+        "description": "Whether the record holds together, from the first entry to the last."
+      },
       "Checkpoint": {
         "properties": {
           "checkpoint_id": {
@@ -3539,6 +3711,79 @@
         ],
         "title": "DataUseOut",
         "description": "What a provider's terms say about prompts for one kind of account. None: not verified."
+      },
+      "DecisionRecord": {
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Seq"
+          },
+          "ts": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Ts"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "review",
+              "edit",
+              "publish",
+              "send",
+              "blind_check",
+              "recalibration",
+              "model_swap",
+              "purge",
+              "delete"
+            ],
+            "title": "Kind"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "actor": {
+            "type": "string",
+            "title": "Actor"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          },
+          "prev_hash": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Prev Hash"
+          },
+          "hash": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Hash"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "seq",
+          "ts",
+          "kind",
+          "actor",
+          "prev_hash",
+          "hash"
+        ],
+        "title": "DecisionRecord",
+        "description": "One entry. Its hash covers every other field and the previous entry's hash."
       },
       "Delivery": {
         "properties": {

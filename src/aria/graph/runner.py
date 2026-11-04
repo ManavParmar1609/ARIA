@@ -27,8 +27,10 @@ from langgraph.store.base import BaseStore
 from langgraph.types import Command, Durability, Overwrite, StateSnapshot, StreamMode
 
 from aria.contracts.inputs import RunOptions, TriageRequest
+from aria.contracts.record import RecordKind
 from aria.contracts.report import IncidentReport, OutboundAction, ReviewDecision
 from aria.contracts.run import EventKind, Plan, RunEvent, RunStatus
+from aria.db import record
 from aria.db import repository as repo
 from aria.db.engine import session_scope
 from aria.graph import retention
@@ -42,6 +44,7 @@ from aria.graph.workflow import (
     rekey_for_fork,
     run_link,
     run_salt,
+    send_facts,
 )
 from aria.llm.quota import Reservation, offline_message
 from aria.llm.visitor import VisitorKeys
@@ -51,7 +54,9 @@ from aria.observability.logging import get_logger
 from aria.reporting.markdown import render_markdown
 from aria.retrieval import runlog
 from aria.security.fields import clean_request
+from aria.security.redaction import Redactor
 from aria.services import Services
+from aria.severity.history import SystemHistory
 from aria.severity.policy import level_words
 
 log = get_logger(__name__)
@@ -253,6 +258,11 @@ class TriageRunner:
         self.held: set[str] = set()
         # Visitors' own model keys, held in memory until the runs they came with start.
         self.keys = VisitorKeys()
+        # Severity reads a system's history (its recent runs' error ratios, the patterns its
+        # reviewers dismissed) from the database the runner writes to; the runner is where the
+        # two meet. Engines built without a runner, as evaluations are, read nothing.
+        if services.severity.history is None:
+            services.severity.history = SystemHistory(services.engine)
 
     @staticmethod
     def config(run_id: str, checkpoint_id: str | None = None) -> RunnableConfig:
@@ -838,6 +848,9 @@ class TriageRunner:
             action, self.services.config.comms, run_url=run_link(settings, run_id)
         )
         await asyncio.to_thread(repo.save_actions, self.engine, run_id, [sent])
+        await asyncio.to_thread(
+            self._record, run_id, "send", by, {**send_facts(sent), "resent": True}
+        )
         await self._event(
             run_id,
             "action",
@@ -846,12 +859,28 @@ class TriageRunner:
         )
         return sent
 
-    async def delete(self, run_id: str) -> None:
+    def _record(self, run_id: str, kind: RecordKind, actor: str, facts: Json) -> None:
+        """Add a decision about a run to the append-only record, with the run's pseudonyms. A
+        failure raises, so the caller answers with an error instead of a quiet success."""
+        salt = run_salt(self.services.settings, run_id, self.engine)
+        record.append(
+            self.engine,
+            kind=kind,
+            actor=actor,
+            run_id=run_id,
+            payload=facts,
+            redactor=Redactor(salt=salt),
+        )
+
+    async def delete(self, run_id: str, *, by: str | None = None) -> None:
         """Remove a run everywhere: what ``retention.owned`` lists, the same a retention purge
         removes (checkpoints, lines, events, report, messages, audit, reviews, memory, alerts).
+        Its entries in the decision record stay, as a purge leaves them.
 
         It holds the run as a drive would, so a review applied at the same moment is refused
-        (409) instead of failing halfway and writing checkpoints for a run that is gone."""
+        (409) instead of failing halfway and writing checkpoints for a run that is gone. With
+        ``by``, the person who asked, the deletion goes on the decision record, which no deletion
+        touches; without it (a duplicate run nobody saw, a benchmark's own runs) it does not."""
         async with self._holding(run_id):
             took = await asyncio.to_thread(
                 repo.claim_run, self.engine, run_id, self.owner, status=None
@@ -859,7 +888,11 @@ class TriageRunner:
             if not took:
                 msg = f"run {run_id} is running in another process"
                 raise RunBusyError(msg)
+            run = await asyncio.to_thread(repo.get_run, self.engine, run_id) if by else None
             await self._purge(run_id)
+            if by is not None and run is not None:
+                facts = {k: run.get(k) for k in ("status", "system", "trigger", "title")}
+                await asyncio.to_thread(self._record, run_id, "delete", by, facts)
         self.keys.drop(run_id)
         self._locks.pop(run_id, None)
 

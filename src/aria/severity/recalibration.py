@@ -22,6 +22,12 @@ little when it held it. That is adaptive conformal inference (Gibbs and Candès,
 over any sequence of checks, the share the sets miss stays within a known distance of the target,
 however the deployment's incidents differ from the training data. Once a level has
 ``BATCH_PER_LEVEL`` checks, its calibration scores are replaced by the checks' own.
+
+The same checks feed the severe-miss alarm (:func:`severe_miss_watch`, built on
+:func:`aria.severity.drift.severe_miss_alarm`): in arrival order, the share of incidents people
+rated SEV1 or SEV2 that ARIA rated SEV3 or SEV4, against the rate the calibration promises. The
+alarm is logged as ``severity.severe_miss_alarm`` whenever it stands and returned with each
+adaptation's summary; it recommends recalibration or retraining and changes nothing by itself.
 """
 
 from __future__ import annotations
@@ -36,9 +42,11 @@ from typing import Any
 import numpy as np
 from sqlalchemy import Engine
 
+from aria.db import record
 from aria.db import repository as repo
 from aria.observability.logging import get_logger
-from aria.severity.conformal import FAMILIAR
+from aria.severity.conformal import FAMILIAR, SERIOUS
+from aria.severity.drift import LEVELS, severe_miss_alarm
 from aria.severity.model import LinearModel, conformal_threshold
 
 log = get_logger(__name__)
@@ -166,6 +174,41 @@ def adapt(
     return adapted, summary
 
 
+def severe_miss_sequence(engine: Engine) -> list[bool]:
+    """The blind checks of incidents the person rated SEV1 or SEV2, oldest first: True where
+    ARIA's level was SEV3 or SEV4, a severe miss. Checks recorded without ARIA's level stay out."""
+    sequence: list[bool] = []
+    for _feedback_id, value, _used in repo.feedback_of(engine, "blind_check"):
+        theirs, aria = value.get("to"), value.get("aria")
+        if theirs in SERIOUS and aria in LEVELS:
+            sequence.append(aria not in SERIOUS)
+    return sequence
+
+
+def promised_severe_miss(model: LinearModel, targets: Mapping[str, float]) -> float | None:
+    """The severe-miss rate the model's calibration promises: the risk its guard was certified
+    for, else the serious levels' target miss rate. None for a model without per-level
+    calibrations, which promises no such rate."""
+    calibration = model.calibrations.get(FAMILIAR)
+    if calibration is None:
+        return None
+    if calibration.epsilon is not None:
+        return float(calibration.epsilon)
+    serious = [float(targets[level]) for level in SERIOUS if level in targets]
+    return min(serious) if serious else None
+
+
+def severe_miss_watch(
+    engine: Engine, model: LinearModel, *, targets: Mapping[str, float]
+) -> dict[str, Any] | None:
+    """The severe-miss alarm over every blind check so far (``aria.severity.drift``), against
+    the rate ``model`` promises; None when it promises none. Read-only."""
+    epsilon = promised_severe_miss(model, targets)
+    if epsilon is None or not 0.0 < epsilon < 1.0:
+        return None
+    return severe_miss_alarm(severe_miss_sequence(engine), epsilon=epsilon)
+
+
 def adapt_from_blind_checks(
     engine: Engine,
     model_path: Path,
@@ -173,11 +216,14 @@ def adapt_from_blind_checks(
     targets: Mapping[str, float],
     trained: Path | None = None,
     dry_run: bool = False,
+    actor: str = "system",
 ) -> dict[str, Any] | None:
     """Apply new blind checks to the live model and save it; None when there is nothing new.
 
     Like :func:`recalibrate_from_feedback`, the live file starts from the shipped model until it
-    exists, and starts again when an upgrade shipped a different one.
+    exists, and starts again when an upgrade shipped a different one. A saved model goes on the
+    decision record under ``actor`` (the job, or ``cli`` for the operator). The severe-miss alarm
+    is checked on every call, logged while it stands, and returned under ``severe_miss_alarm``.
     """
     live = LinearModel.load(model_path) if model_path.exists() else None
     shipped = (
@@ -190,7 +236,20 @@ def adapt_from_blind_checks(
         model = shipped
     if model is None or not model.calibrations:
         return None
+    watch = severe_miss_watch(engine, model, targets=targets)
+    if watch is not None and watch["raised"]:
+        log.warning(
+            "severity.severe_miss_alarm",
+            checks=watch["checks"],
+            misses=watch["misses"],
+            promised=watch["promised"],
+            evidence=watch["evidence"],
+            raised_at=watch["raised_at"],
+            model=model.version,
+        )
     adapted, summary = adapt(model, blind_checks(engine, model), targets=targets)
+    if watch is not None:
+        summary["severe_miss_alarm"] = watch
     if not summary["applied"] and not summary["replaced_scores"]:
         return None
     if not dry_run:
@@ -200,6 +259,20 @@ def adapt_from_blind_checks(
             version=adapted.version,
             applied=summary["applied"],
             missed=summary["missed"],
+        )
+        record.append(
+            engine,
+            kind="recalibration",
+            actor=actor,
+            payload={
+                "method": "blind_checks",
+                "from_version": model.version,
+                "model_version": adapted.version,
+                "applied": summary["applied"],
+                "missed": summary["missed"],
+                "replaced_scores": summary["replaced_scores"],
+                "file": model_path.name,
+            },
         )
     return {"model_version": adapted.version, **summary}
 
@@ -317,6 +390,7 @@ def recalibrate_from_feedback(
     min_new_reviews: int,
     dry_run: bool = False,
     trained: Path | None = None,
+    actor: str = "system",
 ) -> Recalibration | None:
     """Recalibrate when enough reviews have gathered since the loaded model was calibrated.
 
@@ -324,7 +398,8 @@ def recalibrate_from_feedback(
     recalibrates a different trained model (one an upgrade replaced), the ``trained`` model is
     the starting point (and is never written). New reviews are counted against the model file's
     own record, not the ``used`` marks, so a model restored from an older file recalibrates again
-    from the shared database. Returns None when there is nothing to do."""
+    from the shared database. Returns None when there is nothing to do. A saved model goes on
+    the decision record under ``actor``."""
     live = LinearModel.load(model_path) if model_path.exists() else None
     shipped = (
         LinearModel.load(trained)
@@ -356,5 +431,22 @@ def recalibrate_from_feedback(
         coverage_after=round(result.coverage_after, 3),
         threshold_before=result.threshold_before,
         threshold_after=round(result.threshold_after, 4),
+    )
+    record.append(
+        engine,
+        kind="recalibration",
+        actor=actor,
+        payload={
+            "method": "reviews",
+            "from_version": model.version,
+            "model_version": result.model.version,
+            "reviewed": result.reviewed,
+            "new_reviews": result.new_reviews,
+            "coverage_before": round(result.coverage_before, 4),
+            "coverage_after": round(result.coverage_after, 4),
+            "threshold_before": result.threshold_before,
+            "threshold_after": round(result.threshold_after, 4),
+            "file": model_path.name,
+        },
     )
     return result

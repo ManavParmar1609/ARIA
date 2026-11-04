@@ -17,6 +17,8 @@ WARN = "WARN"
 # Levels at which a log reports trouble. The same words at INFO are usually routine.
 ISSUE_LEVELS = frozenset({"WARN", "ERROR", "FATAL"})
 CRITICAL_COMPONENT = 0.8
+# How many of the issue lines' templates a window keeps, most frequent first.
+MAX_ISSUE_TEMPLATES = 50
 
 
 @dataclass(slots=True)
@@ -46,6 +48,20 @@ def burst_score(error_counts: Sequence[int]) -> float:
         return 0.0
     baseline = max(statistics.median(error_counts), 0.5)
     return round(min(100.0, max(0.0, (max(error_counts) - baseline) / math.sqrt(baseline))), 3)
+
+
+def flag_issue_lines(lines: Sequence[FeatureInput]) -> list[bool]:
+    """Which lines count as reporting trouble.
+
+    Lines at WARN or above always do. A line with no level counts only with corroboration: when
+    the window has no levels at all (a legacy log reports trouble in words alone), or when the
+    window also logs errors at a level (something is wrong, and the unlevelled line is read in
+    that light). Otherwise it is read as a log backend reads it, as INFO (the OpenTelemetry logs
+    data model), so a few unlevelled lines cannot make a quiet, levelled window look troubled.
+    """
+    levelled = any(line.level for line in lines)
+    corroborated = not levelled or any(line.level in ERROR_LEVELS for line in lines)
+    return [line.level in ISSUE_LEVELS or (not line.level and corroborated) for line in lines]
 
 
 def compute_features(
@@ -78,13 +94,20 @@ def compute_features(
         peak_warnings = float(len(warnings) > 0)
 
     lowered = [line.message.lower() for line in lines]
-    # Lines with no level count as reported trouble too: some logs carry no levels at all.
-    flagged = [not line.level or line.level in ISSUE_LEVELS for line in lines]
+    flagged = flag_issue_lines(lines)
     keyword_hits: dict[str, int] = {}
     issue_keyword_hits: dict[str, int] = {}
+    keyword_templates: dict[str, int] = {}
+    issue_keyword_templates: dict[str, int] = {}
     for name, pattern in lexicon.items():
-        hits = [issue for text, issue in zip(lowered, flagged, strict=True) if pattern.search(text)]
-        keyword_hits[name], issue_keyword_hits[name] = len(hits), sum(hits)
+        matched = [i for i, text in enumerate(lowered) if pattern.search(text)]
+        issues = [i for i in matched if flagged[i]]
+        keyword_hits[name], issue_keyword_hits[name] = len(matched), len(issues)
+        keyword_templates[name] = len({lines[i].template_id for i in matched})
+        issue_keyword_templates[name] = len({lines[i].template_id for i in issues})
+    issue_counts = Counter(
+        line.template_id for line, issue in zip(lines, flagged, strict=True) if issue
+    )
     nodes = {line.node for line in lines if line.node}
     error_nodes = {line.node for line in errors if line.node}
     components = sorted({line.component for line in lines if line.component})
@@ -105,6 +128,10 @@ def compute_features(
         error_ratio=round(len(errors) / n, 4) if n else 0.0,
         keyword_hits={k: v for k, v in keyword_hits.items() if v},
         issue_keyword_hits={k: v for k, v in issue_keyword_hits.items() if v},
+        issue_events=sum(flagged),
+        keyword_templates={k: v for k, v in keyword_templates.items() if v},
+        issue_keyword_templates={k: v for k, v in issue_keyword_templates.items() if v},
+        issue_templates=dict(issue_counts.most_common(MAX_ISSUE_TEMPLATES)),
         burst_score=burst,
         peak_errors_per_min=peak,
         distinct_nodes=len(nodes),

@@ -20,6 +20,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    event,
     text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -369,6 +370,58 @@ class AlertGroupRow(Base):
     first_at: Mapped[datetime] = mapped_column(default=utcnow)
     last_at: Mapped[datetime] = mapped_column(default=utcnow)
     run_id: Mapped[str | None] = mapped_column(String(64))
+
+
+class DecisionRecordRow(Base):
+    """The decision record: one entry per decision, hash-chained to the entry before it.
+
+    Insert and read only (``aria.db.record``). The triggers below refuse UPDATE and DELETE, and
+    nothing links the table to ``runs``: deleting or purging a run leaves its decisions on record.
+    ``seq`` is the chain's position and the primary key, chosen by the writer, so two writers
+    that read the same tail cannot both insert the next entry.
+    """
+
+    __tablename__ = "decision_record"
+
+    seq: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    ts: Mapped[datetime]
+    kind: Mapped[str] = mapped_column(String(24))
+    run_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    actor: Mapped[str] = mapped_column(String(120))
+    payload: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    prev_hash: Mapped[str] = mapped_column(String(64))
+    hash: Mapped[str] = mapped_column(String(64), unique=True)
+
+
+APPEND_ONLY = "decision_record is append-only"
+
+
+def append_only_ddl(dialect: str) -> list[str]:
+    """The triggers that refuse UPDATE and DELETE on the decision record, for ``dialect``
+    (``sqlite`` or ``mssql``; the migration and ``create_all`` both install them)."""
+    table = DecisionRecordRow.__tablename__
+    if dialect == "sqlite":
+        return [
+            f"CREATE TRIGGER {table}_no_{verb.lower()} BEFORE {verb} ON {table} "
+            f"BEGIN SELECT RAISE(ABORT, '{APPEND_ONLY}'); END"
+            for verb in ("UPDATE", "DELETE")
+        ]
+    if dialect == "mssql":
+        return [
+            f"CREATE TRIGGER {table}_no_{verb.lower()} ON {table} INSTEAD OF {verb} AS "
+            f"BEGIN THROW 50001, '{APPEND_ONLY}', 1; END"
+            for verb in ("UPDATE", "DELETE")
+        ]
+    return []
+
+
+def _install_append_only(_target: Any, connection: Any, **_: Any) -> None:
+    """Install the triggers when ``create_all`` makes the table (tests and ``init_db``)."""
+    for statement in append_only_ddl(connection.dialect.name):
+        connection.execute(text(statement))
+
+
+event.listen(DecisionRecordRow.__table__, "after_create", _install_append_only)
 
 
 class EvalRunRow(Base):

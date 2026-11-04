@@ -15,7 +15,9 @@ Each run goes in a transaction of its own (``purge_run``). What a run owns is wr
 in ``owned``, for the purge and for deleting one run by hand. Rows go children first, so every
 foreign key holds whether or not the database cascades. Runbooks, the incidents memory was seeded
 with, the routine log templates ARIA learned from many runs, datasets, evaluation runs and other
-runs (copies of a purged run included) are never touched.
+runs (copies of a purged run included) are never touched. Nor is the decision record
+(``aria.db.record``): a purged run's decisions stay on it, and the purge adds its own entry for
+each run it deleted and one for the purge as a whole.
 """
 
 from __future__ import annotations
@@ -34,6 +36,7 @@ from sqlalchemy.orm import Session
 
 from aria.contracts.base import utcnow
 from aria.contracts.run import RunStatus
+from aria.db import record
 from aria.db.engine import session_scope
 from aria.db.models import (
     STORE_SEP,
@@ -269,10 +272,14 @@ def purge(
     dry_run: bool = False,
     now: datetime | None = None,
     batch: int = BATCH,
+    actor: str = "system",
 ) -> PurgeResult:
     """Delete every run nothing has happened to for ``days`` days, with what it owns.
 
-    A dry run deletes nothing and holds nothing: it counts what a purge would delete now.
+    A dry run deletes nothing and holds nothing: it counts what a purge would delete now. A purge
+    that deletes goes on the decision record under ``actor`` (the job, or ``cli`` for the
+    operator): one entry per run as it goes, and one for the whole purge at the end. A failure
+    to record raises, so the job logs it and the command fails, instead of a quiet deletion.
     """
     if days <= 0:
         msg = "retention is off: a purge needs a period of at least one day"
@@ -293,7 +300,27 @@ def purge(
             counts = purge_run(engine, run_id, cutoff, owner)
             if counts is None:
                 result.busy.append(run_id)
-            else:
-                result.add(counts)
-                result.runs.append(run_id)
+                continue
+            result.add(counts)
+            result.runs.append(run_id)
+            record.append(
+                engine,
+                kind="purge",
+                actor=actor,
+                run_id=run_id,
+                payload={"days": days, "cutoff": cutoff, "rows": counts},
+            )
+    if result.runs and not dry_run:
+        record.append(
+            engine,
+            kind="purge",
+            actor=actor,
+            payload={
+                "days": days,
+                "cutoff": cutoff,
+                "runs": len(result.runs),
+                "busy": len(result.busy),
+                "rows": result.rows,
+            },
+        )
     return result

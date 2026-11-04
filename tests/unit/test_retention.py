@@ -24,6 +24,7 @@ from aria.contracts.base import utcnow
 from aria.contracts.inputs import TriageRequest
 from aria.contracts.run import RunStatus
 from aria.data.scenarios import LinePools, ScenarioBuilder
+from aria.db import record
 from aria.db import repository as repo
 from aria.db.engine import get_engine, init_db, session_scope
 from aria.db.models import (
@@ -206,6 +207,8 @@ async def test_a_purge_deletes_old_runs_with_what_they_own_and_nothing_else(env:
     assert held(env, old)
     kept = held(env, recent)
     before = shared(env)
+    decided = record.list_entries(env.engine, run_id=old)
+    assert [entry.kind for entry in decided] == ["review", "edit", "publish"]
 
     result = retention.purge(env.engine, days=30)
 
@@ -213,6 +216,20 @@ async def test_a_purge_deletes_old_runs_with_what_they_own_and_nothing_else(env:
     assert not result.busy
     assert held(env, old) == held(env, waiting) == 0
     assert result.rows["runs"] == 2
+    # The decision record keeps the purged run's decisions, and gains the purge's own entries:
+    # one for each run that went, and one for the purge, under the job's name.
+    after = record.list_entries(env.engine, run_id=old)
+    assert after[: len(decided)] == decided
+    assert [entry.kind for entry in after[len(decided) :]] == ["purge"]
+    assert after[-1].actor == "system"
+    assert after[-1].payload["rows"]["runs"] == 1
+    purged = [e for e in record.list_entries(env.engine) if e.kind == "purge"]
+    assert sorted(e.run_id for e in purged if e.run_id) == sorted([old, waiting])
+    summary = purged[-1]
+    assert summary.run_id is None
+    assert (summary.payload["runs"], summary.payload["busy"]) == (2, 0)
+    assert summary.payload["rows"] == result.rows
+    assert record.verify(env.engine).ok
     for kind in ("events", "reports", "messages", "checkpoints", "log lines", "tool calls"):
         assert result.rows[kind] > 0, kind
     assert result.rows["reviews and blind checks"] == 1
@@ -305,8 +322,15 @@ async def test_purging_the_newest_review_never_hands_its_id_out_again(env: Env) 
 async def test_deleting_a_run_by_hand_removes_what_a_purge_would(env: Env) -> None:
     run_id = await published(env, seed=8)
     opened_by_alerts(env, run_id)
-    await env.runner.delete(run_id)
+    decided = record.list_entries(env.engine, run_id=run_id)
+    assert decided
+    await env.runner.delete(run_id, by="ana")
     assert held(env, run_id) == 0
+    # Its decisions stay on record, and the deletion joins them under the deleter's name.
+    kept = record.list_entries(env.engine, run_id=run_id)
+    assert kept[: len(decided)] == decided
+    assert [(e.kind, e.actor) for e in kept[len(decided) :]] == [("delete", "ana")]
+    assert record.verify(env.engine).ok
 
 
 # --- the command and the job ----------------------------------------------------------------------
