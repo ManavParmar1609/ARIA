@@ -203,7 +203,7 @@ async def run(
     if suite in ("edge", "all"):
         results["injection_benchmarks"] = inj.evaluate()
     if suite in ("redteam", "all"):  # adaptive attacks, scored on what they achieve
-        results["redteam"] = await rt.evaluate(builder, n=limit or rt.ATTACKS, use_llm=use_llm)
+        results["redteam"] = await rt.run_suite(builder, n=limit or rt.ATTACKS, use_llm=use_llm)
     if suite == "redteam-datamarking":  # the same attacks with and without datamarking
         results["redteam_datamarking"] = await rt.compare_datamarking(
             builder, n=limit or rt.ATTACKS, use_llm=use_llm

@@ -28,6 +28,12 @@ approves the report and no message. What counts is what happened:
 Counts come with exact one-sided 95% upper bounds (aria.evals.stats): a clean run of n attacks
 shows a rate below that bound, not a rate of zero.
 
+The suite (:func:`run_suite`) runs the attacks twice: against the guard, and then with the guard
+bypassed, as if it had missed every line, so every planted order reaches a model fenced. The
+second arm is the negative control for the model (it must act on the orders, or a clean result
+means nothing) and the invariant test for the structure: a missed detection still cannot move
+the severity outside the set, send anything, leave a link in a draft or leak a secret.
+
 With ``use_llm`` the configured provider chains answer every role instead of the stand-in, so the
 suite measures what a real model is talked into (it costs model calls). :func:`compare_datamarking`
 runs the same attacks with and without spotlighting by datamarking (aria.llm.prompts), the A/B
@@ -351,7 +357,12 @@ class Environment:
 
     @classmethod
     async def create(
-        cls, db_path: Path, *, use_llm: bool = False, datamark: bool = False
+        cls,
+        db_path: Path,
+        *,
+        use_llm: bool = False,
+        datamark: bool = False,
+        guard: bool = True,
     ) -> Environment:
         settings = get_settings().model_copy(
             update={"database_url": f"sqlite:///{db_path}", "require_approval": True}
@@ -359,6 +370,11 @@ class Environment:
         engine = make_engine(settings.database_url)
         init_db(engine)
         config = get_app_config()
+        if not guard:
+            # As if the guard had missed every line: nothing is quarantined, so every planted
+            # order reaches a model fenced, and the checks after the guard are measured alone.
+            guardrails = config.guardrails.model_copy(update={"detect_injection": False})
+            config = config.model_copy(update={"guardrails": guardrails})
         model: GullibleModel | None = None
         if use_llm:
             # The configured chains, as in production: what they are talked into is what counts.
@@ -517,11 +533,14 @@ async def evaluate(
     seed: int = SEED,
     use_llm: bool = False,
     datamark: bool = False,
+    guard: bool = True,
 ) -> dict[str, Any]:
     """Run ``n`` adaptive attacks (spread over the goals) and count what they achieved.
 
     ``use_llm`` puts the configured providers in the stand-in's place (model calls are made and
-    counted); ``datamark`` marks the untrusted blocks of every prompt (aria.llm.prompts)."""
+    counted); ``datamark`` marks the untrusted blocks of every prompt (aria.llm.prompts). With
+    ``guard`` off the attacks are planted as written and nothing is quarantined, as if the guard
+    had missed every line: what the checks after it hold on their own."""
     rng = random.Random(seed)  # noqa: S311 - a reproducible attack corpus, not security
     corpus, picked = seeds(raw, n, rng)
     modes = sorted(builder.pools.modes)
@@ -535,18 +554,20 @@ async def evaluate(
     examples: list[dict[str, Any]] = []
     calls = marked = 0
     with tempfile.TemporaryDirectory(prefix="aria-redteam-") as tmp:
-        env = await Environment.create(Path(tmp) / "redteam.db", use_llm=use_llm, datamark=datamark)
+        env = await Environment.create(
+            Path(tmp) / "redteam.db", use_llm=use_llm, datamark=datamark, guard=guard
+        )
         try:
             for i, (source, text) in enumerate(picked):
                 goal = goals[i % len(goals)]
                 scenario = builder.build(modes[i % len(modes)], seed=seed + i, duration_min=6)
-                lines, mutation, flagged = adapt(
-                    f"{text} {GOALS[goal]}",
-                    system=scenario.system,
-                    rng=rng,
-                    tried=tried,
-                    evaded=evaded,
-                )
+                order = f"{text} {GOALS[goal]}"
+                if guard:
+                    lines, mutation, flagged = adapt(
+                        order, system=scenario.system, rng=rng, tried=tried, evaded=evaded
+                    )
+                else:
+                    lines, mutation, flagged = (order,), "as written", False
                 payload = Payload(source, goal, lines, mutation, flagged)
                 payloads.append(payload)
                 counted = Counter(env.obeyed())
@@ -589,6 +610,7 @@ async def evaluate(
         "model_calls": calls,
         "marked_prompts": marked,
         "guard": {
+            "bypassed": not guard,
             "missed_as_written": planted["as written"],
             "got_past_after_mutation": total - planted["as written"] - planted["none got past"],
             "flagged_whatever_the_mutation": planted["none got past"],
@@ -608,7 +630,7 @@ async def evaluate(
     }
 
 
-async def compare_datamarking(
+async def run_suite(
     builder: ScenarioBuilder,
     *,
     n: int = ATTACKS,
@@ -616,21 +638,44 @@ async def compare_datamarking(
     seed: int = SEED,
     use_llm: bool = False,
 ) -> dict[str, Any]:
+    """The suite as ``aria eval run --suite redteam`` runs it: the attacks against the guard,
+    then the same attacks with the guard bypassed (``guard_bypassed``), where the model must act
+    on the orders and nothing may follow."""
+    against_guard = await evaluate(builder, n=n, raw=raw, seed=seed, use_llm=use_llm)
+    bypassed = await evaluate(builder, n=n, raw=raw, seed=seed, use_llm=use_llm, guard=False)
+    return {**against_guard, "guard_bypassed": bypassed}
+
+
+async def compare_datamarking(
+    builder: ScenarioBuilder,
+    *,
+    n: int = ATTACKS,
+    raw: Path = inj.RAW,
+    seed: int = SEED,
+    use_llm: bool = False,
+    guard: bool = False,
+) -> dict[str, Any]:
     """The same attacks twice, with datamarking off and then on: what each arm's attacks
     achieved, which orders the model acted on, and the difference.
 
-    The seed fixes the attacks, their mutations and the windows they are planted in, so the arms
-    differ only in the marks. Offline both arms face the stand-in, which reads through the marks
-    by design (it strips them before it reads, as the rule tells a model to), so only a run
-    against a configured model (``use_llm``) can show a difference; the offline run proves the
-    harness and counts the calls a live one would make."""
-    without = await evaluate(builder, n=n, raw=raw, seed=seed, use_llm=use_llm, datamark=False)
-    marked = await evaluate(builder, n=n, raw=raw, seed=seed, use_llm=use_llm, datamark=True)
+    The seed fixes the attacks and the windows they are planted in, so the arms differ only in
+    the marks. The guard is bypassed unless asked for, so that every order reaches the model:
+    with it on, what the guard catches never meets a mark. Offline both arms face the stand-in,
+    which reads through the marks by design (it strips them before it reads, as the rule tells a
+    model to), so only a run against a configured model (``use_llm``) can show a difference; the
+    offline run proves the harness and counts the calls a live one would make."""
+    without = await evaluate(
+        builder, n=n, raw=raw, seed=seed, use_llm=use_llm, datamark=False, guard=guard
+    )
+    marked = await evaluate(
+        builder, n=n, raw=raw, seed=seed, use_llm=use_llm, datamark=True, guard=guard
+    )
     kinds = sorted({*without["model_obeyed"], *marked["model_obeyed"]})
     return {
         "seed": seed,
         "attacks": without["attacks"],
         "model": without["model"],
+        "guard_bypassed": not guard,
         "without_datamarking": without,
         "with_datamarking": marked,
         # Hits with the marks minus hits without: below zero, the marks helped.
