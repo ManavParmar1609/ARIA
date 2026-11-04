@@ -786,3 +786,26 @@ export function newDomains(): NewDomains | null {
 export function tuningRecord(): TuningRecord | null {
   return readTuning((evals as unknown as Record<string, unknown>).registry);
 }
+
+/**
+ * What the published results cover, so a page promises only what Test results shows: the tests
+ * on systems the model never saw and on data from new fields appear once `make eval` has measured
+ * them, and the record of what each test was tuned on once it has been copied in.
+ */
+export function testedOn() {
+  const domains = newDomains();
+  return {
+    // The HDFS log plus every other real dataset on Test results, and each new field's data.
+    datasets: Object.keys(realData()).length + 1 + (domains?.results.length ?? 0),
+    unseen: generalisation() != null,
+    tuned: tuningRecord() != null,
+  };
+}
+
+export type TestedOn = ReturnType<typeof testedOn>;
+
+/** How ARIA is tested, in a sentence that names only what the results hold. */
+export function testedOnText({ datasets, unseen }: Pick<TestedOn, "datasets" | "unseen">): string {
+  const systems = unseen ? ", and on systems its model never saw, each held out in turn" : "";
+  return `ARIA is tested on ${datasets} public, labelled datasets, each against a simpler method${systems}.`;
+}

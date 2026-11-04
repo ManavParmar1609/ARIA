@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { Guide } from "@/components/console/guide";
+import { REPO_URL } from "@/lib/site-data";
 
 export const metadata: Metadata = { title: "Guide" };
 
@@ -13,5 +14,10 @@ export default async function GuidePage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { from } = await searchParams;
-  return <Guide back={typeof from === "string" && INCIDENT_PATH.test(from) ? from : null} />;
+  return (
+    <Guide
+      back={typeof from === "string" && INCIDENT_PATH.test(from) ? from : null}
+      docs={`${REPO_URL}/blob/main/docs`}
+    />
+  );
 }

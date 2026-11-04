@@ -12,10 +12,11 @@ import { TriageReplay } from "@/components/site/triage-replay";
 import { Why } from "@/components/site/why";
 import {
   evaluation,
-  realData,
   realLogs,
   replay,
   runFacts,
+  testedOn,
+  testedOnText,
   type Replay,
   type RunFacts,
 } from "@/lib/site-data";
@@ -26,17 +27,18 @@ import { cn } from "@/lib/utils";
 // works section; the home page keeps only the headline, the proof and a line per step (owner
 // feedback, round 8).
 
-/** How a run works, in four steps (item 28), each with what happened in the recorded run. */
+/** How a run works, in four steps (item 28), each with what happened in the recorded run. Each
+ * paragraph holds one idea; the words with a dotted underline open the detail. */
 function steps(f: RunFacts, target: number): GraphStep[] {
   return [
     {
       title: "Read the logs",
       body: (
-        <>
+        <p>
           ARIA groups similar lines into patterns (<Term name="log-template">templates</Term>),
           hides IP and e-mail addresses behind stand-in names, and sets aside any line that tries to
           give it orders (it is <Term name="quarantine">quarantined</Term>).
-        </>
+        </p>
       ),
       fact: `${f.lines} lines became ${f.templates} templates; ${f.pseudonyms} addresses replaced; ${f.quarantined} planted line set aside.`,
       nodes: ["plan", "parse1", "parse2", "parse3", "parse4", "merge"],
@@ -45,10 +47,20 @@ function steps(f: RunFacts, target: number): GraphStep[] {
       title: "Rate how serious it is, and recall the past",
       body: (
         <>
-          Rules and a trained model score the logs and keep a{" "}
-          <Term name="prediction-set">short list</Term> of likely levels, built to hold the right
-          one {Math.round(target * 100)} times in 100. A dangerous pattern is never rated too low.
-          At the same time, ARIA looks for similar past incidents.
+          <p>
+            Rules and a trained model score the logs and keep a{" "}
+            <Term name="prediction-set">short list</Term> of the levels they can&apos;t rule out.
+            Each level has a <Term name="level-promise">promise of its own</Term>: the list is built
+            to hold the right level at least {Math.round(target * 100)} times in 100, and more often
+            still when the incident is serious. A dangerous pattern is never rated too low, and SEV1
+            needs <Term name="impact-dimensions">two kinds of impact</Term> to agree.
+          </p>
+          <p>
+            Logs unlike anything the model learned from, and systems it never trained on, are not
+            decided alone: a person confirms them (the{" "}
+            <Term name="novelty-check">novelty check</Term>). At the same time, ARIA looks for
+            similar past incidents.
+          </p>
         </>
       ),
       fact: `${f.severity} at ${Math.round(f.probability * 100)}% probability; ${f.similar} similar past incidents found.`,
@@ -58,10 +70,18 @@ function steps(f: RunFacts, target: number): GraphStep[] {
       title: "Investigate and write the report",
       body: (
         <>
-          ARIA tests its ideas about the cause with tools that can only read: example lines, a
-          part&apos;s timeline, past incidents and <Term name="runbook">runbooks</Term>. Each result
-          becomes <Term name="evidence">evidence</Term>, and the report may only say what the
-          evidence shows. If the evidence is thin, ARIA looks further, at most twice.
+          <p>
+            ARIA tests its ideas about the cause with tools that can only read: example lines, a
+            part&apos;s timeline, past incidents and <Term name="runbook">runbooks</Term>. Each
+            result becomes <Term name="evidence">evidence</Term>, and the report may only say what
+            the evidence shows. If the evidence is thin, ARIA looks further, at most twice.
+          </p>
+          <p>
+            A <Term name="critic">critic</Term> reads the draft and removes claims the evidence
+            doesn&apos;t support; when it can&apos;t judge, it says so. Message drafts may link only
+            to allowed sites and name only configured recipients; anything else is taken out and
+            listed for the reviewer.
+          </p>
         </>
       ),
       fact: `${f.toolCalls} tool calls; ${f.claims} claims checked, ${Math.round(f.citationCoverage * 100)}% cited; ${f.actions} messages drafted.`,
@@ -71,9 +91,17 @@ function steps(f: RunFacts, target: number): GraphStep[] {
       title: "Wait for a person, then remember",
       body: (
         <>
-          The run pauses for you. You approve, edit or discard the messages, and only what you
-          approve is sent. The approved incident joins ARIA&apos;s memory, so the next similar alert
-          finds it.
+          <p>
+            The run pauses for you. You approve, edit or discard the messages, and only what you
+            approve is sent. When ARIA can&apos;t choose between levels, the review says so
+            (&ldquo;ARIA is torn between SEV2 and SEV3 and plans for SEV2&rdquo;) rather than naming
+            one level.
+          </p>
+          <p>
+            The approved incident joins ARIA&apos;s memory, so the next similar alert finds it, and
+            your decision goes on the <Term name="decision-record">decision record</Term>, which
+            shows any later change.
+          </p>
         </>
       ),
       fact: `Ready for review ${(f.timeToReviewMs / 1000).toFixed(1)} s after the logs arrived.`,
@@ -181,27 +209,39 @@ export function StepsPart() {
 /** Part 4: findings from the tests, led by what they mean for the person on call, so a figure such
  * as "the best standard detector did the same" reads as the match it is. */
 export function ResultsPart() {
-  const datasets = realData();
   const data = evaluation();
   const real = realLogs();
-  // The HDFS log plus every other real dataset on Test results.
-  const nDatasets = Object.keys(datasets).length + 1;
+  const tested = testedOn();
   return (
     <Part
       id="results"
       tinted
       title="What the tests show"
-      intro={`ARIA is tested on ${nDatasets} public, labelled datasets, each against a simpler method. Each finding below links to its test, and Test results also shows where ARIA falls short.`}
+      intro={`${testedOnText(tested)} Each finding below links to its test, and Test results also shows where ARIA falls short.`}
     >
       <p className="max-w-[62ch] text-lg leading-relaxed font-medium text-heading">
         {resultsInShort(data, real)}
       </p>
       <ResultsRow data={data} real={real} />
+      <div className="grid max-w-[62ch] gap-2 text-base leading-relaxed text-foreground">
+        <p>
+          The tests sit in <Term name="rings">three rings</Term>: fresh samples of the systems ARIA
+          learned from, which catch regressions; systems and kinds of failure it never saw, the
+          honest estimate for a new deployment; and real data with the labels its owners gave. The
+          first figure reported is how often a serious incident was rated minor (a{" "}
+          <Term name="severe-miss">severe miss</Term>), with an upper bound the data can support.
+        </p>
+        <p>
+          {tested.tuned
+            ? "Each test on Test results says whether it was untouched, looked at or tuned on while ARIA was being changed, so a flattering number can be read for what it is."
+            : "Rules and thresholds are chosen on separate validation samples, never on the published tests, and a record of what each test was looked at or tuned on travels with the results."}
+        </p>
+      </div>
     </Part>
   );
 }
 
 /** Part 5: the questions people ask first, and where ARIA falls short. */
 export function QuestionsPart() {
-  return <Faq />;
+  return <Faq tested={testedOn()} />;
 }
