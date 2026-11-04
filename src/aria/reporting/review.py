@@ -17,6 +17,7 @@ from aria.contracts.severity import SeverityAssessment
 from aria.evidence import EvidenceStore
 from aria.reporting.composer import CONFIRM_SEVERITY
 from aria.reporting.markdown import REVIEWER_NOTE
+from aria.severity.policy import level_words
 from aria.text import headline
 
 AUTO_REVIEWER = "aria:auto"  # the run did not ask for approval (``graph.workflow.review``)
@@ -93,9 +94,10 @@ def apply_review(
             f"ARIA's assessment was {report.severity}.",
             evidence_ids=[eid],
         )
-        # ARIA's own line for its level ("SEV1 (critical): ... page now.") would contradict the
-        # reviewer's: the note above keeps what ARIA thought.
-        stale = (f"{report.severity} (", f"{report.severity}:")
+        # ARIA's own line for its level ("SEV1 (critical): ... page now.", or what it was torn
+        # between) would contradict the reviewer's: the note above keeps what ARIA thought.
+        stated = level_words(report.severity, severity.prediction_set)
+        stale = (f"{report.severity} (", f"{report.severity}:", f"{stated} (", f"{stated}:")
         summary = [note, *(claim for claim in summary if not claim.text.startswith(stale))]
         update["severity"] = edits.severity
         new_severity = severity.model_copy(

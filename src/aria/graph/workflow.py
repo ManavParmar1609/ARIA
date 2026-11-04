@@ -896,6 +896,7 @@ async def comms(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
     services = runtime.context.services
     request, run_plan = _request(state), _plan(state)
     incident = IncidentReport.model_validate(state["report"])
+    assessment = SeverityAssessment.model_validate(state["severity"])
     guard = _guard(state, services)
     before = guard.snapshot()
     outcome = await draft_comms(
@@ -907,6 +908,7 @@ async def comms(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
         use_llm=run_plan.use_llm,
         safety_check=services.config.guardrails.safety_model,
         policy=draft_policy(services),
+        prediction_set=assessment.prediction_set,
     )
     await _db(repo.save_actions, services.engine, state["run_id"], outcome.actions)
     notes = [
@@ -1257,6 +1259,10 @@ async def publish(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
             service=service_name(request),
             run_url=run_url,
             policy=draft_policy(services),
+            # A level a person set is stated plainly; ARIA's own still names what it was torn between.
+            prediction_set=[assessment.severity]
+            if assessment.decided_by == "human"
+            else assessment.prediction_set,
         )
     actions: list[OutboundAction] = []
     for proposal in proposed:
