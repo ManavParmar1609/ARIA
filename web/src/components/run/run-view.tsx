@@ -670,6 +670,15 @@ export function RunView({
             runId={detail.id}
             prompt={prompt}
             actions={values?.actions ?? []}
+            actionsState={
+              values?.actions
+                ? "ready"
+                : state.isError
+                  ? "error"
+                  : state.isPending
+                    ? "loading"
+                    : "ready"
+            }
             report={report}
             onDecided={() => setDecided(true)}
           />
