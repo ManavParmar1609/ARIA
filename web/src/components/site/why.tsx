@@ -11,7 +11,7 @@ const POINTS: { icon: LucideIcon; title: string; body: string }[] = [
   {
     icon: GaugeIcon,
     title: "Severity you can check",
-    body: "Rules and a calibrated model keep a short list of the levels they can't rule out, with a promise for each level, and hand anything unfamiliar to a person. Safety floors stop a dangerous pattern from being rated too low.",
+    body: "Rules and a trained model keep a short list of the levels they can't rule out, built to hold the right one at a promised rate. Anything unfamiliar goes to a person, and a dangerous pattern is never rated too low.",
   },
   {
     icon: FileCheck2Icon,
@@ -21,7 +21,7 @@ const POINTS: { icon: LucideIcon; title: string; body: string }[] = [
   {
     icon: HistoryIcon,
     title: "Remembers last time",
-    body: "Search finds similar past incidents and the runbooks that resolved them.",
+    body: "Search finds similar past incidents and the runbooks (written fixes) that resolved them.",
   },
   {
     icon: ShieldCheckIcon,

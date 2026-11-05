@@ -1,7 +1,7 @@
 # Deploy a free public demo
 
-This guide puts ARIA online so anyone can read the landing page and try the console. It costs
-nothing:
+This guide is for whoever hosts a public copy of ARIA. It puts ARIA online so anyone can read the
+landing page and try the console, and it costs nothing:
 
 - the website (landing page and console) runs on Vercel's free Hobby plan;
 - the API runs on Render's free web service plan.

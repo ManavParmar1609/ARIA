@@ -6,7 +6,7 @@ Results are measured in three rings: fresh windows of the systems the model lear
 
 ## Docs
 
-- [README](https://raw.githubusercontent.com/ManavParmar1609/ARIA/main/README.md): what ARIA does, quickstart, provider setup including Gemini and NVIDIA NIM, how severity is decided, safety controls, measured results, limitations
+- [README](https://raw.githubusercontent.com/ManavParmar1609/ARIA/main/README.md): what ARIA does, quickstart, provider setup including Gemini and NVIDIA NIM, how severity is decided, safety controls, test results, limitations
 - [Agent skill](https://raw.githubusercontent.com/ManavParmar1609/ARIA/main/skills/aria-triage/SKILL.md): how an agent starts a triage run, reads the cited report and hands it to a human for review
 - [Evaluation](https://raw.githubusercontent.com/ManavParmar1609/ARIA/main/docs/evaluation.md): every measured number, its data and its method, by ring
 - [Model card](https://raw.githubusercontent.com/ManavParmar1609/ARIA/main/docs/model-card.md): the severity model, its per-level calibration and conformal sets, the novelty check, recalibration on blind checks, drift, and the third-party models ARIA calls

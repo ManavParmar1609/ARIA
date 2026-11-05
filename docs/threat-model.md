@@ -1,6 +1,7 @@
 # Threat model
 
-This document covers four things:
+This document is for security reviewers, and for anyone deploying ARIA where the logs hold
+sensitive data. It covers four things:
 
 - what ARIA protects;
 - who might attack it;

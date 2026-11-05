@@ -1,7 +1,8 @@
 # Data card
 
-This card covers the data ARIA trains and evaluates on: where it comes from, how it becomes
-labelled log windows, and what that means for the published results. It follows the spirit of
+This card is for anyone judging what ARIA's results can and cannot show. It covers the data ARIA
+trains and evaluates on: where it comes from, how it becomes labelled log windows, and what that
+means for the published results. It follows the spirit of
 [Datasheets for Datasets](https://arxiv.org/abs/1803.09010) and
 [Data Cards](https://arxiv.org/abs/2204.01075).
 

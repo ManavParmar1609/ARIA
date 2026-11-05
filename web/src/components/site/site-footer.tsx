@@ -23,6 +23,7 @@ const COLUMNS: { title: string; links: { label: string; href: string; internal?:
       { label: "Model card", href: `${DOCS}/model-card.md` },
       { label: "Data card", href: `${DOCS}/data-card.md` },
       { label: "Threat model", href: `${DOCS}/threat-model.md` },
+      { label: "The EU AI Act", href: `${DOCS}/eu-ai-act.md` },
     ],
   },
   {
@@ -31,7 +32,6 @@ const COLUMNS: { title: string; links: { label: string; href: string; internal?:
       { label: "Source on GitHub", href: REPO_URL },
       { label: "API schema", href: `${DOCS}/openapi.json` },
       { label: "Design decisions", href: ADR },
-      { label: "Back to top", href: "#main" },
     ],
   },
 ];
@@ -78,11 +78,15 @@ export function SiteFooter({ recordedAt }: { recordedAt: string }) {
           ))}
         </nav>
       </div>
-      {/* The rule spans the text's width, not the padding around it. */}
+      {/* The rule spans the text's width, not the padding around it. The way back up sits at
+          the page's end, where someone who has read it all needs it. */}
       <div className="mx-auto max-w-[75rem] px-4 sm:px-6">
-        <p className="border-t border-rule py-6 text-sm text-faint">
-          The example incident was recorded on {recordedAt.slice(0, 10)}.
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-rule py-6 text-sm text-faint">
+          <p>The example incident was recorded on {recordedAt.slice(0, 10)}.</p>
+          <a href="#main" className={LINK}>
+            Back to top
+          </a>
+        </div>
       </div>
     </footer>
   );

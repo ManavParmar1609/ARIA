@@ -1,6 +1,7 @@
 # Model card
 
-This card covers four things:
+This card is for anyone deciding whether to trust ARIA's severity ratings: reviewers, SREs and
+auditors. It covers four things:
 
 - the log-severity model that ARIA trains, `severity_log`;
 - the decision policy that turns its output into a severity;

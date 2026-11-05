@@ -30,7 +30,7 @@ test.describe("landing page", () => {
     // The header's links stay on the site, so only the source carries an outbound arrow.
     const nav = page.getByRole("navigation", { name: "Main" });
     await expect(nav.locator("svg")).toHaveCount(1);
-    await nav.getByRole("link", { name: "How it works" }).click();
+    await nav.getByRole("link", { name: "How ARIA works" }).click();
     await expect(page).toHaveURL(/\/console\/how-it-works$/);
     await expect(page.getByRole("heading", { level: 1, name: "How ARIA works" })).toBeVisible();
   });
@@ -116,6 +116,27 @@ test.describe("landing page", () => {
     // New triage as a first visit sees it: the real incident leads "Start with one of these".
     await expect(page).toHaveURL(/\/console\/runs\/new$/);
     await expect(page.getByRole("button", { name: /^Replay it: / }).first()).toBeVisible();
+  });
+
+  test("shows the example whole as soon as keyboard focus reaches a citation", async ({ page }) => {
+    // On a wide screen with motion allowed, the example plays in as it scrolls into view. A
+    // citation reached with Tab during that entrance must not take the focus while invisible.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/");
+    // Past the point where script has revealed the parts that start hidden.
+    await page.waitForTimeout(3000);
+    await page.getByRole("link", { name: "Open the full example" }).focus();
+    await page.keyboard.press("Tab");
+    const focused = await page.evaluate(() => {
+      const el = document.activeElement;
+      const claim = el?.closest("[data-anim=claim]");
+      return {
+        chip: el?.getAttribute("aria-describedby") === "replay-evidence",
+        opacity: claim ? getComputedStyle(claim).opacity : null,
+      };
+    });
+    expect(focused.chip, "Tab reaches the first citation").toBe(true);
+    expect(focused.opacity, "the focused claim is fully visible at once").toBe("1");
   });
 
   test("reaches every page it names from the menu on a phone", async ({ page }) => {

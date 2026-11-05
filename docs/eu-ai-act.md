@@ -1,8 +1,9 @@
 # ARIA and the EU AI Act
 
 This is the project's own reading of where ARIA stands under the EU AI Act (Regulation (EU)
-2024/1689), written down as Article 6(4) asks of a provider. It is not legal advice. A deployer in
-the EU should have their counsel confirm it for their own use. The official text was read through
+2024/1689), written down as Article 6(4) asks of a provider, for compliance reviewers and for
+deployers in the EU. It is not legal advice. A deployer in the EU should have their counsel
+confirm it for their own use. The official text was read through
 the [AI Act Service Desk](https://ai-act-service-desk.ec.europa.eu/en/ai-act/article-6) and law-firm
 briefings, listed under each point.
 
