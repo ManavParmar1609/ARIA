@@ -309,6 +309,7 @@ export function ReviewPanel({
   report,
   onDecided,
   actionsState = "ready",
+  afterReport = false,
   className,
 }: {
   runId: string;
@@ -320,6 +321,8 @@ export function ReviewPanel({
   /** Whether the messages' text has arrived with the run's state, is still loading, or could
    * not be loaded. The review itself names every message and what was removed from it. */
   actionsState?: DraftState;
+  /** Placed after the report (on a phone), so there is no way down to it to offer. */
+  afterReport?: boolean;
   className?: string;
 }) {
   const id = useId();
@@ -436,7 +439,7 @@ export function ReviewPanel({
         <p className="text-sm text-muted-foreground">
           Nothing has been sent. Approving publishes the report
           {sendable.length ? " and sends the messages you tick" : ""}.{" "}
-          {report ? (
+          {report && !afterReport ? (
             // The report sits below the panels it rests on: a way down before deciding.
             <a
               href="#report-title"

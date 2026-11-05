@@ -306,8 +306,8 @@
   samp,
   pre {
     @apply font-mono;
-    /* A shade smaller than the text around it, but never under 12 px. */
-    font-size: max(0.875em, 0.75rem);
+    /* A shade smaller than the text around it, but never under 13 px (DESIGN.md). */
+    font-size: max(0.875em, 0.8125rem);
   }
   /* A page's title, in the serif. */
   h1 {

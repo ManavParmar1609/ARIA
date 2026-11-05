@@ -193,9 +193,10 @@ export function TriageReplay({ data }: { data: Replay }) {
                   >
                     {line.level}
                   </span>
+                  {/* One row on every screen: a tapped citation quotes the line under its tag. */}
                   <span
                     className={cx(
-                      "wrap-anywhere sm:truncate",
+                      "min-w-0 truncate",
                       line.quarantined && "line-through decoration-danger/70",
                     )}
                   >

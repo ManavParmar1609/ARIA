@@ -103,11 +103,14 @@ export function SeverityDot({
 export function LevelChip({
   severity,
   stamp = false,
+  planned = false,
   className,
 }: {
   severity: Severity | null | undefined;
   /** Land like a rubber stamp when it appears (globals.css: .sev-stamp). */
   stamp?: boolean;
+  /** A level ARIA plans for until a person settles it: dashed and unfilled, like "Not rated". */
+  planned?: boolean;
   className?: string;
 }) {
   if (!severity) {
@@ -126,12 +129,15 @@ export function LevelChip({
     <span
       title={SEVERITY_MEANING[severity]}
       className={cx(
-        "tabular inline-flex h-7 items-center gap-1.5 rounded-sm border border-sev-edge px-2.5 text-sm font-medium whitespace-nowrap text-sev-ink",
-        SEVERITY_BG[severity],
+        "tabular inline-flex h-7 items-center gap-1.5 rounded-sm border px-2.5 text-sm font-medium whitespace-nowrap",
+        planned
+          ? "border-dashed border-control text-foreground"
+          : ["border-sev-edge text-sev-ink", SEVERITY_BG[severity]],
         stamp && "sev-stamp",
         className,
       )}
     >
+      {planned ? <span className="font-normal text-muted-foreground">Plans for</span> : null}
       {severity}
       <span aria-hidden>·</span>
       {LEVEL_WORD[severity]}

@@ -46,19 +46,23 @@ function Section({
   id,
   title,
   intro,
+  level = 2,
   children,
 }: {
   id: string;
   title: string;
   intro?: string;
+  /** 3 for a section folded under "Deployment details", so the outline keeps its parent. */
+  level?: 2 | 3;
   children: React.ReactNode;
 }) {
+  const Heading = level === 3 ? "h3" : "h2";
   return (
     <section aria-labelledby={id} className="grid gap-4 border-t border-rule pt-6">
       <div className="grid gap-1">
-        <h2 id={id} className="text-xl tracking-heading">
+        <Heading id={id} className="text-xl tracking-heading">
           {title}
-        </h2>
+        </Heading>
         {intro ? <p className="max-w-prose text-sm text-muted-foreground">{intro}</p> : null}
       </div>
       {children}
@@ -533,134 +537,146 @@ export function Settings() {
         )}
       </Section>
 
-      <details className="group/deployment border-t border-rule pt-6">
-        <summary className="flex w-fit cursor-pointer items-center gap-2 text-xl tracking-heading">
+      <section aria-labelledby="set-deployment" className="grid gap-1 border-t border-rule pt-6">
+        <h2 id="set-deployment" className="text-xl tracking-heading">
           Deployment details
-          <ChevronRightIcon
-            aria-hidden
-            className="size-5 text-muted-foreground transition-transform duration-(--duration-quick) group-open/deployment:rotate-90 motion-reduce:transition-none"
-          />
-        </summary>
-        <p className="mt-1 max-w-[65ch] text-sm text-muted-foreground">
+        </h2>
+        <p className="max-w-[65ch] text-sm text-muted-foreground">
           What this ARIA deployment is set up to do: its model providers, limits, guardrails and
           learning. The server reads them from config/aria.yaml and its environment variables.
         </p>
-        <div className="mt-6 grid gap-8">
-          <Section
-            id="set-providers"
-            title="Model providers"
-            intro="A self-hosted NIM leads the chain, then Gemini, then hosted NIM, each once its key or endpoint is set. Keys are never shown."
-          >
-            {providers.isPending ? (
-              <LoadingRows rows={3} label="Loading providers" />
-            ) : providers.isError ? (
-              failure("providers", "Providers could not be loaded", providers.error)
-            ) : (
-              <Table aria-label="Providers">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Provider</TableHead>
-                    <TableHead>Kind</TableHead>
-                    <TableHead>Chat model</TableHead>
-                    <TableHead>Embeddings</TableHead>
-                    <TableHead>State</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {providers.data.map((p) => (
-                    <TableRow key={p.name}>
-                      <TableHead scope="row">
-                        {/* The offline stand-in answers every step when no model is set up. */}
-                        {p.name === "fake" ? "Offline, no model" : p.name}
-                      </TableHead>
-                      <TableCell className="text-muted-foreground">
-                        {p.kind.replaceAll("_", " ")}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">{p.chat_model ?? ""}</TableCell>
-                      <TableCell className="font-mono text-xs">{p.embedding_model ?? ""}</TableCell>
-                      <TableCell>
-                        <span
-                          className={cn(
-                            "text-sm",
-                            !p.enabled
-                              ? "text-faint"
-                              : p.breaker === "closed"
-                                ? "text-ok"
-                                : "text-sev3-fg",
-                          )}
-                        >
-                          {!p.enabled
-                            ? "Not configured"
-                            : p.breaker === "closed"
-                              ? "Ready"
-                              : `Circuit ${p.breaker.replace("_", "-")}`}
-                        </span>
-                        {p.last_error ? (
-                          <span className="block text-xs text-danger">{p.last_error}</span>
-                        ) : null}
-                      </TableCell>
+        <details className="group/deployment mt-2">
+          <summary className="flex w-fit cursor-pointer items-center gap-1.5 text-sm font-medium text-primary">
+            Show the deployment details
+            <ChevronRightIcon
+              aria-hidden
+              className="size-4 transition-transform duration-(--duration-quick) group-open/deployment:rotate-90 motion-reduce:transition-none"
+            />
+          </summary>
+          <div className="mt-6 grid gap-8">
+            <Section
+              level={3}
+              id="set-providers"
+              title="Model providers"
+              intro="A self-hosted NIM leads the chain, then Gemini, then hosted NIM, each once its key or endpoint is set. Keys are never shown."
+            >
+              {providers.isPending ? (
+                <LoadingRows rows={3} label="Loading providers" />
+              ) : providers.isError ? (
+                failure("providers", "Providers could not be loaded", providers.error)
+              ) : (
+                <Table aria-label="Providers">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Provider</TableHead>
+                      <TableHead>Kind</TableHead>
+                      <TableHead>Chat model</TableHead>
+                      <TableHead>Embeddings</TableHead>
+                      <TableHead>State</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </Section>
+                  </TableHeader>
+                  <TableBody>
+                    {providers.data.map((p) => (
+                      <TableRow key={p.name}>
+                        <TableHead scope="row">
+                          {/* The offline stand-in answers every step when no model is set up. */}
+                          {p.name === "fake" ? "Offline, no model" : p.name}
+                        </TableHead>
+                        <TableCell className="text-muted-foreground">
+                          {p.kind.replaceAll("_", " ")}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{p.chat_model ?? ""}</TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {p.embedding_model ?? ""}
+                        </TableCell>
+                        <TableCell>
+                          <span
+                            className={cn(
+                              "text-sm",
+                              !p.enabled
+                                ? "text-faint"
+                                : p.breaker === "closed"
+                                  ? "text-ok"
+                                  : "text-sev3-fg",
+                            )}
+                          >
+                            {!p.enabled
+                              ? "Not configured"
+                              : p.breaker === "closed"
+                                ? "Ready"
+                                : `Circuit ${p.breaker.replace("_", "-")}`}
+                          </span>
+                          {p.last_error ? (
+                            <span className="block text-xs text-danger">{p.last_error}</span>
+                          ) : null}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </Section>
 
-          {view.isPending ? (
-            <LoadingRows rows={4} label="Loading settings" />
-          ) : view.isError ? (
-            <p className="text-sm text-muted-foreground">Not loaded: see the error above.</p>
-          ) : (
-            <Configuration view={view.data} />
-          )}
-
-          <Section
-            id="set-record"
-            title="Decision record"
-            intro="Every review, edit, publish, message sent, blind check, recalibration and purge goes on an append-only record, each entry hash-chained to the one before it. A chain that verifies means no entry was changed, removed or reordered since it was written."
-          >
-            <RecordStatus />
-          </Section>
-
-          <Section
-            id="set-blind"
-            title="Check ARIA blind"
-            intro="Rate a recent incident from its logs alone, before you see ARIA's level. A rating given without seeing ARIA's answer is free of the pull to agree with it, so these are the ratings ARIA recalibrates its short lists on, one at a time."
-          >
-            <BlindCheck />
-          </Section>
-
-          <Section
-            id="set-drift"
-            title="Has anything shifted?"
-            intro="For each system, the levels ARIA decided on its recent runs against its earlier runs. A shift beyond what chance explains is worth a look: new kinds of incidents, a changed system, or short lists that no longer fit."
-          >
-            <DriftReport />
-          </Section>
-
-          <Section
-            id="set-learning"
-            title="Learning from reviews"
-            intro={
-              view.data?.visitor_scope
-                ? "Every review records the severity a reviewer settled on. On this shared demo, reviews of your own incidents stay private. ARIA recalibrates on blind checks, not on approvals, which tend to agree with whatever ARIA said."
-                : "Every review records the severity a reviewer settled on. ARIA recalibrates on blind checks, not on approvals, which tend to agree with whatever ARIA said."
-            }
-          >
-            {feedback.isPending ? (
-              <LoadingRows rows={3} label="Loading reviews" />
-            ) : feedback.isError ? (
-              failure("feedback", "Reviews could not be loaded", feedback.error)
+            {view.isPending ? (
+              <LoadingRows rows={4} label="Loading settings" />
+            ) : view.isError ? (
+              <p className="text-sm text-muted-foreground">Not loaded: see the error above.</p>
             ) : (
-              <Learning view={feedback.data} />
+              <Configuration view={view.data} />
             )}
-            <div className="grid gap-3 pt-2">
-              <h3 className="text-lg">How each reviewer decides</h3>
-              <ReviewerStats />
-            </div>
-          </Section>
-        </div>
-      </details>
+
+            <Section
+              level={3}
+              id="set-record"
+              title="Decision record"
+              intro="Every review, edit, publish, message sent, blind check, recalibration and purge goes on an append-only record, each entry hash-chained to the one before it. A chain that verifies means no entry was changed, removed or reordered since it was written."
+            >
+              <RecordStatus />
+            </Section>
+
+            <Section
+              level={3}
+              id="set-blind"
+              title="Check ARIA blind"
+              intro="Rate a recent incident from its logs alone, before you see ARIA's level. A rating given without seeing ARIA's answer is free of the pull to agree with it, so these are the ratings ARIA recalibrates its short lists on, one at a time."
+            >
+              <BlindCheck />
+            </Section>
+
+            <Section
+              level={3}
+              id="set-drift"
+              title="Has anything shifted?"
+              intro="For each system, the levels ARIA decided on its recent runs against its earlier runs. A shift beyond what chance explains is worth a look: new kinds of incidents, a changed system, or short lists that no longer fit."
+            >
+              <DriftReport />
+            </Section>
+
+            <Section
+              level={3}
+              id="set-learning"
+              title="Learning from reviews"
+              intro={
+                view.data?.visitor_scope
+                  ? "Every review records the severity a reviewer settled on. On this shared demo, reviews of your own incidents stay private. ARIA recalibrates on blind checks, not on approvals, which tend to agree with whatever ARIA said."
+                  : "Every review records the severity a reviewer settled on. ARIA recalibrates on blind checks, not on approvals, which tend to agree with whatever ARIA said."
+              }
+            >
+              {feedback.isPending ? (
+                <LoadingRows rows={3} label="Loading reviews" />
+              ) : feedback.isError ? (
+                failure("feedback", "Reviews could not be loaded", feedback.error)
+              ) : (
+                <Learning view={feedback.data} />
+              )}
+              <div className="grid gap-3 pt-2">
+                <h4 className="text-lg">How each reviewer decides</h4>
+                <ReviewerStats />
+              </div>
+            </Section>
+          </div>
+        </details>
+      </section>
     </div>
   );
 }

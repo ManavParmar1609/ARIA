@@ -96,7 +96,8 @@ Severity keeps its own earthy hues, apart from the greens, so a level never read
 The scale is 14, 16, 18, 20, 23, 27, 32, 44, 60 and 78 px (`--text-xs` to `--text-6xl`). It was
 raised twice on owner feedback: the text was too small, then text and titles read as one size.
 Each step above body grows by about an eighth, so a title stands clear of the text under it.
-The floor is 14 px for text; labels drawn inside a chart may go to 12 px.
+The floor is 14 px for text. Code and log lines may go to 13 px, a shade smaller than the text
+around them, and labels drawn inside a chart may go to 12 px.
 
 ## Shape
 

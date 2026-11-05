@@ -57,6 +57,8 @@ import { RunProgress, usePacedSteps } from "./progress";
 import { LiveDraft, ReportView } from "./report-view";
 import { ExampleNote } from "./example-note";
 import { Receipt, type ReceiptFacts } from "./receipt";
+import { useMediaQuery } from "@/lib/use-media-query";
+
 import { ReviewPanel } from "./review-panel";
 import { HarmlessNote, SampleNext, sampleOf } from "./sample-next";
 import { EvidenceTable, Templates } from "./run-tabs";
@@ -524,6 +526,9 @@ export function RunView({
   // Edges that fade while the side column or the row of tabs holds more than it shows.
   const sideEnds = useScrollEnds("y");
   const tabEnds = useScrollEnds("x");
+  // On a wide screen the decision sits above the report, which stays in view beside it; on a
+  // phone it comes after the report, so no one approves before reading it.
+  const wide = useMediaQuery("(min-width: 80rem)");
   const evidence = useMemo(() => values?.evidence ?? values?.report?.evidence ?? [], [values]);
   const events = useMemo(() => values?.batch?.events ?? [], [values]);
   const cited = useMemo(() => new Set((values?.report?.evidence ?? []).map((e) => e.id)), [values]);
@@ -601,6 +606,27 @@ export function RunView({
         }
       : null;
 
+  const reviewPanel = (afterReport: boolean) =>
+    prompt ? (
+      <ReviewPanel
+        afterReport={afterReport}
+        className="duration-(--duration-moderate) ease-(--ease-out) motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2"
+        runId={detail.id}
+        prompt={prompt}
+        actions={values?.actions ?? []}
+        actionsState={
+          values?.actions
+            ? "ready"
+            : state.isError
+              ? "error"
+              : state.isPending
+                ? "loading"
+                : "ready"
+        }
+        report={report}
+        onDecided={() => setDecided(true)}
+      />
+    ) : null;
   return (
     <EvidenceProvider evidence={evidence} events={events} besidePanel="(min-width: 1280px)">
       <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
@@ -706,23 +732,9 @@ export function RunView({
         {detail.example && !viewing && (prompt || (terminal && detail.status !== "failed")) ? (
           <ExampleNote runId={detail.id} />
         ) : prompt && !viewing ? (
-          <ReviewPanel
-            className="duration-(--duration-moderate) ease-(--ease-out) motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2"
-            runId={detail.id}
-            prompt={prompt}
-            actions={values?.actions ?? []}
-            actionsState={
-              values?.actions
-                ? "ready"
-                : state.isError
-                  ? "error"
-                  : state.isPending
-                    ? "loading"
-                    : "ready"
-            }
-            report={report}
-            onDecided={() => setDecided(true)}
-          />
+          wide ? (
+            reviewPanel(false)
+          ) : null
         ) : receipt ? (
           <Receipt
             runId={detail.id}
@@ -799,6 +811,11 @@ export function RunView({
               </EmptyState>
             )}
           </div>
+          {!wide &&
+          !viewing &&
+          !(detail.example && (prompt || (terminal && detail.status !== "failed")))
+            ? reviewPanel(true)
+            : null}
           <div className="min-w-0 xl:col-start-1 xl:row-start-2">
             {values?.batch ? (
               <WhatHappened batch={values.batch} timeline={report?.timeline ?? []} />
