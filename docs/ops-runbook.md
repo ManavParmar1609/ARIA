@@ -449,7 +449,7 @@ What else to keep:
 
 ### Recalibration
 
-Models with per-level calibrations, the ones `make train` writes, learn from **blind checks**: in Settings, "Check ARIA blind" shows a random recent incident without ARIA's level, a person rates it, and the rating is stored with the run's model input. Approvals and edits are still recorded, but no longer recalibrate (see [ADR 0014](adr/0014-promise-coverage-per-level-and-send-unfamiliar-windows-to-a-person.md)). On a server with `ARIA_VISITOR_SCOPE`, visitors' ratings are not stored.
+Models with per-level calibrations, the ones `make train` writes, learn from **blind checks**: in Settings, "Check ARIA blind" shows a random recent incident without ARIA's level, a person rates it, and the rating is stored with the run's model input. Each incident is rated blind once: a second rating, by anyone, is refused (409), since the reveal has shown ARIA's level by then. Approvals and edits are still recorded, but no longer recalibrate (see [ADR 0014](adr/0014-promise-coverage-per-level-and-send-unfamiliar-windows-to-a-person.md)). On a server with `ARIA_VISITOR_SCOPE`, visitors' ratings are not stored.
 
 Every `severity.recalibrate_check_s` seconds (600 by default; 0 turns it off), the process that executes runs applies the blind checks it has not seen yet, in the order they arrived: each moves its level's miss rate toward the target, and every 100 further checks of a level replace that level's calibration scores. Coefficients never change.
 
@@ -650,7 +650,7 @@ Every decision ARIA or a person takes is one entry in the `decision_record` tabl
 
 Each entry names who acted: the reviewer's key name, `cli` for the operator at the command line, or `system` for ARIA's own jobs. Never a key. Every string in an entry goes through the same redaction as log text, with the run's own pseudonyms, and a reviewer's comment or note is cut to 500 characters. Log lines, report text and message bodies are never in it: those stay in their own rows.
 
-Each entry carries a SHA-256 hash over a canonical JSON of its own fields and the hash of the entry before it (the first chains to a fixed hash of zeros). The database refuses `UPDATE` and `DELETE` on the table, on SQLite and on Azure SQL, and nothing links it to `runs`, so deleting or purging a run leaves its entries where they are. A decision that cannot be recorded is not dropped: the step fails with the reason (a run ends `failed`, a request answers with an error, the purge job logs `record.failed`), so a quiet gap cannot open.
+Each entry carries a SHA-256 hash over a canonical JSON of its own fields and the hash of the entry before it (the first chains to a fixed hash of zeros). Its moment is kept to the whole second, which SQLite and Azure SQL both store exactly as it was hashed; the sequence number orders entries within a second. The database refuses `UPDATE` and `DELETE` on the table, on SQLite and on Azure SQL, and nothing links it to `runs`, so deleting or purging a run leaves its entries where they are. A decision that cannot be recorded is not dropped: the step fails with the reason (a run ends `failed`, a request answers with an error, the purge job logs `record.failed`), so a quiet gap cannot open.
 
 **Verify it.**
 
