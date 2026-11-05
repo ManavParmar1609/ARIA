@@ -11,7 +11,7 @@ import threading
 import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -23,9 +23,10 @@ import uvicorn
 from asgi_lifespan import LifespanManager
 from fastapi import FastAPI
 from mcp import Client
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 
 from aria.api import alerts as intake
+from aria.api.agui import review_interrupt
 from aria.api.app import create_app
 from aria.api.state import AppState
 from aria.api.worker import Worker, heartbeat_age, poll_forever
@@ -36,9 +37,10 @@ from aria.contracts.run import RunStatus
 from aria.data.scenarios import LinePools, ScenarioBuilder
 from aria.db import repository as repo
 from aria.db.engine import dispose_engines, get_engine, init_db, session_scope
-from aria.db.models import AlertGroupRow, RunRow
+from aria.db.models import AlertGroupRow, ReportRow, RunEventRow, RunRow
 from aria.evidence import EvidenceStore
 from aria.graph.runner import RunBusyError, TriageRunner
+from aria.graph.workflow import review_lead
 from aria.mcp.client import remote_target
 from aria.mcp.server import TOOL_NAMES
 from aria.retrieval.memory import IncidentMemory
@@ -198,6 +200,14 @@ async def test_me_and_settings_show_the_caller_and_limits_without_secrets(api: A
     assert view["routing"]["reporter"][0] == "nim-local"
     assert "k-ana" not in json.dumps(view)
     assert view["channels"]["slack"] is False  # no webhook set: its messages would be skipped
+    assert view["retention"] == {"days": 0, "purge_interval_s": 0}  # runs are kept until deleted
+    terms = {entry["id"]: entry for entry in view["data_terms"]}
+    assert terms["google"]["providers"] == ["gemini", "gemini-lite", "gemini-lite-2", "gemma"]
+    assert [use["improves_models"] for use in terms["google"]["uses"]] == [None, None]
+    assert terms["google"]["verified"] is None  # its page could not be read: not verified
+    claude = terms["anthropic"]
+    assert (claude["providers"], claude["uses"][0]["improves_models"]) == (["claude"], False)
+    assert claude["verified"] == "2026-11-01"
 
 
 async def test_rate_limit_answers_429_with_retry_after(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -541,6 +551,9 @@ async def test_run_lifecycle_over_http(api: Api) -> None:
     metrics = (await api.client.get("/metrics")).text
     assert 'aria_runs{status="awaiting_review"} 1.0' in metrics
     assert "aria_time_to_review_seconds_count" in metrics
+    # Drift signals that need no labels: decisions by level and calibration, and set sizes.
+    assert "aria_severity_decisions_total{" in metrics
+    assert "aria_severity_set_size_count" in metrics
 
 
 async def test_an_untitled_run_takes_its_report_title(api: Api) -> None:
@@ -1036,7 +1049,12 @@ async def test_past_the_daily_allowance_the_sites_model_steps_aside(
     api.state.allowance = SharedAllowance(SharedAllowanceConfig(per_visitor=1, per_day=5))
     monkeypatch.setattr(api.state.services.router, "has_real_llm", lambda role: True)
     settings = (await api.client.get("/api/v1/settings")).json()
-    assert settings["shared_model"] == {"left": 1, "per_visitor": 1, "per_day": 5}
+    assert settings["shared_model"] == {
+        "left": 1,
+        "per_visitor": 1,
+        "per_day": 5,
+        "back_at": None,  # the shared models themselves have room
+    }
     body = {"system": "bgl", "logs": logs(api), "options": {"investigate": False}}
     ids = [(await api.client.post("/api/v1/runs", json=body)).json()["run_id"] for _ in range(2)]
     used = [
@@ -1143,6 +1161,44 @@ async def test_pages_through_the_whole_incident_library(api: Api) -> None:
     assert too_many.status_code == 422
 
 
+async def test_a_blind_check_hides_the_level_until_rated_then_counts_once(api: Api) -> None:
+    run = await start(api)
+    first = (await api.client.get("/api/v1/blind-check")).json()
+    case = first["case"]
+    assert case["run_id"] == run["id"]
+    assert first["counted"] is True
+    assert case["patterns"]
+    # Nothing ARIA decided is shown before the rating: no level, set or title.
+    assert not {"severity", "prediction_set", "title"} & set(case)
+
+    rated = await api.client.post(f"/api/v1/blind-check/{run['id']}", json={"severity": "SEV2"})
+    assert rated.status_code == 200, rated.text
+    reveal = rated.json()
+    assert reveal["aria"] == run["severity"]
+    assert reveal["held"] == ("SEV2" in reveal["prediction_set"])
+    assert (reveal["counted"], reveal["checks"]) == (True, 1)
+    # Each run is rated once, so the next check has nothing left to show.
+    assert (await api.client.get("/api/v1/blind-check")).json()["case"] is None
+    missing = await api.client.post("/api/v1/blind-check/nope", json={"severity": "SEV2"})
+    assert missing.status_code == 404
+
+
+async def test_an_incident_is_rated_blind_once(api: Api) -> None:
+    """A second rating is not blind (the reveal showed ARIA's level) and would count the incident
+    twice in the recalibration and the severe-miss alarm, whoever sends it."""
+    run = await start(api)
+    first = await api.client.post(f"/api/v1/blind-check/{run['id']}", json={"severity": "SEV2"})
+    assert first.status_code == 200, first.text
+    again = await api.client.post(f"/api/v1/blind-check/{run['id']}", json={"severity": "SEV1"})
+    assert again.status_code == 409, again.text
+    other = await api.client.post(
+        f"/api/v1/blind-check/{run['id']}", json={"severity": "SEV1"}, headers=RAJ
+    )
+    assert other.status_code == 409, other.text
+    assert (await api.client.get("/api/v1/blind-check")).json()["checks"] == 1
+    assert len(repo.feedback_of(api.state.services.engine, "blind_check")) == 1
+
+
 async def test_reviews_calibration_evaluation_and_tickets(
     api: Api, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1179,6 +1235,11 @@ async def test_reviews_calibration_evaluation_and_tickets(
     assert results.status_code == 200
     assert results.json()["severity"]["n"] > 0
 
+    # One run is too few to say whether a system's severity mix has shifted.
+    drift = (await api.client.get("/api/v1/drift")).json()
+    assert drift["systems"] == []
+    assert run["system"] in drift["too_few_runs"]
+
     # The committed ticket model (trained on the UCI log) decides by the impact x urgency matrix.
     ticket = {"category": "network", "impact": "1 - High", "urgency": "1 - High"}
     assert api.state.services.tickets is not None
@@ -1208,6 +1269,60 @@ async def test_reviews_calibration_evaluation_and_tickets(
     untrained = await api.client.post("/api/v1/tickets/assess", json=ticket)
     assert untrained.status_code == 503
     assert "aria train tickets" in untrained.json()["detail"]
+
+
+async def test_reviewer_figures_come_from_the_reviews_kept(api: Api) -> None:
+    empty = (await api.client.get("/api/v1/reviewers")).json()
+    assert (empty["reviewers"], empty["decisions"], empty["since"]) == ([], 0, None)
+
+    approved, edited, discarded = [await start(api, title=f"Kernel panics {n}") for n in range(3)]
+    other = "SEV4" if edited["severity"] != "SEV4" else "SEV3"
+    for run, body, caller in (
+        (approved, {"decision": "approve"}, ANA),
+        (edited, {"decision": "edit", "edits": {"severity": other}}, RAJ),
+        (discarded, {"decision": "reject"}, ANA),
+    ):
+        done = await api.client.post(f"/api/v1/runs/{run['id']}/review", json=body, headers=caller)
+        assert done.status_code == 200, done.text
+
+    # Pin when each run paused for review and when its decision came, to know the waits.
+    engine = api.state.services.engine
+    paused = datetime(2026, 10, 1, 9, 0, tzinfo=UTC)
+    for run, waited_s in ((approved, 120), (edited, 45), (discarded, 600)):
+        with session_scope(engine) as session:
+            first = session.scalar(
+                select(func.min(RunEventRow.seq)).where(
+                    RunEventRow.run_id == run["id"], RunEventRow.kind == "interrupt"
+                )
+            )
+            session.execute(
+                update(RunEventRow)
+                .where(RunEventRow.run_id == run["id"], RunEventRow.seq == first)
+                .values(ts=paused)
+            )
+            session.execute(
+                update(ReportRow)
+                .where(ReportRow.run_id == run["id"])
+                .values(reviewed_at=paused + timedelta(seconds=waited_s))
+            )
+
+    body = (await api.client.get("/api/v1/reviewers")).json()
+    assert body["decisions"] == 3
+    assert body["since"].startswith("2026-10-01T09:00:45")
+    ana, raj = body["reviewers"]  # the busiest first
+    assert ana == {
+        "reviewer": "ana",
+        "decisions": 2,
+        "approved_as_is": 1,
+        "edited": 0,
+        "rejected": 1,
+        "level_changed": 0,
+        "timed": 2,
+        "median_wait_s": 360.0,
+    }
+    assert (raj["reviewer"], raj["edited"], raj["level_changed"]) == ("raj", 1, 1)
+    assert raj["median_wait_s"] == 45.0
+    assert (await api.client.get("/api/v1/reviewers?limit=1")).json()["decisions"] == 1
 
 
 # --- agent protocols ------------------------------------------------------------------------------
@@ -1253,6 +1368,12 @@ async def test_a2a_task_pauses_for_review_and_completes(api: Api) -> None:
     report = task["artifacts"][0]["parts"][0]["data"]
     assert report["severity"].startswith("SEV")
     assert "BlueGene/L" in report["title"]
+    # The question names the levels ARIA is torn between, when there are several.
+    said, prompt = task["status"]["message"]["parts"][:2]
+    assert said["text"] == (
+        f"The report is ready for review. {review_lead(prompt['data'])}Reply with a decision: "
+        "approve, edit or reject."
+    )
     reply = {
         "messageId": "m2",
         "role": "ROLE_USER",
@@ -1308,6 +1429,20 @@ async def test_cancelling_an_a2a_task_rejects_its_run_only_while_it_waits(api: A
     assert again["error"]["message"] == "Task cannot be canceled"
 
 
+def test_an_agui_review_prompt_leads_with_the_levels_aria_is_torn_between() -> None:
+    ask = "Review the incident report: approve it, edit it first, or discard it."
+    torn = {
+        "severity": "SEV2",
+        "prediction_set": ["SEV2", "SEV3"],
+        "severity_text": "ARIA is torn between SEV2 and SEV3 and plans for SEV2",
+    }
+    assert review_interrupt("i1", torn).message == f"{torn['severity_text']}. {ask}"
+    single = {"severity": "SEV2", "prediction_set": ["SEV2"], "severity_text": "SEV2"}
+    assert review_interrupt("i1", single).message == ask  # one level: worded as before
+    refused = {**torn, "error": "unknown action ids: a-9"}
+    assert review_interrupt("i1", refused).message == "unknown action ids: a-9"
+
+
 async def test_agui_streams_a_run_and_resumes_its_interrupt(api: Api) -> None:
     body = {
         "threadId": "thread-ui-1",
@@ -1329,6 +1464,7 @@ async def test_agui_streams_a_run_and_resumes_its_interrupt(api: Api) -> None:
     interrupt = outcome["interrupts"][0]
     assert interrupt["reason"] == "review"
     assert "decision" in interrupt["responseSchema"]["properties"]
+    assert interrupt["message"] == review_interrupt("i", interrupt["metadata"]).message
 
     stale = {**body, "runId": "ui-run-2", "resume": [{"interruptId": "x", "status": "resolved"}]}
     errored = sse((await api.client.post("/agui", json=stale)).text)

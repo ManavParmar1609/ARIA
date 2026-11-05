@@ -4,7 +4,14 @@ import { LevelChip, SeverityScale } from "@/components/aria/severity";
 import { decisionPhrase } from "@/lib/decision";
 import { SEVERITIES, type SeverityAssessment } from "@/lib/api/types";
 import { chance, percent } from "@/lib/format";
-import { LEVEL_RESPONSE, orList, unsettled } from "@/lib/levels";
+import {
+  coverageText,
+  LEVEL_RESPONSE,
+  NOVELTY_WORDS,
+  orList,
+  tornText,
+  unsettled,
+} from "@/lib/levels";
 import { cn } from "@/lib/utils";
 
 import { Citations } from "./evidence";
@@ -26,6 +33,11 @@ export function SeverityPanel({
   status?: string;
 }) {
   const coverage = Math.round((1 - assessment.alpha) * 100);
+  const newSystem = (assessment.novelty ?? []).includes("new_system");
+  // The rules-only sentence already explains "unlike anything the model learned from".
+  const confirmBecause = (assessment.novelty ?? [])
+    .filter((reason) => reason !== "outside_training")
+    .map((reason) => NOVELTY_WORDS[reason]);
   // A window unlike the ones the model learned from (or no model loaded): the probabilities are
   // normalised rule scores, so nothing here may read them as a calibrated confidence.
   const rulesOnly = assessment.model_version.startsWith("rules-only");
@@ -46,6 +58,12 @@ export function SeverityPanel({
     : decisionPhrase(assessment, status);
   const set = assessment.prediction_set;
   const overruled = assessment.decided_by === "human" && !set.includes(assessment.severity);
+  // With more than one level possible, the level is a plan, said as one: never a bare "SEV2".
+  // A reviewer's own level is theirs, so it reads as before.
+  const torn =
+    assessment.decided_by === "human"
+      ? null
+      : tornText(assessment.severity, set, status === "published" || status === "rejected");
   const maxScore = Math.max(1, ...SEVERITIES.map((s) => assessment.rule_scores[s] ?? 0));
   return (
     // overflow-clip: the stamp starts large, and a transform still counts as overflow; clipped to
@@ -67,8 +85,10 @@ export function SeverityPanel({
         />
         <p className="text-sm">
           {unsettled(assessment, status) && status !== "rejected"
-            ? `Not settled: ARIA could not narrow it down, so it plans for ${assessment.severity} until someone decides. ${LEVEL_RESPONSE[assessment.severity]}`
-            : LEVEL_RESPONSE[assessment.severity]}
+            ? `Not settled: ${torn ?? `ARIA plans for ${assessment.severity}`} until someone decides. ${LEVEL_RESPONSE[assessment.severity]}`
+            : torn
+              ? `${torn}. ${LEVEL_RESPONSE[assessment.severity]}`
+              : LEVEL_RESPONSE[assessment.severity]}
         </p>
       </div>
       {/* In words, not badges: the level is already shown twice on this screen. */}
@@ -87,11 +107,17 @@ export function SeverityPanel({
         {rulesOnly
           ? "The calibrated model was not used for this window, so the short list comes from the rules alone."
           : `${
-              shortListHeld != null
+              shortListHeld != null && !newSystem
                 ? `Short lists like this held the right level in ${Math.round(shortListHeld * 100)} of 100 past test incidents.`
-                : `Short lists like this are built to hold the right level ${coverage} times in 100.`
+                : `Short lists like this are built to hold the right level ${coverageText(assessment.alpha, assessment.alphas)} on systems ARIA trained on.`
             } That is how often the list was right, not ARIA's confidence in its first choice.`}
       </p>
+      {confirmBecause.length > 0 ? (
+        <p className="-mt-2 text-sm">
+          <span className="font-medium">Why a person should confirm: </span>
+          {confirmBecause.join("; ")}.
+        </p>
+      ) : null}
 
       <details className="group grid gap-3 text-sm">
         <summary className="w-fit cursor-pointer py-0.5 font-medium text-muted-foreground hover:text-heading">
@@ -119,23 +145,31 @@ export function SeverityPanel({
                 : ""}
             </span>
           </p>
-          <p className="leading-relaxed text-muted-foreground">
-            How the pieces fit: the rules score what the logs show, and a safety rule can set the
-            lowest level allowed.{" "}
-            {rulesOnly
-              ? "Here the calibrated model was not used, so the rule scores stand in for its likelihoods."
-              : "The calibrated model weighs the whole window, rule scores included, and gives each level a likelihood."}{" "}
-            The short list keeps the levels that can&apos;t be ruled out, never below a safety
-            rule&apos;s level. When one level is left and a safety rule set it, or the model is
-            confident in it, ARIA decides alone; otherwise a language model chooses from the list,
-            or ARIA plans for the most serious level on it, and a person confirms.
-          </p>
+          {/* The same explanation on every incident: folded, so the chart and the rules that
+              matched here come first, and a reader meets the primer once. */}
+          <details className="text-sm">
+            <summary className="w-fit cursor-pointer py-0.5 text-muted-foreground hover:text-heading">
+              How the pieces fit
+            </summary>
+            <p className="pt-2 leading-relaxed text-muted-foreground">
+              The rules score what the logs show, and a safety rule can set the lowest level
+              allowed.{" "}
+              {rulesOnly
+                ? "Here the calibrated model was not used, so the rule scores stand in for its likelihoods."
+                : "The calibrated model weighs the whole window, rule scores included, and gives each level a likelihood."}{" "}
+              The short list keeps the levels that can&apos;t be ruled out, never below a safety
+              rule&apos;s level. When one level is left and a safety rule set it, or the model is
+              confident in it, ARIA decides alone; otherwise a language model chooses from the list,
+              or ARIA plans for the most serious level on it, and a person confirms.
+            </p>
+          </details>
           <SeverityScale
             probabilities={assessment.probabilities}
             predictionSet={assessment.prediction_set}
             decided={assessment.severity}
             floor={assessment.floor}
             alpha={assessment.alpha}
+            alphas={assessment.alphas}
             setEmpty={assessment.set_empty ?? false}
             rulesOnly={rulesOnly}
             drawBracket

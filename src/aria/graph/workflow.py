@@ -58,15 +58,17 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError
 
 from aria.agents.investigator import INVESTIGATOR_TOOLS, InvestigationInputs, Investigator
-from aria.config import BudgetConfig, Settings
+from aria.config import AppConfig, BudgetConfig, Settings
 from aria.contracts.base import Claim, EvidenceKind, Severity
 from aria.contracts.inputs import TriageRequest
 from aria.contracts.parsing import ParsedBatch
+from aria.contracts.record import RecordKind
 from aria.contracts.report import IncidentReport, OutboundAction, ReviewDecision
 from aria.contracts.retrieval import Investigation, RetrievalResult
 from aria.contracts.run import BudgetUsage, Plan, RunStatus
 from aria.contracts.severity import SeverityAssessment, TicketAssessment
 from aria.data.loghub import LogRecord, format_raw_line
+from aria.db import record
 from aria.db import repository as repo
 from aria.db.engine import session_scope
 from aria.db.models import LogEventRow
@@ -90,14 +92,19 @@ from aria.reporting.comms import AUDIENCE, action_id, draft_comms, is_service_na
 from aria.reporting.composer import SYSTEM_NAMES, ReportContext
 from aria.reporting.grounding import validate_report
 from aria.reporting.markdown import render_markdown
+from aria.reporting.outbound import DraftPolicy
 from aria.reporting.review import apply_review
 from aria.reporting.writer import ReportWriter
 from aria.retrieval import runlog
 from aria.retrieval.memory import MemoryIncident, run_incident_id
 from aria.retrieval.retriever import build_query
+from aria.retrieval.reviewed import reviewed_examples
 from aria.security.fields import clean_request
+from aria.security.redaction import Redactor
 from aria.services import Services
-from aria.text import headline
+from aria.severity.adjudicator import ReviewedExample, levels_outside_set
+from aria.severity.policy import level_words
+from aria.text import failure_words, headline
 
 SHARD_LINES = 4_000  # fan parsing out above this many lines
 MAX_SHARDS = 8
@@ -106,12 +113,39 @@ MAX_ALERT_EVIDENCE = 20
 FEEDBACK_REVIEW_THRESHOLD = 2  # corrections that make ARIA ask for a second look
 # Without ARIA_PSEUDONYM_KEY: the random key the processes sharing a database keep in it.
 _SHARED_KEYS: weakref.WeakKeyDictionary[Engine, bytes] = weakref.WeakKeyDictionary()
+# A node runs again on a database error, or when it cannot reach a remote MCP tool server
+# (ARIA_MCP_URL). Never on a model call: the router turns every provider failure into a
+# fallback to the next provider, ARIA's one retry layer for model calls, so a provider's
+# transport error never reaches a node to be multiplied by a rerun (aria.llm.router).
 TRANSIENT = RetryPolicy(
     max_attempts=3,
     initial_interval=0.25,
     backoff_factor=2.0,
     retry_on=(OperationalError, httpx.TransportError),
 )
+
+
+def expected_llm_calls(config: AppConfig) -> dict[str, int]:
+    """The model calls one model-written triage makes when nothing goes wrong, by role: what a
+    run reserves from the shared models' daily limits before it starts (aria.llm.quota).
+
+    * ``severity``: one adjudication, choosing inside the prediction set;
+    * ``recall``: one query rewrite, when the first search for similar incidents is weak;
+    * ``investigate``: one decision per round;
+    * ``report``: the narrative, then the critic;
+    * ``comms``: the message drafts.
+
+    Repairs, a replan's wider search and fallbacks are not reserved: each is admitted call by
+    call, within what the day has left.
+    """
+    return {
+        "adjudicator": 1,
+        "retriever": 1,
+        "investigator": config.investigation.max_rounds,
+        "reporter": 1,
+        "critic": 1,
+        "comms": 1,
+    }
 
 
 # --- context -------------------------------------------------------------------------------------
@@ -178,6 +212,12 @@ def run_link(settings: Settings, run_id: str) -> str:
     if settings.console_url:
         return f"{settings.console_url.rstrip('/')}/console/runs/{run_id}"
     return f"{settings.public_base_url.rstrip('/')}/api/v1/runs/{run_id}"
+
+
+def draft_policy(services: Services) -> DraftPolicy:
+    """What a message draft may link to and address: ARIA's own console and API, plus the hosts
+    and recipients ``comms`` in config/aria.yaml lists."""
+    return DraftPolicy.for_settings(services.settings, services.config.comms)
 
 
 def ticket_floor(
@@ -362,7 +402,13 @@ async def plan(state: TriageState, runtime: Runtime[TriageContext]) -> Command[A
             if dropped
             else []
         )
-        + withheld,
+        + withheld
+        # The runner's reason for running offline a triage that asked for a model.
+        + (
+            [request.offline_reason]
+            if request.offline_reason and not request.options.use_llm
+            else []
+        ),
     )
     sends = [
         Send(
@@ -482,6 +528,75 @@ async def _reviewer_corrections(
     return [item.value for item in items if item.value.get("to") not in (None, str(severity))]
 
 
+async def _reviewed_examples(
+    services: Services, store: BaseStore | None, batch: ParsedBatch, evidence: EvidenceStore
+) -> list[ReviewedExample]:
+    """The nearest past incidents a person reviewed, as examples for the adjudicator, listed
+    once as evidence with the levels people set, so the reviewer sees what the model saw."""
+    examples = await reviewed_examples(
+        services.memory, store, query=build_query(batch).text, system=batch.system
+    )
+    if not examples:
+        return []
+    eid = evidence.add(
+        EvidenceKind.FEEDBACK,
+        "Past reviewed incidents like this one: "
+        + ", ".join(f"{e.incident_id} rated {e.severity} by a reviewer" for e in examples),
+        source="memory.reviewed",
+        detail="; ".join(
+            f"{e.incident_id}: {e.title} ({failure_words(e.failure_mode)}); a reviewer set "
+            f"{e.severity}"
+            + (
+                f" where ARIA had proposed {e.aria_severity}"
+                if e.aria_severity is not None and e.aria_severity != e.severity
+                else ""
+            )
+            for e in examples
+        ),
+        data={
+            "examples": [
+                {
+                    "incident_id": e.incident_id,
+                    "severity": str(e.severity),
+                    "aria_severity": str(e.aria_severity) if e.aria_severity else None,
+                    "decision": e.decision,
+                    "similarity": e.similarity,
+                }
+                for e in examples
+            ]
+        },
+    )
+    return [replace(e, evidence_id=eid) for e in examples]
+
+
+def _flag_reviewed_levels(
+    assessment: SeverityAssessment, examples: list[ReviewedExample]
+) -> tuple[SeverityAssessment, list[str]]:
+    """When people rated incidents like this one at a level ARIA's set rules out, say so and ask
+    a person to check. The level itself stays out of reach: the set is the set."""
+    outside = levels_outside_set(examples, assessment.prediction_set)
+    cite = next((e.evidence_id for e in examples if e.evidence_id), None)
+    if not outside or cite is None:
+        return assessment, []
+    levels = ", ".join(str(s) for s in outside)
+    held = ", ".join(str(s) for s in assessment.prediction_set)
+    claim = Claim(
+        text=(
+            f"Past reviewed incidents like this were rated {levels}, outside ARIA's set "
+            f"({held}); a person should check the level."
+        ),
+        evidence_ids=[cite],
+    )
+    flagged = assessment.model_copy(
+        update={"needs_review": True, "rationale": [*assessment.rationale, claim]}
+    )
+    note = (
+        f"past reviewed incidents like this were rated {levels}, outside ARIA's set; flagged "
+        "for review"
+    )
+    return flagged, [note]
+
+
 async def severity(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
     services = runtime.context.services
     request, run_plan = _request(state), _plan(state)
@@ -489,6 +604,7 @@ async def severity(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
     evidence = EvidenceStore(evidence_of(state))
     guard = _guard(state, services)
     before = guard.snapshot()
+    examples = await _reviewed_examples(services, runtime.store, batch, evidence)
     result = await services.severity.assess(
         batch.features,
         system=request.system,
@@ -497,9 +613,9 @@ async def severity(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
         router=_router(runtime.context, request, run_plan),
         budget=guard,
         use_llm=run_plan.use_llm,
+        examples=examples,
     )
-    assessment = result.assessment
-    notes: list[str] = []
+    assessment, notes = _flag_reviewed_levels(result.assessment, examples)
 
     ticket: TicketAssessment | None = None
     if request.ticket is not None and services.tickets is not None:
@@ -761,6 +877,8 @@ async def report(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
         "provider": outcome.provider,
         "model": outcome.model,
         "critic": outcome.critic,
+        "critic_provider": outcome.critic_provider,
+        "critic_checks": outcome.critic_checks,
         "removed_claims": outcome.removed_claims,
         "fell_back": outcome.fell_back,
         "safety": outcome.safety,
@@ -778,6 +896,7 @@ async def comms(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
     services = runtime.context.services
     request, run_plan = _request(state), _plan(state)
     incident = IncidentReport.model_validate(state["report"])
+    assessment = SeverityAssessment.model_validate(state["severity"])
     guard = _guard(state, services)
     before = guard.snapshot()
     outcome = await draft_comms(
@@ -788,10 +907,18 @@ async def comms(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
         budget=guard,
         use_llm=run_plan.use_llm,
         safety_check=services.config.guardrails.safety_model,
+        policy=draft_policy(services),
+        prediction_set=assessment.prediction_set,
     )
     await _db(repo.save_actions, services.engine, state["run_id"], outcome.actions)
     notes = [
         f"comms draft for {key} dropped: {'; '.join(p)}" for key, p in outcome.rejected.items()
+    ]
+    # Never kept silently: what the drafts lost is said in the run's notes and the review.
+    notes += [
+        f"removed from the {action.audience} draft: {'; '.join(action.removed)}"
+        for action in outcome.actions
+        if action.removed
     ]
     return {
         "actions": [action.model_dump(mode="json") for action in outcome.actions],
@@ -812,18 +939,37 @@ def review_payload(state: TriageState) -> Json:
         "report_id": incident.report_id,
         "title": incident.title,
         "severity": str(incident.severity),
+        # The level as a reviewer should read it: with a wider set, the levels ARIA is torn
+        # between and the one it plans for, not the bare level.
+        "severity_text": level_words(incident.severity, assessment.prediction_set),
         "decided_by": assessment.decided_by,
         "confidence": assessment.confidence,
         "needs_review": assessment.needs_review,
         "prediction_set": [str(s) for s in assessment.prediction_set],
         "valid": incident.validation.ok,
         "generated_by": incident.generated_by,
+        # What the report's critic could not judge and asks the reviewer to check instead.
+        "critic_checks": list((state.get("report_meta") or {}).get("critic_checks") or []),
         "actions": [
-            {k: a[k] for k in ("action_id", "kind", "audience", "title")}
+            {
+                **{k: a[k] for k in ("action_id", "kind", "audience", "title")},
+                # What was taken out of the draft (links, recipients), for the reviewer.
+                "removed": list(a.get("removed") or []),
+            }
             for a in state.get("actions", [])
         ],
         "decisions": ["approve", "edit", "reject"],
     }
+
+
+def review_lead(payload: Json) -> str:
+    """How a review prompt read as text (A2A, AG-UI) opens: what ARIA is torn between, as a
+    sentence, when the prediction set holds more than one level. A set of one level adds
+    nothing, so those prompts read as they always have."""
+    text = payload.get("severity_text")
+    if not text or len(set(payload.get("prediction_set") or ())) < 2:
+        return ""
+    return f"{text}. "
 
 
 def review(state: TriageState, runtime: Runtime[TriageContext]) -> Command[Any]:
@@ -968,6 +1114,92 @@ async def _private(services: Services, run_id: str) -> bool:
     return await _db(repo.run_visitor, services.engine, run_id) is not None
 
 
+def _actor(reviewer: str) -> str:
+    """Who decided, as the decision record names them: the reviewer, or ``system`` when ARIA
+    itself approved an unattended run."""
+    return "system" if reviewer == "aria:auto" else reviewer
+
+
+def send_facts(action: OutboundAction) -> dict[str, Any]:
+    """What the decision record keeps about a message that went out, or did not: never its
+    body, which the action row holds."""
+    return {
+        "action_id": action.action_id,
+        "channel": action.kind,
+        "audience": action.audience,
+        "status": action.status,
+        "title": action.title,
+        "problem": action.result.get("error") or action.result.get("reason"),
+    }
+
+
+async def _record(
+    runtime: Runtime[TriageContext], run_id: str, kind: RecordKind, actor: str, **facts: Any
+) -> None:
+    """Add a decision to the append-only record, with the run's own pseudonyms.
+
+    A failure raises: the node fails loudly (a database error is retried first) rather than
+    finish a decision nobody can account for afterwards.
+    """
+    services = runtime.context.services
+
+    def write() -> None:
+        salt = run_salt(services.settings, run_id, services.engine)
+        record.append(
+            services.engine,
+            kind=kind,
+            actor=actor,
+            run_id=run_id,
+            payload=facts,
+            redactor=Redactor(salt=salt),
+        )
+
+    await asyncio.to_thread(write)
+
+
+async def _record_decision(
+    state: TriageState,
+    runtime: Runtime[TriageContext],
+    *,
+    decision: ReviewDecision,
+    original: SeverityAssessment,
+    final: Severity,
+) -> None:
+    """The review on the record: who decided what, and what an edit changed. The facts, never
+    the report's text: the report row keeps that, and a decision is accountable without it."""
+    run_id, actor = state["run_id"], _actor(decision.reviewer)
+    report_id = str(state["report"]["report_id"])
+    await _record(
+        runtime,
+        run_id,
+        "review",
+        actor,
+        decision=decision.decision,
+        reviewer=decision.reviewer,
+        report_id=report_id,
+        from_severity=str(original.severity),
+        to_severity=str(final),
+        decided_by=original.decided_by,
+        prediction_set=[str(s) for s in original.prediction_set],
+        approved_actions=sorted(decision.approve_actions),
+        comment=record.clipped(decision.comment),
+    )
+    edits = decision.edits
+    if edits is not None and edits.changes_anything():
+        await _record(
+            runtime,
+            run_id,
+            "edit",
+            actor,
+            report_id=report_id,
+            title=edits.title,
+            severity=str(edits.severity) if edits.severity else None,
+            summary_lines=len(edits.summary or []),
+            actions_added=len(edits.add_actions),
+            note=record.clipped(edits.note),
+        )
+
+
 async def publish(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
     services = runtime.context.services
     request = _request(state)
@@ -977,6 +1209,9 @@ async def publish(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
     evidence = EvidenceStore(evidence_of(state))
     drafted = IncidentReport.model_validate(state["report"])
     incident, assessment = apply_review(drafted, original, decision, evidence)
+    await _record_decision(
+        state, runtime, decision=decision, original=original, final=assessment.severity
+    )
     validation = validate_report(
         incident,
         evidence=evidence.all(),
@@ -994,6 +1229,20 @@ async def publish(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
         reviewer=decision.reviewer,
         comment=decision.comment,
     )
+    await _record(
+        runtime,
+        run_id,
+        "publish",
+        _actor(decision.reviewer),
+        report_id=incident.report_id,
+        version=incident.version,
+        severity=str(incident.severity),
+        title=incident.title,
+        decided_by=assessment.decided_by,
+        generated_by=incident.generated_by,
+        model=incident.model,
+        valid=validation.ok,
+    )
     private = await _private(services, run_id)
     memory = _memory_incident(state, incident, assessment, request.synthetic)
     if not private:
@@ -1004,9 +1253,20 @@ async def publish(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
     run_url = run_link(services.settings, run_id)
     proposed = [OutboundAction.model_validate(raw) for raw in state.get("actions", [])]
     if (incident.title, incident.severity) != (drafted.title, drafted.severity):
-        proposed = redraft(proposed, incident, service=service_name(request), run_url=run_url)
+        proposed = redraft(
+            proposed,
+            incident,
+            service=service_name(request),
+            run_url=run_url,
+            policy=draft_policy(services),
+            # A level a person set is stated plainly; ARIA's own still names what it was torn between.
+            prediction_set=[assessment.severity]
+            if assessment.decided_by == "human"
+            else assessment.prediction_set,
+        )
     actions: list[OutboundAction] = []
     for proposal in proposed:
+        delivered: OutboundAction | None = None
         if proposal.action_id not in approved:
             action = proposal.model_copy(update={"status": "rejected"})
         elif already.get(proposal.action_id) == "sent":
@@ -1017,7 +1277,7 @@ async def publish(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
             actions.append(proposal.model_copy(update={"status": "approved"}))
             continue
         else:
-            action = await send_action(
+            action = delivered = await send_action(
                 proposal.model_copy(update={"status": "approved"}),
                 services.config.comms,
                 run_url=run_url,
@@ -1027,6 +1287,10 @@ async def publish(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
         await _db(
             repo.save_actions, services.engine, run_id, [action], approved_by=decision.reviewer
         )
+        if delivered is not None:
+            await _record(
+                runtime, run_id, "send", _actor(decision.reviewer), **send_facts(delivered)
+            )
         actions.append(action)
 
     batch = ParsedBatch.model_validate(state["batch"])
@@ -1069,6 +1333,9 @@ async def reject(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
         markdown=markdown,
         reviewer=decision.reviewer,
         comment=decision.comment,
+    )
+    await _record_decision(
+        state, runtime, decision=decision, original=original, final=original.severity
     )
     actions = [
         OutboundAction.model_validate(raw).model_copy(update={"status": "rejected"})

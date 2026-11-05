@@ -3,7 +3,11 @@
 import { ChevronRightIcon, LogOutIcon } from "lucide-react";
 import Link from "next/link";
 
+import { BlindCheck, DriftReport } from "@/components/console/calibration-check";
+import { DataTerms } from "@/components/console/data-terms";
 import { ModelKeyPanel } from "@/components/console/model-key";
+import { RecordStatus } from "@/components/console/record-status";
+import { ReviewerStats } from "@/components/console/reviewer-stats";
 import { ErrorState, LoadingRows, PageHeader } from "@/components/console/states";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,15 +19,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  useCapacity,
   useFeedback,
   useModelKey,
   useProviders,
   useSession,
   useSettingsView,
   useSignOut,
+  type CapacityView,
   type FeedbackView,
   type SettingsView,
 } from "@/lib/api/hooks";
+import { capacitySummary, dayWords, minuteWords, shownModels, stateWords } from "@/lib/capacity";
 import { capitalise, money, percent, relativeTime, reviewerName } from "@/lib/format";
 import { useTheme, type ThemeChoice } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -77,6 +84,28 @@ function Pairs({ items }: { items: [string, React.ReactNode][] }) {
 
 const onOff = (value: unknown) => (value ? "On" : "Off");
 
+/** "every hour", "every 6 hours", "every day": how often old runs are purged. */
+function everyWords(seconds: number): string {
+  const [size, unit] =
+    seconds % 86_400 === 0
+      ? [seconds / 86_400, "day"]
+      : seconds % 3_600 === 0
+        ? [seconds / 3_600, "hour"]
+        : [Math.round(seconds / 60), "minute"];
+  return size === 1 ? `every ${unit}` : `every ${size.toLocaleString("en")} ${unit}s`;
+}
+
+/** How long runs are kept (the retention period), in words. */
+export function keptWords(retention: Record<string, number> | undefined): string {
+  const days = retention?.days ?? 0;
+  if (days <= 0) return "Until someone deletes them";
+  const period = `${days.toLocaleString("en")} ${days === 1 ? "day" : "days"} after their last change`;
+  const every = retention?.purge_interval_s ?? 0;
+  return every > 0
+    ? `${period}, purged ${everyWords(every)}`
+    : `${period}, purged when someone runs aria purge`;
+}
+
 // The deployment's environment in words; "dev" is also what the free public demo runs as.
 const ENVIRONMENT: Record<string, string> = {
   dev: "Development or demo",
@@ -105,6 +134,7 @@ function Configuration({ view }: { view: SettingsView }) {
               view.worker_mode === "external" ? "a separate worker" : "the API process",
             ],
             ["Requests a minute, for each caller", view.rate_limit_per_minute],
+            ["Runs are kept", keptWords(view.retention)],
           ]}
         />
       </Section>
@@ -195,6 +225,54 @@ const ROLE: Record<string, string> = {
   default: "Anything else",
 };
 
+/** The room left on each of the site's models: this minute, today, and any rest. */
+function SiteModels({ capacity }: { capacity: CapacityView }) {
+  const models = shownModels(capacity);
+  if (models.length === 0) {
+    return (
+      <p className="max-w-prose text-sm text-muted-foreground">
+        No limits are set for this server&apos;s models, so ARIA does not count their requests.
+      </p>
+    );
+  }
+  return (
+    <>
+      <p role="status" className="max-w-prose text-sm">
+        {capacitySummary(capacity)}
+      </p>
+      <Table aria-label="Room left on each of the site's models">
+        <TableHeader>
+          <TableRow>
+            <TableHead>Model</TableHead>
+            <TableHead>This minute</TableHead>
+            <TableHead>Today</TableHead>
+            <TableHead>State</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {models.map((m) => (
+            <TableRow key={m.name}>
+              <TableHead scope="row" className="font-mono text-xs">
+                {m.model ?? m.name}
+              </TableHead>
+              <TableCell className="tabular">{minuteWords(m)}</TableCell>
+              <TableCell className="tabular">{dayWords(m)}</TableCell>
+              <TableCell
+                className={cn(
+                  "text-sm",
+                  m.held_until ? "text-sev3-fg" : m.set_up ? "text-ok" : "text-faint",
+                )}
+              >
+                {stateWords(m)}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </>
+  );
+}
+
 /** Roles grouped by the chain they share, so each chain is written once. */
 function chains(routing: Record<string, string[]>): [string, string[]][] {
   const byChain = new Map<string, string[]>();
@@ -223,17 +301,32 @@ function Learning({ view }: { view: FeedbackView }) {
               {c.model_version ?? "none"}
             </span>,
           ],
-          [
-            "Recalibrated on",
-            c.recalibrated ? `${c.reviews_in_model} reviewed incidents` : "Not yet (as trained)",
-          ],
-          ["Reviews since then", `${c.pending} of ${c.recalibrate_after} needed`],
-          [
-            "Coverage on reviewed incidents",
-            c.coverage_before != null && c.coverage_after != null
-              ? `${percent(c.coverage_before)} before, ${percent(c.coverage_after)} after`
-              : "Measured at the first recalibration",
-          ],
+          ...(c.per_level
+            ? ([
+                ["Learns from", "Blind checks, one at a time"],
+                ["Blind checks so far", String(c.blind_checks ?? 0)],
+                [
+                  "Adjusted on",
+                  c.adapted_on
+                    ? `${c.adapted_on} blind ${c.adapted_on === 1 ? "check" : "checks"}`
+                    : "Not yet (as trained)",
+                ],
+              ] as [string, React.ReactNode][])
+            : ([
+                [
+                  "Recalibrated on",
+                  c.recalibrated
+                    ? `${c.reviews_in_model} reviewed incidents`
+                    : "Not yet (as trained)",
+                ],
+                ["Reviews since then", `${c.pending} of ${c.recalibrate_after} needed`],
+                [
+                  "Coverage on reviewed incidents",
+                  c.coverage_before != null && c.coverage_after != null
+                    ? `${percent(c.coverage_before)} before, ${percent(c.coverage_after)} after`
+                    : "Measured at the first recalibration",
+                ],
+              ] as [string, React.ReactNode][])),
           [
             "Checked",
             c.check_interval_s > 0
@@ -293,6 +386,7 @@ export function Settings() {
   const providers = useProviders();
   const view = useSettingsView();
   const feedback = useFeedback();
+  const capacity = useCapacity();
   const savedKey = useModelKey();
   const kinds = view.data?.visitor_keys ?? [];
   const { theme, setTheme } = useTheme();
@@ -301,15 +395,18 @@ export function Settings() {
   // let that one "Try again" reload them all.
   const failed = view.isError
     ? "view"
-    : providers.isError
-      ? "providers"
-      : feedback.isError
-        ? "feedback"
-        : null;
+    : capacity.isError
+      ? "capacity"
+      : providers.isError
+        ? "providers"
+        : feedback.isError
+          ? "feedback"
+          : null;
   const retryAll = () => {
     if (providers.isError) void providers.refetch();
     if (view.isError) void view.refetch();
     if (feedback.isError) void feedback.refetch();
+    if (capacity.isError) void capacity.refetch();
   };
   const failure = (key: string, title: string, error: unknown) =>
     failed === key ? (
@@ -351,6 +448,23 @@ export function Settings() {
           </>
         )}
       </Section>
+
+      {/* Only where the site has a model of its own: its room is what visitors share. */}
+      {view.data?.shared_model ? (
+        <Section
+          id="set-site-models"
+          title="The site's models"
+          intro="The site's key spreads its work over several models, each with limits of its own. ARIA counts every request first and keeps a share of each limit spare, so no model is asked for more than it allows. When all of them are at their limits, triages run offline until there is room again."
+        >
+          {capacity.isPending ? (
+            <LoadingRows rows={2} label="Loading the room left on the site's models" />
+          ) : capacity.isError ? (
+            failure("capacity", "The site's models could not be loaded", capacity.error)
+          ) : (
+            <SiteModels capacity={capacity.data} />
+          )}
+        </Section>
+      ) : null}
 
       <Section id="set-session" title="Your session">
         <div className="flex flex-wrap items-center justify-between gap-4 text-sm">
@@ -401,6 +515,22 @@ export function Settings() {
             })}
           </div>
         </fieldset>
+      </Section>
+
+      {/* After the two things the page promises (the model and the look): the providers' terms
+          run long, and most visitors come for the theme or a key. */}
+      <Section
+        id="set-data-terms"
+        title="What providers do with prompts"
+        intro="What each model provider's own terms say it may do with the evidence ARIA sends it, and when someone last read them for ARIA. Terms nobody has read yet say Not verified."
+      >
+        {view.isError ? (
+          <p className="text-sm text-muted-foreground">Not loaded: see the error above.</p>
+        ) : view.isPending ? (
+          <LoadingRows rows={2} label="Loading what providers do with prompts" />
+        ) : (
+          <DataTerms terms={view.data.data_terms ?? []} />
+        )}
       </Section>
 
       <details className="group/deployment border-t border-rule pt-6">
@@ -485,12 +615,36 @@ export function Settings() {
           )}
 
           <Section
+            id="set-record"
+            title="Decision record"
+            intro="Every review, edit, publish, message sent, blind check, recalibration and purge goes on an append-only record, each entry hash-chained to the one before it. A chain that verifies means no entry was changed, removed or reordered since it was written."
+          >
+            <RecordStatus />
+          </Section>
+
+          <Section
+            id="set-blind"
+            title="Check ARIA blind"
+            intro="Rate a recent incident from its logs alone, before you see ARIA's level. A rating given without seeing ARIA's answer is free of the pull to agree with it, so these are the ratings ARIA recalibrates its short lists on, one at a time."
+          >
+            <BlindCheck />
+          </Section>
+
+          <Section
+            id="set-drift"
+            title="Has anything shifted?"
+            intro="For each system, the levels ARIA decided on its recent runs against its earlier runs. A shift beyond what chance explains is worth a look: new kinds of incidents, a changed system, or short lists that no longer fit."
+          >
+            <DriftReport />
+          </Section>
+
+          <Section
             id="set-learning"
             title="Learning from reviews"
             intro={
               view.data?.visitor_scope
-                ? "Every review records the severity a reviewer settled on, and once enough have gathered ARIA recalibrates its short lists on them. On this shared demo, reviews of your own incidents stay private and never retrain it."
-                : "Every review records the severity a reviewer settled on. Once enough have gathered, ARIA recalibrates its short lists on them, so the lists hold the reviewer's severity on this deployment's own incidents."
+                ? "Every review records the severity a reviewer settled on. On this shared demo, reviews of your own incidents stay private. ARIA recalibrates on blind checks, not on approvals, which tend to agree with whatever ARIA said."
+                : "Every review records the severity a reviewer settled on. ARIA recalibrates on blind checks, not on approvals, which tend to agree with whatever ARIA said."
             }
           >
             {feedback.isPending ? (
@@ -500,6 +654,10 @@ export function Settings() {
             ) : (
               <Learning view={feedback.data} />
             )}
+            <div className="grid gap-3 pt-2">
+              <h3 className="text-lg">How each reviewer decides</h3>
+              <ReviewerStats />
+            </div>
           </Section>
         </div>
       </details>

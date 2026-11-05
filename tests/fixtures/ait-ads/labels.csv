@@ -1,0 +1,11 @@
+scenario,attack,start,end
+russellmitchell,network_scans,1642993260.0,1642996606.0
+russellmitchell,service_scans,1642996606.0,1642996645.0
+russellmitchell,dirb,1642996645.0,1642996668.0
+russellmitchell,wpscan,1642996668.0,1642996699.0
+russellmitchell,webshell,1642996699.0,1642996762.0
+russellmitchell,cracking,1642996762.0,1642999016.0
+russellmitchell,reverse_shell,1642999016.0,1642999059.0
+russellmitchell,privilege_escalation,1642999059.0,1642999093.0
+russellmitchell,service_stop,1643032238.0,1643032240.0
+russellmitchell,dnsteal,1643032240.0,1643035840.0

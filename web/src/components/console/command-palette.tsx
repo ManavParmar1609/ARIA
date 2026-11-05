@@ -301,7 +301,8 @@ function Palette({
         hint: entry.definition,
         keywords: "glossary define meaning word",
         icon: TextQuoteIcon,
-        run: () => go("/console/guide#words"),
+        // The word's own card in the guide, not the top of the list it sits in.
+        run: () => go(`/console/guide#word-${key}`),
       });
     }
     all.push(
@@ -433,7 +434,8 @@ function Palette({
         {/* The dialog moves focus here when it opens: it is the first thing that takes focus. */}
         <input
           role="combobox"
-          aria-expanded="true"
+          // The list is hidden while nothing matches, and the combobox says so (WAI-ARIA APG).
+          aria-expanded={shown.length > 0}
           aria-controls={listId}
           aria-autocomplete="list"
           aria-activedescendant={shown.length ? optionId(activeIndex) : undefined}
@@ -445,7 +447,10 @@ function Palette({
             setActive(0);
           }}
           onKeyDown={onKeyDown}
-          className="my-2 h-12 min-w-0 flex-1 rounded-md bg-transparent px-2 text-lg text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
+          // w-0: a text box has an intrinsic width (about twenty characters) that, on a phone,
+          // made the dialog's one grid track wider than the dialog and pushed every result row
+          // past its right edge. With no width of its own, the box takes what the row gives it.
+          className="my-2 h-12 w-0 min-w-0 flex-1 rounded-md bg-transparent px-2 text-lg text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
         />
         <kbd className="hidden rounded-xs border border-control/60 px-1.5 py-0.5 text-xs text-muted-foreground sm:inline">
           Esc

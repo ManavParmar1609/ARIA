@@ -370,7 +370,9 @@ function Connecting({
   if (failed && gaveUp) {
     return (
       <div className="grid gap-4">
+        {/* The whole page, so it is the page's heading: a reader moving by headings finds it. */}
         <ErrorState
+          heading="h1"
           title="ARIA's API is not answering"
           error={
             new Error(
@@ -396,10 +398,18 @@ function Connecting({
   }
   return (
     <div className="grid gap-4">
+      {/* The page's heading while it waits, so the wait reads as a page and not as a blank. */}
+      <h1 className="text-2xl leading-tight tracking-heading">
+        {busy
+          ? "ARIA is busy right now"
+          : slow || failed
+            ? "Waiting for ARIA's server"
+            : "Connecting to ARIA"}
+      </h1>
       <div role="status">
         {busy ? (
           <p className="max-w-prose text-sm text-muted-foreground">
-            ARIA is busy right now. This page carries on by itself in a few seconds.
+            This page carries on by itself in a few seconds.
           </p>
         ) : slow || failed ? (
           <p className="max-w-prose text-sm text-muted-foreground">

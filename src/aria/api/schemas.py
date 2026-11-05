@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import (
@@ -322,11 +322,79 @@ class Me(BaseModel):
 
 class SharedModelOut(BaseModel):
     """This visitor's share today of the server's own model keys (``llm.shared``). None means
-    no limit; ``left`` 0 means this visitor's work runs offline until tomorrow (UTC)."""
+    no limit; ``left`` 0 means this visitor's work runs offline until tomorrow (UTC).
+    ``back_at`` is set while the shared models themselves are at their limits (``llm.quota``):
+    until then, everyone's model-written triages run offline."""
 
     left: int | None = None
     per_visitor: int | None = None
     per_day: int | None = None
+    back_at: datetime | None = None
+
+
+class ProviderLimitsOut(BaseModel):
+    """A provider's limits as ARIA keeps them: the configured ones less the safety margin."""
+
+    requests_per_minute: int | None = None
+    tokens_per_minute: int | None = None
+    requests_per_day: int | None = None
+
+
+class ProviderCapacityOut(BaseModel):
+    """One shared model's room now. Counts and times only: never a key or a request."""
+
+    name: str
+    model: str | None
+    set_up: bool  # its key (or endpoint) is configured on this server
+    limits: ProviderLimitsOut | None
+    minute_requests_left: int | None
+    minute_tokens_left: int | None
+    day_requests_left: int | None
+    day_requests_used: int
+    day_requests_reserved: int  # set aside for runs in progress
+    minute_resets_at: datetime | None  # when the oldest request leaves the one-minute window
+    held_until: datetime | None  # resting after the provider refused for a limit
+    held_because: str | None
+
+
+class CapacityOut(BaseModel):
+    """The shared models' room now (``GET /api/v1/llm/capacity``)."""
+
+    timezone: str
+    margin: float
+    day_resets_at: datetime
+    # How many more model-written triages today's requests have room for; None when no daily
+    # limit bounds them.
+    runs_left_today: int | None
+    # Set while no model-written triage fits: when one may again.
+    back_at: datetime | None
+    providers: list[ProviderCapacityOut]
+
+
+class TermsSourceOut(BaseModel):
+    title: str
+    url: str
+
+
+class DataUseOut(BaseModel):
+    """What a provider's terms say about prompts for one kind of account. None: not verified."""
+
+    account: str
+    improves_models: bool | None = None  # may the provider use prompts to improve its models
+    keeps_prompts: str | None = None  # how long it keeps them, in plain words
+
+
+class DataTermsOut(BaseModel):
+    """A model provider's own terms about the prompts ARIA sends it (``llm.data_terms``)."""
+
+    id: str
+    company: str
+    service: str
+    providers: list[str]  # ARIA's providers these terms cover
+    uses: list[DataUseOut]
+    sources: list[TermsSourceOut]
+    verified: date | None = None  # the day someone read the sources; None: not verified
+    notes: str | None = None
 
 
 class SettingsOut(BaseModel):
@@ -355,6 +423,10 @@ class SettingsOut(BaseModel):
     shared_model: SharedModelOut | None = None
     # The largest request the API reads, so the console can say so before sending a paste.
     max_body_bytes: int | None = None
+    # How long runs are kept (``retention``): days 0 keeps them until someone deletes them.
+    retention: dict[str, int] = Field(default_factory=dict)
+    # What each model provider's terms say about prompts, as someone read them for ARIA.
+    data_terms: list[DataTermsOut] = Field(default_factory=list)
 
 
 class ModelKeyCheck(BaseModel):
@@ -393,11 +465,100 @@ class CalibrationOut(BaseModel):
     check_interval_s: int
     coverage_before: float | None = None
     coverage_after: float | None = None
+    # Per-level models learn from blind checks, not reviews (ADR 0014).
+    per_level: bool = False
+    blind_checks: int = 0
+    adapted_on: int = 0  # blind checks the loaded model has followed
 
 
 class FeedbackOut(BaseModel):
     calibration: CalibrationOut
     reviews: list[ReviewOut]
+
+
+class ReviewerOut(BaseModel):
+    """How one person decides, over the reviews ARIA keeps."""
+
+    reviewer: str
+    decisions: int  # reports they approved, edited or discarded
+    approved_as_is: int  # approved without editing anything
+    edited: int  # edited, then approved
+    rejected: int  # discarded
+    level_changed: int  # settled on a level other than ARIA's
+    timed: int  # decisions whose run's pause for review was recorded
+    # The median time from a run pausing for review to this person's decision, in seconds.
+    median_wait_s: float | None = None
+
+
+class ReviewersOut(BaseModel):
+    """Every reviewer's figures, the busiest first, from the newest ``decisions`` reviews."""
+
+    reviewers: list[ReviewerOut]
+    decisions: int
+    since: datetime | None = None  # the oldest decision counted
+    limit: int  # the most recent decisions read at most
+
+
+class BlindPattern(BaseModel):
+    """One log pattern of the incident, as the parser grouped it (already redacted)."""
+
+    template: str
+    count: int
+    error_like: bool
+    new: bool
+
+
+class BlindCase(BaseModel):
+    """An incident to rate before seeing ARIA's level: what the logs showed, nothing it decided."""
+
+    run_id: str
+    system: str
+    lines: int
+    error_lines: int
+    warning_lines: int
+    nodes: int
+    minutes: float
+    patterns: list[BlindPattern]
+
+
+class BlindCheckOut(BaseModel):
+    case: BlindCase | None
+    checks: int  # blind checks recorded so far
+    counted: bool  # whether this caller's ratings recalibrate ARIA (not a visitor's on a demo)
+
+
+class SystemDrift(BaseModel):
+    """Whether one system's decided levels shifted between its earlier and recent runs."""
+
+    system: str
+    runs: int
+    compared: int  # runs in each half
+    reference: dict[str, int]
+    recent: dict[str, int]
+    psi: float
+    critical: float  # what chance alone exceeds one time in twenty
+    shifted: bool
+
+
+class DriftOut(BaseModel):
+    min_runs: int
+    systems: list[SystemDrift]
+    too_few_runs: list[str]
+
+
+class BlindRating(BaseModel):
+    severity: Severity
+
+
+class BlindReveal(BaseModel):
+    run_id: str
+    yours: Severity
+    aria: Severity
+    prediction_set: list[Severity]
+    held: bool  # your level was in ARIA's set
+    agreed: bool
+    counted: bool
+    checks: int
 
 
 class Health(BaseModel):

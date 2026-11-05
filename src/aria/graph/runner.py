@@ -15,7 +15,7 @@ import os
 import socket
 import uuid
 from collections import defaultdict
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncIterator, Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -24,34 +24,40 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.errors import InvalidUpdateError
 from langgraph.store.base import BaseStore
-from langgraph.types import Command, Overwrite, StateSnapshot, StreamMode
-from sqlalchemy import delete
+from langgraph.types import Command, Durability, Overwrite, StateSnapshot, StreamMode
 
 from aria.contracts.inputs import RunOptions, TriageRequest
+from aria.contracts.record import RecordKind
 from aria.contracts.report import IncidentReport, OutboundAction, ReviewDecision
 from aria.contracts.run import EventKind, Plan, RunEvent, RunStatus
+from aria.db import record
 from aria.db import repository as repo
 from aria.db.engine import session_scope
-from aria.db.models import FeedbackRow, IncidentRow, LogEventRow, RunRow, ToolCallRow
+from aria.graph import retention
 from aria.graph.checkpoint import SqlCheckpointSaver
 from aria.graph.state import Json
 from aria.graph.store import SqlStore
 from aria.graph.workflow import (
     TriageContext,
     build_graph,
+    expected_llm_calls,
     rekey_for_fork,
     run_link,
     run_salt,
+    send_facts,
 )
+from aria.llm.quota import Reservation, offline_message
 from aria.llm.visitor import VisitorKeys
 from aria.mcp.client import Target
 from aria.notify import send_action
 from aria.observability.logging import get_logger
 from aria.reporting.markdown import render_markdown
 from aria.retrieval import runlog
-from aria.retrieval.memory import run_incident_id
 from aria.security.fields import clean_request
+from aria.security.redaction import Redactor
 from aria.services import Services
+from aria.severity.history import SystemHistory
+from aria.severity.policy import level_words
 
 log = get_logger(__name__)
 STREAM_MODES: list[StreamMode] = ["tasks", "custom", "checkpoints"]
@@ -74,6 +80,20 @@ FORK_FROM: dict[str, frozenset[str]] = {
     "reject": frozenset({"review"}),
 }
 _SUBSCRIBER_QUEUE = 2_000
+# Steps whose effects reach past the run: a reviewer's decision applied, a report published,
+# messages sent. A drive that may run one saves each step's checkpoint before the next step
+# starts (LangGraph's "sync" durability), so publishing never begins on an approval that is not
+# yet saved: a crash part way through can neither lose it nor, on recovery, send under one the
+# reviewer never gave. Every other drive saves while the next step works ("async"), so the bulk
+# of a run pays nothing. Unattended runs reach publish in their first drive, asynchronously:
+# they send nothing outbound, and publishing again on recovery changes nothing.
+DURABLE_STEPS = frozenset({"review", "publish", "reject"})
+
+
+def durability_for(next_steps: tuple[str, ...], *, review: bool = False) -> Durability:
+    """How a drive saves its checkpoints: "sync" when it applies a review or continues into a
+    step that publishes or sends, else "async"."""
+    return "sync" if review or DURABLE_STEPS.intersection(next_steps) else "async"
 
 
 class RunNotFoundError(KeyError):
@@ -127,8 +147,20 @@ def summarize(node: str, result: Json) -> Json:
         }
     elif node == "severity" and result.get("severity"):
         sev = result["severity"]
-        keys = ("severity", "decided_by", "confidence", "needs_review", "prediction_set")
+        keys = (
+            "severity",
+            "decided_by",
+            "confidence",
+            "needs_review",
+            "prediction_set",
+            "calibration",
+            "novelty",
+        )
         out = {k: sev.get(k) for k in keys}
+        # In words, for whoever reads the event log: the bare level, or the levels ARIA is torn
+        # between and the one it plans for.
+        if sev.get("severity"):
+            out["summary"] = level_words(sev["severity"], sev.get("prediction_set") or ())
     elif node in ("recall", "widen") and result.get("retrieval"):
         retrieval = result["retrieval"]
         out = {
@@ -226,6 +258,11 @@ class TriageRunner:
         self.held: set[str] = set()
         # Visitors' own model keys, held in memory until the runs they came with start.
         self.keys = VisitorKeys()
+        # Severity reads a system's history (its recent runs' error ratios, the patterns its
+        # reviewers dismissed) from the database the runner writes to; the runner is where the
+        # two meet. Engines built without a runner, as evaluations are, read nothing.
+        if services.severity.history is None:
+            services.severity.history = SystemHistory(services.engine)
 
     @staticmethod
     def config(run_id: str, checkpoint_id: str | None = None) -> RunnableConfig:
@@ -343,6 +380,8 @@ class TriageRunner:
             request = request.model_copy(update={"replay_of": None})
         if trigger != "sample" and request.sample is not None:
             request = request.model_copy(update={"sample": None})  # only the samples endpoint
+        if request.offline_reason is not None:
+            request = request.model_copy(update={"offline_reason": None})  # only the runner's
         request = self._cleaned(self._capped(request), run_id)
         repo.create_run(
             self.engine,
@@ -394,7 +433,8 @@ class TriageRunner:
                     return await self._settle(run_id)
                 finally:  # nothing to drive: give up a claim taken to drive it (a recovery)
                     await self.let_go(run_id)
-            return await self._drive(run_id, None)  # crash recovery: continue from the checkpoint
+            # Crash recovery: continue from the checkpoint, durably in front of publishing.
+            return await self._drive(run_id, None, durability=durability_for(snapshot.next))
         return await self._drive(
             run_id,
             {"run_id": run_id, "request": run["request"]},
@@ -416,7 +456,9 @@ class TriageRunner:
             if isinstance(decision, ReviewDecision)
             else ReviewDecision.model_validate(decision).model_dump(mode="json")
         )
-        return await self._drive(run_id, Command(resume=value), review=True)
+        return await self._drive(
+            run_id, Command(resume=value), review=True, durability=durability_for((), review=True)
+        )
 
     def renew_held(self) -> None:
         """Keep this process's claims fresh: on runs it drives and on runs it has yet to start."""
@@ -464,6 +506,7 @@ class TriageRunner:
         config: RunnableConfig | None = None,
         started: Json | None = None,
         review: bool = False,
+        durability: Durability = "async",
     ) -> RunOutcome:
         async with self._holding(run_id):
             # The claim spans processes: an API resuming a review and a worker recovering a run
@@ -494,7 +537,7 @@ class TriageRunner:
                     )
                 if started is not None:  # only the process that won the run says it started
                     await self._event(run_id, "run_started", payload=started)
-                return await self._stream(run_id, graph_input, config)
+                return await self._stream(run_id, graph_input, config, durability)
             finally:
                 renewal.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
@@ -502,12 +545,51 @@ class TriageRunner:
                 self.held.discard(run_id)
                 await asyncio.to_thread(repo.release_run, self.engine, run_id, self.owner)
 
+    def _reserve(self, run_id: str, graph_input: Any) -> tuple[Any, Reservation | None]:
+        """Before a new model-written run starts on this server's own keys, set aside the day's
+        requests its calls need from the shared models. When they have no room for them, the
+        run goes offline, the way a run past the daily allowance does, and its plan says why
+        and when the models have room again. Forks and recovered runs are admitted call by
+        call."""
+        router, config = self.services.router, self.services.config
+        stored = graph_input.get("request") if isinstance(graph_input, dict) else None
+        if stored is None or not config.llm.quota.reserve_runs:
+            return graph_input, None
+        request = TriageRequest.model_validate(stored)
+        if not request.options.use_llm or not router.has_real_llm("reporter"):
+            return graph_input, None
+        outcome = router.prefer(request.options.provider).reserve_run(expected_llm_calls(config))
+        if isinstance(outcome, Reservation):
+            log.info("runner.reserved", run_id=run_id, calls=outcome.calls)
+            return graph_input, outcome
+        ledger = router.ledger
+        reason = offline_message(outcome.back_at, now=ledger.now(), tz=ledger.tz)
+        log.info("runner.offline", run_id=run_id, role=outcome.role, reason="no room")
+        offline = request.model_copy(
+            update={
+                "options": request.options.model_copy(update={"use_llm": False}),
+                "offline_reason": reason,
+            }
+        )
+        return {**graph_input, "request": offline.model_dump(mode="json")}, None
+
     async def _stream(
-        self, run_id: str, graph_input: Any, config: RunnableConfig | None
+        self,
+        run_id: str,
+        graph_input: Any,
+        config: RunnableConfig | None,
+        durability: Durability = "async",
     ) -> RunOutcome:
         # A run started with a visitor's key gets a router of its own, closed when it stops.
+        # Any other new run reserves the shared models' requests it needs, released when it
+        # stops (it does no model work after the review).
         visitor = self.keys.take(run_id)
         own = self.services.router.with_key(visitor) if visitor is not None else None
+        reservation = None
+        if own is None:
+            graph_input, reservation = self._reserve(run_id, graph_input)
+            if reservation is not None:
+                own = self.services.router.for_run(reservation)
         context = self.context.with_router(own) if own is not None else self.context
         try:
             async for part in self.graph.astream(
@@ -516,6 +598,7 @@ class TriageRunner:
                 context=context,
                 stream_mode=STREAM_MODES,
                 version="v2",
+                durability=durability,
             ):
                 await self._handle(run_id, part)
         except Exception as exc:  # the graph's own handler covers node errors; this is the rest
@@ -528,7 +611,9 @@ class TriageRunner:
             await self._event(run_id, "run_finished", payload={"status": str(RunStatus.FAILED)})
             return RunOutcome(run_id, RunStatus.FAILED, error=message)
         finally:
-            if own is not None:
+            if reservation is not None:
+                self.services.router.release_run(reservation)
+            elif own is not None:
                 await own.aclose()
         return await self._settle(run_id)
 
@@ -658,7 +743,8 @@ class TriageRunner:
         if stored is None:
             msg = "this checkpoint holds no request to fork from; fork from a later one"
             raise RunStateError(msg)
-        request = TriageRequest.model_validate(stored)
+        # The parent's reason for running offline is the parent's alone.
+        request = TriageRequest.model_validate(stored).model_copy(update={"offline_reason": None})
         if options:
             merged = RunOptions.model_validate({**request.options.model_dump(), **options})
             request = request.model_copy(update={"options": merged})
@@ -762,6 +848,9 @@ class TriageRunner:
             action, self.services.config.comms, run_url=run_link(settings, run_id)
         )
         await asyncio.to_thread(repo.save_actions, self.engine, run_id, [sent])
+        await asyncio.to_thread(
+            self._record, run_id, "send", by, {**send_facts(sent), "resent": True}
+        )
         await self._event(
             run_id,
             "action",
@@ -770,11 +859,28 @@ class TriageRunner:
         )
         return sent
 
-    async def delete(self, run_id: str) -> None:
-        """Remove a run everywhere: checkpoints, lines, events, report, actions, audit, memory.
+    def _record(self, run_id: str, kind: RecordKind, actor: str, facts: Json) -> None:
+        """Add a decision about a run to the append-only record, with the run's pseudonyms. A
+        failure raises, so the caller answers with an error instead of a quiet success."""
+        salt = run_salt(self.services.settings, run_id, self.engine)
+        record.append(
+            self.engine,
+            kind=kind,
+            actor=actor,
+            run_id=run_id,
+            payload=facts,
+            redactor=Redactor(salt=salt),
+        )
+
+    async def delete(self, run_id: str, *, by: str | None = None) -> None:
+        """Remove a run everywhere: what ``retention.owned`` lists, the same a retention purge
+        removes (checkpoints, lines, events, report, messages, audit, reviews, memory, alerts).
+        Its entries in the decision record stay, as a purge leaves them.
 
         It holds the run as a drive would, so a review applied at the same moment is refused
-        (409) instead of failing halfway and writing checkpoints for a run that is gone."""
+        (409) instead of failing halfway and writing checkpoints for a run that is gone. With
+        ``by``, the person who asked, the deletion goes on the decision record, which no deletion
+        touches; without it (a duplicate run nobody saw, a benchmark's own runs) it does not."""
         async with self._holding(run_id):
             took = await asyncio.to_thread(
                 repo.claim_run, self.engine, run_id, self.owner, status=None
@@ -782,34 +888,37 @@ class TriageRunner:
             if not took:
                 msg = f"run {run_id} is running in another process"
                 raise RunBusyError(msg)
+            run = await asyncio.to_thread(repo.get_run, self.engine, run_id) if by else None
             await self._purge(run_id)
+            if by is not None and run is not None:
+                facts = {k: run.get(k) for k in ("status", "system", "trigger", "title")}
+                await asyncio.to_thread(self._record, run_id, "delete", by, facts)
         self.keys.drop(run_id)
         self._locks.pop(run_id, None)
 
     async def _purge(self, run_id: str) -> None:
+        # Through the graph's own saver and store first, in case they are not the SQL ones.
         await self.checkpointer.adelete_thread(run_id)
         for item in await self.store.asearch(("feedback",), filter={"run_id": run_id}, limit=100):
             await self.store.adelete(item.namespace, item.key)
 
         def purge() -> None:
             with session_scope(self.engine) as session:
-                session.execute(
-                    delete(LogEventRow).where(
-                        LogEventRow.window_id == run_id, LogEventRow.dataset == runlog.RUN_DATASET
-                    )
-                )
-                session.execute(delete(ToolCallRow).where(ToolCallRow.run_id == run_id))
-                session.execute(delete(FeedbackRow).where(FeedbackRow.run_id == run_id))
-                session.execute(
-                    delete(IncidentRow).where(IncidentRow.id == run_incident_id(run_id))
-                )
-                row = session.get(RunRow, run_id)
-                if row is not None:
-                    session.delete(row)  # events, reports and actions cascade in the database
+                retention.delete_owned(session, [run_id])
 
         await asyncio.to_thread(purge)
         await self.services.memory.refresh()
         self._last_seq.pop(run_id, None)
+
+    def forget(self, run_ids: Iterable[str]) -> None:
+        """Let go of what this process keeps in memory for runs deleted elsewhere (a retention
+        purge): their event counters, held model keys and idle locks."""
+        for run_id in run_ids:
+            self._last_seq.pop(run_id, None)
+            self.keys.drop(run_id)
+            lock = self._locks.get(run_id)
+            if lock is not None and not lock.locked():
+                self._locks.pop(run_id, None)
 
 
 def _interrupts(snapshot: StateSnapshot) -> list[Any]:

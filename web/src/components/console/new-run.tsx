@@ -105,7 +105,7 @@ export function modelHint(
   on = true,
 ): string {
   if (!on) {
-    return "Off: rules, the calibrated model and the grounded template write this triage. Faster, and nothing leaves the server.";
+    return "Off: the rules, the calibrated model and ARIA's evidence template write this triage. Faster, and nothing leaves the server.";
   }
   const access = modelAccess(savedProvider, kinds, shared);
   if (access.kind === "own") {
@@ -116,7 +116,7 @@ export function modelHint(
       ? "On: the site's key answers."
       : `On: the site's key answers (shared, limited: ${access.left} left today).`;
   }
-  if (access.usedUp) return accessSentence(access, kinds.length > 0);
+  if (access.usedUp || access.backAt) return accessSentence(access, kinds.length > 0);
   if (kinds.length > 0) {
     return "No model answers here yet, so this triage runs offline. To use a model, add your own key in Settings.";
   }

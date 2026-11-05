@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { orList, shortListText } from "./levels";
+import { coverageText, orList, shortListText, tornText } from "./levels";
 
 const assessment = (changes: Partial<Parameters<typeof shortListText>[0]> = {}) => ({
   severity: "SEV2" as const,
@@ -83,9 +83,43 @@ describe("shortListText", () => {
   });
 });
 
+describe("tornText", () => {
+  it("names the levels ARIA is torn between and the one it plans for", () => {
+    expect(tornText("SEV2", ["SEV3", "SEV2"])).toBe(
+      "ARIA is torn between SEV2 and SEV3 and plans for SEV2",
+    );
+    expect(tornText("SEV1", ["SEV1", "SEV2", "SEV3"])).toBe(
+      "ARIA is torn between SEV1, SEV2 and SEV3 and plans for SEV1",
+    );
+  });
+
+  it("says what ARIA had planned once a person decided", () => {
+    expect(tornText("SEV2", ["SEV2", "SEV3"], true)).toBe(
+      "ARIA was torn between SEV2 and SEV3 and planned for SEV2",
+    );
+  });
+
+  it("leaves a set of one level to the bare level", () => {
+    expect(tornText("SEV2", ["SEV2"])).toBeNull();
+    expect(tornText("SEV2", ["SEV2", "SEV2"])).toBeNull();
+  });
+});
+
 describe("orList", () => {
   it("joins levels the way a sentence does", () => {
     expect(orList(["SEV1", "SEV2", "SEV3"])).toBe("SEV1, SEV2 or SEV3");
     expect(orList(["SEV2"])).toBe("SEV2");
+  });
+});
+
+describe("coverageText", () => {
+  it("says one rate when every level shares it", () => {
+    expect(coverageText(0.1)).toBe("90 times in 100");
+  });
+
+  it("names the tighter promise for serious levels", () => {
+    expect(coverageText(0.1, { SEV1: 0.05, SEV2: 0.05, SEV3: 0.1, SEV4: 0.1 })).toBe(
+      "95 times in 100 when it is SEV1 or SEV2, and 90 otherwise",
+    );
   });
 });

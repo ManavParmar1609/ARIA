@@ -96,7 +96,10 @@ export function RunGraph({ steps }: { steps: GraphStep[] }) {
             </span>
             <div className="grid content-start gap-3">
               <h3 className="text-xl leading-snug">{step.title}</h3>
-              <p className="max-w-prose text-base leading-relaxed text-foreground">{step.body}</p>
+              {/* One idea per paragraph: a step's body is one <p>, or a few. */}
+              <div className="grid max-w-prose gap-2 text-base leading-relaxed text-foreground">
+                {step.body}
+              </div>
               <p className="rounded-md bg-panel-keylime px-4 py-3 text-sm leading-relaxed text-foreground">
                 <span className="font-semibold text-heading">In the example: </span>
                 {step.fact}

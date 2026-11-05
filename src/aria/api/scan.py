@@ -7,7 +7,9 @@ burst score reaches ``scan_min_burst_score``, reports a finding and starts the n
 so one burst opens one run. A file is read from where the scan stopped; the first look starts at
 its end (history is not an incident), and a file that shrinks (rotated or truncated) is read from
 the top. A finding opens a run with trigger ``scan``, unless a scan run on that system is still
-open or started within the alert grouping window.
+open or started within the alert grouping window. A finding while that run is still open is added
+to it as a ``followup`` event, so the reviewer sees the incident grow, however many bursts it
+takes; ARIA never lowers or replaces the level already proposed.
 
 The scan runs where runs execute: in the API process in ``inprocess`` mode, in ``aria worker``
 otherwise.
@@ -125,9 +127,21 @@ def _age_s(created_at: str) -> float:
 def open_run(runner: TriageRunner, finding: ScanFinding, *, window_s: int) -> str | None:
     """Record a queued run for a finding, or None when a recent scan run covers its system."""
     latest = repo.latest_run(runner.engine, trigger=TRIGGER, system=finding.system)
-    if latest is not None and (
-        not RunStatus(latest["status"]).terminal or _age_s(latest["created_at"]) < window_s
-    ):
+    if latest is not None and not RunStatus(latest["status"]).terminal:
+        repo.append_event(
+            runner.engine,
+            latest["id"],
+            "followup",
+            node="scan",
+            payload={
+                "burst_score": round(finding.burst_score, 2),
+                "lines": len(finding.lines),
+                "source": finding.path.name,
+            },
+        )
+        log.info("scan.followup", system=finding.system, run_id=latest["id"])
+        return None
+    if latest is not None and _age_s(latest["created_at"]) < window_s:
         log.info("scan.covered", system=finding.system, run_id=latest["id"])
         return None
     request = TriageRequest(system=finding.system, logs=finding.lines)

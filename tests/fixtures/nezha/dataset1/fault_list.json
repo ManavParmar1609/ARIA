@@ -1,0 +1,21 @@
+{
+ "day": "2022-08-22",
+ "faults": {
+  "04": [
+   {
+    "inject_pod": "frontend-579b9bff58-t2dbm",
+    "inject_time": "2022-08-22 04:18:35",
+    "inject_timestamp": "1661141915",
+    "inject_type": "exception"
+   }
+  ],
+  "07": [
+   {
+    "inject_pod": "recommendationservice-6cfdd55578-gfj6q",
+    "inject_time": "2022-08-22 07:10:43",
+    "inject_timestamp": "1661152183",
+    "inject_type": "cpu_consumed"
+   }
+  ]
+ }
+}

@@ -80,6 +80,28 @@
         }
       }
     },
+    "/api/v1/llm/capacity": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Capacity",
+        "description": "The shared models' room now: for each provider with limits (``limits`` in\nconfig/aria.yaml), the requests and tokens left this minute and the requests left today,\nany rest after a refusal, and when the day starts again. Counts and times only, never a key.",
+        "operationId": "capacity_api_v1_llm_capacity_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapacityOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/me": {
       "get": {
         "tags": [
@@ -481,7 +503,7 @@
           "runs"
         ],
         "summary": "Delete Run",
-        "description": "Delete the run and everything derived from it (report, events, memory, checkpoints).",
+        "description": "Delete the run and everything derived from it (report, events, memory, checkpoints).\nThe deletion itself stays on the decision record, under the caller's name.",
         "operationId": "delete_run_api_v1_runs__run_id__delete",
         "parameters": [
           {
@@ -2068,6 +2090,197 @@
         }
       }
     },
+    "/api/v1/reviewers": {
+      "get": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Reviewers",
+        "description": "How each person reviews: how often they approve a report without editing it, how often\nthey set a level other than ARIA's, and the median time from a run pausing for review to\ntheir decision. From the newest ``limit`` reviews ARIA keeps; reviews of a visitor's own\nruns on a shared demo are not kept, so they are not counted.",
+        "operationId": "reviewers_api_v1_reviewers_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "default": 2000,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewersOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blind-check": {
+      "get": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Blind Check",
+        "description": "A recent incident, picked at random, to rate before seeing ARIA's level.\n\nOnly what the logs showed comes back: no level, set, report or title (a title opens with the\nlevel). On a shared demo a visitor may try it, but only a key-holder's ratings recalibrate.",
+        "operationId": "blind_check_api_v1_blind_check_get",
+        "parameters": [
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlindCheckOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blind-check/{run_id}": {
+      "post": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Rate Blind",
+        "description": "Record a blind rating and show what ARIA decided. A key-holder's rating recalibrates.",
+        "operationId": "rate_blind_api_v1_blind_check__run_id__post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlindRating"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlindReveal"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/drift": {
+      "get": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Drift",
+        "description": "Per system, whether the levels ARIA decided lately differ from the ones it decided before\nby more than chance (see aria.severity.drift). Needs no labels.",
+        "operationId": "drift_api_v1_drift_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriftOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/eval": {
       "get": {
         "tags": [
@@ -2257,6 +2470,118 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RunAccepted"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/audit/verify": {
+      "get": {
+        "tags": [
+          "audit"
+        ],
+        "summary": "Verify Record",
+        "description": "Walk the decision record from its first entry and say whether every link holds: how\nlong it is, the first entry that breaks it (if any) and the newest hash, to anchor\nelsewhere. It reads every entry, so call it on a schedule, not on every page view.",
+        "operationId": "verify_record_api_v1_audit_verify_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChainCheck"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{run_id}/record": {
+      "get": {
+        "tags": [
+          "audit"
+        ],
+        "summary": "Run Record",
+        "description": "A run's decisions, oldest first: each review, edit, publish, message sent and blind check,\nwith who made it and the hashes that chain it to the rest of the record.",
+        "operationId": "run_record_api_v1_runs__run_id__record_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 9007199254740992,
+              "minimum": -1,
+              "default": -1,
+              "title": "After"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 200,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "X-Visitor-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you.",
+              "title": "X-Visitor-Id"
+            },
+            "description": "A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DecisionRecord"
+                  },
+                  "title": "Response Run Record Api V1 Runs  Run Id  Record Get"
                 }
               }
             }
@@ -2747,6 +3072,177 @@
         ],
         "title": "AskResponse"
       },
+      "BlindCase": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "system": {
+            "type": "string",
+            "title": "System"
+          },
+          "lines": {
+            "type": "integer",
+            "title": "Lines"
+          },
+          "error_lines": {
+            "type": "integer",
+            "title": "Error Lines"
+          },
+          "warning_lines": {
+            "type": "integer",
+            "title": "Warning Lines"
+          },
+          "nodes": {
+            "type": "integer",
+            "title": "Nodes"
+          },
+          "minutes": {
+            "type": "number",
+            "title": "Minutes"
+          },
+          "patterns": {
+            "items": {
+              "$ref": "#/components/schemas/BlindPattern"
+            },
+            "type": "array",
+            "title": "Patterns"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "system",
+          "lines",
+          "error_lines",
+          "warning_lines",
+          "nodes",
+          "minutes",
+          "patterns"
+        ],
+        "title": "BlindCase",
+        "description": "An incident to rate before seeing ARIA's level: what the logs showed, nothing it decided."
+      },
+      "BlindCheckOut": {
+        "properties": {
+          "case": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BlindCase"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "checks": {
+            "type": "integer",
+            "title": "Checks"
+          },
+          "counted": {
+            "type": "boolean",
+            "title": "Counted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "case",
+          "checks",
+          "counted"
+        ],
+        "title": "BlindCheckOut"
+      },
+      "BlindPattern": {
+        "properties": {
+          "template": {
+            "type": "string",
+            "title": "Template"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "error_like": {
+            "type": "boolean",
+            "title": "Error Like"
+          },
+          "new": {
+            "type": "boolean",
+            "title": "New"
+          }
+        },
+        "type": "object",
+        "required": [
+          "template",
+          "count",
+          "error_like",
+          "new"
+        ],
+        "title": "BlindPattern",
+        "description": "One log pattern of the incident, as the parser grouped it (already redacted)."
+      },
+      "BlindRating": {
+        "properties": {
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "severity"
+        ],
+        "title": "BlindRating"
+      },
+      "BlindReveal": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "yours": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "aria": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "prediction_set": {
+            "items": {
+              "$ref": "#/components/schemas/Severity"
+            },
+            "type": "array",
+            "title": "Prediction Set"
+          },
+          "held": {
+            "type": "boolean",
+            "title": "Held"
+          },
+          "agreed": {
+            "type": "boolean",
+            "title": "Agreed"
+          },
+          "counted": {
+            "type": "boolean",
+            "title": "Counted"
+          },
+          "checks": {
+            "type": "integer",
+            "title": "Checks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "yours",
+          "aria",
+          "prediction_set",
+          "held",
+          "agreed",
+          "counted",
+          "checks"
+        ],
+        "title": "BlindReveal"
+      },
       "CalibrationOut": {
         "properties": {
           "model_version": {
@@ -2816,6 +3312,21 @@
               }
             ],
             "title": "Coverage After"
+          },
+          "per_level": {
+            "type": "boolean",
+            "title": "Per Level",
+            "default": false
+          },
+          "blind_checks": {
+            "type": "integer",
+            "title": "Blind Checks",
+            "default": 0
+          },
+          "adapted_on": {
+            "type": "integer",
+            "title": "Adapted On",
+            "default": 0
           }
         },
         "type": "object",
@@ -2831,6 +3342,124 @@
         ],
         "title": "CalibrationOut",
         "description": "Where the severity model's calibration stands against the reviews gathered so far."
+      },
+      "CapacityOut": {
+        "properties": {
+          "timezone": {
+            "type": "string",
+            "title": "Timezone"
+          },
+          "margin": {
+            "type": "number",
+            "title": "Margin"
+          },
+          "day_resets_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Day Resets At"
+          },
+          "runs_left_today": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runs Left Today"
+          },
+          "back_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Back At"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderCapacityOut"
+            },
+            "type": "array",
+            "title": "Providers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "timezone",
+          "margin",
+          "day_resets_at",
+          "runs_left_today",
+          "back_at",
+          "providers"
+        ],
+        "title": "CapacityOut",
+        "description": "The shared models' room now (``GET /api/v1/llm/capacity``)."
+      },
+      "ChainCheck": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "length": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Length"
+          },
+          "first_broken": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Broken"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem"
+          },
+          "head_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Head Hash"
+          },
+          "checked_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Checked At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "ok",
+          "length",
+          "checked_at"
+        ],
+        "title": "ChainCheck",
+        "description": "Whether the record holds together, from the first entry to the last."
       },
       "Checkpoint": {
         "properties": {
@@ -2976,6 +3605,186 @@
         ],
         "title": "ClaimOut"
       },
+      "DataTermsOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "company": {
+            "type": "string",
+            "title": "Company"
+          },
+          "service": {
+            "type": "string",
+            "title": "Service"
+          },
+          "providers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Providers"
+          },
+          "uses": {
+            "items": {
+              "$ref": "#/components/schemas/DataUseOut"
+            },
+            "type": "array",
+            "title": "Uses"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/TermsSourceOut"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "verified": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "company",
+          "service",
+          "providers",
+          "uses",
+          "sources"
+        ],
+        "title": "DataTermsOut",
+        "description": "A model provider's own terms about the prompts ARIA sends it (``llm.data_terms``)."
+      },
+      "DataUseOut": {
+        "properties": {
+          "account": {
+            "type": "string",
+            "title": "Account"
+          },
+          "improves_models": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Improves Models"
+          },
+          "keeps_prompts": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keeps Prompts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "account"
+        ],
+        "title": "DataUseOut",
+        "description": "What a provider's terms say about prompts for one kind of account. None: not verified."
+      },
+      "DecisionRecord": {
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Seq"
+          },
+          "ts": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Ts"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "review",
+              "edit",
+              "publish",
+              "send",
+              "blind_check",
+              "recalibration",
+              "model_swap",
+              "purge",
+              "delete"
+            ],
+            "title": "Kind"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "actor": {
+            "type": "string",
+            "title": "Actor"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          },
+          "prev_hash": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Prev Hash"
+          },
+          "hash": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Hash"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "seq",
+          "ts",
+          "kind",
+          "actor",
+          "prev_hash",
+          "hash"
+        ],
+        "title": "DecisionRecord",
+        "description": "One entry. Its hash covers every other field and the previous entry's hash."
+      },
       "Delivery": {
         "properties": {
           "action_id": {
@@ -3049,6 +3858,35 @@
         ],
         "title": "Delivery",
         "description": "A message a reviewer approved, and what happened when ARIA sent it."
+      },
+      "DriftOut": {
+        "properties": {
+          "min_runs": {
+            "type": "integer",
+            "title": "Min Runs"
+          },
+          "systems": {
+            "items": {
+              "$ref": "#/components/schemas/SystemDrift"
+            },
+            "type": "array",
+            "title": "Systems"
+          },
+          "too_few_runs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Too Few Runs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "min_runs",
+          "systems",
+          "too_few_runs"
+        ],
+        "title": "DriftOut"
       },
       "Evidence": {
         "properties": {
@@ -3691,6 +4529,172 @@
         "title": "ModelKeyCheck",
         "description": "What a provider said about a visitor's own key. The key itself is not kept."
       },
+      "ProviderCapacityOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "set_up": {
+            "type": "boolean",
+            "title": "Set Up"
+          },
+          "limits": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProviderLimitsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "minute_requests_left": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minute Requests Left"
+          },
+          "minute_tokens_left": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minute Tokens Left"
+          },
+          "day_requests_left": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day Requests Left"
+          },
+          "day_requests_used": {
+            "type": "integer",
+            "title": "Day Requests Used"
+          },
+          "day_requests_reserved": {
+            "type": "integer",
+            "title": "Day Requests Reserved"
+          },
+          "minute_resets_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minute Resets At"
+          },
+          "held_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Held Until"
+          },
+          "held_because": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Held Because"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "model",
+          "set_up",
+          "limits",
+          "minute_requests_left",
+          "minute_tokens_left",
+          "day_requests_left",
+          "day_requests_used",
+          "day_requests_reserved",
+          "minute_resets_at",
+          "held_until",
+          "held_because"
+        ],
+        "title": "ProviderCapacityOut",
+        "description": "One shared model's room now. Counts and times only: never a key or a request."
+      },
+      "ProviderLimitsOut": {
+        "properties": {
+          "requests_per_minute": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requests Per Minute"
+          },
+          "tokens_per_minute": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tokens Per Minute"
+          },
+          "requests_per_day": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requests Per Day"
+          }
+        },
+        "type": "object",
+        "title": "ProviderLimitsOut",
+        "description": "A provider's limits as ARIA keeps them: the configured ones less the safety margin."
+      },
       "ProviderOut": {
         "properties": {
           "name": {
@@ -4064,6 +5068,100 @@
         "title": "ReviewRequest",
         "description": "A reviewer's decision. With API keys, the reviewer is the authenticated key's name."
       },
+      "ReviewerOut": {
+        "properties": {
+          "reviewer": {
+            "type": "string",
+            "title": "Reviewer"
+          },
+          "decisions": {
+            "type": "integer",
+            "title": "Decisions"
+          },
+          "approved_as_is": {
+            "type": "integer",
+            "title": "Approved As Is"
+          },
+          "edited": {
+            "type": "integer",
+            "title": "Edited"
+          },
+          "rejected": {
+            "type": "integer",
+            "title": "Rejected"
+          },
+          "level_changed": {
+            "type": "integer",
+            "title": "Level Changed"
+          },
+          "timed": {
+            "type": "integer",
+            "title": "Timed"
+          },
+          "median_wait_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Wait S"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reviewer",
+          "decisions",
+          "approved_as_is",
+          "edited",
+          "rejected",
+          "level_changed",
+          "timed"
+        ],
+        "title": "ReviewerOut",
+        "description": "How one person decides, over the reviews ARIA keeps."
+      },
+      "ReviewersOut": {
+        "properties": {
+          "reviewers": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewerOut"
+            },
+            "type": "array",
+            "title": "Reviewers"
+          },
+          "decisions": {
+            "type": "integer",
+            "title": "Decisions"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reviewers",
+          "decisions",
+          "limit"
+        ],
+        "title": "ReviewersOut",
+        "description": "Every reviewer's figures, the busiest first, from the newest ``decisions`` reviews."
+      },
       "RunAccepted": {
         "properties": {
           "run_id": {
@@ -4380,7 +5478,8 @@
               "action",
               "run_finished",
               "checkpoint",
-              "error"
+              "error",
+              "followup"
             ],
             "title": "Kind"
           },
@@ -5056,6 +6155,20 @@
               }
             ],
             "title": "Max Body Bytes"
+          },
+          "retention": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Retention"
+          },
+          "data_terms": {
+            "items": {
+              "$ref": "#/components/schemas/DataTermsOut"
+            },
+            "type": "array",
+            "title": "Data Terms"
           }
         },
         "type": "object",
@@ -5121,11 +6234,23 @@
               }
             ],
             "title": "Per Day"
+          },
+          "back_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Back At"
           }
         },
         "type": "object",
         "title": "SharedModelOut",
-        "description": "This visitor's share today of the server's own model keys (``llm.shared``). None means\nno limit; ``left`` 0 means this visitor's work runs offline until tomorrow (UTC)."
+        "description": "This visitor's share today of the server's own model keys (``llm.shared``). None means\nno limit; ``left`` 0 means this visitor's work runs offline until tomorrow (UTC).\n``back_at`` is set while the shared models themselves are at their limits (``llm.quota``):\nuntil then, everyone's model-written triages run offline."
       },
       "SimilarIncident": {
         "properties": {
@@ -5330,6 +6455,79 @@
           "label"
         ],
         "title": "SizeOptionOut"
+      },
+      "SystemDrift": {
+        "properties": {
+          "system": {
+            "type": "string",
+            "title": "System"
+          },
+          "runs": {
+            "type": "integer",
+            "title": "Runs"
+          },
+          "compared": {
+            "type": "integer",
+            "title": "Compared"
+          },
+          "reference": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Reference"
+          },
+          "recent": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Recent"
+          },
+          "psi": {
+            "type": "number",
+            "title": "Psi"
+          },
+          "critical": {
+            "type": "number",
+            "title": "Critical"
+          },
+          "shifted": {
+            "type": "boolean",
+            "title": "Shifted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "system",
+          "runs",
+          "compared",
+          "reference",
+          "recent",
+          "psi",
+          "critical",
+          "shifted"
+        ],
+        "title": "SystemDrift",
+        "description": "Whether one system's decided levels shifted between its earlier and recent runs."
+      },
+      "TermsSourceOut": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "url"
+        ],
+        "title": "TermsSourceOut"
       },
       "TicketAssessment": {
         "properties": {

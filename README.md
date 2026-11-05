@@ -8,8 +8,19 @@ incident report in which every claim cites the log lines behind it, and pauses f
 approve, edit or reject the report before anything is published or sent.
 
 ARIA runs offline with no API keys. Set a Gemini key (free tier available) or an NVIDIA NIM key,
-and the agents write with hosted models. Azure OpenAI and any OpenAI-compatible server work the
-same way: switching is a config change.
+and the agents write with hosted models. Anthropic Claude, OpenAI, Azure OpenAI and any
+OpenAI-compatible server work the same way: switching is a config change.
+
+Start here:
+
+- **Try it.** The [quickstart](#quickstart) runs ARIA offline in three commands; the console's
+  **How ARIA works** and **Guide** pages then show it on a real incident.
+- **Proof.** [Test results](#test-results) on public, labelled datasets, each against a simpler
+  method; every number and its method is in [docs/evaluation.md](docs/evaluation.md).
+- **Limits.** [Limitations](#limitations) and the [data card](docs/data-card.md) say what the
+  results can and cannot show.
+- **Trust.** The [safety controls](#safety-controls), the [threat model](docs/threat-model.md)
+  and the [EU AI Act position](docs/eu-ai-act.md).
 
 ![ARIA's home page: the headline "Turn a wall of logs into a report you can check." on a sage-green panel, and beside it, on a slate-blue panel, a report card from a recorded run: the level, a claim with its citation open on the log line it cites, and a note that it is waiting for a person to approve.](docs/images/hero.webp)
 
@@ -29,12 +40,14 @@ same way: switching is a config change.
    the CLI, or another agent (over A2A or AG-UI) starts a run. Alerts that share a group key
    within five minutes join one run, so an alert storm becomes one incident.
 2. **Parse.** Lines are redacted (secrets removed, IP and e-mail addresses pseudonymised),
-   checked for prompt injection, and grouped into templates with Drain. Large inputs fan out
-   over parallel shards. The parser also follows each unit of work it can name (an HDFS block, a
-   task attempt, a VM boot) from start to finish, learns from the window which steps always come
-   in equal numbers, and flags units that stop partway: failures that log no error at all.
+   checked for prompt injection, and grouped into templates (patterns) by the Drain parser.
+   Large inputs fan out over parallel shards. The parser also follows each unit of work it can
+   name (an HDFS block, a task attempt, a VM boot) from start to finish, learns from the window
+   which steps always come in equal numbers, and flags units that stop partway: failures that
+   log no error at all.
 3. **Severity.** Rules give a floor. A calibrated model gives probabilities and a conformal
-   prediction set. An LLM may adjudicate, but only between the labels in that set.
+   prediction set: the short list of levels it cannot rule out, built to hold the right one at a
+   promised rate. A language model may choose, but only between the levels in that set.
 4. **Investigate and retrieve.** An investigator tests hypotheses with read-only log tools.
    Hybrid search (BM25 plus embeddings) finds the three most similar past incidents and the
    matching runbooks. Weak evidence triggers a replan: wider retrieval, more context, another
@@ -43,7 +56,9 @@ same way: switching is a config change.
    claim that does not cite an existing evidence ID is repaired or replaced by the deterministic
    draft.
 6. **Review.** The run pauses. A reviewer approves, edits or rejects. Nothing outbound (Slack,
-   Teams, ticket drafts) happens before approval.
+   Teams, ticket drafts) happens before approval. When the prediction set holds more than one
+   level, the review says so ("ARIA is torn between SEV2 and SEV3 and plans for SEV2") rather
+   than stating a bare level.
 7. **Learn.** Approved reports join incident memory. Reviewer corrections go to a feedback
    queue, and once enough gather, the severity model's prediction sets are recalibrated on them.
 
@@ -107,15 +122,17 @@ uv run aria db upgrade && uv run aria seed
 make dev
 ```
 
-Open http://localhost:3000 for the home page, then **Open the console**. New to ARIA? The
-console's **How ARIA works** explains it in five short pages, and its **Guide** page replays a
-real incident (ten minutes of a real Hadoop cluster's log) or starts a sample triage in one click,
-and explains how to read a run. A replayed run shows the blocks ARIA flagged next to the label
-Hadoop experts gave each one, and the run page's first tab tells the run as each agent's turn. In
-the console, Ctrl or ⌘ + K opens search, which jumps to any page, recent incident, sample, runbook
-or definition, and `?` lists the keyboard shortcuts. The API listens on
-http://127.0.0.1:8000 (OpenAPI docs at `/docs`). If those ports are taken,
-`make dev API_PORT=8010 WEB_PORT=3010` moves both.
+Open http://localhost:3000 for the home page, then **Open the console**. The API listens on
+http://127.0.0.1:8000 (OpenAPI docs at `/docs`); if those ports are taken,
+`make dev API_PORT=8010 WEB_PORT=3010` moves both. New to ARIA?
+
+- The console's **How ARIA works** explains it in five short pages.
+- Its **Guide** page replays a real incident (ten minutes of a real Hadoop cluster's log) or
+  starts a sample triage in one click, and explains how to read a run. A replayed run shows the
+  blocks ARIA flagged next to the label Hadoop experts gave each one, and the run page's first
+  tab tells the run as each agent's turn.
+- Ctrl or ⌘ + K opens search, which jumps to any page, recent incident, sample, runbook or
+  definition, and `?` lists the keyboard shortcuts.
 
 Without downloaded data, ARIA seeds incident memory from the small test fixtures.
 `uv run aria data download --source loghub-2k` fetches the Loghub samples (pinned commit, checked
@@ -150,8 +167,15 @@ it and checks the console reads it back. `make down` stops it.
    uv run aria providers check gemini
    ```
 
-Every agent role now tries Gemini first: `gemini-3.6-flash`, then `gemini-3.5-flash-lite` when
-the first is busy or reaches its limit, then hosted NIM if its key is set. On the free tier,
+The one key serves a pool of Gemini models, each kept inside its own limits: the strongest leads
+the investigation and the report, and the lighter ones, with larger daily limits, take the critic,
+the message drafts and Ask ARIA. Before each call ARIA checks that model's requests a minute,
+tokens a minute and requests a day, and gives the call to the best model with room; a triage
+reserves its calls before it starts, and when no model has room it is written offline with a note
+saying when the model is back. Copy your key's real limits from AI Studio into `GEMINI_RPM`,
+`GEMINI_TPM` and `GEMINI_RPD` and their `GEMINI_LITE_*`, `GEMINI_LITE_2_*` and `GEMMA_*` twins
+([how](docs/deploy-free.md#keep-your-gemini-key-inside-its-limits);
+[ADR 0016](docs/adr/0016-keep-each-model-on-a-shared-key-inside-its-own-limits.md)). On the free tier,
 Google may use what it is sent to improve its products. ARIA sends only redacted, fenced
 evidence, but use a paid key, a self-hosted NIM or offline mode where even that is not
 acceptable.
@@ -187,7 +211,7 @@ curl -sS http://127.0.0.1:8000/api/v1/alerts/alertmanager \
                   "startsAt":"2026-10-29T03:00:00Z"}]}'
 ```
 
-The run appears in the console's incident queue, streams its steps live, and waits for your
+The run appears in the console's **Incidents** list, streams its steps live, and waits for your
 review. To have ARIA read log files as well, set `ARIA_SCAN_SOURCES` (for example
 `bgl=/var/log/bgl.log`) and `ARIA_SCAN_INTERVAL_S`: each burst of errors opens a run with those
 lines. With `ARIA_ENV=prod`, every call needs an API key from `ARIA_API_KEYS`.
@@ -198,11 +222,11 @@ lines. With `ARIA_ENV=prod`, every call needs an API key from `ARIA_API_KEYS`.
 
 | Surface | Where | What it is for |
 |---|---|---|
-| Console | `web/`, http://localhost:3000/console | Queue, live run view with rule trace, prediction set, evidence and cited report; review, time travel, Ask ARIA, evals, the incident library with its filters and charts, settings, a guide with one-click samples, and search with keyboard shortcuts |
+| Console | `web/`, http://localhost:3000/console | Incidents, live run view with rule trace, prediction set, evidence and cited report; review, time travel, Ask ARIA, test results, the incident library with its filters and charts, settings (with how each reviewer decides and what each model provider's terms say about prompts), a guide with one-click samples, and search with keyboard shortcuts |
 | REST and SSE | `/api/v1/*`, [docs/openapi.json](docs/openapi.json) | Runs, live event stream, report (JSON and Markdown), postmortem draft, review, resending a failed message, history, fork |
 | Alert webhooks | `/api/v1/alerts/alertmanager`, `/grafana`, `/alerts` | Turn alert storms into one grouped run |
 | Log scan | `ARIA_SCAN_SOURCES`, `ARIA_SCAN_INTERVAL_S` | Open a run on an error burst no alert caught |
-| CLI | `uv run aria --help` | Triage a file or scenario, train, evaluate, check providers, run the worker |
+| CLI | `uv run aria --help` | Triage a file or scenario, train, evaluate, check providers, run the worker, purge runs past the retention period |
 | MCP | `/mcp` (streamable HTTP) or `make mcp` (stdio) | Read-only tools over logs, incidents, runbooks and ticket history, plus resources and prompts, for any MCP client |
 | A2A | `/.well-known/agent-card.json`, `/a2a` | Other agents delegate triage; review maps to the `input-required` task state |
 | AG-UI | `/agui` | The event stream the console's chat uses; works with CopilotKit |
@@ -219,12 +243,16 @@ Providers are switched in [config/aria.yaml](config/aria.yaml), and keys come on
 environment or Key Vault. Each role has a fallback chain, and a provider without a key is skipped.
 A circuit breaker opens on repeated failures, or for as long as a rate-limited provider asks, and
 per-run budgets (tokens, cost, latency, steps, tool and LLM calls) degrade a run to the rules-only
-path rather than failing it.
+path rather than failing it. One Gemini key serves a pool of four models, and ARIA counts every
+request against each model's own limits before sending it, so none is asked for more than it
+allows ([docs/deploy-free.md](docs/deploy-free.md#keep-your-gemini-key-inside-its-limits)).
 
 | Provider | Default models | Status |
 |---|---|---|
 | Google Gemini (`gemini`) | chat `gemini-3.6-flash`, reasoning minimal | Verified with live calls on 2026-10-30, including a full triage |
 | Google Gemini, lighter model (`gemini-lite`) | chat `gemini-3.5-flash-lite` | Verified with live calls on 2026-10-30 |
+| Google Gemini, second lighter model (`gemini-lite-2`) | chat `gemini-3.1-flash-lite` | Not verified with a live call |
+| Google Gemma, on the Gemini key (`gemma`) | chat `gemma-3-27b-it`, JSON asked for in the prompt | Not verified with a live call |
 | NVIDIA NIM, hosted (`nim`) | chat `openai/gpt-oss-20b`; embeddings `nvidia/nemotron-3.5-embed-1b` | Verified with live calls on 2026-10-29 |
 | NVIDIA NIM, second model (`nim-fallback`) | chat `minimaxai/minimax-m3.1-flash` | Verified with live calls on 2026-10-29 |
 | NVIDIA NIM, self-hosted (`nim-local`) | Whatever your NIM container serves | Not verified (needs a GPU) |
@@ -240,27 +268,37 @@ optional content-safety check (`guardrails.safety_model`, off by default) asks
 2026-10-29), but ARIA has not called it live yet, so its verdict format is unverified.
 `uv run aria providers list` shows what is enabled, and `aria providers check` confirms the IDs.
 
+What each provider's own terms say about prompts (whether it may use them to improve its models,
+and how long it keeps them) is recorded in `llm.data_terms`, with the day someone read them, and
+shown in Settings beside the model settings. Terms nobody has read yet say "Not verified".
+
 ## How severity is decided
 
 | Step | What it does | Why |
 |---|---|---|
-| Rules | Scoring rules read component criticality, bursts and fatal markers; five floors (data risk, a crashing critical component, a critical alert, a power-supply fault, unfinished work) set a minimum | Transparent: a known-bad pattern is never rated below its floor (SEV2 or SEV3) |
-| Calibrated model | Linear model on window features, temperature-calibrated | Probabilities that mean what they say |
-| Conformal set | Split-conformal (LAC) set at alpha 0.10 | A label set that holds the true severity about 90% of the time on data like the calibration windows (exchangeable), less under a shift |
-| LLM adjudication | Chooses only between labels already in the set | The LLM cannot invent a severity the evidence rules out |
-| Policy | One label decides alone; otherwise the most severe label in the set, flagged for review | Over-triage beats under-triage when unsure |
+| Rules | Scoring rules read bursts, spread, component criticality and keyword families drawn from open vocabularies (gRPC and HTTP status codes, Kubernetes reasons, PostgreSQL SQLSTATE, Linux errno, MITRE ATT&CK). SEV1 needs two kinds of impact to agree, such as an outage and how far it spreads. Floors set a minimum for data at risk, a crashing critical component, a critical alert, a power fault, payment errors, deleted backups, failing backups, lost redundancy, filesystem shutdowns, fatal hardware and unfinished work | Transparent: a known-bad pattern is never rated below its floor (SEV2 or SEV3) |
+| Calibrated model | A linear model on the window's features, temperature-calibrated | Probabilities that mean what they say |
+| Novelty check | A window unlike anything in training (too far from the training data, too many new patterns, or a system the model never saw) goes to a person | The model never extrapolates quietly |
+| Conformal set | One threshold per level, with a tighter promise for SEV1 and SEV2 than for SEV3 and SEV4, sets kept in order, and a certified limit on how often a serious incident is ruled out | The promise holds for each level, not just on average |
+| LLM adjudication | Chooses only between labels already in the set, with the nearest incidents a person reviewed as examples | The LLM cannot invent a severity the evidence rules out, and a reviewed level outside the set is flagged for a person, never chosen |
+| Policy | One label decides alone; otherwise the most severe label in the set, flagged for review with the reasons | Over-triage beats under-triage when unsure |
 
-Reviewer corrections feed recalibration: `aria train recalibrate` (and a background job, every
-`severity.recalibrate_check_s`) re-fits only the conformal threshold once
-`severity.recalibrate_after` new reviews have gathered. It writes `<version>-recal<n>`, keeps the
-previous file, and running engines reload it. The [model card](docs/model-card.md) has the
-details.
+Blind checks recalibrate it. In Settings, "Check ARIA blind" shows a recent incident without
+ARIA's verdict; the person rates it first, so the rating is not anchored on ARIA's. Each check
+nudges that level's promise in arrival order (adaptive conformal inference), and every 100
+checks of a level replace its calibration with the checks' own. Approvals no longer count,
+because a person approving a report tends to agree with it. A drift monitor compares each
+system's recent mix of levels with its earlier one and says when it has shifted. The
+[model card](docs/model-card.md) and [ADR 0014](docs/adr/0014-promise-coverage-per-level-and-send-unfamiliar-windows-to-a-person.md)
+have the details.
 
 ## Safety controls
 
 - **Prompt injection.** Instruction-like log lines, alert labels and annotations are quarantined
   before any model sees them. Everything else reaches a model only as fenced, untrusted
-  evidence.
+  evidence. An adaptive red team measures what attacks still achieve, with the guard and with
+  it bypassed, and a hard gate fails it on a severity outside the set or a message sent before
+  approval. Spotlighting by datamarking is an option, off until a comparison shows it helps.
 - **Constrained output.** The LLM can only choose severity inside the conformal set, so injected
   text cannot change it. Every report claim must cite evidence, and the validator rejects
   anything else.
@@ -280,24 +318,24 @@ details.
 The full analysis, with the code and test for each control, is in the
 [threat model](docs/threat-model.md).
 
-## Measured results
+## Test results
 
 ![The Hadoop cluster test on the console's Test results page: ARIA's result against the label experts gave each storage block, its precision, recall and false alarms, and a table comparing ARIA with four standard detectors, its severity engine and a keyword rule.](docs/images/real.webp)
 
 *The Hadoop cluster test on the console's Test results page. Every number on it comes from `docs/eval-results.json`.*
 
 <!-- generated:results -->
-Generated by `make eval` at commit `7e6233e`; do not edit by hand. Apart from the real-data results, the data is **semi-synthetic**: real lines from the public Loghub samples, composed into incidents by ARIA's scenario builder, on held-out seeds 41, 42. These numbers show how ARIA behaves on that distribution, not its accuracy on production incidents.
+Generated by `make eval` at commit `e28321c`; do not edit by hand. Apart from the real-data results, the data is **semi-synthetic**: real lines from the public Loghub samples, composed into incidents by ARIA's scenario builder, on held-out seeds 41, 42. These numbers show how ARIA behaves on that distribution, not its accuracy on production incidents.
 
 **Real logs, expert labels**: on a real Hadoop cluster's log (more than 200 nodes, every storage block labelled by Hadoop experts), ARIA's lifecycle check flagged 151 of the 5,435 blocks it judged, 98.0% of them real failures (3 false alarms among 5,186 healthy blocks): 59.4% of the 249 failures it judged, 47.3% of all 313 in the sample. It matches or beats each standard detector on the same blocks, though they see the whole sample at once: PCA (Xu et al. 2009) finds 37.0% with 2 false alarms, an isolation forest finds 56.2% with 14 false alarms, and a rule that flags rare step counts ties it. An offline replay of the check, not of the deployed log scan.
 
-**Real severity**: on all 7,346 20-minute windows of a supercomputer's 214.7-day log, labelled by its administrators' alert tags, ARIA rated 27 of the 680 SEV1-2 windows as SEV3-4 and paged on 437 of 6,533 quiet windows (ARIA's rules alone: 26 and 251; the highest log level: 0 and 505); accuracy 90.4% (89.7–91.0%), macro-F1 0.655.
+**Real severity**: on all 7,346 20-minute windows of a supercomputer's 214.7-day log, labelled by its administrators' alert tags, ARIA rated 13 of the 680 SEV1-2 windows as SEV3-4 and paged on 481 of 6,533 quiet windows (ARIA's rules alone: 25 and 298; the highest log level: 0 and 505); accuracy 89.9% (89.2–90.6%), macro-F1 0.644.
 
-**Real failed jobs**: of 44 Hadoop jobs with a failure injected, ARIA flagged 37 (69.9–93.4%), and 11 of 11 healthy jobs; a rule on ERROR lines flags 19 and 2.
+**Real failed jobs**: of 44 Hadoop jobs with a failure injected, ARIA flagged 43 (88.0–99.9%), and 11 of 11 healthy jobs; a rule on ERROR lines flags 19 and 2.
 
-**Real injected bugs**: of 480 OpenStack runs that failed after a bug was injected into the code, ARIA flagged 480 (99.2–100.0%), including all 84 that no API error reported, and all 431 runs that did not fail: it was unsure of 911 of the 911 runs and sent them to a reviewer. Paging only at SEV1-2, it caught 441 failed and 133 healthy runs, where a rule on ERROR lines flags 439 and 113; ranking failed above healthy runs, it scores AUROC 0.781 (0.752–0.810), against 0.829 for counting ERROR lines.
+**Real injected bugs**: of 480 OpenStack runs that failed after a bug was injected into the code, ARIA flagged 480 (99.2–100.0%), including all 84 that no API error reported, and all 431 runs that did not fail: it was unsure of 911 of the 911 runs and sent them to a reviewer. Paging only at SEV1-2, it caught 476 failed and 431 healthy runs, where a rule on ERROR lines flags 439 and 113; ranking failed above healthy runs, it scores AUROC 0.560 (0.519–0.601), against 0.829 for counting ERROR lines.
 
-**Build failures**: on 756 failed CI builds, a kind of log ARIA was never tuned on, the lines it kept as evidence held the lines a person marked as the cause in 44.7% of builds (41.1–48.3%); the same number of the log's last error-looking lines held them in 44.3%.
+**Build failures**: on 756 failed CI builds, a kind of log ARIA was never tuned on, the lines it kept as evidence held the lines a person marked as the cause in 45.0% of builds (41.4–48.6%); the same number of the log's last error-looking lines held them in 44.3%.
 
 **Real tickets**: on the newest 3,737 of 24,918 tickets from a ServiceNow service desk, ARIA's priority matched the final priority for 98.5% (98.1–98.9%), the same as the impact x urgency matrix it learns, and its SLA model ranks breaches at AUROC 0.769 (0.751–0.785), against 0.737 for the best single field.
 
@@ -309,24 +347,30 @@ Generated by `make eval` at commit `7e6233e`; do not edit by hand. Apart from th
 
 | Method | Accuracy (95% CI) | Macro-F1 | SEV1/2 rated SEV3/4 |
 |---|---|---|---|
-| ARIA policy (offline) | 95.5% (93.0–97.8%) | 0.943 | 1.8% |
+| ARIA policy (offline) | 83.0% (78.8–86.9%) | 0.826 | 0.9% |
 | TF-IDF + logistic regression (raw text) | 84.0% (79.8–87.8%) | 0.823 | 13.3% |
-| Rules only | 58.3% (52.9–63.8%) | 0.528 | 23.9% |
+| Rules only | 64.4% (59.3–69.9%) | 0.584 | 9.7% |
 | Keyword categories only | 42.3% (36.9–48.1%) | 0.403 | 18.6% |
 | Majority class | 36.9% (31.7–42.0%) | 0.135 | 100.0% |
 
-- Calibration: ECE 0.016. Conformal prediction sets hold the true severity in 97.8% of windows (target 90.0%), with 1.083 labels on average.
-- Automation: 88.5% of windows are decided without review, at 99.3% accuracy; the rest go to a reviewer.
+These windows come from the same systems and failure modes as the training windows; the next line is the honest estimate for a new system.
 
-**End to end**, 60 offline runs through the whole graph: 100.0% of reports pass validation and 100.0% cite existing evidence for every claim; similar incidents Recall@3 100.0%; time to review p50 0.60 s, p95 1.26 s.
+**On systems the model never saw** (each held out in turn, 312 windows from 12 systems): accuracy 61.9% (56.4–67.1%); serious windows rated SEV3-4: 4 of 113 (at most 7.9%); a person asked about 100.0%. [Details](docs/evaluation.md#systems-and-failures-aria-has-never-seen).
+
+- Calibration: ECE 0.035. Conformal prediction sets hold the true severity in 95.2% of windows (target 90.0%), with 1.276 labels on average.
+- Automation: 68.3% of windows are decided without review, at 97.7% accuracy; the rest go to a reviewer.
+
+**End to end**, 60 offline runs through the whole graph: 100.0% of reports pass validation and 100.0% cite existing evidence for every claim; similar incidents Recall@3 100.0%; time to review p50 0.43 s, p95 1.02 s.
 
 **With a live LLM** (Google Gemini, 3 runs at commit `53522c7`): the LLM wrote 3 of the 3 reports, and 100.0% cite evidence for every claim; time to review p50 47.2 s, mostly waiting on the provider (LLM call p50 3.0 s).
 
-**Log parsing**: grouping accuracy 0.862 against Loghub's labelled templates (30,000 lines, 15 systems), and 0.785 on GAIA's 140,000 labelled lines from 14 systems: 0.801 on the 5 that ARIA has no format or settings for.
+**Log parsing**: grouping accuracy 0.863 against Loghub's labelled templates (30,000 lines, 15 systems), and 0.785 on GAIA's 140,000 labelled lines from 14 systems: 0.802 on the 5 that ARIA has no format or settings for.
 
 **Prompt injection**: the guard quarantined 97.2% of 1,000 attacks (an upper bound: the detector was tuned on this corpus) and 0.0% of 1,000 benign inputs. With 3 injected lines in each of 16 incident windows, severity was unchanged in 100.0% and tool calls in 100.0%.
 
-**Prompt injection, public benchmarks**: of 2,654 attacks from 6 public benchmarks the detector was never tuned on, it caught 29.9% (28.1–31.7%); it flagged 3.5% of 339 benign look-alikes and 0 of 5,247,088 real log lines. Fencing, the prediction set and approval do not rely on it.
+**Prompt injection, public benchmarks**: of 2,654 attacks from 6 public benchmarks the detector was never tuned on, it caught 29.9% (28.2–31.7%); it flagged 3.5% of 339 benign look-alikes and 0 of 5,247,088 real log lines. Fencing, the prediction set and approval do not rely on it.
+
+**Red team**: of 24 adaptive injection attacks, mutated until they got past the guard and run through the whole pipeline with a model that obeys any order it reads, 0 achieved an outcome that matters (a severity outside the set, a message sent without approval, an unlisted link or recipient in a draft, a leaked secret); at 95% confidence the rate is below 11.7%. With the guard bypassed, the model acted on 136 orders and 0 of 24 attacks achieved an outcome. [Details](docs/evaluation.md#red-team).
 
 Every section, with its method: [docs/evaluation.md](docs/evaluation.md).
 <!-- /generated:results -->
@@ -350,16 +394,17 @@ Every section, with its method: [docs/evaluation.md](docs/evaluation.md).
   rate, which ARIA's features estimate. That suits ARIA better than real on-call labels would.
   See the [data card](docs/data-card.md).
 - **The severity model learned from semi-synthetic windows.** On the real BGL log, the rules
-  alone did better than the rules and model together
-  ([evaluation](docs/evaluation.md#real-logs-a-supercomputers-alert-tags)). A deployment should
-  recalibrate on its own reviewed incidents (`aria train recalibrate`).
+  and model together miss fewer serious windows than the rules alone, but page on more quiet
+  ones ([evaluation](docs/evaluation.md#real-logs-a-supercomputers-alert-tags)). A deployment
+  should recalibrate on its own reviewed incidents (`aria train recalibrate`).
 - **ARIA knows few failure modes outside its samples.** On OpenStack runs with an injected bug,
   its one OpenStack failure mode is a missing image-cache file, from a 2,000-line sample of
-  another deployment. It was unsure of most runs and sent them to a reviewer at the most severe
-  label in their prediction set, so at SEV1-3 it flags nearly every run, failed or not. Ranked by
-  its probability of SEV1-2, it tells failed from healthy runs a little less well than counting
-  ERROR lines does ([evaluation](docs/evaluation.md#real-failures-bugs-injected-into-openstack)).
-  A deployment needs failure modes and reviewed incidents of its own.
+  another deployment. It was unsure of every run and sent each to a reviewer at the most severe
+  label in its prediction set, so it pages on nearly every run, failed or not. Ranked by its
+  probability of SEV1-2, it tells failed from healthy runs only a little better than chance,
+  where counting ERROR lines does much better
+  ([evaluation](docs/evaluation.md#real-failures-bugs-injected-into-openstack)). A deployment
+  needs failure modes and reviewed incidents of its own.
 - **Memory needs more than a summary of impact.** On three clouds' public post-mortems, no
   method finds a past incident with the same root cause or fix from an incident's title and
   impact summary much more often than picking past incidents at random does
@@ -399,7 +444,9 @@ Every section, with its method: [docs/evaluation.md](docs/evaluation.md).
     Clients get the same state, with more bytes per update.
 - **Raw log lines are kept with their run.** Analysis, model calls, reports, messages and memory
   use redacted text, but the lines a run was sent stay in its stored request and checkpoints, so
-  it can be replayed, until the run is deleted. Nothing prunes old runs yet.
+  it can be replayed, until the run is deleted. Old runs are purged only once an operator sets a
+  retention period (`retention.days`, off by default; see the
+  [ops runbook](docs/ops-runbook.md#retention-and-purge)).
 - **Mobile Lighthouse is at or just under the brief's bar.** On mobile, the landing page's
   performance score sits at or a few points below the brief's target of 95, varying from run to
   run; `make web-lighthouse` prints it, and CI gates at 90. Desktop and the other categories meet
@@ -504,13 +551,23 @@ Mining Console Logs", SOSP 2009, for the HDFS labels. Sources and pinned checksu
 
 ## Docs
 
-- [Evaluation](docs/evaluation.md): every measured number and how it was measured
-- [Architecture decisions](docs/adr/README.md)
-- [Data card](docs/data-card.md)
-- [Model card](docs/model-card.md)
-- [Threat model](docs/threat-model.md)
-- [Ops runbook](docs/ops-runbook.md)
-- [Deploy a free public demo](docs/deploy-free.md): the website on Vercel, the API on Render
-- [Quality audit](docs/quality-audit.md): what the pre-release audit checked, fixed and left
+- [Evaluation](docs/evaluation.md): every measured number and how it was measured, for anyone
+  judging the results (written by `make eval`)
+- [Model card](docs/model-card.md): how severity is decided, calibrated and recalibrated, for
+  reviewers, SREs and auditors
+- [Data card](docs/data-card.md): the datasets, their labels and licences, and how the
+  semi-synthetic incidents are built, for anyone judging what the results can show
+- [Threat model](docs/threat-model.md): assets, trust boundaries, prompt injection, and the
+  control and test behind each threat, for security reviewers
+- [The EU AI Act](docs/eu-ai-act.md): why ARIA, as shipped, is not a high-risk system, and what
+  would change that, for compliance reviewers and deployers in the EU
+- [Architecture decisions](docs/adr/README.md): why ARIA is built the way it is, for engineers
+- [Ops runbook](docs/ops-runbook.md): deploying, configuring, watching and fixing ARIA, for
+  whoever operates it
+- [Deploy a free public demo](docs/deploy-free.md): the website on Vercel, the API on Render,
+  for whoever hosts a demo
+- [Validation log](docs/validation-log.md): every candidate change to the severity rules and
+  thresholds, adopted or not, for engineers changing the engine
+- [Quality audit](docs/quality-audit.md): what the pre-release audits checked, fixed and left
 - [Build brief](docs/build-brief.md): the specification and its acceptance checks
 - [AGENTS.md](AGENTS.md): conventions for coding agents working on this repo

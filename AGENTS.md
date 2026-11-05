@@ -58,6 +58,7 @@ must never need a network call or a real key. Contract tests mock HTTP.
 | `docs/evaluation.md`, `docs/eval-results.json` | `make eval` |
 | Blocks between `<!-- generated:NAME -->` and `<!-- /generated:NAME -->` in `README.md` and `docs/model-card.md` | `make eval` |
 | `docs/eval-live.json` | `uv run aria eval run --suite pipeline --llm` (makes paid or rate-limited provider calls; ask first) |
+| `docs/eval-llm-choice.json` | `uv run aria eval run --suite llm-choice --llm` (paid or rate-limited provider calls; ask first; the offline run's `calls` says how many). Until it exists, `make eval` says nothing about the model's choice inside the set |
 | `web/src/data/eval-results.json`, `web/src/data/eval-live.json`, `web/src/data/llms.json` | `pnpm --dir web sync:data` |
 | `web/src/data/samples.json`, `web/src/data/samples/*.json`, `web/src/data/sample-lines.ts` | `uv run python -I scripts/export_web_samples.py` |
 | `web/src/data/demo-run.json` | `uv run python -I scripts/record_demo_run.py --llm` (paid or rate-limited provider calls; ask first; without `--llm` it records offline). The home page, the console's How ARIA works and `video/` read it |
@@ -119,11 +120,14 @@ falls out of date.
 |---|---|
 | `src/aria/graph/workflow.py` | Graph nodes, routing, review interrupt, publish and learn |
 | `src/aria/graph/runner.py` | Starting, resuming and forking runs |
-| `src/aria/severity/` | Rules, features, model, conformal sets, recalibration |
-| `src/aria/reporting/` | Report writer, critic, validator, comms drafts |
-| `src/aria/llm/` | Providers, router, budgets, prompts |
-| `src/aria/api/` | App, routers, webhooks, log scan, A2A, AG-UI, worker |
-| `src/aria/evals/` | Suites, metrics and the report generator. Real data: `real.py` (HDFS, expert labels), `bgl.py` (BGL alert tags), `hadoop.py` (failed jobs), `openstack.py` (injected bugs), `tickets.py` (ServiceNow tickets), `gitlab.py` (GitLab.com incidents), `postmortems.py` (cloud post-mortems), `injection.py` (public injection benchmarks) |
+| `src/aria/severity/` | Rules, features, model, policy and engine. `conformal.py` (a calibration per level, ordered sets and the certified severe-miss guard), `recalibration.py` (recalibration on blind checks), `drift.py` (each system's level mix and the severe-miss alarm), `history.py` (a system's own baseline and the patterns reviewers dismissed) |
+| `src/aria/reporting/` | Report writer, critic, validator, comms drafts; `outbound.py` (allow-listed links and recipients in drafts) |
+| `src/aria/llm/` | Providers, router, budgets, prompts; `quota.py` (each model's limits, admission and reservations), `ratelimit.py` (reading a provider's refusal), `cache.py` (answers to repeated deterministic requests) |
+| `src/aria/api/` | App, routers, webhooks, log scan, A2A, AG-UI, worker; `routers/audit.py` verifies the decision record |
+| `src/aria/db/record.py` | The append-only, hash-chained decision record (`aria audit verify`) |
+| `src/aria/graph/retention.py` | The retention purge |
+| `src/aria/evals/` | Suites, metrics and the report generator. `rings.py` (ring B: systems and failure modes held out in turn), `stats.py` (exact bounds, paired tests, resampling by incident or system), `redteam.py` (the adaptive red team). Real data (ring C): `real.py` (HDFS, expert labels), `bgl.py` (BGL alert tags), `hadoop.py` (failed jobs), `openstack.py` (injected bugs), `logchunks.py` (failed CI builds), `tickets.py` (ServiceNow tickets), `gitlab.py` (GitLab.com incidents), `postmortems.py` (cloud post-mortems), `injection.py` (public injection benchmarks). New domains, through `domains.py` and `ringc.py`: `ait_ads.py` (security alerts), `rcaeval.py` and `nezha.py` (microservice faults), `anomod.py` (microservice anomalies), `itbench.py` (Kubernetes incidents), `jira.py` (public Jira priorities) |
+| `config/eval_registry.yaml`, `docs/validation-log.md` | What each suite was tuned on, and every candidate change to the rules and thresholds, chosen on validation seeds only, adopted or not |
 | `src/aria/parsing/flows.py` | Units of work that stop partway, learned per window (`config/flows.yaml`) |
 | `src/aria/data/real.py` | Real, labelled logs and the real incidents the console replays |
 | `src/aria/data/download.py` | Fetching and verifying manifest sources, with checksum-pinned mirrors for blocked hosts |

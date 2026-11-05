@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import Field, StringConstraints
+from pydantic import Field, StringConstraints, field_validator
 
 from aria.contracts.base import Contract, EvidenceId, Severity
 
@@ -26,6 +26,14 @@ class AdjudicationOutput(Contract):
     severity: Severity
     rationale: list[ClaimOut] = Field(min_length=1, max_length=4)
     uncertainty: Annotated[str, StringConstraints(max_length=400)] = ""
+
+    @field_validator("severity", mode="before")
+    @classmethod
+    def _read_the_label_whatever_its_case(cls, value: object) -> object:
+        """A provider asked for JSON in its prompt (no schema to hold it to the enum) may write
+        "sev2": the label is read whatever its case. The adjudicator still checks it against the
+        prediction set afterwards, so this widens nothing."""
+        return value.strip().upper() if isinstance(value, str) else value
 
 
 class ToolArguments(Contract):
@@ -87,14 +95,21 @@ class NarrativeOutput(Contract):
 
 class CriticIssue(Contract):
     path: str  # for example "summary[1]"
-    problem: Literal["unsupported", "contradicted", "overstated", "missing_citation", "other"]
+    # "cannot_judge": the critic abstains on this claim; its explanation says what the reviewer
+    # should check. It never removes the claim.
+    problem: Literal[
+        "unsupported", "contradicted", "overstated", "missing_citation", "cannot_judge", "other"
+    ]
     explanation: Annotated[str, StringConstraints(max_length=400)]
     suggested_evidence_ids: list[EvidenceId] = Field(default_factory=list, max_length=6)
 
 
 class CriticOutput(Contract):
-    verdict: Literal["pass", "revise"]
+    # "abstain": the critic cannot judge the report; reviewer_should_check says what a person
+    # should look at instead.
+    verdict: Literal["pass", "revise", "abstain"]
     issues: list[CriticIssue] = Field(default_factory=list, max_length=12)
+    reviewer_should_check: Annotated[str, StringConstraints(max_length=400)] = ""
 
 
 class MessageDraft(Contract):

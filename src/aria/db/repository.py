@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import secrets
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -26,6 +26,7 @@ from aria.db.models import (
     STORE_SEP,
     ActionRow,
     FeedbackRow,
+    LogEventRow,
     ReportRow,
     RunEventRow,
     RunRow,
@@ -465,6 +466,45 @@ def review_feedback(engine: Engine) -> list[tuple[int, dict[str, Any], bool]]:
         return [(row.id, dict(row.value), row.used_for_training) for row in rows]
 
 
+def feedback_of(engine: Engine, field: str) -> list[tuple[int, dict[str, Any], bool]]:
+    """Every feedback row of one kind (``review``, ``blind_check``), oldest first."""
+    with session_scope(engine) as session:
+        rows = session.scalars(
+            select(FeedbackRow).where(FeedbackRow.field == field).order_by(FeedbackRow.id)
+        )
+        return [(row.id, dict(row.value), row.used_for_training) for row in rows]
+
+
+def blind_check_candidates(engine: Engine, *, recent: int = 500) -> list[str]:
+    """Recent runs someone could rate blind: decided, shared (no visitor's own), not yet rated.
+
+    Picking at random from these, not choosing, keeps blind checks a fair sample of what ARIA
+    sees, which is what lets them recalibrate it.
+    """
+    done = blind_checked_runs(engine)
+    with session_scope(engine) as session:
+        rows = session.scalars(
+            select(RunRow.id)
+            .where(
+                RunRow.severity.is_not(None),
+                RunRow.visitor.is_(None),
+                RunRow.status.in_(
+                    [RunStatus.AWAITING_REVIEW, RunStatus.PUBLISHED, RunStatus.REJECTED]
+                ),
+            )
+            .order_by(RunRow.created_at.desc())
+            .limit(recent)
+        )
+        return [run_id for run_id in rows if run_id not in done]
+
+
+def blind_checked_runs(engine: Engine) -> set[str]:
+    """Runs someone has already rated blind."""
+    with session_scope(engine) as session:
+        rows = session.scalars(select(FeedbackRow.run_id).where(FeedbackRow.field == "blind_check"))
+        return set(rows)
+
+
 def list_feedback(engine: Engine, *, limit: int = 50) -> list[dict[str, Any]]:
     """The newest reviews first, for people: who decided what, and whether it was used."""
     with session_scope(engine) as session:
@@ -487,12 +527,170 @@ def list_feedback(engine: Engine, *, limit: int = 50) -> list[dict[str, Any]]:
         ]
 
 
+def review_decisions(engine: Engine, *, limit: int = 2_000) -> list[dict[str, Any]]:
+    """People's review decisions, newest first, with the moments that time them.
+
+    Each is a ``review`` feedback row, so only people's reviews of shared runs: unattended
+    publishing and visitors' own runs record none. ``paused_at`` is when the run first paused for
+    review (its first ``interrupt`` event) and ``decided_at`` when the decision was applied (its
+    report's ``reviewed_at``, else the review's own time). Either is None where it is unknown.
+    """
+    paused = (
+        select(func.min(RunEventRow.ts))
+        .where(RunEventRow.run_id == FeedbackRow.run_id, RunEventRow.kind == "interrupt")
+        .correlate(FeedbackRow)
+        .scalar_subquery()
+    )
+    reviewed = (
+        select(func.max(ReportRow.reviewed_at))
+        .where(ReportRow.run_id == FeedbackRow.run_id)
+        .correlate(FeedbackRow)
+        .scalar_subquery()
+    )
+    stmt = (
+        select(
+            FeedbackRow.run_id,
+            FeedbackRow.author,
+            FeedbackRow.value["decision"].as_string(),
+            FeedbackRow.value["from"].as_string(),
+            FeedbackRow.value["to"].as_string(),
+            FeedbackRow.created_at,
+            paused,
+            reviewed,
+        )
+        .where(FeedbackRow.field == "review")
+        .order_by(FeedbackRow.id.desc())
+        .limit(limit)
+    )
+    with session_scope(engine) as session:
+        return [
+            {
+                "run_id": run_id,
+                "reviewer": author,
+                "decision": decision,
+                "aria_level": aria,
+                "final_level": final,
+                "paused_at": paused_at,
+                "decided_at": reviewed_at or created_at,
+            }
+            for run_id, author, decision, aria, final, created_at, paused_at, reviewed_at in (
+                session.execute(stmt)
+            )
+        ]
+
+
+def decided_levels(engine: Engine, *, per_system: int = 400) -> dict[str, list[str]]:
+    """Each system's decided severity levels on its latest ``per_system`` runs, oldest first.
+
+    Visitors' own runs on a shared demo stay out: they are theirs, like their reviews.
+    """
+    # Numbered newest first within each system, so the database hands back at most
+    # ``per_system`` rows a system rather than every run it holds.
+    rank = (
+        func.row_number()
+        .over(partition_by=RunRow.system, order_by=(RunRow.created_at.desc(), RunRow.id.desc()))
+        .label("rank")
+    )
+    recent = (
+        select(RunRow.system, RunRow.severity, rank)
+        .where(RunRow.severity.is_not(None), RunRow.visitor.is_(None))
+        .subquery()
+    )
+    out: dict[str, list[str]] = {}
+    with session_scope(engine) as session:
+        rows = session.execute(
+            select(recent.c.system, recent.c.severity)
+            .where(recent.c.rank <= per_system)
+            .order_by(recent.c.system, recent.c.rank.desc())
+        )
+        for system, level in rows:
+            out.setdefault(str(system), []).append(str(level))
+    return out
+
+
 def mark_feedback_used(engine: Engine, ids: Sequence[int]) -> None:
     if not ids:
         return
     with session_scope(engine) as session:
         for row in session.scalars(select(FeedbackRow).where(FeedbackRow.id.in_(list(ids)))):
             row.used_for_training = True
+
+
+# --- a system's own history (read at triage time; see aria.severity.history) ---------------------
+
+
+def recent_error_ratios(engine: Engine, system: str, *, limit: int = 30) -> list[float]:
+    """The error ratio of each of the system's latest runs that got past parsing, newest first.
+
+    Read from the ``merge`` step's finished event, which records the window's events and errors,
+    so it needs no column of its own. Runs still queued or running stay out, the run being
+    triaged among them, as do visitors' own runs on a shared demo.
+    """
+    stmt = (
+        select(RunEventRow.payload)
+        .join(RunRow, RunRow.id == RunEventRow.run_id)
+        .where(
+            RunRow.system == system,
+            RunRow.visitor.is_(None),
+            RunRow.status.not_in(("queued", "running")),
+            RunEventRow.kind == "node_finished",
+            RunEventRow.node == "merge",
+        )
+        .order_by(RunRow.created_at.desc(), RunEventRow.id.desc())
+        .limit(limit)
+    )
+    ratios: list[float] = []
+    with session_scope(engine) as session:
+        for (payload,) in session.execute(stmt):
+            events, errors = payload.get("events"), payload.get("errors")
+            if isinstance(events, int) and events > 0 and isinstance(errors, int):
+                ratios.append(min(1.0, max(0.0, errors / events)))
+    return ratios
+
+
+def dismissed_reviews(engine: Engine, system: str, *, limit: int = 200) -> list[str]:
+    """Runs on this system whose review dismissed ARIA's rating, newest first: the reviewer
+    discarded the draft, or lowered the level to SEV4. Read from the system's newest ``limit``
+    reviews; each run once. Visitors' own runs record no reviews, so none appear."""
+    stmt = (
+        select(FeedbackRow.run_id, FeedbackRow.value)
+        .join(RunRow, RunRow.id == FeedbackRow.run_id)
+        .where(FeedbackRow.field == "review", RunRow.system == system, RunRow.visitor.is_(None))
+        .order_by(FeedbackRow.id.desc())
+        .limit(limit)
+    )
+    dismissed: list[str] = []
+    with session_scope(engine) as session:
+        for run_id, value in session.execute(stmt):
+            lowered = value.get("to") == "SEV4" and value.get("from") != "SEV4"
+            if (value.get("decision") == "reject" or lowered) and run_id not in dismissed:
+                dismissed.append(str(run_id))
+    return dismissed
+
+
+def issue_templates_of(
+    engine: Engine, run_ids: Sequence[str], *, levels: Collection[str], dataset: str = "run"
+) -> dict[str, set[str]]:
+    """Each run's log patterns on its stored lines at ``levels`` or with no level (its issue
+    lines), from the run's own analysed lines (``aria.retrieval.runlog``). A run whose lines are
+    gone is left out."""
+    if not run_ids:
+        return {}
+    stmt = (
+        select(LogEventRow.window_id, LogEventRow.template_id)
+        .where(
+            LogEventRow.dataset == dataset,
+            LogEventRow.window_id.in_(list(run_ids)[:500]),
+            LogEventRow.template_id.is_not(None),
+            or_(LogEventRow.level.in_(sorted(levels)), LogEventRow.level.is_(None)),
+        )
+        .distinct()
+    )
+    out: dict[str, set[str]] = {}
+    with session_scope(engine) as session:
+        for window_id, template in session.execute(stmt):
+            out.setdefault(str(window_id), set()).add(str(template))
+    return out
 
 
 # --- the external worker's queue -----------------------------------------------------------------

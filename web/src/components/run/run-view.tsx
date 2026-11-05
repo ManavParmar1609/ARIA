@@ -48,6 +48,7 @@ import { systemName, triggerLabel } from "@/lib/systems";
 import { cn } from "@/lib/utils";
 
 import { Activity } from "./activity";
+import { DecisionRecord } from "./decision-record";
 import { Deliveries } from "./deliveries";
 import { EvidencePanel, EvidenceProvider } from "./evidence";
 import { ExpertCheck } from "./expert-check";
@@ -150,6 +151,18 @@ export function headerRating(
 
 // A title longer than this takes a smaller size, so it does not fill a phone's first screen (L10).
 const LONG_TITLE = 80;
+
+/**
+ * Whether the report's title says what the page's heading already says: the same words, or the
+ * heading cut short with an ellipsis (a long title the report keeps only the start of). Then the
+ * report shows no title of its own.
+ */
+export function sameTitle(reportTitle: string | null | undefined, heading: string): boolean {
+  const title = stripSeverity(reportTitle).trim();
+  if (!title || title === heading) return true;
+  const cut = title.replace(/(?:…|\.\.\.)$/, "").trim();
+  return cut !== title && cut.length > 0 && heading.startsWith(cut);
+}
 
 /** The answer first (item 14): the level and its word, the title, and the short list of levels
  * it could be; then where the incident came from. */
@@ -411,6 +424,36 @@ function RunSkeleton() {
 // Runs that ended with no rating, so the severity panel says so instead of waiting for one.
 const ENDED_UNRATED = new Set(["failed", "rejected", "published"]);
 
+/** A link that names no incident. Its title takes focus, as an incident's does on arrival, so a
+ * screen reader hears what the page says instead of starting again at the menu. */
+function MissingIncident({ shared }: { shared: boolean }) {
+  const page = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const title = page.current?.querySelector("h1");
+    if (!title) return;
+    title.tabIndex = -1;
+    title.focus({ preventScroll: true });
+  }, []);
+  return (
+    <div ref={page} className="[&_h1]:outline-none">
+      <EmptyState
+        heading="h1"
+        title="This incident is not here"
+        art={<LostSpot className="h-auto w-full" />}
+        action={
+          <Button asChild size="sm">
+            <Link href="/console/runs">Back to incidents</Link>
+          </Button>
+        }
+      >
+        {shared
+          ? "The link may be wrong, or the incident was deleted. On this shared demo, each visitor sees only the incidents they started, so a link from someone else's browser opens nothing here."
+          : "It may have been deleted, or the link is wrong."}
+      </EmptyState>
+    </div>
+  );
+}
+
 /** The step an earlier view stops before, in the history list's words: "before “Rate severity”". */
 function earlierStep(next: string[]): string {
   const name = checkpointName({ next, interrupted: false });
@@ -440,6 +483,22 @@ export function RunView({
   const [openedTitle, setOpenedTitle] = useState<string | null | undefined>(undefined);
   if (openedTitle === undefined && run.data) setOpenedTitle(run.data.title ?? null);
   const [checkpoint, setCheckpoint] = useState<string | null>(null);
+  // The banner that holds "Back to now" goes with the earlier view, so focus would fall to the
+  // page: it goes to the step's own button in History instead, or else to the title.
+  const backToNow = () => {
+    const id = checkpoint;
+    setCheckpoint(null);
+    requestAnimationFrame(() => {
+      const button = id
+        ? document.querySelector<HTMLElement>(`[data-checkpoint="${CSS.escape(id)}"]`)
+        : null;
+      const target =
+        button && button.getClientRects().length > 0
+          ? button
+          : document.querySelector<HTMLElement>("#console-main h1");
+      target?.focus({ preventScroll: true });
+    });
+  };
   const [tab, setTab] = useState(() => storedTab(runId));
   const chooseTab = (next: string) => {
     setTab(next);
@@ -480,24 +539,7 @@ export function RunView({
   // A refresh that fails (a busy server, say) keeps what the page already shows; one that finds
   // the incident gone (deleted in another tab) says so instead (FL-08).
   if (run.isError && (!run.data || missing)) {
-    if (missing) {
-      return (
-        <EmptyState
-          heading="h1"
-          title="This incident is not here"
-          art={<LostSpot className="h-auto w-full" />}
-          action={
-            <Button asChild size="sm">
-              <Link href="/console/runs">Back to incidents</Link>
-            </Button>
-          }
-        >
-          {shared
-            ? "The link may be wrong, or the incident was deleted. On this shared demo, each visitor sees only the incidents they started, so a link from someone else's browser opens nothing here."
-            : "It may have been deleted, or the link is wrong."}
-        </EmptyState>
-      );
-    }
+    if (missing) return <MissingIncident shared={shared} />;
     return (
       <div className="grid gap-6">
         <Crumbs />
@@ -633,7 +675,7 @@ export function RunView({
               <HistoryIcon aria-hidden className="size-4" />
               You are looking at this incident as it was earlier: {earlierStep(viewing.next)}.
             </span>
-            <Button size="sm" onClick={() => setCheckpoint(null)}>
+            <Button size="sm" onClick={backToNow}>
               Back to now
             </Button>
           </div>
@@ -669,6 +711,15 @@ export function RunView({
             runId={detail.id}
             prompt={prompt}
             actions={values?.actions ?? []}
+            actionsState={
+              values?.actions
+                ? "ready"
+                : state.isError
+                  ? "error"
+                  : state.isPending
+                    ? "loading"
+                    : "ready"
+            }
             report={report}
             onDecided={() => setDecided(true)}
           />
@@ -688,6 +739,8 @@ export function RunView({
             readOnly={detail.example}
           />
         ) : null}
+        {/* Once a person can decide (or has): what was decided, when and by whom. */}
+        {!viewing && !WORKING.has(detail.status) ? <DecisionRecord runId={detail.id} /> : null}
 
         {state.isError && !state.data ? (
           <ErrorState
@@ -734,10 +787,7 @@ export function RunView({
           </div>
           <div className="min-w-0 xl:col-start-1 xl:row-start-1">
             {report ? (
-              <ReportView
-                report={report}
-                titleHidden={stripSeverity(report.title) === runTitle(detail)}
-              />
+              <ReportView report={report} titleHidden={sameTitle(report.title, runTitle(detail))} />
             ) : liveText ? (
               <LiveDraft text={liveText} />
             ) : state.isPending && status !== "queued" ? (

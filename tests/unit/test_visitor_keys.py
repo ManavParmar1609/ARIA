@@ -311,10 +311,16 @@ async def test_claude_asks_for_the_schema_in_words_when_it_cannot_constrain_to_i
         )
 
     provider = _claude(handler)
+    # One request per call: the refusal switches the client to asking in words and says the
+    # request may go again, which the router sends (each one counted against the limits).
+    with pytest.raises(ProviderError) as info:
+        await provider.chat(MESSAGES, json_schema=SCHEMA)
+    assert info.value.resend
+    assert provider.mode is StructuredOutputMode.PROMPT
     text, _ = await provider.chat(MESSAGES, json_schema=SCHEMA)
     assert json.loads(text) == {"x": 2}
     assert "JSON Schema" in bodies[-1]["system"]
-    assert provider.mode is StructuredOutputMode.PROMPT
+    assert len(bodies) == 2
 
 
 async def test_claude_lists_its_models_for_a_key_check() -> None:
@@ -558,12 +564,13 @@ def test_only_the_sites_own_key_counts_against_the_allowance() -> None:
     from aria.llm.visitor import VisitorKey
 
     def state(real_llm: bool) -> AppState:
-        router = SimpleNamespace(has_real_llm=lambda role: real_llm)
+        # The shared models have room (run_back_at None): only the allowance decides.
+        router = SimpleNamespace(has_real_llm=lambda role: real_llm, run_back_at=lambda _: None)
         return cast(
             "AppState",
             SimpleNamespace(
                 allowance=SharedAllowance(SharedAllowanceConfig(per_visitor=1)),
-                services=SimpleNamespace(router=router),
+                services=SimpleNamespace(router=router, config=get_app_config()),
             ),
         )
 
@@ -578,3 +585,40 @@ def test_only_the_sites_own_key_counts_against_the_allowance() -> None:
     for _ in range(3):  # a server without a model of its own counts nothing
         assert may_use_model(offline_server, None, "v-1", wanted=True)
     assert offline_server.allowance.check("v-1").left == 1
+
+
+def test_the_allowance_still_binds_when_runs_do_not_reserve_their_calls() -> None:
+    """While the shared models are full, a run is let through without spending a share only
+    because the runner, finding no room to reserve, runs it offline. With reservations off the
+    runner never does, so the allowance must decide, or a visitor past their share would use
+    the server's key call by call."""
+    from types import SimpleNamespace
+    from typing import cast
+
+    from aria.api.keys import may_use_model
+    from aria.api.state import AppState
+    from aria.config import SharedAllowanceConfig
+    from aria.llm.allowance import SharedAllowance
+
+    def state(reserve_runs: bool) -> AppState:
+        # The shared models are full: run_back_at names when they have room again.
+        router = SimpleNamespace(has_real_llm=lambda role: True, run_back_at=lambda _: 4e9)
+        base = get_app_config()
+        quota = base.llm.quota.model_copy(update={"reserve_runs": reserve_runs})
+        config = base.model_copy(update={"llm": base.llm.model_copy(update={"quota": quota})})
+        return cast(
+            "AppState",
+            SimpleNamespace(
+                allowance=SharedAllowance(SharedAllowanceConfig(per_visitor=1)),
+                services=SimpleNamespace(router=router, config=config),
+            ),
+        )
+
+    reserving = state(reserve_runs=True)
+    for _ in range(3):  # let through unspent: the runner will run each offline
+        assert may_use_model(reserving, None, "v-1", wanted=True)
+    assert reserving.allowance.check("v-1").left == 1
+    direct = state(reserve_runs=False)
+    assert may_use_model(direct, None, "v-1", wanted=True)  # the one share the visitor has
+    assert not may_use_model(direct, None, "v-1", wanted=True)  # past it: offline
+    assert direct.allowance.check("v-1").left == 0

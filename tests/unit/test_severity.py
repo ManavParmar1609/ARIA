@@ -23,6 +23,7 @@ from aria.data.scenarios import LinePools, ScenarioBuilder
 from aria.evidence import EvidenceStore
 from aria.llm.fake import FakeProvider
 from aria.llm.router import LLMRouter
+from aria.llm.schemas import AdjudicationOutput
 from aria.severity.engine import SeverityEngine
 from aria.severity.features import log_feature_names, log_feature_row
 from aria.severity.model import (
@@ -33,8 +34,15 @@ from aria.severity.model import (
     fit_temperature,
     softmax,
 )
-from aria.severity.policy import Preliminary, decide
-from aria.severity.rules import RuleSet, feature_space, load_rules, parse_condition
+from aria.severity.policy import Preliminary, decide, level_words, torn_words
+from aria.severity.rules import (
+    HISTORY_FEATURES,
+    RuleSet,
+    feature_space,
+    known_features,
+    load_rules,
+    parse_condition,
+)
 from aria.severity.training import featurize_all, fit_log_model
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "loghub"
@@ -190,6 +198,125 @@ def test_nested_any_all_conditions() -> None:
     assert not node.holds({"error_events": 5, "error_nodes": 3, "node_spread": 0.1})
 
 
+def test_a_lone_critical_alert_is_serious_but_not_sev1(rules: RuleSet) -> None:
+    """One kind of impact (monitoring's own label) is not enough for SEV1 by the rules."""
+    alert = AlertSignal(name="NodeDown", fingerprint="f1", labels={"severity": "critical"})
+    result = rules.evaluate(feature_space(features(), [alert]))
+    assert result.dimensions == {"alerting"}
+    # Its weight counts towards SEV2 instead, and the alert's floor keeps it at SEV2 or above.
+    assert result.scores[Severity.SEV1] == 0
+    assert result.scores[Severity.SEV2] >= 1.5
+    assert result.rule_severity is not Severity.SEV1
+    assert result.floor is Severity.SEV2
+
+
+def test_a_handful_of_quiet_lines_is_not_called_a_low_error_rate(rules: RuleSet) -> None:
+    def hits(window: WindowFeatures) -> set[str]:
+        return {h.rule_id for h in rules.evaluate(feature_space(window)).hits}
+
+    assert "low_error_rate" in hits(features())
+    few = features(n_events=5, level_counts={"INFO": 5}, events_per_min=0.25)
+    assert "low_error_rate" not in hits(few)
+
+
+def test_a_detector_reporting_data_leaving_decides_sev2(rules: RuleSet) -> None:
+    window = features(
+        level_counts={"INFO": 598, "WARN": 2},
+        keyword_hits={"exfiltration": 2},
+        issue_keyword_hits={"exfiltration": 2},
+    )
+    result = rules.evaluate(feature_space(window))
+    assert "exfiltration_detected" in {h.rule_id for h in result.hits}
+    assert result.scores[Severity.SEV2] >= 2.0
+
+
+@pytest.mark.parametrize(
+    ("category", "floor"),
+    [
+        ("storage_fatal", Severity.SEV3),
+        ("hardware_fatal", Severity.SEV3),
+        ("redundancy_lost", Severity.SEV3),
+        ("backup", Severity.SEV3),
+    ],
+)
+def test_a_fatal_form_reported_in_a_warning_sets_a_floor(
+    rules: RuleSet, category: str, floor: Severity
+) -> None:
+    window = features(
+        level_counts={"INFO": 599, "ERROR": 1},
+        keyword_hits={category: 1},
+        issue_keyword_hits={category: 1},
+    )
+    assert rules.evaluate(feature_space(window)).floor is floor
+    routine = features(keyword_hits={category: 1})  # the same words in an INFO line
+    assert rules.evaluate(feature_space(routine)).floor is None
+
+
+def test_deleting_backups_beside_security_alerts_is_rated_sev1(rules: RuleSet) -> None:
+    alone = features(keyword_hits={"recovery_inhibition": 1})
+    assert rules.evaluate(feature_space(alone)).floor is Severity.SEV2
+    attack = features(keyword_hits={"recovery_inhibition": 1, "security": 4})
+    result = rules.evaluate(feature_space(attack))
+    assert result.rule_severity is Severity.SEV1
+    assert result.dimensions == {"security", "integrity"}
+
+
+def _rules_file(tmp_path: Path, *rules: dict[str, Any], **extra: Any) -> Path:
+    path = tmp_path / "rules.yaml"
+    path.write_text(json.dumps({"rules": list(rules), **extra}), encoding="utf-8")
+    return path
+
+
+def _sev1(rule_id: str, weight: float, dimensions: list[str], feature: str) -> dict[str, Any]:
+    return {
+        "id": rule_id,
+        "title": rule_id,
+        "severity": "SEV1",
+        "weight": weight,
+        "dimensions": dimensions,
+        "when": {"feature": feature, "op": ">=", "value": 1},
+    }
+
+
+def test_sev1_needs_two_impact_dimensions_to_agree(tmp_path: Path) -> None:
+    rules = load_rules(
+        _rules_file(
+            tmp_path,
+            _sev1("outage", 1.5, ["availability"], "error_events"),
+            _sev1("outage_again", 1.5, ["availability"], "error_nodes"),
+            _sev1("spread", 1.5, ["spread"], "distinct_nodes"),
+        )
+    )
+    same_kind = rules.evaluate({"error_events": 5, "error_nodes": 2})
+    assert same_kind.rule_severity is Severity.SEV2  # 3.0 of SEV1 weight, one dimension
+    assert same_kind.scores[Severity.SEV2] == 3.0
+    two_kinds = rules.evaluate({"error_events": 5, "distinct_nodes": 9})
+    assert two_kinds.rule_severity is Severity.SEV1
+    assert two_kinds.dimensions == {"availability", "spread"}
+
+
+def test_a_rule_that_decides_sev1_alone_must_name_two_dimensions(tmp_path: Path) -> None:
+    lone = _sev1("outage", 3.0, ["availability"], "error_events")
+    with pytest.raises(ValueError, match="at least 2 impact dimensions"):
+        load_rules(_rules_file(tmp_path, lone))
+    # Below the SEV1 activation a rule needs corroboration anyway, so one dimension is fine.
+    assert load_rules(_rules_file(tmp_path, {**lone, "weight": 1.0})).sev1_dimensions == 2
+    # A rules file can ask for one dimension, which restores the old behaviour.
+    assert load_rules(_rules_file(tmp_path, lone, sev1_dimensions=1)).sev1_dimensions == 1
+
+
+def test_unknown_impact_dimensions_fail_at_load(tmp_path: Path) -> None:
+    rule = _sev1("outage", 3.0, ["availability", "vibes"], "error_events")
+    with pytest.raises(ValueError, match="unknown impact dimensions"):
+        load_rules(_rules_file(tmp_path, rule))
+
+
+def test_every_repo_sev1_rule_names_its_impact(rules: RuleSet) -> None:
+    sev1 = [r for r in rules.rules if r.severity is Severity.SEV1 and r.effect == "score"]
+    assert sev1
+    assert all(r.dimensions for r in sev1)
+
+
 def test_duplicate_rule_ids_are_rejected(tmp_path: Path) -> None:
     rule = {
         "id": "a",
@@ -201,6 +328,119 @@ def test_duplicate_rule_ids_are_rejected(tmp_path: Path) -> None:
     path.write_text(json.dumps({"rules": [rule, rule]}), encoding="utf-8")
     with pytest.raises(ValueError, match="duplicate"):
         load_rules(path)
+
+
+def test_each_keyword_category_is_read_as_lines_patterns_and_a_share_of_issue_lines() -> None:
+    window = features(
+        level_counts={"INFO": 590, "ERROR": 10},
+        error_events=10,
+        error_ratio=10 / 600,
+        issue_events=10,
+        keyword_hits={"cancellation": 8, "unavailable": 2},
+        issue_keyword_hits={"cancellation": 8, "unavailable": 2},
+        keyword_templates={"cancellation": 1, "unavailable": 2},
+        issue_keyword_templates={"cancellation": 1, "unavailable": 2},
+    )
+    values = feature_space(window)
+    assert values["issue_keyword_hits.cancellation"] == 8
+    assert values["issue_keyword_templates.cancellation"] == 1
+    assert values["keyword_templates.unavailable"] == 2
+    assert values["issue_keyword_share.cancellation"] == 0.8
+    assert values["issue_keyword_share.unavailable"] == 0.2
+    assert values["issue_keyword_share.crash"] == 0
+    # A window stored before issue lines were counted has no shares, never a division error.
+    assert (
+        feature_space(features(issue_keyword_hits={"crash": 3}))["issue_keyword_share.crash"] == 0
+    )
+
+
+def test_a_window_of_client_cancellations_is_noise_unless_something_else_says_otherwise(
+    rules: RuleSet,
+) -> None:
+    """OpenTelemetry records a client cancelling its own request at DEBUG: a window made of them
+    is no error storm, and the rules that count errors by node or by critical component leave
+    it out. Other SEV2 evidence still counts, because a noise rule never dampens it."""
+
+    def errors(cancellations: int, **extra: Any) -> WindowFeatures:
+        issue = {"cancellation": cancellations, **extra.pop("issue_keyword_hits", {})}
+        return features(
+            level_counts={"INFO": 540, "ERROR": 60},
+            error_events=60,
+            error_ratio=0.1,
+            error_nodes=9,
+            distinct_nodes=10,
+            node_spread=0.9,
+            issue_events=60,
+            keyword_hits=dict(issue),
+            issue_keyword_hits=issue,
+            max_component_criticality=0.8,  # critical, short of the widespread SEV1 rule
+            **extra,
+        )
+
+    cancelled = rules.evaluate(feature_space(errors(50)))
+    hits = {h.rule_id for h in cancelled.hits}
+    assert "mostly_cancellations" in hits
+    assert not {"errors_spread", "critical_component_errors"} & hits
+    assert cancelled.rule_severity is Severity.SEV4
+    real = {h.rule_id for h in rules.evaluate(feature_space(errors(10))).hits}
+    assert real >= {"errors_spread", "critical_component_errors"}
+    assert "mostly_cancellations" not in real
+    crashing = rules.evaluate(feature_space(errors(50, issue_keyword_hits={"crash": 3})))
+    assert crashing.rule_severity is Severity.SEV2
+
+
+def test_one_message_repeated_by_one_node_is_not_many_failures(rules: RuleSet) -> None:
+    """A rule that a repeated line could inflate reads the distinct patterns beside the count:
+    an SSH host's background of failed logins is one pattern, an attack shows several, and a
+    cluster that keeps saying one thing is unavailable is not several services unreachable."""
+    noise = features(
+        level_counts={"INFO": 560, "ERROR": 40},
+        error_events=40,
+        error_ratio=40 / 600,
+        distinct_nodes=8,
+        error_nodes=4,
+        keyword_hits={"security": 40, "unavailable": 25},
+        keyword_templates={"security": 1, "unavailable": 1},
+    )
+    quiet = {h.rule_id for h in rules.evaluate(feature_space(noise)).hits}
+    assert not {"security_attempts", "attack_widespread", "unavailability_widespread"} & quiet
+    varied = noise.model_copy(update={"keyword_templates": {"security": 3, "unavailable": 2}})
+    loud = {h.rule_id for h in rules.evaluate(feature_space(varied)).hits}
+    assert loud >= {"security_attempts", "attack_widespread", "unavailability_widespread"}
+
+
+def test_a_burn_above_the_systems_baseline_needs_a_baseline_and_volume(rules: RuleSet) -> None:
+    burn_rules = {"error_burn_page", "error_burn_ticket"}
+    window = features(level_counts={"INFO": 570, "ERROR": 30}, error_events=30, error_ratio=0.05)
+    history = {"error_ratio_vs_baseline": 50.0, "baseline_error_ratio": 0.001, "baseline_runs": 12}
+
+    def hits(values: dict[str, float]) -> set[str]:
+        return {h.rule_id for h in rules.evaluate(values).hits}
+
+    assert not burn_rules & hits(feature_space(window))  # offline: no history, no burn
+    assert hits(feature_space(window, history=history)) >= burn_rules
+    usual = {**history, "error_ratio_vs_baseline": 1.2}
+    assert not burn_rules & hits(feature_space(window, history=usual))
+    few = features(
+        n_events=40, level_counts={"INFO": 36, "ERROR": 4}, error_events=4, error_ratio=0.1
+    )
+    assert not burn_rules & hits(feature_space(few, history=history))
+
+
+def test_history_features_are_absent_offline_and_only_ever_tested_from_below() -> None:
+    values = feature_space(features())
+    assert not set(HISTORY_FEATURES) & set(values)
+    assert set(HISTORY_FEATURES) <= known_features()
+    history = {"error_ratio_vs_baseline": 20.0, "baseline_runs": 12, "something_else": 1.0}
+    with_history = feature_space(features(), history=history)
+    assert with_history["error_ratio_vs_baseline"] == 20.0
+    assert with_history["baseline_runs"] == 12
+    assert "something_else" not in with_history
+    burn = parse_condition(
+        {"feature": "error_ratio_vs_baseline", "op": ">=", "value": 14.4}, rule_id="r"
+    )
+    assert not burn.holds(values)  # absent reads as 0, so the rule never fires without history
+    assert burn.holds(with_history)
 
 
 # --- calibration and conformal prediction ------------------------------------------------------
@@ -462,6 +702,44 @@ def test_llm_choice_must_be_inside_the_set() -> None:
         decide(pre, gate=0.85, llm_choice=Severity.SEV4)
 
 
+def test_a_wider_set_is_stated_as_the_levels_aria_is_torn_between() -> None:
+    assert (
+        level_words(Severity.SEV2, [Severity.SEV3, Severity.SEV2])
+        == "ARIA is torn between SEV2 and SEV3 and plans for SEV2"
+    )
+    assert (
+        level_words("SEV1", ["SEV3", "SEV1", "SEV2", "SEV2"])
+        == "ARIA is torn between SEV1, SEV2 and SEV3 and plans for SEV1"
+    )
+    # A ticket's own rating can lift the level out of the set; the words say what ARIA plans.
+    assert level_words("SEV1", ["SEV2", "SEV3"]).endswith("and plans for SEV1")
+
+
+def test_a_set_of_one_level_keeps_the_bare_level() -> None:
+    assert level_words(Severity.SEV2, [Severity.SEV2]) == "SEV2"
+    assert level_words("SEV1", ["SEV2"]) == "SEV1"  # a floor above the one likely level
+    assert torn_words(Severity.SEV3, [Severity.SEV3]) is None
+    assert torn_words(Severity.SEV3, [Severity.SEV3, Severity.SEV4]) == level_words(
+        Severity.SEV3, [Severity.SEV3, Severity.SEV4]
+    )
+
+
+@given(
+    st.sampled_from(SEVERITY_ORDER),
+    st.lists(st.sampled_from(SEVERITY_ORDER), min_size=1, max_size=6),
+)
+def test_the_words_name_every_level_in_the_set_and_the_planned_one(
+    severity: Severity, prediction_set: list[Severity]
+) -> None:
+    words = level_words(severity, prediction_set)
+    assert words.endswith(str(severity))
+    if len(set(prediction_set)) > 1:
+        assert words.startswith("ARIA is torn between ")
+        assert all(str(level) in words for level in prediction_set)
+    else:
+        assert words == str(severity)
+
+
 # --- engine end to end -------------------------------------------------------------------------
 
 UNCERTAIN = {"SEV1": 0.45, "SEV2": 0.45, "SEV3": 0.07, "SEV4": 0.03}
@@ -603,6 +881,47 @@ async def test_a_compromised_llm_cannot_leave_the_prediction_set(rules: RuleSet)
     assert result.assessment.decided_by == "fallback"
     assert len(fake.calls) == 2  # first answer plus one repair attempt, both rejected
     assert "severity must be one of SEV1, SEV2" in fake.calls[1]["messages"][-1].content
+
+
+async def test_a_lower_case_label_is_read_and_still_checked_against_the_set(
+    rules: RuleSet,
+) -> None:
+    """A model answering in prompt mode may write "sev2": the label counts, and one outside the
+    set is refused however it is written."""
+    assert (
+        AdjudicationOutput.model_validate(
+            {"severity": " sev2 ", "rationale": [{"text": "x", "evidence_ids": ["E1"]}]}
+        ).severity
+        is Severity.SEV2
+    )
+
+    def answers(level: str) -> Any:
+        def respond(ctx: dict[str, Any]) -> dict[str, Any]:
+            eid = ctx["evidence_index"][0]["id"]
+            return {
+                "severity": level,
+                "rationale": [{"text": "The errors are contained.", "evidence_ids": [eid]}],
+                "uncertainty": "",
+            }
+
+        return respond
+
+    engine = SeverityEngine(rules, constant_model(UNCERTAIN, 0.6), alpha=0.1)
+    inside = FakeProvider(responders={"adjudication": answers("sev2")})
+    result = await engine.assess(
+        WINDOW, system="bgl", evidence=EvidenceStore(), router=_router(inside)
+    )
+    assert (result.assessment.severity, result.assessment.decided_by) == (Severity.SEV2, "llm")
+    assert len(inside.calls) == 1  # read first time, no repair
+
+    outside = FakeProvider(responders={"adjudication": answers("sev4")})
+    result = await engine.assess(
+        WINDOW, system="bgl", evidence=EvidenceStore(), router=_router(outside)
+    )
+    assert (result.assessment.severity, result.assessment.decided_by) == (
+        Severity.SEV1,
+        "fallback",
+    )
 
 
 async def test_llm_citing_unknown_evidence_is_rejected(rules: RuleSet) -> None:

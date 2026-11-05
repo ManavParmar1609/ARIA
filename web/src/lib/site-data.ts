@@ -5,7 +5,9 @@ import evals from "@/data/eval-results.json";
 import live from "@/data/eval-live.json";
 
 import type { Severity } from "./api/types";
+import { readDomains, type NewDomains } from "./domains";
 import { evidenceTitle } from "./evidence-text";
+import { readTuning, type TuningRecord } from "./tuning";
 
 // Everything the landing page quotes comes from three committed files: the offline evaluation
 // (docs/eval-results.json), the live-provider run (docs/eval-live.json) and one recorded run
@@ -683,3 +685,127 @@ export function realData() {
 }
 
 export type RealData = ReturnType<typeof realData>;
+
+// --- systems the model never saw (ring B) ------------------------------------------------------
+
+export interface SevereMisses {
+  misses: number;
+  severe: number;
+  rate: number | null;
+  /** At most this, with 95% confidence (an exact one-sided bound). */
+  upper95: number;
+}
+
+interface RawRate {
+  hits: number;
+  n: number;
+  rate: number | null;
+  ci95: [number, number];
+}
+
+interface RawGroup {
+  n: number;
+  accuracy: number;
+  severe: SevereMisses;
+  deferred: number;
+}
+
+interface RawRing {
+  n: number;
+  groups?: number;
+  severe?: SevereMisses;
+  accuracy?: RawRate;
+  deferred?: RawRate;
+  over_triage?: RawRate;
+  coverage?: { target: number; all: RawRate };
+  methods?: Record<string, { accuracy: number; severe: SevereMisses }>;
+  spread?: { median_accuracy: number; worst_group: string; worst_accuracy: number };
+  by_group?: Record<string, RawGroup>;
+}
+
+export interface HeldOutRing {
+  n: number;
+  groups: number;
+  severe: SevereMisses;
+  accuracy: number;
+  accuracyCi: [number, number];
+  deferred: number;
+  overTriage: number;
+  coverage: number;
+  target: number;
+  median: number;
+  worst: { name: string; accuracy: number };
+  methods: Record<string, { accuracy: number; severe: SevereMisses }>;
+  byGroup: { name: string; n: number; accuracy: number; severe: SevereMisses; deferred: number }[];
+}
+
+function heldOutRing(raw: RawRing | undefined): HeldOutRing | null {
+  if (!raw?.n || !raw.severe || !raw.accuracy || !raw.spread || !raw.coverage) return null;
+  return {
+    n: raw.n,
+    groups: raw.groups ?? 0,
+    severe: raw.severe,
+    accuracy: raw.accuracy.rate ?? 0,
+    accuracyCi: raw.accuracy.ci95,
+    deferred: raw.deferred?.rate ?? 0,
+    overTriage: raw.over_triage?.rate ?? 0,
+    coverage: raw.coverage.all.rate ?? 0,
+    target: raw.coverage.target,
+    median: raw.spread.median_accuracy,
+    worst: { name: raw.spread.worst_group, accuracy: raw.spread.worst_accuracy },
+    methods: raw.methods ?? {},
+    byGroup: Object.entries(raw.by_group ?? {})
+      .map(([name, g]) => ({ name, ...g }))
+      .sort((a, b) => a.accuracy - b.accuracy),
+  };
+}
+
+/**
+ * How ARIA does on systems, and on failure modes, its model never saw: each held out in turn and
+ * the model fitted again without it. Absent until `make eval` has measured it.
+ */
+export function generalisation(): { system: HeldOutRing; mode: HeldOutRing | null } | null {
+  const raw = (evals as unknown as Record<string, unknown>).generalisation as
+    { leave_one_system_out?: RawRing; leave_one_failure_mode_out?: RawRing } | undefined;
+  const system = heldOutRing(raw?.leave_one_system_out);
+  if (!system) return null;
+  return { system, mode: heldOutRing(raw?.leave_one_failure_mode_out) };
+}
+
+// --- new domains (ring C) and the tuning record ------------------------------------------------
+
+/**
+ * The tests on data from fields ARIA was never built for: security alerts, microservice faults,
+ * Kubernetes incidents and Jira priorities (lib/domains.ts). Absent until `make eval` has run them.
+ */
+export function newDomains(): NewDomains | null {
+  return readDomains((evals as unknown as Record<string, unknown>).domains);
+}
+
+/** What each test was tuned on (config/eval_registry.yaml). Absent until `make eval` copies it. */
+export function tuningRecord(): TuningRecord | null {
+  return readTuning((evals as unknown as Record<string, unknown>).registry);
+}
+
+/**
+ * What the published results cover, so a page promises only what Test results shows: the tests
+ * on systems the model never saw and on data from new fields appear once `make eval` has measured
+ * them, and the record of what each test was tuned on once it has been copied in.
+ */
+export function testedOn() {
+  const domains = newDomains();
+  return {
+    // The HDFS log plus every other real dataset on Test results, and each new field's data.
+    datasets: Object.keys(realData()).length + 1 + (domains?.results.length ?? 0),
+    unseen: generalisation() != null,
+    tuned: tuningRecord() != null,
+  };
+}
+
+export type TestedOn = ReturnType<typeof testedOn>;
+
+/** How ARIA is tested, in a sentence that names only what the results hold. */
+export function testedOnText({ datasets, unseen }: Pick<TestedOn, "datasets" | "unseen">): string {
+  const systems = unseen ? ", and on systems its model never saw, each held out in turn" : "";
+  return `ARIA is tested on ${datasets} public, labelled datasets, each against a simpler method${systems}.`;
+}

@@ -1,7 +1,7 @@
 # Deploy a free public demo
 
-This guide puts ARIA online so anyone can read the landing page and try the console. It costs
-nothing:
+This guide is for whoever hosts a public copy of ARIA. It puts ARIA online so anyone can read the
+landing page and try the console, and it costs nothing:
 
 - the website (landing page and console) runs on Vercel's free Hobby plan;
 - the API runs on Render's free web service plan.
@@ -189,6 +189,60 @@ Before you add your key, weigh three things:
   share: the daily total is the real cap.
 - **Privacy.** Visitors' pasted logs, after redaction, go to your provider account. On Gemini's
   free tier, Google may use prompts to improve its products.
+
+### Keep your Gemini key inside its limits
+
+Google limits a Gemini project per model: requests a minute, tokens a minute and requests a day,
+with the daily count starting again at midnight Pacific time. Your one `GEMINI_API_KEY` serves a
+pool of four models, each with limits of its own: `gemini-3.6-flash` writes the investigation, the
+report and the severity choice, and `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite` and Gemma take
+the critic, the message drafts and Ask ARIA first. ARIA counts every request against the model's
+limits, less a safety margin, before it sends it, so no model is asked for more than it allows:
+
+- a model with no room left is skipped for the next one in the pool;
+- a triage that asks for a model reserves the calls it needs across the pool before it starts;
+  when they do not fit, it runs offline, and its plan says until when;
+- a model that refuses anyway rests until its limit lifts: a minute, or until midnight Pacific time
+  for a daily quota or a spending cap;
+- the console's **Settings** page shows each model's room under **The site's models**.
+
+Do these once, in this order:
+
+1. **Take NVIDIA's trial key off the public host.** In the Render service's **Environment**
+   settings, delete `NVIDIA_API_KEY`. NVIDIA's trial terms allow testing and evaluation only, and
+   NVIDIA counts serving real visitors as production. Keep the key in your own `.env` for local
+   work and evaluations.
+2. **Optionally, enable billing with a monthly spend cap.** In AI Studio, link a billing account
+   to the project behind your key (that is all Google's first paid tier needs), then set
+   **Spend**, **Monthly spend cap** to what you accept spending in a month. The cap is the real
+   backstop: Google enforces it however many processes share the key.
+3. **Copy each model's limits from AI Studio.** Open the project's rate-limit page in AI Studio.
+   Google shows each model's numbers only there, and they change with your tier. For each model,
+   set its requests a minute, tokens a minute and requests a day in the Render service's
+   **Environment** settings:
+
+   | Model | Variables |
+   |---|---|
+   | `gemini-3.6-flash` | `GEMINI_RPM`, `GEMINI_TPM`, `GEMINI_RPD` |
+   | `gemini-3.5-flash-lite` | `GEMINI_LITE_RPM`, `GEMINI_LITE_TPM`, `GEMINI_LITE_RPD` |
+   | `gemini-3.1-flash-lite` | `GEMINI_LITE_2_RPM`, `GEMINI_LITE_2_TPM`, `GEMINI_LITE_2_RPD` |
+   | `gemma-3-27b-it` | `GEMMA_RPM`, `GEMMA_TPM`, `GEMMA_RPD` |
+
+   Until you do, ARIA uses cautious placeholders from `config/aria.yaml`. A model that AI Studio
+   shows with a limit of 0 has no quota on your tier: set 0, and ARIA never calls it. Copy the
+   numbers again after you enable billing, since paid limits are higher. To use another model in
+   a slot, set `GEMINI_CHAT_MODEL`, `GEMINI_LITE_MODEL`, `GEMINI_LITE_2_MODEL` or `GEMMA_MODEL`,
+   and its limits with it.
+4. **Know the free tier's region rule.** Google's terms let an app that serves users in the EEA,
+   Switzerland or the UK use only paid services. Anyone can open a public demo from there, so on
+   the free tier either enable billing (step 2) or accept that risk knowingly.
+
+Never add keys or projects to stretch the limits: Google counts limits per project, and its terms
+forbid working around them. ARIA keeps a tenth of each limit spare (`ARIA_QUOTA_MARGIN`, 0.1).
+It keeps its counts in `llm-quota.json` in `ARIA_DATA_DIR`, so a restart of the process remembers
+them; on Render's free plan the disk does not survive a sleep or a deploy, so the counts start
+afresh then, and the spend cap from step 2 is what still holds. Run one API process per key: two
+processes count apart.
 
 ## What a public demo exposes
 

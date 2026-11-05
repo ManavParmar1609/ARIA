@@ -1,6 +1,7 @@
 # Model card
 
-This card covers four things:
+This card is for anyone deciding whether to trust ARIA's severity ratings: reviewers, SREs and
+auditors. It covers four things:
 
 - the log-severity model that ARIA trains, `severity_log`;
 - the decision policy that turns its output into a severity;
@@ -18,10 +19,10 @@ It follows the spirit of [Model Cards for Model Reporting](https://arxiv.org/abs
 | Committed version | The `version` field of [`models/severity_log.json`](../models/severity_log.json) |
 | Task | Rate one window of log lines, plus any firing alerts, from SEV1 to SEV4 |
 | Type | Multinomial logistic regression on standardised features, with temperature scaling and split-conformal prediction sets |
-| Output | A calibrated probability for each of the four classes, and a prediction set that targets 90% coverage (alpha 0.1) |
+| Output | A calibrated probability for each of the four classes, and a prediction set that targets coverage per level: 95% for SEV1 and SEV2 (`severity.serious_alpha` 0.05) and 90% for SEV3 and SEV4 (`severity.alpha` 0.1), with a severe-miss guard certified at 5% (`severity.severe_miss_risk`) |
 | Rules version | The `version` in [`config/severity_rules.yaml`](../config/severity_rules.yaml), recorded in the model's metadata |
-| Format | JSON (`aria.linear_model.v1`): coefficients, scaler statistics, temperature, conformal threshold and metadata. Inference is plain numpy, and loading a model file cannot run code. |
-| Code | [`src/aria/severity/`](../src/aria/severity/): `model.py`, `training.py`, `policy.py`, `engine.py` and `recalibration.py` |
+| Format | JSON (`aria.linear_model.v1`): coefficients, scaler statistics, the training range, temperature, each level's calibration scores, the guard, novelty statistics and metadata. Inference is plain numpy, and loading a model file cannot run code. |
+| Code | [`src/aria/severity/`](../src/aria/severity/): `model.py`, `conformal.py`, `training.py`, `policy.py`, `engine.py`, `recalibration.py` and `drift.py` |
 | Training data | **Semi-synthetic** windows built from real Loghub lines ([data card](data-card.md)) |
 | Licence | The code is MIT. The model is trained on Loghub-derived data, and the Loghub terms still apply to it. |
 
@@ -38,35 +39,74 @@ The model is one stage of a policy
 ([`src/aria/severity/policy.py`](../src/aria/severity/policy.py)). The stages run in this
 order:
 
-1. **Rules score each severity, and some set a floor.** The rules file holds 22 scoring rules
-   and 5 floor rules. Four floors keep signals at SEV2 or worse: data-integrity errors
+1. **Rules score each severity, and some set a floor.** The rules file holds 34 scoring rules
+   and 11 floor rules. Six floors keep signals at SEV2 or worse: data-integrity errors
    (corruption, data loss, missing blocks), a crashing critical component, a firing critical
-   alert, and a power-supply fault reported as an error. The fifth keeps units of work that
-   stopped partway with no error logged
-   (parsing/flows.py) at SEV3 or worse: the model, trained on windows that log their failures,
-   reads such a window as noise. A severity's summed rule weight must reach its activation threshold, so one
-   decisive SEV1 rule is not outvoted by the weaker SEV2 rules that a severe incident also
-   trips.
+   alert, a power-supply fault reported as an error, payment-integrity errors (duplicate charges,
+   ledgers that disagree), and commands that delete backups or shadow copies (how ransomware
+   prepares, MITRE ATT&CK T1490; beside security alerts the rules call it SEV1). Five keep signals
+   at SEV3 or worse: backups failing, redundancy gone, a filesystem that shut itself down, a
+   hardware error the firmware calls fatal, and units of work that stopped partway with no error
+   logged (parsing/flows.py), which the model, trained on windows that log their failures, reads
+   as noise. The fatal forms count only in warnings and errors; the same words in routine lines
+   set no floor. A severity's summed rule weight must reach
+   its activation threshold, so one decisive SEV1 rule is not outvoted by the weaker SEV2 rules
+   that a severe incident also trips. SEV1 also needs two kinds of impact to agree: each SEV1
+   rule names the dimensions it shows (an outage, at-risk data, a security exposure, how far it
+   spreads, a critical component, how long it lasts, or monitoring's own alert), and SEV1 weight
+   whose rules name only one counts towards SEV2. Rules that read a ratio need enough lines
+   behind it. Node counts and node spread stand in for blast radius, which logs cannot see:
+   how many customers or requests an incident touches is not in them, and the rules that read
+   them say so. Each keyword category is counted as lines, as distinct log patterns and as its
+   share of the window's issue lines, so a rule that one message repeated by one node could
+   inflate reads the patterns beside the count: repeated authentication failures, attacks on
+   many hosts and services unreachable from several nodes each need more than one kind of
+   message, while a service reported unreachable keeps its line count, because real outages
+   often repeat one message. A window whose issue lines are mostly clients
+   cancelling their own requests, which OpenTelemetry records at DEBUG, counts as noise, and the
+   rules that count errors by node or by critical component leave it out. Two rules read the
+   system's own baseline, the median error ratio of its recent runs in the database: errors at
+   six times the usual ratio, with at least ten of them in a hundred lines, score as contained,
+   and at fourteen times, with at least twenty, as major, after the Google SRE workbook's
+   burn-rate alerts. Without five finished runs on the system, as in every offline evaluation,
+   the baseline is absent and those rules never fire.
 2. **The model gives calibrated probabilities.** It reads the window's features, including the
-   rules' output. The prediction set holds every class whose probability is at least 1 − q,
-   where q is the conformal threshold. If no class clears it, the set is marked empty and holds
-   the model's most likely class and the rules' class, so the conservative fallback plans for
-   the more serious of the two. (With the most likely class alone, a crash-looping service the
-   rules rated SEV2 came out SEV4.)
+   rules' output. Each level has its own conformal threshold q, and the prediction set holds
+   every level whose probability is at least 1 − q for that level. A set is ordered: one that
+   holds SEV1 and SEV3 also holds SEV2. When neither serious level made the set but their
+   total probability passes the certified guard, the likelier serious level joins it. If no
+   level clears its threshold, the set is marked empty and holds the model's most likely class
+   and the rules' class, so the conservative fallback plans for the more serious of the two.
+   (With the most likely class alone, a crash-looping service the rules rated SEV2 came out
+   SEV4.)
 3. **Floors narrow the set.** They remove every class less severe than the floor.
 4. **A confident one-class set is decided without an LLM.** This happens when the model gives
    the class at least 0.85 (the `gate` in the rules file), or when a floor alone settled it.
    `decided_by` is `rules` when a floor settled it or the rules agree, and `model` otherwise.
    Both are auditable. A window unlike the ones the model learned from is never decided this
    way: when a feature sits more than six training standard deviations from the training mean,
-   as with a handful of lines or an alert with no logs, the model is not used at all. The rules
-   supply the probabilities and the set, as with no model file, the evidence says why, and a
-   person always confirms.
+   or a quarter of the training range past its edge, as with a handful of lines or an alert with
+   no logs, the model is not used at all. The rules supply the probabilities and the set, as
+   with no model file, the evidence says why, and a person always confirms. A person also
+   confirms, though the model is used, when the window's mix of features or its share of new log
+   patterns is further out than all but 1% of held-out windows, when the set is empty or holds
+   every level, or when the model never trained on the window's system. For the two "further
+   out" cases, the levels the rules leave open join the set too.
 5. **Otherwise an LLM may choose, but only within the set.** The severity enum in its JSON
    schema is the set, and its answer is checked again: the class must be in the set and every
    cited evidence ID must exist. `decided_by` is `llm`. These decisions are not auditable, and
-   they are flagged for review when the set holds three or more classes or the model was not
-   used.
+   they are flagged for review when the set holds three or more classes, the model was not
+   used, any reason in step 4 applies, or the LLM picked SEV3 or SEV4 while the set kept a
+   serious level possible. Past incidents like this one that a person reviewed (up to three:
+   the nearest run-sourced incidents in memory whose runs have a review) reach the model as
+   fenced, redacted examples with the level the person set, so it sees how this team rates such
+   incidents. They change nothing about the set: a model that follows one out of the set is
+   refused like any other answer, and a reviewed level outside the set is reported to the
+   reviewer, never chosen. Whether the model's pick beats the calibrated model's top level
+   inside the set, and how steady it is over repeated runs, is measured by
+   `aria eval run --suite llm-choice`; only the offline fake provider has answered it so far,
+   so no live figure is published
+   ([ops runbook](ops-runbook.md#measure-the-models-choice-inside-the-set)).
 6. **Without an LLM, ARIA takes the most severe class in the set.** This applies when no LLM is
    configured, the run's budget is spent, or the LLM's answers fail validation. The severity is
    flagged for review, and `decided_by` is `fallback`. Under-triage costs more than
@@ -80,6 +120,15 @@ Two cases follow from this:
 - **Offline.** The adjudicator's provider chain has no offline fake provider. So offline runs,
   and the published offline evaluation, always end at step 4 or step 6.
 
+One more thing is read before a window is rated, and shown rather than scored. **Patterns
+reviewers dismissed:** the log patterns on the issue lines of the system's earlier runs whose
+reviewers discarded the draft or lowered the level to SEV4
+([`src/aria/severity/history.py`](../src/aria/severity/history.py)). When most of the window's
+issue lines follow them, the assessment carries a feedback item and a claim, "reviewers dismissed
+this pattern N times before", for the reviewer to weigh. It informs; it never lowers the level or
+changes the prediction set. It needs the reviews and the runs' stored lines, so deleting or
+purging those runs forgets it.
+
 Every assessment records the following, and the run view shows all of it:
 
 - the probabilities;
@@ -91,27 +140,37 @@ Every assessment records the following, and the run view shows all of it:
 
 ## Inputs
 
-The model reads 40 features of one window
-([`src/aria/severity/features.py`](../src/aria/severity/features.py)). The parser computes them
-from redacted message text, levels, timestamps, nodes and components, plus any firing alerts.
-Lines quarantined as possible prompt injection are left out first. No feature reads dataset
-labels or BGL alert tags.
+The model reads 53 features of one window
+([`src/aria/severity/features.py`](../src/aria/severity/features.py)); a model file trained
+before lexicon version 2.2 lists 52, as it has no count of client cancellations. The parser
+computes them from redacted message text, levels, timestamps, nodes and components, plus any
+firing alerts. Lines quarantined as possible prompt injection are left out first. No feature
+reads dataset labels or BGL alert tags. The rules read everything the model reads and more
+([`src/aria/severity/rules.py`](../src/aria/severity/rules.py)): the distinct patterns and the
+share of issue lines behind each keyword category, how many lines count as issue lines, and the
+system's own baseline.
 
 | Group | Features | Scale |
 |---|---|---|
 | Volume and spread (16) | Events, error events, events per minute, peak errors per minute, distinct nodes, nodes with errors, templates, novel templates, novel error templates, peak warnings per minute, nodes with warnings, novel warning templates, critical components, firing alerts, critical alerts, warning alerts | log(1 + x) |
 | Ratios (4) | Error ratio, node spread, highest criticality among components logging errors, highest criticality among components logging warnings or errors (the catalog default when those lines name none) | 0 to 1 |
 | Shape (5) | Burst score (capped at 50, divided by 10), persistence in minutes (log scale), shares of WARN, ERROR and FATAL lines | As listed |
-| Keyword categories (10) | Crash, data risk, unavailable, resource, security, hardware, storage, network, degradation, power ([`config/lexicon.yaml`](../config/lexicon.yaml)), counted on lines logged at WARN or above or with no level, because at INFO the same words are usually routine. The rules count every line | log(1 + matching lines) |
+| Keyword categories (23) | Crash, data risk, unavailable, resource, security, hardware, storage, network, degradation, power; since version 2 TLS, DNS, control plane, backup, payment, freshness, sign-in and data leaving the network; since version 2.1 the fatal forms: backups deleted, a filesystem shut down, fatal hardware and redundancy gone; and since version 2.2 client cancellations ([`config/lexicon.yaml`](../config/lexicon.yaml), which names each one's sources: gRPC status codes, HTTP, Kubernetes reasons, PostgreSQL SQLSTATE, etcd, Linux errno, MITRE ATT&CK, OpenTelemetry and others). They are counted on issue lines: lines logged at WARN or above, plus lines with no level when the window has no levels at all or also logs errors, because at INFO the same words are usually routine and a lone unlevelled line in a levelled window reads as INFO, as the OpenTelemetry logs data model allows. Each rule says which count it reads, and the floors count every line | log(1 + matching lines) |
 | Rules (5) | The rules' smoothed probability for each severity, and the floor rank (0 is a SEV1 floor and 3 a SEV4 floor; 4 means no floor) | 0 to 1; 0 to 4 |
+| Rules only: issue lines and patterns | How many lines count as issue lines; for each keyword category, the distinct log patterns behind its hits on every line and on issue lines, and its share of the issue lines. The model does not read them: on the validation seeds they changed nothing it could learn from | counts; 0 to 1 |
+| Rules only: the system's baseline | The window's error ratio against the median error ratio of the system's last 30 finished runs in the database, that median, and how many runs it rests on. Absent, not zero, below 5 runs and in every offline evaluation, so a rule may only ask whether they are at least something | ratio; 0 to 1; count |
 
-Two of these depend on configuration and history:
+Three of these depend on configuration and history:
 
 - **Component criticality** comes from
   [`config/service_catalog.yaml`](../config/service_catalog.yaml). In a real deployment that
   file should come from the deployment's own service catalog.
 - **Novelty features** compare a window with the routine templates ARIA has already seen. A new
   deployment starts from the history that `aria seed` loads.
+- **The system's baseline** comes from the deployment's own runs (the events and errors each
+  run's parsing step recorded), so it exists only after the system has been triaged a few
+  times, and it follows what the deployment sends: a system triaged only when it is on fire has
+  a high baseline.
 
 ## Training
 
@@ -125,78 +184,106 @@ Two of these depend on configuration and history:
     features a run computes.
 - **Fit.** scikit-learn's logistic regression on standardised features, with balanced class
   weights.
-  - C is chosen from {0.03, 0.1, 0.3, 1, 3} by stratified cross-validation on the training
-    split (up to 4 folds), scored by log loss.
+  - C is chosen from {0.03, 0.1, 0.3, 1, 3} by cross-validation on the training split that
+    holds out whole systems in each fold (up to 4 folds; stratified folds only when fewer than
+    three systems train), scored by log loss, so the choice favours what works on a system the
+    model has not seen. The training report records which (`c_chosen_by`).
   - The committed model chose C = 3.
   - Classes absent from the training data would get almost no probability.
 - **Calibration.** A single temperature that minimises negative log-likelihood on the
   temperature split ([Guo et al., 2017](https://arxiv.org/abs/1706.04599)). It corrects over-
   and under-confidence without changing which class ranks first.
-- **Conformal prediction.** Split-conformal prediction with the least ambiguous set-valued
-  classifier ([Sadinle et al., 2019](https://arxiv.org/abs/1609.00451)), fitted on the
-  conformal split.
-  - The threshold q is the finite-sample-corrected (1 − alpha) quantile of 1 − p(true class).
-  - With alpha 0.1 ([`config/aria.yaml`](../config/aria.yaml)), the sets hold the true class at
-    least 90% of the time, but only on data exchangeable with the conformal split.
+- **Conformal prediction.** Class-conditional (Mondrian) split-conformal prediction
+  ([Vovk et al., 2005](https://link.springer.com/book/10.1007/b106715); the least ambiguous
+  set-valued classifier of [Sadinle et al., 2019](https://arxiv.org/abs/1609.00451)), fitted on
+  the conformal split ([`conformal.py`](../src/aria/severity/conformal.py)).
+  - Each level's threshold is the ⌈(n + 1)(1 − alpha)⌉-th smallest of 1 − p(level) over the n
+    conformal windows whose truth is that level. With too few windows to promise that, the level
+    is never ruled out.
+  - Alpha is 0.05 for SEV1 and SEV2 and 0.1 for SEV3 and SEV4
+    ([`config/aria.yaml`](../config/aria.yaml)), so a true SEV1 or SEV2 stays in the set at least
+    95% of the time, and the others 90%, but only on data exchangeable with the conformal split.
+  - The model file keeps each level's sorted scores, so a threshold at any alpha can be
+    recomputed without the training data.
+- **Severe-miss guard.** Conformal risk control
+  ([Angelopoulos et al., 2024](https://arxiv.org/abs/2208.02814)) on the loss "a truly serious
+  window's set holds no serious level": the loosest guard whose corrected risk on the conformal
+  split is at most `severity.severe_miss_risk` (0.05). When the per-level sets already meet it,
+  no guard is needed and the calibration records the certificate.
+- **Novelty.** A Mahalanobis distance on standardised features with a shrunk covariance
+  ([Ledoit and Wolf, 2004](https://doi.org/10.1016/S0047-259X(03)00096-4)) fitted on the training
+  windows, and the share of a window's log patterns new to its system, each turned into a
+  conformal p-value against held-out windows. Below 1%, a person confirms.
 - **Version.** `severity-log-<date>-<first 8 hex digits of a SHA-256 of the coefficients>`.
 - **Retraining.** `make train` (or `aria train severity`) writes the model and its training
   report. Without the Loghub samples it stops, unless `--fixtures` asks for a model fit on the
   test fixtures.
 
-## Recalibration on reviewed incidents
+## Recalibration on blind checks
 
 The coverage guarantee holds only on data like the calibration split. A deployment's own
 incidents differ from the semi-synthetic windows, so ARIA recalibrates on them
-([`src/aria/severity/recalibration.py`](../src/aria/severity/recalibration.py)).
+([`src/aria/severity/recalibration.py`](../src/aria/severity/recalibration.py),
+[ADR 0014](adr/0014-promise-coverage-per-level-and-send-unfamiliar-windows-to-a-person.md)).
 
-**What is recorded.** Every human review stores the run's model input (the 40 features) and the
-severity the reviewer settled on:
+**What is recorded.** In Settings, "Check ARIA blind" shows a recent incident, picked at random
+from those decided in the last 500 runs, as its log patterns and counts. Nothing ARIA decided is
+shown. The person rates it, then sees ARIA's level and set. The rating, the run's model input
+(the model's features) and the calibration it used are stored as a blind check. Reviews are
+still recorded, but no longer recalibrate: a person approving a report tends to agree with
+whatever ARIA said. On a shared demo, visitors may try a blind check, but their ratings are not
+stored, so no visitor can skew the model.
 
-- an approval confirms ARIA's severity, and an edit corrects it;
-- a rejection settles nothing and is left out;
-- runs approved automatically, because approval was turned off, are not recorded at all.
+**What it does.** After each blind check, in the order they arrived, the rated level's alpha
+moves toward its target: down by 0.05 × (1 − target) when the set missed the person's level,
+up by 0.05 × target when it held it (adaptive conformal inference,
+[Gibbs and Candès, 2021](https://arxiv.org/abs/2106.00170)). Over any sequence of n checks of a
+level, the share its sets missed exceeds the target by at most (max(alpha, 1 − alpha) + 0.05) /
+(0.05 n). Alpha may dip below zero, meaning "never rule this level out", because clipping it
+would forget misses and break that bound. Every 100 further checks of a level replace its
+calibration scores with the checks' own, and its alpha starts again at the target.
 
-**When it runs.** A background job checks every `severity.recalibrate_check_s` seconds, where
-runs execute: in the API in in-process mode, or in `aria worker` in external mode.
+**When it runs.** A background job checks every `severity.recalibrate_check_s` seconds (600 by
+default; 0 turns it off), where runs execute. `aria train recalibrate [--dry-run]` does the same
+by hand. The model is written atomically to `ARIA_MODELS_DIR`, with the previous file kept
+beside it, and running engines reload it when it changes.
 
-- The default interval is 600 seconds, and 0 turns the job off.
-- It recalibrates once `severity.recalibrate_after` new reviews have gathered since the loaded
-  model was calibrated (default 30, minimum 10).
-- New reviews are counted against the model file's own record, so a model restored from an
-  older file recalibrates again from the shared database.
-- `aria train recalibrate [--min-new-reviews N] [--dry-run]` does the same by hand. With
-  `--dry-run`, it reports the effect without saving anything.
+**The severe-miss alarm.** Each time the job runs, it also reads every blind check of an
+incident the person rated SEV1 or SEV2, in arrival order, and asks whether the share ARIA rated
+SEV3 or SEV4 has exceeded the promised severe-miss rate with confidence: the risk the guard was
+certified for (`severity.severe_miss_risk`), else the serious levels' target. The test is a
+mixture likelihood-ratio martingale, the likelihood of the misses so far under every miss rate
+above the promise, averaged, against their likelihood at the promise, read against 1/0.05
+([`drift.py`](../src/aria/severity/drift.py)). By Ville's inequality it sounds falsely at most
+one time in twenty over an endless sequence of checks, however often it is read (Robbins' mixture
+martingales; Howard, Ramdas, McAuliffe and Sekhon, 2021; Ramdas, Grünwald, Vovk and Shafer,
+2023). While it stands, the job logs `severity.severe_miss_alarm` and returns it with the
+adaptation summary. It recommends recalibration or retraining; it changes nothing by itself.
 
-**What it does.**
+**What moves and what does not.** Only each level's alpha, and after a batch its scores, move.
+The coefficients, scaler, temperature and novelty statistics stay as trained, so recalibration
+can widen or narrow the sets, and with them how often ARIA asks for review, but cannot change
+which level the model ranks first.
 
-1. It recomputes the conformal threshold on all reviewed incidents, not just the new ones.
-2. It writes the model atomically under a new version to `ARIA_MODELS_DIR` (`models/` in a
-   checkout; the shared `/var/lib/aria/models` volume in containers), and keeps the previous
-   file beside it as `severity_log.<previous version>.json`. The trained model that ships with
-   the code is never overwritten there; engines read it until the first recalibration.
-3. It marks the reviews as used.
+**Versions.** An adapted model is named `<trained version>-aci<n>`, where n is the number of
+blind checks it followed. Its metadata gains `trained_version` and an `aci` record: the last
+check applied, the count, the step, the targets and when.
 
-Running engines, in every container that shares the volume, reload the file when it changes.
-
-**What moves and what does not.** Only the threshold moves; alpha is taken from the config.
-The coefficients, scaler and temperature stay as trained. So recalibration can widen or narrow
-the prediction sets, and with them how often ARIA asks for review. It cannot change which class
-the model ranks first.
-
-**Versions.**
-
-- A recalibrated model is named `<trained version>-recal<n>`, where n is the number of reviewed
-  incidents it used.
-- Its metadata gains `trained_version`, `recalibrated_from`, `recalibrated_at`, `n_reviewed`,
-  `coverage_before` and `coverage_after`.
-
-**Caveats.** Reviewed incidents are not a random sample, and every approval counts as a
-confirmation. The guarantee is only as good as the reviews.
+**Model files without per-level calibrations** still recalibrate their single threshold on
+reviews, as [ADR 0011](adr/0011-recalibrate-only-the-conformal-threshold-from-reviews.md)
+describes.
 
 **Rolling back.** Copy the kept file back over `severity_log.json` in `ARIA_MODELS_DIR`, or
-delete that file to return to the trained model. Unless
-`recalibrate_check_s` is 0, the job may recalibrate again at its next check if enough reviews
-have gathered. The [ops runbook](ops-runbook.md) has the operational steps.
+delete that file to return to the trained model. The [ops runbook](ops-runbook.md) has the
+operational steps.
+
+**Drift.** `GET /api/v1/drift`, and "Has anything shifted?" in Settings, compare the levels ARIA
+decided on each system's recent runs with its earlier runs (at least 40 runs), by the population
+stability index against the cut-off chance alone passes one time in twenty
+([`drift.py`](../src/aria/severity/drift.py)). `/metrics` counts decisions by level, set sizes
+and each reason a person was asked to confirm. The severe-miss alarm above is the label-based
+companion: drift needs no labels and says the mix moved; the alarm needs blind checks and says
+the promise is being broken.
 
 ## Metrics
 
@@ -205,7 +292,7 @@ compared with simple baselines on the held-out test seeds (41 and 42). `make eva
 this section; the method and the other suites are in [evaluation.md](evaluation.md).
 
 <!-- generated:severity-metrics -->
-Generated by `make eval` at commit `7e6233e`; do not edit by hand. The data is **semi-synthetic**: real lines from the public Loghub samples, composed into incidents by ARIA's scenario builder, on held-out seeds 41, 42. These numbers show how ARIA behaves on that distribution, not its accuracy on production incidents.
+Generated by `make eval` at commit `e28321c`; do not edit by hand. The data is **semi-synthetic**: real lines from the public Loghub samples, composed into incidents by ARIA's scenario builder, on held-out seeds 41, 42. These numbers show how ARIA behaves on that distribution, not its accuracy on production incidents.
 
 ### Held-out results
 
@@ -213,38 +300,38 @@ Generated by `make eval` at commit `7e6233e`; do not edit by hand. The data is *
 
 | Method | Accuracy (95% CI) | Macro-F1 (95% CI) | Weighted kappa | Under-triage | SEV1/2 rated SEV3/4 |
 |---|---|---|---|---|---|
-| ARIA policy (offline) | 95.5% (93.0–97.8%) | 0.943 (0.910–0.970) | 0.966 | 1.6% | 1.8% |
-| Calibrated model + rule floors | 95.2% (92.6–97.4%) | 0.942 (0.909–0.968) | 0.977 | 2.9% | 3.5% |
-| Calibrated model only | 95.2% (92.6–97.4%) | 0.942 (0.909–0.968) | 0.977 | 2.9% | 3.5% |
-| Rules only | 58.3% (52.9–63.8%) | 0.528 (0.475–0.583) | 0.550 | 18.3% | 23.9% |
+| ARIA policy (offline) | 83.0% (78.8–86.9%) | 0.826 (0.781–0.864) | 0.886 | 2.2% | 0.9% |
+| Calibrated model + rule floors | 86.9% (82.7–90.1%) | 0.866 (0.824–0.901) | 0.925 | 7.0% | 12.4% |
+| Calibrated model only | 88.1% (84.3–91.7%) | 0.877 (0.836–0.912) | 0.939 | 7.4% | 13.3% |
+| Rules only | 64.4% (59.3–69.9%) | 0.584 (0.529–0.639) | 0.751 | 16.0% | 9.7% |
 | Keyword categories only | 42.3% (36.9–48.1%) | 0.403 (0.343–0.458) | 0.245 | 21.5% | 18.6% |
 | TF-IDF + logistic regression (raw text) | 84.0% (79.8–87.8%) | 0.823 (0.776–0.863) | 0.923 | 6.4% | 13.3% |
 | Majority class | 36.9% (31.7–42.0%) | 0.135 (0.120–0.148) | 0.000 | 63.1% | 100.0% |
 
 The text baseline reads each window's raw lines, minus the alert tag that BGL lines open with: the BGL labels come from that tag.
 
-Calibration of the model's probabilities: ECE 0.016, Brier 0.075.
+Calibration of the model's probabilities: ECE 0.035, Brier 0.177.
 
-Risk–coverage (the calibrated model answering only its most confident windows): 0.0% error at 50.0% coverage, 0.0% error at 60.0% coverage, 0.0% error at 70.0% coverage, 0.8% error at 80.0% coverage, 1.8% error at 90.0% coverage, 4.8% error at 100.0% coverage; AURC 0.004.
+Risk–coverage (the calibrated model answering only its most confident windows): 1.3% error at 50.0% coverage, 1.6% error at 60.0% coverage, 1.8% error at 70.0% coverage, 4.8% error at 80.0% coverage, 9.2% error at 90.0% coverage, 11.9% error at 100.0% coverage; AURC 0.025.
 
-Conformal prediction sets (alpha 0.1, target coverage 90.0%): coverage 97.8% before the rule floors, 97.8% after; mean set size 1.083.
+Conformal prediction sets (alpha 0.1, target coverage 90.0%): coverage 95.2% before the rule floors, 95.2% after; mean set size 1.276.
 
-Automation: 88.5% of windows were decided without review, with 99.3% accuracy; the rest were flagged for review (66.7% accuracy for the conservative choice).
+Automation: 68.3% of windows were decided without review, with 97.7% accuracy; the rest were flagged for review (51.5% accuracy for the conservative choice).
 
 | System | Windows | Accuracy | SEV1/2 rated SEV3/4 | Labels from |
 |---|---|---|---|---|
 | android | 18 | 100.0% | 0.0% | scenario_policy |
-| apache | 18 | 100.0% | 0.0% | scenario_policy |
-| bgl | 66 | 93.9% | 4.0% | bgl_alert_tags |
-| hadoop | 30 | 93.3% | 0.0% | scenario_policy |
-| hdfs | 18 | 100.0% | 0.0% | scenario_policy |
-| hpc | 42 | 97.6% | 0.0% | scenario_policy |
-| linux | 18 | 100.0% | 0.0% | scenario_policy |
-| mac | 18 | 100.0% | 0.0% | scenario_policy |
-| openssh | 18 | 77.8% | 0.0% | scenario_policy |
-| openstack | 18 | 88.9% | 0.0% | scenario_policy |
-| proxifier | 18 | 100.0% | 0.0% | scenario_policy |
-| zookeeper | 30 | 96.7% | 0.0% | scenario_policy |
+| apache | 18 | 88.9% | 0.0% | scenario_policy |
+| bgl | 66 | 84.9% | 0.0% | bgl_alert_tags |
+| hadoop | 30 | 100.0% | 0.0% | scenario_policy |
+| hdfs | 18 | 83.3% | 0.0% | scenario_policy |
+| hpc | 42 | 85.7% | 0.0% | scenario_policy |
+| linux | 18 | 72.2% | 0.0% | scenario_policy |
+| mac | 18 | 44.4% | 0.0% | scenario_policy |
+| openssh | 18 | 72.2% | 0.0% | scenario_policy |
+| openstack | 18 | 72.2% | 0.0% | scenario_policy |
+| proxifier | 18 | 72.2% | 0.0% | scenario_policy |
+| zookeeper | 30 | 93.3% | 8.3% | scenario_policy |
 <!-- /generated:severity-metrics -->
 
 What each row measures:
@@ -291,6 +378,14 @@ regression.
 
 ## Limitations
 
+- **Domains with no labelled data.** No dataset ARIA trains on logs TLS, DNS, control-plane,
+  backup, payment, data-freshness, sign-in, data-leaving or the fatal-form failures, so the
+  weights of the rules that read those categories are judgement. They sit below SEV2's
+  activation, so each needs a second signal, except a detector reporting data leaving the
+  network, which decides SEV2 on its own. The floors added for them (payments, deleted backups,
+  failing backups, lost redundancy, filesystem shutdowns, fatal hardware) follow incident
+  practice and the research behind it, not measurement. The new-domain suites in [evaluation.md](evaluation.md) are the
+  first test of them.
 - **The data.** Training and test data are semi-synthetic, and every split draws from the same
   pools of real lines. The published numbers are not production accuracy; see the
   [data card](data-card.md#known-biases-and-gaps).
@@ -305,11 +400,32 @@ regression.
   runs on seed 41. Read the severity numbers as development-set results. Their intervals resample
   windows as if they were independent, but windows of one failure mode share a few source
   messages, so the true uncertainty is wider. The changes in rules version 2026.10.3 (keywords
-  and criticality read from warning lines, and two keyword patterns narrowed) were chosen on
-  separate validation seeds, 51–56, without looking at the test seeds.
-- **Prediction sets.** Almost every set holds one label, so coverage sits close to top-1
-  accuracy and an LLM adjudicates rarely. The 90% target holds on windows exchangeable with the
-  calibration windows; coverage differs by class and falls under a shift.
+  and criticality read from warning lines, and two keyword patterns narrowed) and in 2026.11.1
+  (crash words decisive only in warnings and errors, a service reported unreachable, the new
+  version 2 categories, two floors and the impact dimensions) and in 2026.11.2 (the fatal forms
+  and their floors) were chosen on separate validation
+  seeds, 51–56, without looking at the test seeds. Each candidate had to lower the cost on
+  held-out systems without raising it on familiar ones; one that did the first but not the
+  second (counting corrected hardware errors apart from failures) was not adopted. The changes
+  in 2026.11.3 (patterns counted beside lines, the cancellation discount, the baseline burn
+  rules and corroboration for unlevelled lines) were chosen the same way, each candidate having
+  to leave the cost on both rings no higher; [validation-log.md](validation-log.md) records
+  every run, adopted or not.
+- **Proxies for blast radius.** Node counts and node spread stand in for how far an incident
+  reaches, because logs do not see customers or requests. A fleet of chatty nodes and a single
+  node serving everyone look alike to them, so the rules that read them are titled as stand-ins
+  and a deployment should bring its own impact signals through alerts or tickets.
+- **History the benchmark lacks.** The system's baseline and the patterns reviewers dismissed
+  exist only in a deployment with runs and reviews behind it. The semi-synthetic benchmark has
+  neither, so the burn-rate rules and the review note are tested by unit tests alone, and their
+  thresholds (the SRE workbook's burn rates, a minimum of ten or twenty errors in a hundred
+  lines, half the issue lines) are judgement, not measurement.
+- **Cancellations.** No dataset ARIA trains on logs client cancellations, so the discount for
+  windows made mostly of them rests on OpenTelemetry's convention and unit tests, not on
+  measurement.
+- **Prediction sets.** Most sets hold one label. A set that holds more goes to a person, and an
+  LLM, when one is configured, chooses only inside it. Each level's target holds on windows
+  exchangeable with the calibration windows, and coverage falls under a shift.
 - **Retrieval scores.** Retrieval filters by system first, and most systems have a single failure
   mode in memory, so many queries cannot miss. Recall@3 here is a hit rate at three, close to what
   a random pick within the system would score. The harder test is on
@@ -341,8 +457,12 @@ regression.
   benign failure modes and quiet windows exist to measure it. Under-triage rates are reported in
   the [evaluation](evaluation.md#severity).
 - **Review and automation bias.** The review screen shows the evidence behind a severity: the
-  rule trace, the probabilities and the prediction set. Approvals feed recalibration as
-  confirmations, so a reviewer who disagrees should edit the severity rather than approve it.
+  rule trace, the probabilities and the prediction set, and says which levels ARIA is torn
+  between when the set holds more than one. Approvals no longer recalibrate the shipped model;
+  blind checks do, because an approval carries a pull toward agreeing with ARIA
+  ([above](#recalibration-on-blind-checks)). A reviewer who disagrees should still edit the
+  severity rather than approve it: the edit goes on the decision record and into the reviewer
+  figures (`GET /api/v1/reviewers`), which show who approves everything unread.
 - **Privacy.**
   - Logs carry personal data. Secrets are redacted before any model sees the text, and e-mail
     and IP addresses are pseudonymised. Hostnames and usernames remain.
@@ -413,8 +533,9 @@ tiny request.
 
 | Role | Provider chain | Default model | Verified |
 |---|---|---|---|
-| Severity adjudicator | `nim-local` → `gemini` → `gemini-lite` → `nim` → `nim-fallback` → `azure` → `openai_compat` (no fake: the policy decides instead) | As for the chat roles below | As below |
-| Investigator, reporter, critic, comms and Ask ARIA | The same chain, ending at the deterministic `fake` provider | `gemini`: `gemini-3.6-flash` (reasoning effort minimal). `gemini-lite`: `gemini-3.5-flash-lite`. `nim`: `openai/gpt-oss-20b` (reasoning effort low). `nim-fallback`: `minimaxai/minimax-m3.1-flash`. `azure`: the deployment named `gpt-5.1`. `openai_compat` and `nim-local`: none set. | `gemini` and `gemini-lite` answered live calls on 2026-10-30, including a full triage. `nim` and `nim-fallback` answered live calls on 2026-10-29. `azure`, `openai_compat` and `nim-local` are not verified. |
+| Severity adjudicator | `nim-local` → `gemini` → `gemini-lite` → `gemini-lite-2` → `gemma` → `nim` → `nim-fallback` → `claude` → `openai` → `azure` → `openai_compat` (no fake: the policy decides instead) | As for the chat roles below | As below |
+| Investigator and reporter | The same chain, ending at the deterministic `fake` provider | `gemini`: `gemini-3.6-flash` (reasoning effort minimal). `gemini-lite`: `gemini-3.5-flash-lite`. `gemini-lite-2`: `gemini-3.1-flash-lite`. `gemma`: `gemma-3-27b-it`, asked for JSON in the prompt, with its instructions folded into the user's turn. `nim`: `openai/gpt-oss-20b` (reasoning effort low). `nim-fallback`: `minimaxai/minimax-m3.1-flash`. `claude`: `claude-opus-5-5`. `openai`: `gpt-6.1-sol`. `azure`: the deployment named `gpt-5.1`. `openai_compat` and `nim-local`: none set. | `gemini` and `gemini-lite` answered live calls on 2026-10-30, including a full triage. `nim` and `nim-fallback` answered live calls on 2026-10-29. `gemini-lite-2`, `gemma`, `claude`, `openai`, `azure`, `openai_compat` and `nim-local` are not verified. |
+| Critic, comms, Ask ARIA and the search's query rewrite | `nim-local` → `gemini-lite` → `gemini-lite-2` → `gemma` → `gemini`, then as above, ending at `fake`: the lite models and Gemma lead, keeping the quality model's daily requests for the investigation and the report | As above | As above |
 | Embeddings | `nim` → `azure` → `local` | `nim`: `nvidia/nemotron-3.5-embed-1b` (2048 dimensions). `azure`: the deployment named `text-embedding-3-small`. `local`: latent semantic analysis (TF-IDF over words and word pairs, reduced to 128 dimensions) fitted by `aria seed` on the incident corpus. | The NIM model answered live calls on 2026-10-29. The Azure deployment is not verified. |
 | Reranking | `nim` | None. Reranking is off until `NVIDIA_NIM_RERANK_MODEL` and `NVIDIA_NIM_RERANK_URL` are set. | Not applicable |
 | Content safety | `nim` | `nvidia/nemotron-3.5-content-safety` | **Listed in NIM's model catalog on 2026-10-29, but not called live**, so its verdict format is unverified. The guardrail is off by default (`guardrails.safety_model: false`). |
@@ -430,6 +551,12 @@ What these models can and cannot do:
   it cannot read, or a safety model it cannot reach, counts as flagged.
 - Per-run budgets cap tokens, cost, latency, steps, tool calls and LLM calls (`budgets` in the
   config). When a budget is spent, the run falls back to the deterministic path.
+- The four Gemini models share one key but have limits of their own: requests a minute, tokens a
+  minute and requests a day (`limits` in the config). ARIA counts every request against them, less
+  a safety margin, before sending it, so no model is asked for more than it allows. A triage
+  reserves its calls across them before it starts; when they do not fit, it runs offline and says
+  until when. Each request is sent once: when it fails, the next provider in the chain takes the
+  call.
 
 ## Versions and where to find them
 

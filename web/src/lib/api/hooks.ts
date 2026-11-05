@@ -24,15 +24,23 @@ import type {
   RunbookOut,
   SampleRunRequest,
   Scenario,
+  Severity,
   TriageRequest,
 } from "./types";
 import type { components } from "./schema";
 
 export type SettingsView = components["schemas"]["SettingsOut"];
+export type CapacityView = components["schemas"]["CapacityOut"];
 export type FeedbackView = components["schemas"]["FeedbackOut"];
+export type ReviewersView = components["schemas"]["ReviewersOut"];
+export type DecisionRecordEntry = components["schemas"]["DecisionRecord"];
+export type ChainCheckView = components["schemas"]["ChainCheck"];
 export type RealIncident = components["schemas"]["RealIncidentOut"];
 export type ReplayRequest = components["schemas"]["ReplayRequest"];
 export type ExpertCheck = components["schemas"]["ExpertCheckOut"];
+export type BlindCheckView = components["schemas"]["BlindCheckOut"];
+export type BlindReveal = components["schemas"]["BlindReveal"];
+export type DriftView = components["schemas"]["DriftOut"];
 
 export const keys = {
   session: ["session"] as const,
@@ -49,8 +57,14 @@ export const keys = {
   runbooks: ["runbooks"] as const,
   runbook: (slug: string) => ["runbooks", slug] as const,
   providers: ["providers"] as const,
+  capacity: ["capacity"] as const,
   settings: ["settings"] as const,
   feedback: ["feedback"] as const,
+  reviewers: ["reviewers"] as const,
+  record: (id: string) => ["run", id, "record"] as const,
+  audit: ["audit"] as const,
+  blindCheck: ["blind-check"] as const,
+  drift: ["drift"] as const,
   realIncidents: ["real-incidents"] as const,
   scenarios: ["scenarios"] as const,
 };
@@ -259,11 +273,79 @@ export function useSettingsView() {
   });
 }
 
+/** The shared models' room now: each one's minute and day, and when the day starts again. */
+export function useCapacity() {
+  return useQuery({
+    queryKey: keys.capacity,
+    queryFn: () => apiFetch<CapacityView>(v1("/llm/capacity")),
+    refetchInterval: 30_000,
+  });
+}
+
 export function useFeedback(limit = 8) {
   return useQuery({
     queryKey: [...keys.feedback, limit],
     queryFn: () => apiFetch<FeedbackView>(v1(`/feedback?limit=${limit}`)),
     staleTime: 30_000,
+  });
+}
+
+/** How each reviewer decides: approvals without edits, changed levels and time to decide. */
+export function useReviewers() {
+  return useQuery({
+    queryKey: keys.reviewers,
+    queryFn: () => apiFetch<ReviewersView>(v1("/reviewers")),
+    staleTime: 30_000,
+  });
+}
+
+/** A recent incident to rate before seeing ARIA's level, picked at random by the server. */
+export function useBlindCheck(enabled: boolean) {
+  return useQuery({
+    queryKey: keys.blindCheck,
+    queryFn: () => apiFetch<BlindCheckView>(v1("/blind-check")),
+    enabled,
+    staleTime: Infinity,
+  });
+}
+
+/** Rate the incident blind; the answer reveals what ARIA decided. */
+export function useRateBlind() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ runId, severity }: { runId: string; severity: Severity }) =>
+      postJson<BlindReveal>(v1(`/blind-check/${encodeURIComponent(runId)}`), { severity }),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.feedback }),
+  });
+}
+
+/** Per system, whether ARIA's recent levels shifted from its earlier ones. */
+export function useDrift() {
+  return useQuery({
+    queryKey: keys.drift,
+    queryFn: () => apiFetch<DriftView>(v1("/drift")),
+    staleTime: 60_000,
+  });
+}
+
+/** A run's decisions, oldest first: each review, edit, publish, message and blind check, with
+ * who made it. A review or a resend invalidates it along with the rest of the run. */
+export function useRunRecord(id: string, enabled = true) {
+  return useQuery({
+    queryKey: keys.record(id),
+    queryFn: () => apiFetch<DecisionRecordEntry[]>(runPath(id, "/record")),
+    enabled,
+    staleTime: 10_000,
+  });
+}
+
+/** Whether the decision record's chain holds from its first entry to its last. The server
+ * reads every entry to answer, so the answer is kept for a while. */
+export function useAuditVerify() {
+  return useQuery({
+    queryKey: keys.audit,
+    queryFn: () => apiFetch<ChainCheckView>(v1("/audit/verify")),
+    staleTime: 60_000,
   });
 }
 

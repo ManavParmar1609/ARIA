@@ -144,7 +144,7 @@ def replay(
             "settle_s": out.flows.settle_s.get("HDFS block"),
         }
         if engine is not None:
-            pre = engine.preliminary(out.batch.features, evidence=EvidenceStore())
+            pre = engine.preliminary(out.batch.features, system="hdfs", evidence=EvidenceStore())
             decision = decide(pre, gate=engine.gate, llm_unavailable_reason="offline evaluation")
             window |= {"severity": str(decision.severity), "decided_by": decision.decided_by}
         windows.append(window)
@@ -225,7 +225,7 @@ def per_block_baselines(
     for block in blocks:
         lines = [format_raw_line(sample.records[i]) for i in sample.blocks[block]]
         feats = features_for("hdfs", lines, known)
-        pre = engine.preliminary(feats, evidence=EvidenceStore())
+        pre = engine.preliminary(feats, system="hdfs", evidence=EvidenceStore())
         decision = decide(pre, gate=engine.gate, llm_unavailable_reason="offline evaluation")
         engine_flags.append(decision.severity != Severity.SEV4)
         keyword_flags.append(keyword_severity(feats) != str(Severity.SEV4))

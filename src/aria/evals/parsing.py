@@ -28,7 +28,7 @@ from __future__ import annotations
 import csv
 import time
 from collections import Counter, defaultdict
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import get_context
 from pathlib import Path
@@ -36,6 +36,7 @@ from typing import Any
 
 from aria.config import GuardrailConfig
 from aria.data.loghub import LOGHUB_DIRS, format_raw_line, iter_structured_csv
+from aria.evals import stats
 from aria.evidence import EvidenceStore
 from aria.parsing.parser import parse_lines
 
@@ -98,6 +99,25 @@ def group_f1(predicted: Sequence[str], truth: Sequence[str]) -> float:
     precision = correct / len(found) if found else 0.0
     recall = correct / len(events) if events else 0.0
     return 0.0 if precision + recall == 0 else 2 * precision * recall / (precision + recall)
+
+
+# Loghub-2.0 found parsers weakest on events that occur rarely and on templates with many
+# parameters (Jiang et al., ISSTA 2024), so both are scored apart: an event is rare with at most
+# this many lines, and parameter-heavy with at least this many variable parts in its template.
+RARE_EVENT_MAX_LINES = 10
+HEAVY_TEMPLATE_MIN_PARAMS = 3
+
+
+def events_found(predicted: Sequence[str], truth: Sequence[str], events: Iterable[str]) -> int:
+    """How many of ``events`` ARIA reproduces exactly: one group holding exactly its lines."""
+    groups: dict[str, set[int]] = defaultdict(set)
+    members: dict[str, set[int]] = defaultdict(set)
+    for i, (group, event) in enumerate(zip(predicted, truth, strict=True)):
+        if group != QUARANTINED:
+            groups[group].add(i)
+        members[event].add(i)
+    exact = {frozenset(lines) for lines in groups.values()}
+    return sum(1 for event in set(events) if frozenset(members[event]) in exact)
 
 
 def corrected_events(directory: Path) -> dict[int, str]:
@@ -284,8 +304,12 @@ def loghub2_accuracy(directory: Path) -> dict[str, Any]:
     """Parse one system's whole Loghub-2.0 log, raw line by raw line, and score the groups."""
     started = time.perf_counter()
     name = directory.name
+    templates: dict[str, str] = {}
+    truth: list[str] = []
     with (directory / f"{name}_full.log_structured.csv").open(newline="", encoding="utf-8") as fh:
-        truth = [str(row["EventId"]) for row in csv.DictReader(fh)]
+        for row in csv.DictReader(fh):
+            truth.append(str(row["EventId"]))
+            templates.setdefault(truth[-1], str(row.get("EventTemplate") or ""))
     with (directory / f"{name}_full.log").open(encoding="utf-8", errors="replace") as handle:
         raw = [line.rstrip("\r\n") for line in handle]
     if len(raw) != len(truth):  # a log and its labels that disagree are not scored
@@ -300,12 +324,19 @@ def loghub2_accuracy(directory: Path) -> dict[str, Any]:
     predicted = [QUARANTINED] * len(raw)
     for line in out.lines:
         predicted[line.idx] = line.template_id
+    counts = Counter(truth)
+    rare = [e for e, n in counts.items() if n <= RARE_EVENT_MAX_LINES]
+    heavy = [e for e, t in templates.items() if t.count("<*>") >= HEAVY_TEMPLATE_MIN_PARAMS]
     return {
         "lines": len(raw),
         "events": len(set(truth)),
         "templates": len({p for p in predicted if p != QUARANTINED}),
         "grouping_accuracy": round(grouping_accuracy(predicted, truth), 4),
         "group_f1": round(group_f1(predicted, truth), 4),
+        "rare_events": len(rare),
+        "rare_events_found": events_found(predicted, truth, rare),
+        "heavy_events": len(heavy),
+        "heavy_events_found": events_found(predicted, truth, heavy),
         "flagged_as_injection": len(out.quarantined),
         "seconds": round(time.perf_counter() - started, 1),
     }
@@ -328,6 +359,13 @@ def summarize_loghub2(root: Path = LOGHUB2_DIR, *, workers: int = 1) -> dict[str
     }
     scored = [r for r in systems.values() if "error" not in r]
     lines = sum(r["lines"] for r in scored)
+
+    def pooled(kind: str) -> dict[str, Any]:
+        found = sum(r.get(f"{kind}_found", 0) for r in scored)
+        total = sum(r.get(kind, 0) for r in scored)
+        low, high = stats.wilson(found, total) if total else (0.0, 0.0)
+        return {"found": found, "total": total, "low": round(low, 4), "high": round(high, 4)}
+
     return {
         "source": "Loghub-2.0 whole logs",
         "citation": LOGHUB2_CITATION,
@@ -345,4 +383,8 @@ def summarize_loghub2(root: Path = LOGHUB2_DIR, *, workers: int = 1) -> dict[str
         if lines
         else 0.0,
         "real_lines_flagged_as_injection": sum(r["flagged_as_injection"] for r in scored),
+        "rare_events": pooled("rare_events"),
+        "heavy_events": pooled("heavy_events"),
+        "rare_event_max_lines": RARE_EVENT_MAX_LINES,
+        "heavy_template_min_params": HEAVY_TEMPLATE_MIN_PARAMS,
     }

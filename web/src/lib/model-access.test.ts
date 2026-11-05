@@ -25,8 +25,30 @@ describe("who answers a visitor's runs", () => {
     const none = modelAccess("openai", ["gemini"], null);
     expect(none.kind).toBe("offline");
     expect(accessSentence(none, false)).toBe(
-      "Offline: triages use the rules, the calibrated model and the grounded template, and nothing leaves the server.",
+      "Offline: triages use the rules, the calibrated model and ARIA's evidence template, and nothing leaves the server.",
     );
+  });
+
+  it("goes offline until the site's models have room again, without spending the share", () => {
+    const busy = modelAccess(null, ["gemini"], {
+      left: 3,
+      per_visitor: 5,
+      back_at: "2026-11-02T08:00:00Z",
+    });
+    expect(busy).toEqual({
+      kind: "offline",
+      label: "Offline",
+      usedUp: false,
+      backAt: "2026-11-02T08:00:00Z",
+    });
+    expect(accessSentence(busy, true)).toMatch(
+      /^Offline until \d{2}:\d{2}: the site's models are at their limits for now, so triages use the rules, .* Add your own key in Settings to use a model\.$/,
+    );
+    expect(accessShort(busy, true)).toMatch(/^Offline until \d{2}:\d{2}$/);
+    // A visitor's own key is theirs alone: the site's limits do not touch it.
+    expect(
+      modelAccess("gemini", ["gemini"], { left: 3, back_at: "2026-11-02T08:00:00Z" }).kind,
+    ).toBe("own");
   });
 
   it("points at the key form below it on Settings, and says the short version in the sidebar", () => {

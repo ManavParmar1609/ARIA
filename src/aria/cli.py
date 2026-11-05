@@ -19,17 +19,22 @@ app = typer.Typer(no_args_is_help=True, help="ARIA incident triage.")
 db_app = typer.Typer(no_args_is_help=True, help="Database migrations.")
 # The latest end-to-end run through a live LLM: committed, quoted by `make eval`.
 LIVE_RESULTS = Path("docs/eval-live.json")
+# The latest live run of the model's choice inside the set (`--suite llm-choice --llm`): until
+# one is committed, `make eval` says nothing about that choice.
+LIVE_CHOICE = Path("docs/eval-llm-choice.json")
 data_app = typer.Typer(no_args_is_help=True, help="Download and ingest the public datasets.")
 train_app = typer.Typer(
     help="Train and export the severity and ticket models.", invoke_without_command=True
 )
 providers_app = typer.Typer(no_args_is_help=True, help="Inspect LLM providers.")
 eval_app = typer.Typer(no_args_is_help=True, help="Evaluate ARIA and gate regressions.")
+audit_app = typer.Typer(no_args_is_help=True, help="The decision record.")
 app.add_typer(eval_app, name="eval")
 app.add_typer(db_app, name="db")
 app.add_typer(data_app, name="data")
 app.add_typer(train_app, name="train")
 app.add_typer(providers_app, name="providers")
+app.add_typer(audit_app, name="audit")
 console = Console()
 
 
@@ -83,6 +88,40 @@ def db_current() -> None:
     from aria.db.migrate import current
 
     current()
+
+
+# --- the decision record -------------------------------------------------------------------------
+
+
+@audit_app.command("verify")
+def audit_verify() -> None:
+    """Walk the decision record from its first entry and report the first broken link, if any.
+
+    Exits 1 when the chain does not hold (or the table is missing). Prints the newest hash, so
+    it can be kept somewhere outside the database and compared next time.
+    """
+    from sqlalchemy import inspect
+
+    from aria.db.engine import get_engine
+    from aria.db.record import verify
+
+    engine = get_engine()
+    if not inspect(engine).has_table("decision_record"):
+        console.print("The decision record is not set up yet. Run `aria db upgrade`.")
+        raise typer.Exit(code=1)
+    result = verify(engine)
+    entries = "entry" if result.length == 1 else "entries"
+    if result.ok:
+        console.print(f"The decision record holds {result.length} {entries} and every link holds.")
+        if result.head_hash:
+            console.print(f"Newest hash: {result.head_hash}")
+        return
+    console.print(
+        f"The decision record is broken at entry {result.first_broken}: {result.problem}. "
+        f"{result.length} {entries} were read. See docs/ops-runbook.md, "
+        '"The decision record", for what to do.'
+    )
+    raise typer.Exit(code=1)
 
 
 # --- data --------------------------------------------------------------------------------------
@@ -179,7 +218,13 @@ def train_severity(
     config = get_app_config().severity
     rules = load_rules(config.rules_file)
     model, report = train_from_loghub(
-        logs, rules, alpha=config.alpha, per_mode=per_mode, workers=workers
+        logs,
+        rules,
+        alpha=config.alpha,
+        serious_alpha=config.serious_alpha,
+        severe_miss_risk=config.severe_miss_risk,
+        per_mode=per_mode,
+        workers=workers,
     )
     model.save(config.log_model_file)
     report_path = config.log_model_file.with_suffix(".report.json")
@@ -199,17 +244,36 @@ def train_recalibrate(
     """Recalibrate the severity model's prediction sets on reviewed incidents."""
     from aria.config import get_app_config, get_settings
     from aria.db.engine import get_engine
-    from aria.severity.model import live_model_path
-    from aria.severity.recalibration import recalibrate_from_feedback
+    from aria.severity.conformal import level_alphas
+    from aria.severity.model import LinearModel, live_model_path
+    from aria.severity.recalibration import adapt_from_blind_checks, recalibrate_from_feedback
 
     config = get_app_config().severity
+    live = live_model_path(config.log_model_file, get_settings().models_dir)
+    trained = LinearModel.load(config.log_model_file) if config.log_model_file.exists() else None
+    if trained is not None and trained.calibrations:
+        # Per-level models learn from blind checks, not approvals (docs/adr/0014).
+        adapted = adapt_from_blind_checks(
+            get_engine(),
+            live,
+            targets=level_alphas(trained.classes, config.alpha, config.serious_alpha),
+            trained=config.log_model_file,
+            dry_run=dry_run,
+            actor="cli",
+        )
+        if adapted is None:
+            console.print("no new blind checks to learn from")
+        else:
+            console.print_json(json.dumps(adapted))
+        return
     result = recalibrate_from_feedback(
         get_engine(),
-        live_model_path(config.log_model_file, get_settings().models_dir),
+        live,
         alpha=config.alpha,
         min_new_reviews=config.recalibrate_after if min_new_reviews is None else min_new_reviews,
         dry_run=dry_run,
         trained=config.log_model_file,
+        actor="cli",
     )
     if result is None:
         console.print("not enough new reviews to recalibrate yet")
@@ -312,6 +376,55 @@ def seed(
 
 
 @app.command()
+def purge(
+    days: Annotated[
+        int | None,
+        typer.Option(
+            min=1,
+            help="Purge runs nothing has happened to for this many days "
+            "(default: retention.days in config/aria.yaml).",
+        ),
+    ] = None,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Only count what would be deleted.")
+    ] = False,
+) -> None:
+    """Delete runs past the retention period, with everything that belongs only to them."""
+    from aria.config import get_app_config
+    from aria.db.engine import get_engine
+    from aria.graph.retention import purge as purge_runs
+
+    period = days or get_app_config().retention.days
+    if period <= 0:
+        console.print(
+            "Retention is off, so nothing was deleted. Set retention.days in config/aria.yaml "
+            "(ARIA_RETENTION_DAYS), or pass --days."
+        )
+        return
+    _require_database()
+    result = purge_runs(get_engine(), days=period, dry_run=dry_run, actor="cli")
+    when = f"{result.cutoff:%Y-%m-%d %H:%M} UTC"
+    verb = "would be deleted" if dry_run else "deleted"
+    console.print(
+        f"Runs nothing has happened to since {when} ({period} days): {len(result.runs)} {verb}."
+    )
+    if result.runs:
+        table = Table("what", "rows")
+        for kind, count in result.rows.items():
+            table.add_row(kind, f"{count:,}")
+        console.print(table)
+    if result.busy:
+        console.print(
+            f"{len(result.busy)} more past the period are held by a process working on them; "
+            "the next purge takes them."
+        )
+    if result.rows.get("incident memory") and not dry_run:
+        console.print(
+            "Running API and worker processes stop finding the deleted incidents within a minute."
+        )
+
+
+@app.command()
 def mcp(
     transport: Annotated[str, typer.Option(help="stdio or streamable-http")] = "stdio",
     host: str = "127.0.0.1",
@@ -382,7 +495,11 @@ def worker(
 
     settings = get_settings()
     configure_logging(settings.log_level, settings.log_format)
-    configure_tracing(settings.otel_exporter, endpoint=settings.otlp_endpoint)
+    configure_tracing(
+        settings.otel_exporter,
+        endpoint=settings.otlp_endpoint,
+        metrics_endpoint=settings.otlp_metrics_endpoint,
+    )
 
     async def main() -> None:
         services = await Services.create()
@@ -508,7 +625,12 @@ def triage(
 def eval_run(
     *,
     suite: Annotated[
-        str, typer.Option(help="smoke, severity, pipeline, robustness, parsing, edge, real or all")
+        str,
+        typer.Option(
+            help="smoke, severity, pipeline, robustness, parsing, edge, real, llm-choice, "
+            "redteam, redteam-datamarking, a new-domain suite (ait-ads, rcaeval, anomod, "
+            "itbench, jira, nezha) or all"
+        ),
     ] = "smoke",
     gate: Annotated[bool, typer.Option(help="Fail when a threshold is missed (CI).")] = False,
     llm: Annotated[bool, typer.Option(help="Use the configured LLM chain (costs calls).")] = False,
@@ -554,10 +676,25 @@ def eval_run(
     if suite == "pipeline" and llm:
         LIVE_RESULTS.write_text(json.dumps(results, indent=2, default=str) + "\n", "utf-8")
         console.print(f"wrote {LIVE_RESULTS}; `make eval` quotes it")
+    if suite == "llm-choice":
+        choice = results["llm_choice"]
+        console.print(
+            f"[bold]llm-choice[/bold] {choice['model']}: {choice['calls']} model calls, "
+            f"{choice['held_out_systems']['windows']} held-out-system windows left to a model"
+            + (
+                f", {choice['bgl']['windows']} BGL windows sampled"
+                if "windows" in choice.get("bgl", {})
+                else ""
+            )
+        )
+        if llm:
+            LIVE_CHOICE.write_text(json.dumps(results, indent=2, default=str) + "\n", "utf-8")
+            console.print(f"wrote {LIVE_CHOICE}; `make eval` quotes it")
     if suite == "all" and not llm:
         live = json.loads(LIVE_RESULTS.read_text()) if LIVE_RESULTS.exists() else None
+        choice_run = json.loads(LIVE_CHOICE.read_text()) if LIVE_CHOICE.exists() else None
         docs.parent.mkdir(parents=True, exist_ok=True)
-        docs.write_text(report.render(results, live), encoding="utf-8")
+        docs.write_text(report.render(results, live, choice=choice_run), encoding="utf-8")
         Path("docs/eval-results.json").write_text(
             json.dumps({k: v for k, v in results.items() if not k.endswith("_cases")}, indent=2)
             + "\n",

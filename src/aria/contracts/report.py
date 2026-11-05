@@ -88,6 +88,9 @@ class OutboundAction(Contract):
     requires_approval: bool = True
     evidence_ids: list[EvidenceId] = Field(default_factory=list)
     result: JsonDict = Field(default_factory=dict)
+    # What was taken out of the draft before review: links to hosts off the allow-list and
+    # recipients nobody configured (aria.reporting.outbound), described for the reviewer.
+    removed: list[str] = Field(default_factory=list)
 
 
 # A reviewer's line: each becomes a claim or an action, so it has a claim's bounds.

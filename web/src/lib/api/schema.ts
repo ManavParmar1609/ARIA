@@ -157,6 +157,92 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/audit/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Verify Record
+         * @description Walk the decision record from its first entry and say whether every link holds: how
+         *     long it is, the first entry that breaks it (if any) and the newest hash, to anchor
+         *     elsewhere. It reads every entry, so call it on a schedule, not on every page view.
+         */
+        get: operations["verify_record_api_v1_audit_verify_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blind-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Blind Check
+         * @description A recent incident, picked at random, to rate before seeing ARIA's level.
+         *
+         *     Only what the logs showed comes back: no level, set, report or title (a title opens with the
+         *     level). On a shared demo a visitor may try it, but only a key-holder's ratings recalibrate.
+         */
+        get: operations["blind_check_api_v1_blind_check_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blind-check/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rate Blind
+         * @description Record a blind rating and show what ARIA decided. A key-holder's rating recalibrates.
+         */
+        post: operations["rate_blind_api_v1_blind_check__run_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/drift": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Drift
+         * @description Per system, whether the levels ARIA decided lately differ from the ones it decided before
+         *     by more than chance (see aria.severity.drift). Needs no labels.
+         */
+        get: operations["drift_api_v1_drift_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/eval": {
         parameters: {
             query?: never;
@@ -229,6 +315,28 @@ export type paths = {
         };
         /** Incident */
         get: operations["incident_api_v1_incidents__incident_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/llm/capacity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Capacity
+         * @description The shared models' room now: for each provider with limits (``limits`` in
+         *     config/aria.yaml), the requests and tokens left this minute and the requests left today,
+         *     any rest after a refusal, and when the day starts again. Counts and times only, never a key.
+         */
+        get: operations["capacity_api_v1_llm_capacity_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -340,6 +448,29 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reviewers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reviewers
+         * @description How each person reviews: how often they approve a report without editing it, how often
+         *     they set a level other than ARIA's, and the median time from a run pausing for review to
+         *     their decision. From the newest ``limit`` reviews ARIA keeps; reviews of a visitor's own
+         *     runs on a shared demo are not kept, so they are not counted.
+         */
+        get: operations["reviewers_api_v1_reviewers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runbooks": {
         parameters: {
             query?: never;
@@ -426,6 +557,7 @@ export type paths = {
         /**
          * Delete Run
          * @description Delete the run and everything derived from it (report, events, memory, checkpoints).
+         *     The deletion itself stays on the decision record, under the caller's name.
          */
         delete: operations["delete_run_api_v1_runs__run_id__delete"];
         options?: never;
@@ -541,6 +673,27 @@ export type paths = {
         };
         /** Get Postmortem */
         get: operations["get_postmortem_api_v1_runs__run_id__postmortem_md_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/record": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Run Record
+         * @description A run's decisions, oldest first: each review, edit, publish, message sent and blind check,
+         *     with who made it and the hashes that chain it to the rest of the record.
+         */
+        get: operations["run_record_api_v1_runs__run_id__record_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -882,10 +1035,85 @@ export type components = {
             scheme?: string;
         };
         /**
+         * BlindCase
+         * @description An incident to rate before seeing ARIA's level: what the logs showed, nothing it decided.
+         */
+        BlindCase: {
+            /** Error Lines */
+            error_lines: number;
+            /** Lines */
+            lines: number;
+            /** Minutes */
+            minutes: number;
+            /** Nodes */
+            nodes: number;
+            /** Patterns */
+            patterns: components["schemas"]["BlindPattern"][];
+            /** Run Id */
+            run_id: string;
+            /** System */
+            system: string;
+            /** Warning Lines */
+            warning_lines: number;
+        };
+        /** BlindCheckOut */
+        BlindCheckOut: {
+            case: components["schemas"]["BlindCase"] | null;
+            /** Checks */
+            checks: number;
+            /** Counted */
+            counted: boolean;
+        };
+        /**
+         * BlindPattern
+         * @description One log pattern of the incident, as the parser grouped it (already redacted).
+         */
+        BlindPattern: {
+            /** Count */
+            count: number;
+            /** Error Like */
+            error_like: boolean;
+            /** New */
+            new: boolean;
+            /** Template */
+            template: string;
+        };
+        /** BlindRating */
+        BlindRating: {
+            severity: components["schemas"]["Severity"];
+        };
+        /** BlindReveal */
+        BlindReveal: {
+            /** Agreed */
+            agreed: boolean;
+            aria: components["schemas"]["Severity"];
+            /** Checks */
+            checks: number;
+            /** Counted */
+            counted: boolean;
+            /** Held */
+            held: boolean;
+            /** Prediction Set */
+            prediction_set: components["schemas"]["Severity"][];
+            /** Run Id */
+            run_id: string;
+            yours: components["schemas"]["Severity"];
+        };
+        /**
          * CalibrationOut
          * @description Where the severity model's calibration stands against the reviews gathered so far.
          */
         CalibrationOut: {
+            /**
+             * Adapted On
+             * @default 0
+             */
+            adapted_on?: number;
+            /**
+             * Blind Checks
+             * @default 0
+             */
+            blind_checks?: number;
             /** Check Interval S */
             check_interval_s: number;
             /** Coverage After */
@@ -896,6 +1124,11 @@ export type components = {
             model_version: string | null;
             /** Pending */
             pending: number;
+            /**
+             * Per Level
+             * @default false
+             */
+            per_level?: boolean;
             /** Recalibrate After */
             recalibrate_after: number;
             /** Recalibrated */
@@ -913,6 +1146,48 @@ export type components = {
             metadata?: Record<string, never>;
             /** @example  */
             tenant?: string;
+        };
+        /**
+         * CapacityOut
+         * @description The shared models' room now (``GET /api/v1/llm/capacity``).
+         */
+        CapacityOut: {
+            /** Back At */
+            back_at: string | null;
+            /**
+             * Day Resets At
+             * Format: date-time
+             */
+            day_resets_at: string;
+            /** Margin */
+            margin: number;
+            /** Providers */
+            providers: components["schemas"]["ProviderCapacityOut"][];
+            /** Runs Left Today */
+            runs_left_today: number | null;
+            /** Timezone */
+            timezone: string;
+        };
+        /**
+         * ChainCheck
+         * @description Whether the record holds together, from the first entry to the last.
+         */
+        ChainCheck: {
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /** First Broken */
+            first_broken?: number | null;
+            /** Head Hash */
+            head_hash?: string | null;
+            /** Length */
+            length: number;
+            /** Ok */
+            ok: boolean;
+            /** Problem */
+            problem?: string | null;
         };
         /** Checkpoint */
         Checkpoint: {
@@ -955,6 +1230,70 @@ export type components = {
             /** Text */
             text: string;
         };
+        /**
+         * DataTermsOut
+         * @description A model provider's own terms about the prompts ARIA sends it (``llm.data_terms``).
+         */
+        DataTermsOut: {
+            /** Company */
+            company: string;
+            /** Id */
+            id: string;
+            /** Notes */
+            notes?: string | null;
+            /** Providers */
+            providers: string[];
+            /** Service */
+            service: string;
+            /** Sources */
+            sources: components["schemas"]["TermsSourceOut"][];
+            /** Uses */
+            uses: components["schemas"]["DataUseOut"][];
+            /** Verified */
+            verified?: string | null;
+        };
+        /**
+         * DataUseOut
+         * @description What a provider's terms say about prompts for one kind of account. None: not verified.
+         */
+        DataUseOut: {
+            /** Account */
+            account: string;
+            /** Improves Models */
+            improves_models?: boolean | null;
+            /** Keeps Prompts */
+            keeps_prompts?: string | null;
+        };
+        /**
+         * DecisionRecord
+         * @description One entry. Its hash covers every other field and the previous entry's hash.
+         */
+        DecisionRecord: {
+            /** Actor */
+            actor: string;
+            /** Hash */
+            hash: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "review" | "edit" | "publish" | "send" | "blind_check" | "recalibration" | "model_swap" | "purge" | "delete";
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+            /** Prev Hash */
+            prev_hash: string;
+            /** Run Id */
+            run_id?: string | null;
+            /** Seq */
+            seq: number;
+            /**
+             * Ts
+             * Format: date-time
+             */
+            ts: string;
+        };
         DeleteTaskPushNotificationConfigRequest: {
             /** @example id */
             id?: string;
@@ -987,6 +1326,15 @@ export type components = {
             status: "approved" | "sent" | "failed" | "skipped";
             /** Title */
             title: string;
+        };
+        /** DriftOut */
+        DriftOut: {
+            /** Min Runs */
+            min_runs: number;
+            /** Systems */
+            systems: components["schemas"]["SystemDrift"][];
+            /** Too Few Runs */
+            too_few_runs: string[];
         };
         /**
          * Evidence
@@ -1323,6 +1671,47 @@ export type components = {
         } | {
             data: unknown;
         });
+        /**
+         * ProviderCapacityOut
+         * @description One shared model's room now. Counts and times only: never a key or a request.
+         */
+        ProviderCapacityOut: {
+            /** Day Requests Left */
+            day_requests_left: number | null;
+            /** Day Requests Reserved */
+            day_requests_reserved: number;
+            /** Day Requests Used */
+            day_requests_used: number;
+            /** Held Because */
+            held_because: string | null;
+            /** Held Until */
+            held_until: string | null;
+            limits: components["schemas"]["ProviderLimitsOut"] | null;
+            /** Minute Requests Left */
+            minute_requests_left: number | null;
+            /** Minute Resets At */
+            minute_resets_at: string | null;
+            /** Minute Tokens Left */
+            minute_tokens_left: number | null;
+            /** Model */
+            model: string | null;
+            /** Name */
+            name: string;
+            /** Set Up */
+            set_up: boolean;
+        };
+        /**
+         * ProviderLimitsOut
+         * @description A provider's limits as ARIA keeps them: the configured ones less the safety margin.
+         */
+        ProviderLimitsOut: {
+            /** Requests Per Day */
+            requests_per_day?: number | null;
+            /** Requests Per Minute */
+            requests_per_minute?: number | null;
+            /** Tokens Per Minute */
+            tokens_per_minute?: number | null;
+        };
         /** ProviderOut */
         ProviderOut: {
             /** Breaker */
@@ -1396,6 +1785,42 @@ export type components = {
             /** Markdown */
             markdown: string;
             report: components["schemas"]["IncidentReport"];
+        };
+        /**
+         * ReviewerOut
+         * @description How one person decides, over the reviews ARIA keeps.
+         */
+        ReviewerOut: {
+            /** Approved As Is */
+            approved_as_is: number;
+            /** Decisions */
+            decisions: number;
+            /** Edited */
+            edited: number;
+            /** Level Changed */
+            level_changed: number;
+            /** Median Wait S */
+            median_wait_s?: number | null;
+            /** Rejected */
+            rejected: number;
+            /** Reviewer */
+            reviewer: string;
+            /** Timed */
+            timed: number;
+        };
+        /**
+         * ReviewersOut
+         * @description Every reviewer's figures, the busiest first, from the newest ``decisions`` reviews.
+         */
+        ReviewersOut: {
+            /** Decisions */
+            decisions: number;
+            /** Limit */
+            limit: number;
+            /** Reviewers */
+            reviewers: components["schemas"]["ReviewerOut"][];
+            /** Since */
+            since?: string | null;
         };
         /**
          * ReviewOut
@@ -1572,7 +1997,7 @@ export type components = {
              * Kind
              * @enum {string}
              */
-            kind: "run_started" | "node_started" | "node_finished" | "token" | "tool_call" | "llm_call" | "replan" | "budget" | "guardrail" | "interrupt" | "review" | "action" | "run_finished" | "checkpoint" | "error";
+            kind: "run_started" | "node_started" | "node_finished" | "token" | "tool_call" | "llm_call" | "replan" | "budget" | "guardrail" | "interrupt" | "review" | "action" | "run_finished" | "checkpoint" | "error" | "followup";
             /** Node */
             node?: string | null;
             /** Payload */
@@ -1784,6 +2209,8 @@ export type components = {
             channels?: {
                 [key: string]: boolean;
             };
+            /** Data Terms */
+            data_terms?: components["schemas"]["DataTermsOut"][];
             /** Embeddings */
             embeddings: string[];
             /** Environment */
@@ -1802,6 +2229,10 @@ export type components = {
             rate_limit_per_minute: number;
             /** Require Approval */
             require_approval: boolean;
+            /** Retention */
+            retention?: {
+                [key: string]: number;
+            };
             /** Retrieval */
             retrieval: {
                 [key: string]: unknown;
@@ -1837,8 +2268,12 @@ export type components = {
          * SharedModelOut
          * @description This visitor's share today of the server's own model keys (``llm.shared``). None means
          *     no limit; ``left`` 0 means this visitor's work runs offline until tomorrow (UTC).
+         *     ``back_at`` is set while the shared models themselves are at their limits (``llm.quota``):
+         *     until then, everyone's model-written triages run offline.
          */
         SharedModelOut: {
+            /** Back At */
+            back_at?: string | null;
             /** Left */
             left?: number | null;
             /** Per Day */
@@ -1917,6 +2352,32 @@ export type components = {
             /** @example  */
             tenant?: string;
         };
+        /**
+         * SystemDrift
+         * @description Whether one system's decided levels shifted between its earlier and recent runs.
+         */
+        SystemDrift: {
+            /** Compared */
+            compared: number;
+            /** Critical */
+            critical: number;
+            /** Psi */
+            psi: number;
+            /** Recent */
+            recent: {
+                [key: string]: number;
+            };
+            /** Reference */
+            reference: {
+                [key: string]: number;
+            };
+            /** Runs */
+            runs: number;
+            /** Shifted */
+            shifted: boolean;
+            /** System */
+            system: string;
+        };
         TaskPushNotificationConfig: {
             /** @example null */
             authentication?: components["schemas"]["AuthenticationInfo"] | null;
@@ -1930,6 +2391,13 @@ export type components = {
             token?: string;
             /** @example url */
             url?: string;
+        };
+        /** TermsSourceOut */
+        TermsSourceOut: {
+            /** Title */
+            title: string;
+            /** Url */
+            url: string;
         };
         /**
          * TicketAssessment
@@ -2349,6 +2817,116 @@ export interface operations {
             };
         };
     };
+    verify_record_api_v1_audit_verify_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChainCheck"];
+                };
+            };
+        };
+    };
+    blind_check_api_v1_blind_check_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlindCheckOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rate_blind_api_v1_blind_check__run_id__post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlindRating"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlindReveal"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    drift_api_v1_drift_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DriftOut"];
+                };
+            };
+        };
+    };
     evaluation_api_v1_eval_get: {
         parameters: {
             query?: never;
@@ -2463,6 +3041,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    capacity_api_v1_llm_capacity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapacityOut"];
                 };
             };
         };
@@ -2590,6 +3188,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunAccepted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reviewers_api_v1_reviewers_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewersOut"];
                 };
             };
             /** @description Validation Error */
@@ -3043,6 +3672,43 @@ export interface operations {
                 };
                 content: {
                     "text/plain": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_record_api_v1_runs__run_id__record_get: {
+        parameters: {
+            query?: {
+                after?: number;
+                limit?: number;
+            };
+            header?: {
+                /** @description A private session id: 16 to 64 letters, digits, dashes or underscores. On a server with ARIA_VISITOR_SCOPE=true you see the runs you started with it, plus the examples. The console sends one for you. */
+                "X-Visitor-Id"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionRecord"][];
                 };
             };
             /** @description Validation Error */

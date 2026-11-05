@@ -6,7 +6,7 @@ export const STEP_LINES: { title: string; body: string }[] = [
   },
   {
     title: "Rate how serious it is",
-    body: "Rules and a calibrated model keep a short list of likely levels, and say when they aren't sure.",
+    body: "Rules and a trained model keep a short list of the levels they can't rule out, built to hold the right one at a promised rate. Logs unlike anything ARIA has learned from go to a person.",
   },
   {
     title: "Investigate and write",
@@ -14,6 +14,6 @@ export const STEP_LINES: { title: string; body: string }[] = [
   },
   {
     title: "Wait for you",
-    body: "Nothing is sent until a person approves. The approved incident is remembered for next time.",
+    body: "Nothing is sent until a person approves, and every decision goes on a record that shows any later change. The approved incident is remembered for next time.",
   },
 ];

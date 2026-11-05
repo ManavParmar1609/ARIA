@@ -5,6 +5,7 @@ import {
   count,
   duration,
   median,
+  minutesWords,
   money,
   percent,
   plainResolution,
@@ -13,6 +14,17 @@ import {
 } from "./format";
 
 describe("format", () => {
+  it("says how long a window spans in minutes, hours or days", () => {
+    expect(minutesWords(12)).toBe("under a minute");
+    expect(minutesWords(60)).toBe("1 minute");
+    expect(minutesWords(462)).toBe("7.7 minutes");
+    expect(minutesWords(89 * 60)).toBe("89 minutes");
+    expect(minutesWords(2.5 * 3600)).toBe("2.5 hours");
+    expect(minutesWords(24 * 3600)).toBe("24 hours");
+    expect(minutesWords(3 * 24 * 3600)).toBe("3 days");
+    expect(minutesWords(4_733_283 * 60)).toBe("3,287 days");
+  });
+
   it("writes durations a person can read", () => {
     expect(duration(734)).toBe("734 ms");
     expect(duration(2_240)).toBe("2.2 s");

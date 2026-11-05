@@ -231,3 +231,94 @@ sources:
     license: Public issues with no licence stated; read only to evaluate, never redistributed
     citation: "GitLab Inc. GitLab.com production incident tracker, https://gitlab.com/gitlab-com/gl-infra/production/-/issues."
     description: GitLab.com's production incidents (gitlab-com/gl-infra/production), created before October 2026, with the responders' severity, service and root-cause labels. A live API, so the download records its snapshot's sha256 and date; the memory evaluation asks for similar past incidents from each later incident's title.
+
+  # --- new domains: data no rule, threshold or model was tuned on (ring C) -----------------------
+  ait-ads:
+    kind: zenodo
+    record: "8263181"
+    files: [ait_ads.zip, labels.csv]
+    checksums:
+      ait_ads.zip: md5:43db6b1f0996e0024befd617706c50e9
+      labels.csv: md5:60ff33796c77fd2136c4d1a4bc841bd9
+    extract: false
+    license: CC BY 4.0 (the Zenodo record's licence)
+    citation: "M. Landauer, F. Skopik, M. Wurzenberger. Introducing a New Alert Data Set for Multi-Step Attack Analysis. CSET 2024. Zenodo, DOI 10.5281/zenodo.8263181."
+    description: The AIT Alert Data Set. 2,655,821 intrusion-detection alerts (Wazuh, Suricata and AMiner) from eight simulated company networks, each attacked once in several steps (scans, a web shell, password cracking, a reverse shell, privilege escalation, a stopped service and data theft over DNS), with the start and end of every attack step. Kept zipped (2.9 GB unpacked); the security-alert evaluation reads it from inside the zip (src/aria/evals/ait_ads.py).
+
+  rcaeval-re3:
+    kind: zenodo
+    record: "14590730"
+    files: [RE3-SS.zip, RE3-OB.zip, RE3-TT.zip]
+    checksums:
+      RE3-SS.zip: md5:467964eddb2a4fef4d6486c4679e749b
+      RE3-OB.zip: md5:96947589084348f9d12cba370313458e
+      RE3-TT.zip: md5:ae1eb5906fb4d13a16a6a5e58faaf30b
+    extract: false
+    license: CC BY 4.0 on Zenodo; MIT in the authors' repository (both permissive; the Zenodo licence applies)
+    citation: "L. Pham, H. Zhang, H. Ha, F. Salim, X. Zhang. RCAEval: A Benchmark for Root Cause Analysis of Microservice Systems with Telemetry Data. WWW 2025 Companion. Zenodo, DOI 10.5281/zenodo.14590730."
+    description: RCAEval's RE3 suite. 90 code-level faults injected into three microservice shops (Sock Shop, Online Boutique and Train Ticket, 30 each), each with every service's logs from before and after the fault and the service it was injected into. Kept zipped; the root-cause evaluation reads each case's logs from inside the zips (src/aria/evals/rcaeval.py).
+
+  anomod:
+    kind: zenodo
+    record: "18342898"
+    files: [AnoMod.zip]
+    checksums:
+      AnoMod.zip: md5:30c5835190c3550c5efc34d6be4f9238
+    extract: false
+    license: CC BY 4.0 (the Zenodo record's licence)
+    citation: "K. Ping, H. B. Mazhar, Y. Wang, Y. Song, M. V. Mäntylä. AnoMod: A Dataset for Anomaly Detection and Root Cause Analysis in Microservice Systems. MSR 2026. Zenodo, DOI 10.5281/zenodo.18342898."
+    description: AnoMod. 24 anomalies injected into two microservice systems (SocialNetwork and Train Ticket), six of each of four kinds (performance, service, database and code), plus a normal run of each system, with every service's logs, metrics, traces, API responses and code coverage. Kept zipped (3.1 GB unpacked); the evaluation reads only the logs, from inside the zip (src/aria/evals/anomod.py).
+
+  itbench-lite:
+    kind: huggingface
+    url: https://huggingface.co/datasets/ibm-research/ITBench-Lite
+    commit: d0916b08ba421ce5e672e9ad68aa947d938dfef0
+    paths:
+      - "snapshots/sre/*/Scenario-*/ground_truth.yaml"
+      - "snapshots/sre/*/Scenario-*/k8s_events_raw.tsv"
+      - "snapshots/sre/*/Scenario-*/alerts_in_alerting_state_*.json"
+      - "snapshots/sre/*/Scenario-*/alerts/alerts_in_alerting_state_*.json"
+    stream:
+      reader: itbench-logs
+      minutes: 10
+      limit: 20000
+    license: Apache-2.0
+    citation: "S. Jha et al. ITBench: Evaluating AI Agents across Diverse Real-World IT Automation Tasks. ICML 2025. Data: IBM Research, ITBench-Lite (huggingface.co/datasets/ibm-research/ITBench-Lite)."
+    description: ITBench-Lite's 35 site-reliability scenarios. Each is a snapshot of a Kubernetes cluster running the OpenTelemetry demo shop while a fault was injected, with the alerts in alerting state when the incident was raised, the cluster's Kubernetes events and a ground truth naming the entity at fault and how the fault spread. The services' logs (about 4 GB) are streamed, checked against the Hub's sha256, and only the last 20,000 lines of the 10 minutes before each incident are kept (src/aria/evals/itbench.py).
+
+  jira-public:
+    kind: zenodo
+    record: "15719919"
+    files: ["2025-06-23 ThePublicJiraDataset.zip"]
+    stream:
+      reader: jira-mongodump
+      member: "ThePublicJiraDataset/3. DataDump/mongodump-JiraReposAnon.archive"
+      keep: [Apache, Jira]
+      limit: 20000
+    checksums:
+      # The whole archive's md5 cannot be checked without downloading it; the subset is pinned.
+      "2025-06-23 ThePublicJiraDataset.zip": md5:02f85309d966092ea130ca0797aea795
+      apache.jsonl: sha256:8b8b2f399b2c585445c4deba255728f7058fe3ba4f2cb138fbdf54d850c5e592
+      jira.jsonl: sha256:d43d35e4c91e6d7a2e9d6a5dd5662f76937bf7d92f2b9546d7c50edfd13aa63f
+    license: CC BY 4.0 (the Zenodo record's licence)
+    citation: "L. Montgomery, C. Lüders, W. Maalej. An Alternative Issue Tracking Dataset of Public Jira Repositories. MSR 2022. Zenodo, DOI 10.5281/zenodo.15719919."
+    description: A subset of the Public Jira Dataset (2.7 million issues from 16 public Jira instances, one 5.8 GB zip). The download never fetches the zip whole; it streams the MongoDB dump inside it and keeps the first 20,000 issues of two instances, Apache's and Atlassian's own, in the dump's order, with each issue's type, components, title, description, final priority and the priority it was opened with (src/aria/data/jira.py). The ticket evaluation scores ARIA's ticket model against the priority people set (src/aria/evals/jira.py).
+
+  nezha:
+    kind: zenodo
+    record: "7029202"
+    files: [nezhadata.zip]
+    stream:
+      reader: nezha-logs
+      keep: [dataset1.tar.xz, dataset2.tar.xz]
+      minutes: 1
+    checksums:
+      # Matched against the checksum Zenodo publishes; each archive streamed out of the zip is
+      # checked against the CRC-32 the zip records for it.
+      nezhadata.zip: md5:a199b38cbb94af303ec5be5db43ebbd7
+      # The labels: each day's fault list as the download writes it.
+      dataset1/fault_list.json: sha256:c5f8e8e6c0f5f89cc647ba9a3ec38c748cec450ceed72fff37fa4b1c8ee1b1f2
+      dataset2/fault_list.json: sha256:b7473cf586eba253ddc60ddca02ff846ac5229bcd240a694c9d76d99a828abec
+    license: CC BY 4.0 (the Zenodo record's licence; the authors' repository is MIT)
+    citation: "G. Yu, P. Chen, Y. Li, H. Chen, X. Li, Z. Zheng. Nezha: Interpretable Fine-Grained Root Causes Analysis for Microservices on Multi-Modal Observability Data. ESEC/FSE 2023. Zenodo, DOI 10.5281/zenodo.7029202."
+    description: Nezha's Online Boutique data. Two days of faults (CPU contention and consumption, network delay, a thrown exception, a wrong return value) injected one at a time into the shop's pods, with each day's fault list and every service's logs, metrics and traces (about 4 GB a day unpacked). The download streams the zip's two archives without storing them and keeps each day's fault list and the log files of the minutes around each fault, cut to time, pod and log record and gzipped (src/aria/data/nezha.py). The evaluation reads the minute before each fault and the minute from it on (src/aria/evals/nezha.py).

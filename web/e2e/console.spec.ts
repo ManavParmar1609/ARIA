@@ -49,6 +49,8 @@ test.describe("console", () => {
     const citation = page.getByRole("button", { name: /^Evidence E\d+: Log template/ }).first();
     await citation.hover();
     await expect(page.locator("#evidence-panel")).toContainText("Log template");
+    // Nothing has been decided, so no empty decision record sits above the report.
+    await expect(page.getByRole("region", { name: "Decision record" })).toHaveCount(0);
     await expectAccessible(page, "run view, awaiting review");
 
     // No channel is connected on the test server: the drafted messages are previews to read,
@@ -68,6 +70,10 @@ test.describe("console", () => {
       ),
     ).toBeVisible();
     await expect(page.getByRole("link", { name: "Postmortem draft (Markdown)" })).toBeVisible();
+    // The decision record starts with this approval.
+    await expect(page.getByRole("region", { name: "Decision record" })).toContainText(
+      /Approved the report/,
+    );
     // A sample's page then offers ways to keep exploring.
     const next = page.locator("section", {
       has: page.getByRole("heading", { name: "What next?" }),
@@ -100,6 +106,12 @@ test.describe("console", () => {
     ).toBeVisible();
     await page.getByRole("button", { name: "Back to now" }).click();
     await expect(page.getByText(/as it was earlier/)).toBeHidden();
+    // The banner that held the button has gone, so focus goes back to the step's own button.
+    await expect(
+      page
+        .locator("li", { hasText: "Paused at “Your review”" })
+        .getByRole("button", { name: "View" }),
+    ).toBeFocused();
   });
 
   test("runs a sample at a bigger size and shows both ratings", async ({ page }) => {
@@ -118,7 +130,8 @@ test.describe("console", () => {
     await card.getByText(/^Show \d+ real lines/).click();
     await expect(card.locator("pre")).toBeVisible();
     // Only sizes that change the rating are offered (`aria seed` rated them); the smallest first.
-    const sizes = card.getByRole("radio");
+    // A card can offer a rate as well ("12 lines a minute"): only the servers are wanted here.
+    const sizes = card.getByRole("group", { name: "How many servers?" }).getByRole("radio");
     await expect(sizes.first()).toBeChecked();
     const smallest = (await sizes.first().getAttribute("value")) ?? "";
     const largest = (await sizes.last().getAttribute("value")) ?? "";
@@ -428,12 +441,13 @@ test.describe("console", () => {
       }
     }
     // Settings leads with the model. The deployment's own settings are folded away until asked for;
-    // there, reviews from the earlier tests feed the recalibration queue.
+    // there, the reviews from the earlier tests are listed and the model says how far its learning
+    // has got: blind checks for a model calibrated per level, reviews for an older one.
     await expect(page.getByRole("heading", { level: 2 }).first()).toHaveText("Language model");
     await expect(page.getByRole("table", { name: "Recent reviews" })).toBeHidden();
     await page.getByText("Deployment details").click();
     await expect(page.getByRole("table", { name: "Recent reviews" })).toContainText("Approved");
-    await expect(page.getByText(/of 30 needed/)).toBeVisible();
+    await expect(page.getByText(/^Blind checks so far$|of \d+ needed/)).toBeVisible();
 
     // The theme setting applies at once and survives a reload. The radios are styled labels
     // around visually hidden inputs, so click the label as a person would.
@@ -469,6 +483,17 @@ test.describe("console", () => {
     await page.keyboard.press("g");
     await page.keyboard.press("i");
     await expect(page).toHaveURL(/\/console\/runs$/);
+
+    // A word opens on its own card in the guide, not at the top of the list it sits in. With no
+    // match the list is hidden, and the box says so.
+    await page.keyboard.press("Control+k");
+    await search.fill("zzzzqq");
+    await expect(search).toHaveAttribute("aria-expanded", "false");
+    await search.fill("prediction set");
+    await expect(search).toHaveAttribute("aria-expanded", "true");
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/console\/guide#word-prediction-set$/);
+    await expect(page.locator("#word-prediction-set")).toBeInViewport();
   });
 
   test("guides a first visit and triages a sample in one click", async ({ page }) => {
@@ -562,10 +587,30 @@ test.describe("console at 320 px", () => {
 });
 
 test.describe("console on a phone", () => {
+  test("keeps the command palette's results inside the dialog", async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 740 });
+    await page.goto("/console/runs");
+    await page.getByRole("button", { name: "Search" }).click();
+    const search = page.getByRole("combobox", { name: /Search pages, incidents/ });
+    await search.fill("quorum");
+    const option = page.getByRole("option").first();
+    await expect(option).toBeVisible();
+    // The search box has an intrinsic width that once made the rows wider than the dialog.
+    const dialog = await page.getByRole("dialog").boundingBox();
+    const row = await option.boundingBox();
+    expect(row!.x + row!.width).toBeLessThanOrEqual(dialog!.x + dialog!.width);
+  });
+
   test("meets WCAG 2.2 AA at 375 px", async ({ page }) => {
     // The phone header shows the wordmark where the sidebar was: its name must include "ARIA".
     await page.setViewportSize({ width: 375, height: 800 });
-    for (const path of ["/console", "/console/runs", "/console/guide", "/console/memory"]) {
+    for (const path of [
+      "/console",
+      "/console/runs",
+      "/console/guide",
+      "/console/memory",
+      "/console/evals",
+    ]) {
       await page.goto(path);
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       await expectAccessible(page, `${path} at 375 px`);

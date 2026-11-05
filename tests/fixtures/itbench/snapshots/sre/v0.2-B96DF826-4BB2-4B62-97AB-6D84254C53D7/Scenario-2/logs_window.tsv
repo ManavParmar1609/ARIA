@@ -1,0 +1,5 @@
+ts	service	pod	severity	body
+2025-12-15 17:52:23.613773800	cart	cart-84889c965d-tkxdz	Information	GetCartAsync called with userId=cf744166-d9de-11f0-b9b3-6e252e01a6fc
+2025-12-15 17:52:23.618544100	cart	cart-84889c965d-tkxdz	Information	GetCartAsync called with userId=cef3568c-d9de-11f0-b9b3-6e252e01a6fc
+2025-12-15 17:52:23.711618300	cart	cart-84889c965d-tkxdz	Information	GetCartAsync called with userId=cf744166-d9de-11f0-b9b3-6e252e01a6fc
+2025-12-15 17:52:23.865962000	cart	cart-84889c965d-tkxdz	Information	EmptyCartAsync called with userId=cf744166-d9de-11f0-b9b3-6e252e01a6fc

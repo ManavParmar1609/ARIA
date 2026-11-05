@@ -11,7 +11,8 @@ from aria.contracts import EvidenceKind
 from aria.data.loghub import LOGHUB_DIRS, iter_structured_csv
 from aria.data.scenarios import LinePools, ScenarioBuilder
 from aria.evidence import EvidenceStore
-from aria.parsing.drain import WILDCARD, Drain, drain_for, parameters, template_id
+from aria.parsing.catalog import LEXICON_PATH, load_lexicon
+from aria.parsing.drain import POLARITY, WILDCARD, Drain, drain_for, parameters, template_id
 from aria.parsing.features import FeatureInput, burst_score, compute_features
 from aria.parsing.parser import parse_lines
 from aria.parsing.signals import line_rank, signal_components, signal_templates
@@ -45,6 +46,109 @@ def test_drain_keeps_different_events_apart() -> None:
     a = drain.add("Accepted password for alice from 10.0.0.1")
     b = drain.add("Failed password for alice from 10.0.0.1")
     assert a.id != b.id
+
+
+def test_a_failure_never_merges_into_a_healthy_template() -> None:
+    drain = Drain(sim_threshold=0.4)
+    ok = drain.add("Connection to 10.0.0.1 port 22 established")
+    same = drain.add("Connection to 10.0.0.2 port 22 established")
+    failed = drain.add("Connection to 10.0.0.3 port 22 failed")
+    refused = drain.add("Connection to 10.0.0.4 port 22 REFUSED:")
+    assert ok.id == same.id
+    assert len({ok.id, failed.id, refused.id}) == 3
+    assert "established" in ok.template
+    assert "failed" in failed.template
+    # The same rule holds when only looking a message up.
+    assert drain.match("Connection to 10.0.0.9 port 22 failed") is failed
+
+
+@pytest.mark.parametrize("word", sorted(POLARITY | {"DEBUG", "INFO", "WARN", "ERROR", "FATAL"}))
+def test_masks_never_hide_a_level_or_failure_word(word: str) -> None:
+    """Masks replace values (addresses, ids, numbers), never the words that carry meaning."""
+    template = Drain().add(f"task 0x1f on 10.0.0.7 took 12 ms: {word} after 3 tries").template
+    assert word in template.split()
+
+
+def test_every_keyword_category_names_its_sources() -> None:
+    import yaml
+
+    raw = yaml.safe_load(LEXICON_PATH.read_text(encoding="utf-8"))
+    assert set(raw["sources"]) == set(load_lexicon())
+    assert all(raw["sources"][name] for name in raw["sources"])
+
+
+@pytest.mark.parametrize(
+    ("line", "category"),
+    [
+        ("rpc error: code = DataLoss desc = DATA_LOSS on shard 3", "data_risk"),
+        ("FATAL: sorry, too many clients already (too_many_connections)", "resource"),
+        ("etcdserver: mvcc: database space exceeded", "resource"),
+        ("KeeperErrorCode = ConnectionLoss for /brokers/ids", "unavailable"),
+        ("x509: certificate has expired or is not yet valid", "tls"),
+        ("dial tcp: lookup api.internal: no such host", "dns"),
+        ("vssadmin delete shadows /all /quiet", "recovery_inhibition"),
+        ("duplicate charge detected for order 1192", "payment"),
+        ("replication lag 412s on replica db-2", "freshness"),
+        ("SSO service unavailable: identity provider timed out", "signin"),
+        ("IDS: possible data exfiltration via DNS tunneling from 10.1.4.7", "exfiltration"),
+        ("beacon to C2 server every 60s from host-12", "exfiltration"),
+        ("cmd.exe /c vssadmin.exe delete shadows /all /quiet", "recovery_inhibition"),
+        ("XFS (sdb1): Corruption detected. Shutting down filesystem", "storage_fatal"),
+        (
+            "EXT4-fs error (device sda1): ext4_find_entry: reading directory lblock 0",
+            "storage_fatal",
+        ),
+        ("{1}[Hardware Error]: event severity: fatal", "hardware_fatal"),
+        ("md/raid1:md0: Operation continuing on 1 devices; array degraded", "redundancy_lost"),
+        ("replication broken on replica db-3: no route to primary", "redundancy_lost"),
+        ("backup job missed for db-2 (last run 3 days ago)", "backup"),
+    ],
+)
+def test_version_2_vocabulary_reads_codes_from_outside_loghub(line: str, category: str) -> None:
+    assert load_lexicon()[category].search(line.lower())
+
+
+def test_power_supply_words_need_a_word_of_their_own() -> None:
+    """ "psu" inside a longer word (HealthApp's stepSum, macOS's AppSuggestion) is not hardware."""
+    hardware = load_lexicon()["hardware"]
+    assert hardware.search("psu failure\\ ambient=28")
+    assert not hardware.search("checkinsertstatus stepsum or caloriesum is enough")
+    assert not hardware.search("-[uabestappsuggestionmanager notifybestappchanged:type:]")
+
+
+def test_a_routine_lease_renewer_thread_is_not_degradation() -> None:
+    line = "WARN [LeaseRenewer:hdfs@nn:9000] org.apache.hadoop.ipc.Client: Address change detected"
+    assert not load_lexicon()["degradation"].search(line.lower())
+    assert load_lexicon()["degradation"].search("lease expired for client dfsclient_7")
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "rpc error: code = Canceled desc = context canceled",
+        "grpc: Server.processUnaryRPC failed to write status: CANCELLED",
+        '10.0.0.1 - - [31/Oct/2026:02:00:00 +0000] "GET /api HTTP/1.1" 499 0 "-"',
+        "upstream request aborted: client closed the request",
+        "The operation was canceled. (CancellationToken)",
+        "request cancelled by the client",
+        "StatusCode.CANCELLED: Received RST_STREAM with error code 8",
+    ],
+)
+def test_a_client_that_gave_up_is_a_cancellation(line: str) -> None:
+    assert load_lexicon()["cancellation"].search(line.lower())
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "rpc error: code = DeadlineExceeded desc = context deadline exceeded",  # a timeout
+        "transferred 499 bytes in 2 ms",
+        "cancel the lease renewal for client dfsclient_7",
+        "connection reset by peer",
+    ],
+)
+def test_a_timeout_or_a_number_is_not_a_cancellation(line: str) -> None:
+    assert not load_lexicon()["cancellation"].search(line.lower())
 
 
 def test_match_does_not_learn() -> None:
@@ -166,6 +270,55 @@ def test_warn_component_criticality_reads_warnings_and_falls_back_to_the_default
         [_line("INFO", "ok", "KERNEL")], system="bgl", novel_template_ids=set()
     )
     assert quiet.warn_component_criticality == 0
+
+
+def test_a_line_with_no_level_is_trouble_only_when_the_window_corroborates_it() -> None:
+    """A log with no levels at all reports trouble in words, so its lines count. In a levelled
+    window an unlevelled line reads as INFO (the OpenTelemetry logs data model) unless the window
+    also logs errors, which says something is wrong."""
+    refused = "connection refused by node-7"
+    legacy = compute_features(
+        [_line(None, refused), _line(None, refused), _line(None, "all good")],
+        system="hpc",
+        novel_template_ids=set(),
+    )
+    assert legacy.issue_keyword_hits["unavailable"] == 2
+    assert legacy.issue_events == 3
+    quiet = compute_features(
+        [_line("INFO", "served request"), _line(None, refused)],
+        system="hpc",
+        novel_template_ids=set(),
+    )
+    assert quiet.keyword_hits["unavailable"] == 1
+    assert "unavailable" not in quiet.issue_keyword_hits
+    assert quiet.issue_events == 0
+    corroborated = compute_features(
+        [_line("ERROR", "disk full"), _line(None, refused)],
+        system="hpc",
+        novel_template_ids=set(),
+    )
+    assert corroborated.issue_keyword_hits["unavailable"] == 1
+    assert corroborated.issue_events == 2
+
+
+def test_keyword_patterns_count_a_repeated_line_once() -> None:
+    def at(level: str, message: str, template: str) -> FeatureInput:
+        return FeatureInput(datetime(2026, 1, 1, tzinfo=UTC), "n1", None, level, message, template)
+
+    lines = [
+        *[at("ERROR", "connection refused by 10.0.0.1", "T1")] * 5,
+        at("ERROR", "connection refused by 10.0.0.2", "T1"),
+        at("WARN", "no route to host 10.0.0.3", "T2"),
+        at("INFO", "host unreachable earlier, recovered", "T3"),
+    ]
+    features = compute_features(lines, system="hdfs", novel_template_ids=set())
+    assert features.keyword_hits["unavailable"] == 8
+    assert features.issue_keyword_hits["unavailable"] == 7
+    assert features.keyword_templates["unavailable"] == 3
+    assert features.issue_keyword_templates["unavailable"] == 2
+    assert features.issue_templates == {"T1": 6, "T2": 1}
+    assert features.issue_events == 7
+    assert "crash" not in features.keyword_templates
 
 
 @pytest.fixture(scope="module")

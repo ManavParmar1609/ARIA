@@ -72,7 +72,9 @@ class RunRating:
             known_templates=known_templates(self._builder, scenario.system),
             salt=TRAIN_SALT,
         ).batch
-        pre = self._engine.preliminary(batch.features, evidence=EvidenceStore())
+        pre = self._engine.preliminary(
+            batch.features, system=scenario.system, evidence=EvidenceStore()
+        )
         return decide(
             pre, gate=self._engine.gate, llm_unavailable_reason="sizing a sample"
         ).severity

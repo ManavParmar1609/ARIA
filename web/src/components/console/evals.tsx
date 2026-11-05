@@ -1,9 +1,12 @@
-import { ChevronRightIcon } from "lucide-react";
 import Link from "next/link";
 
-import { RollingNumber } from "@/components/aria/rolling-number";
+import { Term } from "@/components/aria/term";
+import { DOMAIN_CARDS } from "@/components/console/domain-results";
+import { NewDomainCards } from "@/components/console/eval-domains";
+import { Bars, Facts, MethodTable, pct, Section } from "@/components/console/eval-parts";
 import { OnThisPage, type TocItem } from "@/components/console/on-this-page";
 import { PageHeader, SectionHeader } from "@/components/console/states";
+import { TuningBadge } from "@/components/console/tuning-badge";
 import { BaselineChart, RiskCoverageChart } from "@/components/site/charts";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,144 +50,20 @@ import {
   ticketsResult,
   ticketsVerdict,
 } from "@/components/console/test-questions";
-import { EVAL_DOC_URL, type Evaluation, type RealData, type RealLogs } from "@/lib/site-data";
+import {
+  EVAL_DOC_URL,
+  type Evaluation,
+  type RealData,
+  type RealLogs,
+  type SevereMisses,
+  type generalisation,
+} from "@/lib/site-data";
+import type { DomainResult, NewDomains } from "@/lib/domains";
 import { count } from "@/lib/format";
 import { NODE_LABEL } from "@/lib/steps";
 import { systemName } from "@/lib/systems";
+import { ringTuning, type TuningRecord } from "@/lib/tuning";
 import { cn } from "@/lib/utils";
-
-const pct = (x: number | undefined, digits = 1) =>
-  x == null ? "" : `${(x * 100).toFixed(digits)}%`;
-
-function Section({
-  id,
-  title,
-  what,
-  verdict,
-  headline,
-  intro,
-  source,
-  children,
-}: {
-  id: string;
-  title: string;
-  /** One sentence on what was tested. */
-  what: React.ReactNode;
-  /** What the result means for the person on call, in one plain sentence: it opens the result. */
-  verdict?: string;
-  /** The result, beside the strongest simple method. */
-  headline?: React.ReactNode;
-  /** How it was tested, in full: shown with the details. */
-  intro?: React.ReactNode;
-  /** Where the data and its labels come from. */
-  source?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section
-      aria-labelledby={id}
-      className="grid gap-4 rounded-card border border-rule bg-raised p-5 sm:p-6"
-    >
-      <div className="grid max-w-3xl gap-1.5">
-        {/* Clear of the sticky phone header when a link jumps here. */}
-        <h3 id={id} className="scroll-mt-24 text-xl leading-snug lg:scroll-mt-8">
-          {title}
-        </h3>
-        <p className="text-base text-muted-foreground">{what}</p>
-      </div>
-      {verdict || headline ? (
-        <div className="grid max-w-3xl gap-1 rounded-md bg-panel-keylime px-4 py-3">
-          <p className="text-sm font-semibold text-heading">Result</p>
-          {verdict ? (
-            <p className="text-lg leading-relaxed font-medium text-foreground">{verdict}</p>
-          ) : null}
-          {headline ? (
-            <p className="text-base leading-relaxed text-foreground">{headline}</p>
-          ) : null}
-        </div>
-      ) : null}
-      <details className="group">
-        <summary className="inline-flex min-h-9 w-fit cursor-pointer items-center gap-1.5 rounded-sm text-sm font-medium text-heading underline decoration-control underline-offset-4 hover:decoration-heading [&::-webkit-details-marker]:hidden">
-          <ChevronRightIcon
-            aria-hidden
-            className="size-4 transition-transform duration-(--duration-quick) group-open:rotate-90 motion-reduce:transition-none"
-          />
-          {/* Named for its test, so a list of the page's controls tells them apart (RQ-p2). */}
-          <span className="group-open:hidden">
-            Show how it was measured<span className="sr-only">: {title}</span>
-          </span>
-          <span className="hidden group-open:inline">
-            Hide how it was measured<span className="sr-only">: {title}</span>
-          </span>
-        </summary>
-        <div className="grid gap-5 pt-5">
-          {intro ? <p className="max-w-prose text-sm text-muted-foreground">{intro}</p> : null}
-          {children}
-          {source ? (
-            <p className="max-w-prose text-xs leading-5 text-faint">Source: {source}</p>
-          ) : null}
-        </div>
-      </details>
-    </section>
-  );
-}
-
-/**
- * A row of figures, each over its label. A figure never wraps ("3 of 5,186" stays on one line), so
- * the row wraps instead: two to a line on a phone, three on wider screens, and a long figure takes
- * the width it needs, alone on its line if it must. Capped at three across, so labels stay short.
- */
-function Facts({ items }: { items: [string, string][] }) {
-  return (
-    <dl className="flex max-w-3xl flex-wrap gap-6">
-      {items.map(([label, value]) => (
-        <div
-          key={label}
-          className="grid flex-[1_1_6.5rem] content-start gap-2 border-t border-rule pt-3 sm:basis-[11.5rem]"
-        >
-          <dt className="order-2 text-sm text-muted-foreground">{label}</dt>
-          <dd className="stat order-1 text-[1.75rem] whitespace-nowrap">
-            <RollingNumber value={value} />
-          </dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-/** Horizontal bars with the value written at the end; real text, no script. */
-function Bars({
-  rows,
-  max = 1,
-  format = (v: number) => pct(v),
-  label,
-}: {
-  rows: [string, number][];
-  max?: number;
-  format?: (v: number) => string;
-  label: string;
-}) {
-  return (
-    <ul aria-label={label} className="grid gap-1.5">
-      {rows.map(([name, value]) => (
-        <li
-          key={name}
-          className="grid grid-cols-[minmax(0,7rem)_1fr_3.5rem] items-center gap-3 text-sm sm:grid-cols-[minmax(7rem,11rem)_1fr_4rem]"
-        >
-          {/* Labels wrap rather than cut: "First assignment group" must stay readable. */}
-          <span className="text-pretty text-muted-foreground">{name}</span>
-          <span className="h-2.5 rounded-xs bg-sunken" aria-hidden>
-            <span
-              className="block h-2.5 rounded-xs bg-primary/80"
-              style={{ width: `${Math.min(100, (value / max) * 100)}%` }}
-            />
-          </span>
-          <span className="tabular text-right">{format(value)}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
 
 function Confusion({ matrix }: { matrix: number[][] }) {
   return (
@@ -242,7 +121,7 @@ function Confusion({ matrix }: { matrix: number[][] }) {
   );
 }
 
-function RealSection({ real }: { real: RealLogs }) {
+function RealSection({ real, tuning }: { real: RealLogs; tuning?: TuningRecord | null }) {
   const methods = [
     ["ARIA, following each block's steps", real.lifecycle],
     ...real.detectors.map((d) => [d.label, d] as const),
@@ -254,6 +133,7 @@ function RealSection({ real }: { real: RealLogs }) {
       id="ev-real"
       title="A Hadoop file system's blocks, judged by experts"
       what="Can ARIA find the storage blocks that failed, from the log lines alone?"
+      tuning={tuning?.["real.hdfs"]}
       verdict={hdfsVerdict(real)}
       headline={hdfsResult(real)}
       source={real.citation}
@@ -428,49 +308,19 @@ const SOURCES: Record<string, string> = {
   jailbreaks: "Jailbreaks in the wild",
 };
 
-function MethodTable({
-  label,
-  head,
-  rows,
-}: {
-  label: string;
-  head: string[];
-  rows: { name: string; cells: string[]; strong?: boolean }[];
-}) {
-  return (
-    <Table aria-label={label}>
-      <TableHeader>
-        <TableRow>
-          {head.map((h, i) => (
-            <TableHead key={h} className={i > 0 ? "text-right" : undefined}>
-              {h}
-            </TableHead>
-          ))}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((row) => (
-          <TableRow key={row.name} className={cn(row.strong && "bg-highlight/40")}>
-            <TableHead scope="row" className={cn(row.strong && "text-foreground")}>
-              {row.name}
-            </TableHead>
-            {row.cells.map((cell, i) => (
-              <TableCell key={i} className="tabular text-right">
-                {cell}
-              </TableCell>
-            ))}
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
-}
-
 /**
  * The other real-data evaluations: BGL windows, Hadoop jobs, OpenStack runs, tickets, GitLab.com's
  * incidents, cloud post-mortems and injection benchmarks.
  */
-function MoreRealSections({ more, data }: { more: RealData; data: Evaluation }) {
+function MoreRealSections({
+  more,
+  data,
+  tuning,
+}: {
+  more: RealData;
+  data: Evaluation;
+  tuning?: TuningRecord | null;
+}) {
   const { bgl, builds, hadoop, openstack, tickets, gitlab, postmortems, injection } = more;
   const n = (x: number) => x.toLocaleString("en");
   const sev = (m: typeof bgl.aria) => [
@@ -508,6 +358,7 @@ function MoreRealSections({ more, data }: { more: RealData; data: Evaluation }) 
         id="ev-bgl"
         title="A supercomputer's own alarm tags"
         what="Does ARIA rate each stretch of BlueGene/L's whole log as seriously as its administrators' alert tags do?"
+        tuning={tuning?.["real.bgl"]}
         verdict={bglVerdict(more.bgl)}
         headline={bglResult(more.bgl)}
         source={bgl.citation}
@@ -566,6 +417,7 @@ function MoreRealSections({ more, data }: { more: RealData; data: Evaluation }) 
         id="ev-hadoop"
         title="Hadoop jobs with injected failures"
         what="Can ARIA tell the jobs that failed from the healthy ones, and say how they failed?"
+        tuning={tuning?.["real.hadoop"]}
         verdict={hadoopVerdict(more)}
         headline={hadoopResult(more)}
         source={hadoop.citation}
@@ -613,6 +465,7 @@ function MoreRealSections({ more, data }: { more: RealData; data: Evaluation }) 
         id="ev-openstack"
         title="OpenStack runs with injected bugs"
         what="Can ARIA tell the runs a bug broke, including the ones that failed silently?"
+        tuning={tuning?.["real.openstack"]}
         verdict={openstackVerdict(more)}
         headline={openstackResult(more)}
         source={openstack.citation}
@@ -684,6 +537,7 @@ function MoreRealSections({ more, data }: { more: RealData; data: Evaluation }) 
         id="ev-builds"
         title="Failed CI builds"
         what="Do the lines ARIA keeps as evidence include the reason a build failed?"
+        tuning={tuning?.["real.logchunks"]}
         verdict={buildsVerdict(more)}
         headline={buildsResult(more)}
         intro={
@@ -713,6 +567,7 @@ function MoreRealSections({ more, data }: { more: RealData; data: Evaluation }) 
         id="ev-tickets"
         title="A service desk's tickets"
         what="Can ARIA set a ticket's priority when it opens, and spot the ones that will miss their deadline?"
+        tuning={tuning?.["real.uci_tickets"]}
         verdict={ticketsVerdict(more)}
         headline={ticketsResult(more)}
         source={tickets.citation}
@@ -769,6 +624,7 @@ function MoreRealSections({ more, data }: { more: RealData; data: Evaluation }) 
         id="ev-gitlab"
         title="GitLab.com's incidents"
         what="When an incident comes in, does ARIA find past ones on the same service, or with the same cause?"
+        tuning={tuning?.["real.gitlab"]}
         verdict={gitlabVerdict(more)}
         headline={gitlabResult(more)}
         source={gitlab.citation}
@@ -819,6 +675,7 @@ function MoreRealSections({ more, data }: { more: RealData; data: Evaluation }) 
         id="ev-postmortems"
         title="Three clouds' post-mortems"
         what="Does ARIA find past post-mortems with the same root cause, or the same fix?"
+        tuning={tuning?.["real.postmortems"]}
         verdict={postmortemsVerdict(more)}
         headline={postmortemsResult(more)}
         source={postmortems.citation}
@@ -867,6 +724,7 @@ function MoreRealSections({ more, data }: { more: RealData; data: Evaluation }) 
         id="ev-injection"
         title="Public prompt-injection attacks"
         what="Does ARIA set aside log lines written to talk it out of an incident, when someone else wrote them?"
+        tuning={tuning?.injection_benchmarks}
         verdict={injectionVerdict(more)}
         headline={injectionResult(data, more)}
         intro={
@@ -906,14 +764,146 @@ function MoreRealSections({ more, data }: { more: RealData; data: Evaluation }) 
   );
 }
 
+/** "3 of 43 (at most 16%)": the honest form of a severe-miss count. */
+function missed(severe: SevereMisses): string {
+  if (!severe.severe) return "no serious windows";
+  return `${severe.misses} of ${severe.severe} (at most ${pct(severe.upper95, 0)})`;
+}
+
+/** Ring B: systems the model never saw, each held out in turn and the model fitted again. */
+function UnseenSection({ unseen }: { unseen: NonNullable<ReturnType<typeof generalisation>> }) {
+  const s = unseen.system;
+  const rules = s.methods.rules_only;
+  const verdict =
+    `On a system its model never saw, ARIA rated ${pct(s.accuracy, 0)} of windows right and ` +
+    `missed ${s.severe.misses} of ${s.severe.severe} serious ones: at most ` +
+    `${pct(s.severe.upper95, 0)}, with 95% confidence.`;
+  return (
+    <Section
+      id="ev-unseen-systems"
+      title="On systems it has never seen"
+      what="Each system held out in turn: the model is fitted again without it, then rates that system's windows. The honest estimate for a new system."
+      verdict={verdict}
+      headline={
+        rules
+          ? `Rules alone, on the same windows: ${pct(rules.accuracy, 0)} right, ${missed(rules.severe)} serious windows missed.`
+          : undefined
+      }
+      intro={
+        <>
+          The severity test on built samples uses fresh windows of the systems the model was trained
+          on. Here every window is rated once, by a model fitted (with its calibration and its short
+          lists) on the other systems only. With few serious windows, the honest claim is &ldquo;at
+          most&rdquo;, so serious misses come with an exact upper bound.
+        </>
+      }
+    >
+      <Facts
+        items={[
+          ["Right level (accuracy)", pct(s.accuracy)],
+          ["95% interval", `${pct(s.accuracyCi[0])} to ${pct(s.accuracyCi[1])}`],
+          ["Serious rated minor", missed(s.severe)],
+          ["Asked a person", pct(s.deferred)],
+          ["Rated too high", pct(s.overTriage)],
+          ["Short list held the label", `${pct(s.coverage)} (target ${pct(s.target, 0)})`],
+        ]}
+      />
+      <div
+        className="overflow-x-auto"
+        tabIndex={0}
+        role="region"
+        aria-label="Each system held out in turn"
+      >
+        <table className="w-full min-w-[32rem] text-left text-sm">
+          <caption className="sr-only">Each system held out in turn</caption>
+          <thead className="text-muted-foreground">
+            <tr className="border-b border-rule">
+              <th scope="col" className="py-2 pr-4 font-medium">
+                System held out
+              </th>
+              <th scope="col" className="py-2 pr-4 text-right font-medium">
+                Windows
+              </th>
+              <th scope="col" className="py-2 pr-4 text-right font-medium">
+                Right
+              </th>
+              <th scope="col" className="py-2 pr-4 font-medium">
+                Serious rated minor
+              </th>
+              <th scope="col" className="py-2 text-right font-medium">
+                Asked a person
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {s.byGroup.map((g) => (
+              <tr key={g.name} className="border-b border-rule last:border-0">
+                <th scope="row" className="py-2 pr-4 font-medium text-foreground">
+                  {systemName(g.name)}
+                </th>
+                <td className="tabular py-2 pr-4 text-right">{g.n}</td>
+                <td className="tabular py-2 pr-4 text-right">{pct(g.accuracy, 0)}</td>
+                <td className="tabular py-2 pr-4">{missed(g.severe)}</td>
+                <td className="tabular py-2 text-right">{pct(g.deferred, 0)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {unseen.mode ? (
+        <p className="max-w-prose text-sm text-muted-foreground">
+          Holding out one kind of failure at a time instead ({unseen.mode.groups} kinds), ARIA rated{" "}
+          {pct(unseen.mode.accuracy, 0)} of windows right and missed {missed(unseen.mode.severe)}{" "}
+          serious ones.
+        </p>
+      ) : null}
+    </Section>
+  );
+}
+
+/** The tests on real data in page order: each card, its name in the contents, and its suite in the
+ * tuning record. */
+const REAL_TESTS = [
+  { id: "ev-real", label: "Hadoop file system blocks", suite: "real.hdfs" },
+  { id: "ev-bgl", label: "BlueGene/L alarm tags", suite: "real.bgl" },
+  { id: "ev-hadoop", label: "Hadoop jobs", suite: "real.hadoop" },
+  { id: "ev-openstack", label: "OpenStack bugs", suite: "real.openstack" },
+  { id: "ev-builds", label: "Failed CI builds", suite: "real.logchunks" },
+  { id: "ev-tickets", label: "Service desk tickets", suite: "real.uci_tickets" },
+  { id: "ev-gitlab", label: "GitLab.com incidents", suite: "real.gitlab" },
+  { id: "ev-postmortems", label: "Cloud post-mortems", suite: "real.postmortems" },
+  { id: "ev-injection", label: "Prompt-injection attacks", suite: "injection_benchmarks" },
+];
+
+/**
+ * The badge beside a group of tests' heading, from the tuning record: the least clean of the
+ * group's tests (lib/tuning.ts). Nothing when the record has none of them.
+ */
+function ringBadge(tuning: TuningRecord | null | undefined, ring: string, title: string) {
+  const names = Object.fromEntries([
+    ...REAL_TESTS.map((t) => [t.suite, t.label]),
+    ...Object.entries(DOMAIN_CARDS).map(([key, card]) => [`domains.${key}`, card.label]),
+  ]);
+  const summary = tuning ? ringTuning(tuning, ring, names) : null;
+  return summary ? <TuningBadge id={`ring-${ring}`} tuning={summary} context={title} /> : null;
+}
+
 export function Evals({
   data,
   real,
   more,
+  unseen,
+  domains,
+  tuning,
 }: {
   data: Evaluation;
   real?: RealLogs;
   more?: RealData;
+  unseen?: ReturnType<typeof generalisation>;
+  /** The tests on data from fields ARIA was never built for: none until `make eval` runs them. */
+  domains?: NewDomains | null;
+  /** What each test was tuned on: no badges while the results have no record. */
+  tuning?: TuningRecord | null;
 }) {
   const s = data.severity;
   const p = data.pipeline;
@@ -922,7 +912,7 @@ export function Evals({
   const stages = Object.entries(p.stageP50)
     .map(([step, ms]) => [NODE_LABEL[step] ?? step, ms] as [string, number])
     .sort((a, b) => b[1] - a[1]);
-  const toc = contents(Boolean(real), Boolean(more));
+  const toc = contents(Boolean(real), Boolean(more), Boolean(unseen), domains?.results ?? []);
   return (
     <div className="grid gap-8">
       <PageHeader
@@ -930,8 +920,13 @@ export function Evals({
         description={
           <>
             How ARIA was tested on public, labelled data, beside simpler methods it should beat,
-            including where they win. Measured on {data.createdAt.slice(0, 10)}; anyone can run the
-            tests again from the source code.{" "}
+            including where they win. The tests sit in{" "}
+            <Term name="rings" instance="tests">
+              three rings
+            </Term>
+            , in the order below: systems its model never saw, real data with its owners&apos;
+            labels, and fresh samples of the systems it learned from. Measured on{" "}
+            {data.createdAt.slice(0, 10)}; anyone can run the tests again from the source code.{" "}
             <a
               href={EVAL_DOC_URL}
               className="text-foreground underline decoration-control underline-offset-4"
@@ -957,15 +952,29 @@ export function Evals({
             </section>
           ) : null}
 
+          {unseen ? (
+            <section aria-labelledby="ev-unseen" className="grid gap-6">
+              <SectionHeader
+                id="ev-unseen"
+                title="New systems"
+                description="How ARIA does on systems and failures its model never saw."
+                badge={ringBadge(tuning, "B", "New systems")}
+              />
+              <UnseenSection unseen={unseen} />
+            </section>
+          ) : null}
+
           <section aria-labelledby="ev-real-data" className="grid gap-6">
             <SectionHeader
               id="ev-real-data"
               title="Tests on real data"
               description="Logs, jobs, tickets, incidents and attacks, judged against the labels their owners gave them."
+              badge={ringBadge(tuning, "C", "Tests on real data")}
             />
             <div className="grid gap-4">
-              {real ? <RealSection real={real} /> : null}
-              {more ? <MoreRealSections more={more} data={data} /> : null}
+              {real ? <RealSection real={real} tuning={tuning} /> : null}
+              {more ? <MoreRealSections more={more} data={data} tuning={tuning} /> : null}
+              {domains ? <NewDomainCards domains={domains} tuning={tuning} /> : null}
             </div>
           </section>
 
@@ -974,6 +983,7 @@ export function Evals({
               id="ev-built"
               title="Tests on built samples"
               description="Real log lines from public collections, arranged into incidents. They show how ARIA behaves, not its accuracy on production incidents."
+              badge={ringBadge(tuning, "A", "Tests on built samples")}
             />
             <div className="grid gap-4">
               <Section
@@ -1290,21 +1300,20 @@ export function Evals({
 }
 
 /** The page's sections and the tests in each, for its "On this page" list. */
-function contents(real: boolean, more: boolean): TocItem[] {
+export function contents(
+  real: boolean,
+  more: boolean,
+  unseen: boolean,
+  domains: DomainResult[] = [],
+): TocItem[] {
+  // The HDFS card shows with the real-log results; the rest with the other real-data results,
+  // then a card for each new-domain suite with results.
   const realTests = [
-    ...(real ? [{ id: "ev-real", label: "Hadoop file system blocks" }] : []),
-    ...(more
-      ? [
-          { id: "ev-bgl", label: "BlueGene/L alarm tags" },
-          { id: "ev-hadoop", label: "Hadoop jobs" },
-          { id: "ev-openstack", label: "OpenStack bugs" },
-          { id: "ev-builds", label: "Failed CI builds" },
-          { id: "ev-tickets", label: "Service desk tickets" },
-          { id: "ev-gitlab", label: "GitLab.com incidents" },
-          { id: "ev-postmortems", label: "Cloud post-mortems" },
-          { id: "ev-injection", label: "Prompt-injection attacks" },
-        ]
-      : []),
+    ...REAL_TESTS.filter((t) => (t.id === "ev-real" ? real : more)).map(({ id, label }) => ({
+      id,
+      label,
+    })),
+    ...domains.map((d) => ({ id: DOMAIN_CARDS[d.key].id, label: DOMAIN_CARDS[d.key].label })),
   ];
   return [
     ...(more
@@ -1318,6 +1327,15 @@ function contents(real: boolean, more: boolean): TocItem[] {
               { id: "q-memory", label: "Does it find the right past incident?" },
               { id: "q-limits", label: "Where does it fall short?" },
             ],
+          },
+        ]
+      : []),
+    ...(unseen
+      ? [
+          {
+            id: "ev-unseen",
+            label: "New systems",
+            children: [{ id: "ev-unseen-systems", label: "On systems it has never seen" }],
           },
         ]
       : []),

@@ -14,6 +14,7 @@ from fastapi import Depends, Header, HTTPException, status
 
 from aria.api.state import AppState, app_state
 from aria.contracts.inputs import RunOptions
+from aria.graph.workflow import expected_llm_calls
 from aria.llm.visitor import VisitorKey, parse_key
 
 
@@ -96,10 +97,20 @@ def may_use_model(
 ) -> bool:
     """Whether this run or answer may use a model: always with the visitor's own key; with this
     server's keys while the visitor's daily allowance lasts (``llm.shared``); past it, the work
-    runs offline. Work that wants no model, or a server with none, uses none of the allowance."""
+    runs offline. Work that wants no model, or a server with none, uses none of the allowance.
+
+    While the shared models themselves are at their limits (``llm.quota``) and runs reserve
+    their calls before they start (``reserve_runs``), no share is spent either: the work is let
+    through as asked, and the runner, finding no room to reserve, runs it offline and says why
+    and until when. With reservations off, nothing else would keep a visitor past their share
+    off the server's key, so the allowance decides as usual."""
     if not wanted or visitor is not None:
         return wanted
-    if not state.allowance.limited or not state.services.router.has_real_llm("reporter"):
+    router = state.services.router
+    if not state.allowance.limited or not router.has_real_llm("reporter"):
+        return True
+    config = state.services.config
+    if config.llm.quota.reserve_runs and router.run_back_at(expected_llm_calls(config)) is not None:
         return True
     return state.allowance.take(visitor_tag or "all")
 

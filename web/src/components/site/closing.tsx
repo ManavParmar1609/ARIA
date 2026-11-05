@@ -55,7 +55,9 @@ export function Closing() {
               <CopyButton text={QUICKSTART.join("\n")} label="the commands" />
             </div>
             <pre className="px-5 pt-1 pb-4 text-left text-xs leading-relaxed wrap-anywhere whitespace-pre-wrap text-foreground">
-              <code>
+              {/* Commands a visitor copies by hand stay at the 14 px floor: without this the code
+                  element's own "a shade smaller" rule takes them below it. */}
+              <code className="text-xs">
                 {QUICKSTART.map((command) => (
                   <span key={command} className="block pl-[2ch] -indent-[2ch]">
                     <span aria-hidden className="text-faint select-none">

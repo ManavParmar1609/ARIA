@@ -68,6 +68,9 @@ export interface RuleHit {
   evidence_ids: string[];
 }
 
+export type NoveltyReason =
+  "outside_training" | "unusual_mix" | "new_patterns" | "empty_set" | "every_level" | "new_system";
+
 export interface SeverityAssessment {
   severity: Severity;
   decided_by: DecidedBy;
@@ -79,6 +82,12 @@ export interface SeverityAssessment {
   /** No class cleared the conformal threshold; the set holds the most likely class as a stand-in. */
   set_empty?: boolean;
   alpha: number;
+  /** The miss rate the short list allows per level; serious levels get a tighter one. */
+  alphas?: Partial<Record<Severity, number>>;
+  /** Which calibration made the list: per level, the rules alone, or one bar for every level. */
+  calibration?: "familiar" | "rules" | "single";
+  /** Why a person should confirm the level even if the model was confident. */
+  novelty?: NoveltyReason[];
   floor: Severity | null;
   confidence: number;
   auditable: boolean;
@@ -262,6 +271,10 @@ export interface OutboundAction {
   status: "proposed" | "approved" | "rejected" | "sent" | "failed" | "skipped";
   requires_approval: boolean;
   evidence_ids: string[];
+  /** What was taken out of the draft before review: links to hosts off the allow-list and
+   * recipients nobody configured, each in words ("link to evil[.]example"). Missing from runs
+   * made before the API sent it. */
+  removed?: string[];
 }
 
 export interface Plan {
@@ -323,13 +336,16 @@ export interface ReviewPrompt {
   report_id: string;
   title: string;
   severity: Severity;
+  /** The level in words: bare for one possible level, else the levels ARIA is torn between and
+   * the one it plans for. Missing from reviews paused before the API sent it. */
+  severity_text?: string;
   decided_by: DecidedBy;
   confidence: number;
   needs_review: boolean;
   prediction_set: Severity[];
   valid: boolean;
   generated_by: "template" | "llm";
-  actions: Pick<OutboundAction, "action_id" | "kind" | "audience" | "title">[];
+  actions: Pick<OutboundAction, "action_id" | "kind" | "audience" | "title" | "removed">[];
   decisions: ("approve" | "edit" | "reject")[];
   error?: string | null;
 }

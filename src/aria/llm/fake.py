@@ -2,7 +2,10 @@
 
 It answers from the same ``<aria_context>`` facts a real model receives, so tests, evals and
 the offline demo exercise the real prompt contract, validation and repair paths. Tests can also
-queue raw outputs (including malformed ones) or errors per task to drive failure paths.
+queue raw outputs (including malformed ones), replies that end in a refusal or at the token
+limit (``FakeReply``), or errors, per task, to drive failure paths. Those replies stop the way a
+real provider's do: a refusal raises ``ModelRefusalError`` and structured output cut short
+raises ``OutputTruncatedError``.
 
 Its outputs are never presented as a real model's: results carry provider ``fake``.
 """
@@ -13,15 +16,42 @@ import json
 import re
 from collections import defaultdict, deque
 from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from aria.config import ProviderKind
 from aria.contracts.base import Severity
-from aria.llm.base import Message, ProviderError, TokenCallback, Usage, estimate_tokens
-from aria.llm.prompts import parse_context, parse_evidence_block, parse_untrusted_data
+from aria.llm.base import (
+    Message,
+    ProviderError,
+    TokenCallback,
+    Usage,
+    check_stop,
+    estimate_tokens,
+    finish_reason,
+)
+from aria.llm.prompts import (
+    parse_context,
+    parse_evidence_block,
+    parse_untrusted_data,
+    strip_datamarks,
+)
 
 Responder = Callable[[dict[str, Any]], dict[str, Any]]
 _WORD = re.compile(r"[a-z0-9_]{3,}")
+
+
+@dataclass(frozen=True)
+class FakeReply:
+    """A scripted reply and how it ended: ``finish_reason`` as a provider words it ("stop",
+    "length", "max_tokens", "content_filter", "refusal") and any ``refusal`` text."""
+
+    text: str
+    finish_reason: str | None = None
+    refusal: str = ""
+
+
+Scripted = str | FakeReply | BaseException
 
 
 def _ids(ctx: dict[str, Any], *kinds: str) -> list[str]:
@@ -245,18 +275,18 @@ class FakeProvider:
         name: str = "fake",
         *,
         model: str = "aria-fake-1",
-        script: dict[str, Sequence[str | BaseException]] | None = None,
+        script: dict[str, Sequence[Scripted]] | None = None,
         responders: dict[str, Responder] | None = None,
     ) -> None:
         self.name = name
         self.model = model
-        self._script: dict[str, deque[str | BaseException]] = defaultdict(deque)
+        self._script: dict[str, deque[Scripted]] = defaultdict(deque)
         for task, outputs in (script or {}).items():
             self._script[task].extend(outputs)
         self.responders = {**RESPONDERS, **(responders or {})}
         self.calls: list[dict[str, Any]] = []
 
-    def queue(self, task: str, *outputs: str | BaseException) -> None:
+    def queue(self, task: str, *outputs: Scripted) -> None:
         self._script[task].extend(outputs)
 
     async def chat(
@@ -275,11 +305,13 @@ class FakeProvider:
             {"task": schema_name, "messages": list(messages), "model": model or self.model}
         )
         queued = self._script.get(schema_name)
+        stop = FakeReply("")
         if queued:
             item = queued.popleft()
             if isinstance(item, BaseException):
                 raise item
-            text = item
+            stop = item if isinstance(item, FakeReply) else FakeReply(item)
+            text = stop.text
         elif json_schema is None:
             text = "ARIA offline model: no free-text responder is configured."
         else:
@@ -287,8 +319,11 @@ class FakeProvider:
             if responder is None:
                 msg = f"fake provider has no responder for task {schema_name!r}"
                 raise ProviderError(msg, status=400)
-            ctx = {**parse_context(messages), **parse_untrusted_data(messages)}
-            ctx["_evidence_block"] = parse_evidence_block(messages)
+            # Datamarked prompts are read the way the rule tells a model to read them: each
+            # marker as the space it stands for. What was sent is kept in ``calls`` as sent.
+            plain = [Message(m.role, strip_datamarks(m.content)) for m in messages]
+            ctx = {**parse_context(plain), **parse_untrusted_data(plain)}
+            ctx["_evidence_block"] = parse_evidence_block(plain)
             text = json.dumps(responder(ctx), ensure_ascii=False)
         if on_token is not None:
             for piece in re.findall(r"\S+\s*", text):
@@ -298,5 +333,9 @@ class FakeProvider:
             output_tokens=estimate_tokens(text),
             cost_usd=0.0,
             estimated=True,
+            finish_reason=finish_reason(stop.finish_reason),
+            response_id=f"{self.name}-{len(self.calls)}",
+            response_model=model or self.model,
         )
+        check_stop(self.name, usage, structured=json_schema is not None, refusal=stop.refusal)
         return text, usage

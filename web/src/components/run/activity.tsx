@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ActivityIcon,
   BotIcon,
   CircleCheckIcon,
   FlagIcon,
@@ -20,11 +21,19 @@ import { useMemo } from "react";
 
 import type { RunEvent } from "@/lib/api/types";
 import { capitalise, decisionWords, duration, reviewerName } from "@/lib/format";
+import { triggerLabel } from "@/lib/systems";
 import { cn } from "@/lib/utils";
 
 import { NODE_LABEL } from "@/lib/steps";
 
 import { Citations } from "./evidence";
+
+// How a run ended, in the words the rest of the console uses ("Discarded", never "rejected").
+const ENDED: Record<string, string> = {
+  published: "published",
+  rejected: "discarded",
+  failed: "failed",
+};
 
 type StepState = "pending" | "running" | "done" | "paused" | "failed";
 
@@ -84,7 +93,7 @@ function rows(events: RunEvent[], { offline = false, titles = {} }: RowOptions =
           t,
           icon: PlayIcon,
           title: "Run started",
-          detail: p.trigger ? `trigger: ${String(p.trigger)}` : undefined,
+          detail: p.trigger ? capitalise(triggerLabel(String(p.trigger))) : undefined,
         });
         break;
       case "node_finished": {
@@ -95,7 +104,8 @@ function rows(events: RunEvent[], { offline = false, titles = {} }: RowOptions =
           icon: CircleCheckIcon,
           tone: "good",
           title: `${label} finished`,
-          detail: notes,
+          // The severity step says its level in words: with several possible, which ones.
+          detail: typeof p.summary === "string" ? p.summary : notes,
           node: e.node,
         });
         break;
@@ -138,6 +148,17 @@ function rows(events: RunEvent[], { offline = false, titles = {} }: RowOptions =
           icon: ShieldAlertIcon,
           tone: "warn",
           title: `Guardrail: ${Number(p.quarantined ?? 0)} line${Number(p.quarantined) === 1 ? "" : "s"} quarantined as possible prompt injection`,
+          node: e.node,
+        });
+        break;
+      case "followup":
+        out.push({
+          key,
+          t,
+          icon: ActivityIcon,
+          tone: "warn",
+          title: "The log scan saw this system burst again while the incident was open",
+          detail: `Burst score ${Number(p.burst_score ?? 0)}, ${Number(p.lines ?? 0).toLocaleString("en")} lines${p.source ? ` from ${String(p.source)}` : ""}. ARIA keeps its proposed level; review it with the new burst in mind.`,
           node: e.node,
         });
         break;
@@ -205,7 +226,7 @@ function rows(events: RunEvent[], { offline = false, titles = {} }: RowOptions =
           t,
           icon: FlagIcon,
           tone: p.status === "failed" ? "bad" : "good",
-          title: `Run finished: ${String(p.status)}`,
+          title: `Run finished: ${ENDED[String(p.status)] ?? String(p.status)}`,
         });
         break;
       default:

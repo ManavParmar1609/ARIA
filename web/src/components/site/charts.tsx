@@ -15,9 +15,9 @@ export function BaselineChart({
   className?: string;
 }) {
   const row =
-    "grid grid-cols-[minmax(0,1fr)_3.5rem] items-center gap-x-3 gap-y-1 sm:grid-cols-[minmax(10rem,15rem)_minmax(0,1fr)_3.5rem]";
+    "grid grid-cols-[minmax(0,1fr)_4rem] items-center gap-x-3 gap-y-1 @xl:grid-cols-[minmax(10rem,15rem)_minmax(0,1fr)_4rem]";
   return (
-    <figure className={cn("grid gap-3", className)}>
+    <figure className={cn("@container grid gap-3", className)}>
       <div
         role="table"
         aria-label="Severity accuracy by method, with 95% confidence intervals"
@@ -30,7 +30,7 @@ export function BaselineChart({
           <span
             role="columnheader"
             aria-hidden
-            className="@container relative hidden h-4 text-xs text-faint sm:block"
+            className="@container relative hidden h-4 text-xs text-faint @xl:block"
           >
             {[0, 25, 50, 75, 100].map((tick) => (
               <span
@@ -50,7 +50,7 @@ export function BaselineChart({
           </span>
           <span
             role="columnheader"
-            className="col-start-2 text-right text-xs text-faint sm:col-start-3"
+            className="col-start-2 text-right text-xs text-faint @xl:col-start-3"
           >
             Accuracy
           </span>
@@ -71,7 +71,7 @@ export function BaselineChart({
               <span
                 role="cell"
                 aria-label={`95% interval ${pct(m.low)} to ${pct(m.high)}`}
-                className="relative col-span-2 row-start-2 h-5 sm:col-span-1 sm:col-start-2 sm:row-start-1"
+                className="relative col-span-2 row-start-2 h-5 @xl:col-span-1 @xl:col-start-2 @xl:row-start-1"
               >
                 {[25, 50, 75].map((tick) => (
                   <span
@@ -101,7 +101,7 @@ export function BaselineChart({
               <span
                 role="cell"
                 className={cn(
-                  "tabular col-start-2 row-start-1 text-right text-sm sm:col-start-3",
+                  "tabular col-start-2 row-start-1 text-right text-sm @xl:col-start-3",
                   isAria ? "font-medium" : "text-muted-foreground",
                 )}
               >

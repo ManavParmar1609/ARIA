@@ -51,6 +51,26 @@ class Metrics:
         self.reviews = Counter(
             "aria_reviews", "Review decisions", ["decision"], registry=self.registry
         )
+        # Drift signals that need no labels: what ARIA decides, how wide its sets are, which
+        # calibration it used and why it asked a person. A shift in any of them is worth a look.
+        self.severity = Counter(
+            "aria_severity_decisions",
+            "Severity decisions by level, who decided and the calibration used",
+            ["level", "decided_by", "calibration"],
+            registry=self.registry,
+        )
+        self.set_size = Histogram(
+            "aria_severity_set_size",
+            "How many levels the prediction set kept",
+            buckets=(1, 2, 3, 4),
+            registry=self.registry,
+        )
+        self.review_reasons = Counter(
+            "aria_severity_review_reasons",
+            "Why a person was asked to confirm a severity",
+            ["reason"],
+            registry=self.registry,
+        )
         self.time_to_review = Histogram(
             "aria_time_to_review_seconds",
             "From run start until the report is ready for review",
@@ -67,6 +87,18 @@ class Metrics:
             self.finished.labels(str(event.payload.get("status", "unknown"))).inc()
         elif event.kind == "tool_call" and event.payload.get("phase") != "result":
             self.tool_calls.labels(str(event.payload.get("tool", "unknown"))).inc()
+        elif event.kind == "node_finished" and event.node == "severity":
+            payload = event.payload
+            self.severity.labels(
+                str(payload.get("severity", "unknown")),
+                str(payload.get("decided_by", "unknown")),
+                str(payload.get("calibration") or "familiar"),
+            ).inc()
+            levels = payload.get("prediction_set")
+            if isinstance(levels, list) and levels:
+                self.set_size.observe(len(levels))
+            for reason in payload.get("novelty") or []:
+                self.review_reasons.labels(str(reason)).inc()
         elif event.kind == "review":
             self.reviews.labels(str(event.payload.get("decision", "unknown"))).inc()
         elif event.kind == "budget" and "latency_ms" in event.payload:

@@ -50,7 +50,7 @@ export function TriageReplay({ data }: { data: Replay }) {
   useWideMotion(root, ({ gsap }) => {
     const show = { autoAlpha: 1, x: 0, y: 0 };
     gsap.set("[data-tag] [data-stamp]", { autoAlpha: 0 });
-    gsap
+    const entrance = gsap
       .timeline({
         defaults: { ease: "power3.out" },
         // Starts as the example enters the screen and is done in about a second and a half, so
@@ -99,6 +99,14 @@ export function TriageReplay({ data }: { data: Replay }) {
         repeat: 5,
         yoyo: true,
       });
+    // Keyboard focus inside the example (a citation reached with Tab) shows the whole run at
+    // once: a claim still fading in would take the focus while invisible (WCAG 2.4.7).
+    const finish = () => {
+      entrance.progress(1);
+    };
+    const el = root.current;
+    el?.addEventListener("focusin", finish);
+    return () => el?.removeEventListener("focusin", finish);
   });
 
   const chip = (id: string) => {

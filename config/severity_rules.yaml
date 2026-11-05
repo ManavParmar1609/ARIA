@@ -12,13 +12,29 @@
 #                Noise (SEV4) rules can outvote SEV3-level signals only.
 # effect: floor  the final severity can never be less severe than `severity`.
 #
+# dimensions     the kinds of impact a SEV1 rule shows: availability, integrity, security, spread,
+#                criticality, persistence or alerting. The rules call SEV1 only when the SEV1
+#                rules that fired name at least `sev1_dimensions` of them between them, as an
+#                impact-by-urgency matrix would; otherwise their weight counts towards SEV2. A
+#                rule that decides SEV1 on its own must name that many itself (checked at load).
+#
 # Conditions are {feature, op, value}, combined with all: [...] or any: [...] and nested freely.
-# Features: every numeric WindowFeatures field, level_counts.<LEVEL>, keyword_hits.<category>
-# (see config/lexicon.yaml), issue_keyword_hits.<category> (the same, on lines at WARN or above
-# or with no level), n_critical_components, alerts.firing, alerts.critical and alerts.warning.
-# Unknown feature names fail at load time.
+# Features: every numeric WindowFeatures field (issue_events among them: the lines that count as
+# reporting trouble), level_counts.<LEVEL>, keyword_hits.<category> (see config/lexicon.yaml),
+# issue_keyword_hits.<category> (the same, on issue lines: WARN or above, plus unlevelled lines
+# when the window has no levels at all or also logs errors), keyword_templates.<category> and
+# issue_keyword_templates.<category> (the distinct log patterns behind those counts, so one
+# message repeated by one node is one), issue_keyword_share.<category> (the category's share of
+# the issue lines), n_critical_components, alerts.firing, alerts.critical and alerts.warning.
+# From the system's own history, when it has one: error_ratio_vs_baseline (the window's error
+# ratio over the median of the system's recent runs), baseline_error_ratio and baseline_runs.
+# They are absent, not zero, offline and until five runs exist, so a rule may only ask whether
+# they are at least something. Unknown feature names fail at load time.
+#
+# Node counts and node spread are stand-ins for blast radius, which logs cannot see: how many
+# customers or requests an incident touches is not in them. The rules that read them say so.
 
-version: "2026.10.3"
+version: "2026.11.3"
 
 # A severity is decided without the LLM only when the prediction set is a single class and the
 # calibrated model gives it at least this probability.
@@ -32,6 +48,9 @@ activation:
   SEV2: 2.0
   SEV3: 1.0
 
+# Impact dimensions SEV1 needs, between the SEV1 rules that fired.
+sev1_dimensions: 2
+
 rules:
   # --- SEV1: widespread outage or data-loss risk ------------------------------------------------
   - id: crash_widespread
@@ -39,6 +58,7 @@ rules:
     effect: score
     severity: SEV1
     weight: 3.0
+    dimensions: [availability, spread]
     when:
       all:
         - {feature: keyword_hits.crash, op: ">=", value: 10}
@@ -49,16 +69,18 @@ rules:
     effect: score
     severity: SEV1
     weight: 2.5
+    dimensions: [criticality, spread]
     when:
       all:
         - {feature: max_component_criticality, op: ">=", value: 0.9}
         - {feature: error_nodes, op: ">=", value: 8}
 
   - id: error_storm
-    title: Error storm across most of the fleet
+    title: Error storm across most of the logging nodes, a stand-in for blast radius
     effect: score
     severity: SEV1
     weight: 2.5
+    dimensions: [availability, spread]
     when:
       all:
         - {feature: peak_errors_per_min, op: ">=", value: 100}
@@ -70,6 +92,7 @@ rules:
     effect: score
     severity: SEV1
     weight: 2.5
+    dimensions: [availability, spread, criticality]
     when:
       all:
         - {feature: keyword_hits.hardware, op: ">=", value: 10}
@@ -81,16 +104,34 @@ rules:
     effect: score
     severity: SEV1
     weight: 1.5
+    dimensions: [alerting]
     when: {feature: alerts.critical, op: ">=", value: 1}
 
   # --- SEV2: major degradation or a failing critical component ---------------------------------
+  # A crash word in a routine INFO line (a speculative task attempt "aborted", a process
+  # "killed" on schedule) is usually not a crash: only lines at WARN or above, or with no level,
+  # are decisive. Routine mentions still count, as moderate.
   - id: crash_signature
-    title: Crash signatures (panic, segfault, abort, kernel terminated)
+    title: Crash signatures (panic, segfault, abort, kernel terminated) in warnings or errors
     effect: score
     severity: SEV2
     weight: 2.0
-    when: {feature: keyword_hits.crash, op: ">=", value: 1}
+    when: {feature: issue_keyword_hits.crash, op: ">=", value: 1}
 
+  - id: crash_words_routine
+    title: Crash words in routine lines
+    effect: score
+    severity: SEV3
+    weight: 1.0
+    when:
+      all:
+        - {feature: keyword_hits.crash, op: ">=", value: 1}
+        - {feature: issue_keyword_hits.crash, op: "==", value: 0}
+
+  # Counts of error lines leave out windows whose trouble is mostly clients cancelling their own
+  # requests (OpenTelemetry records those at DEBUG): see mostly_cancellations below. The rules
+  # that need a spike (error_storm, sustained_burst) still count them: a spike of cancellations
+  # is a client giving up on a slow service.
   - id: critical_component_errors
     title: Errors from a critical component
     effect: score
@@ -100,13 +141,17 @@ rules:
       all:
         - {feature: max_component_criticality, op: ">=", value: 0.8}
         - {feature: error_events, op: ">=", value: 5}
+        - {feature: issue_keyword_share.cancellation, op: "<", value: 0.5}
 
   - id: errors_spread
-    title: Errors on eight or more nodes
+    title: Errors on eight or more nodes, a stand-in for blast radius
     effect: score
     severity: SEV2
     weight: 1.5
-    when: {feature: error_nodes, op: ">=", value: 8}
+    when:
+      all:
+        - {feature: error_nodes, op: ">=", value: 8}
+        - {feature: issue_keyword_share.cancellation, op: "<", value: 0.5}
 
   - id: sustained_burst
     title: Sustained error burst well above baseline
@@ -118,15 +163,28 @@ rules:
         - {feature: burst_score, op: ">=", value: 5}
         - {feature: error_events, op: ">=", value: 50}
 
+  # One message repeated by one node is one pattern however often it repeats, so the rules a
+  # repeated line could inflate read the distinct patterns beside the count (chosen on validation
+  # seeds, rules version 2026.11.3: quiet HPC and OpenSSH windows fired these on one pattern,
+  # their real incidents on several). A service reported unreachable (below) keeps its line count:
+  # real outages often repeat one message.
   - id: unavailability_widespread
-    title: Services unreachable from several nodes
+    title: Services unreachable from several nodes, in more than one kind of message
     effect: score
     severity: SEV2
     weight: 1.5
     when:
       all:
         - {feature: keyword_hits.unavailable, op: ">=", value: 20}
+        - {feature: keyword_templates.unavailable, op: ">=", value: 2}
         - {feature: error_nodes, op: ">=", value: 3}
+
+  - id: unavailability_reported
+    title: A service reported unreachable in warnings or errors, three or more times
+    effect: score
+    severity: SEV2
+    weight: 2.0
+    when: {feature: issue_keyword_hits.unavailable, op: ">=", value: 3}
 
   - id: storage_failures
     title: Storage or file-system failures
@@ -149,13 +207,14 @@ rules:
         - {feature: broken_flow_ratio, op: ">=", value: 0.05}
 
   - id: attack_widespread
-    title: Authentication attacks against six or more hosts
+    title: Authentication attacks against six or more hosts, in more than one kind of message
     effect: score
     severity: SEV2
     weight: 1.5
     when:
       all:
         - {feature: keyword_hits.security, op: ">=", value: 30}
+        - {feature: keyword_templates.security, op: ">=", value: 2}
         - {feature: distinct_nodes, op: ">=", value: 6}
 
   - id: warning_alert_firing
@@ -191,11 +250,14 @@ rules:
         - {feature: keyword_hits.network, op: ">=", value: 5}
 
   - id: security_attempts
-    title: Repeated authentication failures
+    title: Repeated authentication failures of more than one kind
     effect: score
     severity: SEV3
     weight: 1.0
-    when: {feature: keyword_hits.security, op: ">=", value: 5}
+    when:
+      all:
+        - {feature: keyword_hits.security, op: ">=", value: 5}
+        - {feature: keyword_templates.security, op: ">=", value: 2}
 
   - id: unfinished_work
     title: Units of work (blocks, task attempts) that broke off partway
@@ -226,7 +288,9 @@ rules:
       all:
         - {feature: error_events, op: "==", value: 0}
         - {feature: broken_flows, op: "<", value: 3}
+        - {feature: issue_keyword_hits.unavailable, op: "<", value: 3}
 
+  # A ratio says little about a handful of lines: "errors are rare" needs twenty events behind it.
   - id: low_error_rate
     title: Errors are rare and confined to low-criticality components
     effect: score
@@ -234,10 +298,143 @@ rules:
     weight: 1.5
     when:
       all:
+        - {feature: n_events, op: ">=", value: 20}
         - {feature: error_ratio, op: "<", value: 0.05}
         - {feature: max_component_criticality, op: "<", value: 0.5}
         - {feature: keyword_hits.crash, op: "==", value: 0}
         - {feature: broken_flows, op: "<", value: 3}
+
+  # A client that gave up or went away is not a failure of the service: OpenTelemetry records
+  # client cancellations at DEBUG (lexicon 2.2, cancellation). When most of a window's issue
+  # lines are such lines, the window is noise unless something else says otherwise; a noise
+  # rule can outvote SEV3-level signals only, never SEV1 or SEV2 evidence.
+  - id: mostly_cancellations
+    title: Most of the trouble reported is clients cancelling their own requests
+    effect: score
+    severity: SEV4
+    weight: 2.0
+    when:
+      all:
+        - {feature: issue_keyword_share.cancellation, op: ">=", value: 0.5}
+        - {feature: issue_events, op: ">=", value: 5}
+
+  # --- the system's own baseline (history; absent offline and until five runs exist) ------------
+  # A burn rate in the Google SRE workbook's sense: errors arriving many times faster than this
+  # system usually logs them, which neither a count nor a bare ratio can say for a system that
+  # always logs some. The workbook pages at 14.4 times the budgeted rate over an hour and six
+  # times over six hours; a single window has one rate, so fourteen times reads as major (below
+  # SEV2's activation, so it needs another SEV2 signal) and six times as contained. The volume
+  # guards keep a handful of lines from reading as a burn. The thresholds are judgement: no
+  # offline window has a history, so validation could only show they change nothing there.
+  - id: error_burn_page
+    title: Errors at fourteen times this system's usual ratio or more
+    effect: score
+    severity: SEV2
+    weight: 1.5
+    when:
+      all:
+        - {feature: error_ratio_vs_baseline, op: ">=", value: 14.4}
+        - {feature: error_events, op: ">=", value: 20}
+        - {feature: n_events, op: ">=", value: 100}
+
+  - id: error_burn_ticket
+    title: Errors at six times this system's usual ratio or more
+    effect: score
+    severity: SEV3
+    weight: 1.0
+    when:
+      all:
+        - {feature: error_ratio_vs_baseline, op: ">=", value: 6}
+        - {feature: error_events, op: ">=", value: 10}
+        - {feature: n_events, op: ">=", value: 100}
+
+  # --- version 2 categories (config/lexicon.yaml names each one's sources) -----------------------
+  # No Loghub system logs these, so their weights are judgement, kept below SEV2's activation:
+  # each needs another SEV2 signal before the rules call SEV2 on its own.
+  - id: tls_failures
+    title: TLS or certificate failures, so clients cannot connect securely
+    effect: score
+    severity: SEV2
+    weight: 1.5
+    when: {feature: issue_keyword_hits.tls, op: ">=", value: 3}
+
+  - id: dns_failures_spread
+    title: Name-resolution failures on three or more nodes
+    effect: score
+    severity: SEV2
+    weight: 1.5
+    when:
+      all:
+        - {feature: issue_keyword_hits.dns, op: ">=", value: 5}
+        - {feature: error_nodes, op: ">=", value: 3}
+
+  - id: dns_failures
+    title: Name-resolution failures
+    effect: score
+    severity: SEV3
+    weight: 1.0
+    when: {feature: issue_keyword_hits.dns, op: ">=", value: 5}
+
+  - id: control_plane_failures
+    title: The cluster's control plane is failing (leader lost, store full, API timing out)
+    effect: score
+    severity: SEV2
+    weight: 1.5
+    when: {feature: issue_keyword_hits.control_plane, op: ">=", value: 3}
+
+  # A detector saying data is leaving, or a command-and-control channel, is a security incident
+  # with data exposure (NIST SP 800-61's information impact), so it decides SEV2 on its own.
+  - id: exfiltration_detected
+    title: A detector reports data leaving the network, or a command-and-control channel
+    effect: score
+    severity: SEV2
+    weight: 2.0
+    when: {feature: issue_keyword_hits.exfiltration, op: ">=", value: 1}
+
+  - id: recovery_inhibition_attack
+    title: Backups deleted alongside security alerts, as ransomware prepares
+    effect: score
+    severity: SEV1
+    weight: 2.5
+    dimensions: [security, integrity]
+    when:
+      all:
+        - {feature: keyword_hits.recovery_inhibition, op: ">=", value: 1}
+        - {feature: keyword_hits.security, op: ">=", value: 1}
+
+  - id: storage_fatal_spread
+    title: Filesystems shutting down on two or more nodes
+    effect: score
+    severity: SEV2
+    weight: 2.0
+    when:
+      all:
+        - {feature: issue_keyword_hits.storage_fatal, op: ">=", value: 1}
+        - {feature: error_nodes, op: ">=", value: 2}
+
+  - id: hardware_fatal_spread
+    title: Fatal hardware errors on two or more nodes
+    effect: score
+    severity: SEV2
+    weight: 2.0
+    when:
+      all:
+        - {feature: issue_keyword_hits.hardware_fatal, op: ">=", value: 1}
+        - {feature: error_nodes, op: ">=", value: 2}
+
+  - id: signin_outage
+    title: Sign-in or identity services failing, so people cannot log in
+    effect: score
+    severity: SEV2
+    weight: 1.5
+    when: {feature: issue_keyword_hits.signin, op: ">=", value: 3}
+
+  - id: stale_data
+    title: Data reported stale, lagging or out of schema
+    effect: score
+    severity: SEV3
+    weight: 1.0
+    when: {feature: issue_keyword_hits.freshness, op: ">=", value: 3}
 
   # --- floors: severities ARIA must never go below ---------------------------------------------
   - id: data_risk_floor
@@ -283,3 +480,51 @@ rules:
     effect: floor
     severity: SEV3
     when: {feature: broken_flows, op: ">=", value: 3}
+
+  # Money moved twice, or ledgers that disagree, is a data-integrity incident whatever else the
+  # window shows.
+  - id: payment_integrity_floor
+    title: Payment integrity at risk (duplicate charges, ledger mismatches)
+    effect: floor
+    severity: SEV2
+    when: {feature: issue_keyword_hits.payment, op: ">=", value: 1}
+
+  # Deleting shadow copies or the backup catalog is how ransomware makes sure there is nothing to
+  # restore (MITRE ATT&CK T1490). These commands show up as routine process events, so every line
+  # counts. With security signals beside them they are an attack in progress (see
+  # recovery_inhibition_attack).
+  - id: recovery_inhibition_floor
+    title: Commands that delete backups or shadow copies were run
+    effect: floor
+    severity: SEV2
+    when: {feature: keyword_hits.recovery_inhibition, op: ">=", value: 1}
+
+  # Backups that fail leave nothing to restore when the next incident comes (NIST SP 800-61;
+  # GitLab.com's 2017 database outage). Someone should look, but nothing is down yet.
+  - id: backups_failing_floor
+    title: Backups, snapshots or restores failing
+    effect: floor
+    severity: SEV3
+    when: {feature: issue_keyword_hits.backup, op: ">=", value: 1}
+
+  # One more failure and the service is down (PagerDuty rates "no redundancy" above a single
+  # failed node).
+  - id: redundancy_lost_floor
+    title: Redundancy is gone, so one more failure means an outage
+    effect: floor
+    severity: SEV3
+    when: {feature: issue_keyword_hits.redundancy_lost, op: ">=", value: 1}
+
+  # A filesystem that shut itself down, or a hardware event the firmware calls fatal, has lost a
+  # node's function, unlike the generic words in storage and hardware.
+  - id: storage_fatal_floor
+    title: A filesystem shut itself down or went read-only after an error
+    effect: floor
+    severity: SEV3
+    when: {feature: issue_keyword_hits.storage_fatal, op: ">=", value: 1}
+
+  - id: hardware_fatal_floor
+    title: Hardware reported a fatal error
+    effect: floor
+    severity: SEV3
+    when: {feature: issue_keyword_hits.hardware_fatal, op: ">=", value: 1}

@@ -22,6 +22,7 @@ from aria.llm.schemas import ActionOut, ClaimOut, NarrativeOutput
 from aria.parsing.catalog import load_lexicon
 from aria.parsing.signals import signal_components, signal_templates
 from aria.retrieval.runbooks import Runbook
+from aria.severity.policy import level_words
 from aria.text import clip, headline, plain_template, sentence_start
 
 # The next step that asks a person to settle a severity ARIA was unsure of; a review that
@@ -304,9 +305,12 @@ def compose_draft(ctx: ReportContext) -> NarrativeOutput:
             "The calibrated model was not used, because this window is unlike the ones it "
             "learned from: the rules set the choices, and a person confirms"
         )
-    # "SEV2 (high): major degradation ...", not "SEV2: High: major degradation ..." (J-p1).
+    # "SEV2 (high): major degradation ...", not "SEV2: High: major degradation ..." (J-p1). With
+    # a wider set, the line leads with the levels ARIA is torn between and the one it plans for,
+    # as the review and the run log say it. The heading keeps the bare level it is parsed by.
+    stated = level_words(sev.severity, sev.prediction_set)
     word, _, what = meaning.partition(": ")
-    level = f"{sev.severity} ({word.lower()}): {what}" if what else f"{sev.severity}: {meaning}"
+    level = f"{stated} ({word.lower()}): {what}" if what else f"{stated}: {meaning}"
     severity_text = f"{level} {how}"
     if sev.decided_by in ("model", "llm", "fallback") and model_ev is not None:
         # Without the model the figure is a share of the rules' summed weight, not a chance.

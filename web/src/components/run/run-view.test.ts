@@ -3,7 +3,23 @@ import { describe, expect, it } from "vitest";
 import type { SeverityAssessment } from "@/lib/api/types";
 import { shortListText } from "@/lib/levels";
 
-import { headerRating } from "./run-view";
+import { headerRating, sameTitle } from "./run-view";
+
+describe("the report's own title", () => {
+  const heading = "Checkout API returns 502 after the connection pool is exhausted on the primary";
+
+  it("is hidden when the page's heading already says it, in full or cut short", () => {
+    expect(sameTitle(`SEV1 · ${heading}`, heading)).toBe(true);
+    expect(sameTitle("SEV1 · Checkout API returns 502 after the connection…", heading)).toBe(true);
+    expect(sameTitle("Checkout API returns 502 after the connection...", heading)).toBe(true);
+    expect(sameTitle("", heading)).toBe(true);
+  });
+
+  it("shows when it says something else", () => {
+    expect(sameTitle("SEV1 · Connection pool exhausted on the primary", heading)).toBe(false);
+    expect(sameTitle("Something else entirely…", heading)).toBe(false);
+  });
+});
 
 const assessment = (changes: Partial<SeverityAssessment> = {}): SeverityAssessment => ({
   severity: "SEV1",

@@ -1,0 +1,9 @@
+Part of one ITBench-Lite site-reliability scenario (Scenario-2): its ground truth and
+alerts in alerting state unchanged, two of its Kubernetes event rows unchanged, and five
+rows of the log window ARIA's download keeps (four of its columns, unchanged).
+
+Source: https://huggingface.co/datasets/ibm-research/ITBench-Lite at commit
+d0916b08ba421ce5e672e9ad68aa947d938dfef0
+Licence: Apache License 2.0, https://www.apache.org/licenses/LICENSE-2.0
+Copyright IBM Research. Cite: S. Jha et al. ITBench: Evaluating AI Agents across Diverse
+Real-World IT Automation Tasks. ICML 2025.

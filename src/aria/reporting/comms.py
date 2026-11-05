@@ -8,7 +8,9 @@ until a reviewer approves it. Each audience has its own rules:
 * customers (status page): calm, no internal identifiers and no speculation about causes.
 
 An LLM may polish the deterministic drafts, but a polished draft that breaks its audience's
-rules is dropped in favour of the deterministic one.
+rules is dropped in favour of the deterministic one. Every draft, polished or not, then keeps
+only links to allowed hosts and configured recipients (aria.reporting.outbound): anything else
+is taken out and listed on the action for the reviewer.
 """
 
 from __future__ import annotations
@@ -26,8 +28,10 @@ from aria.llm.prompts import build_messages
 from aria.llm.router import LLMRouter
 from aria.llm.schemas import CommsOutput, MessageDraft
 from aria.reporting.grounding import validate_external_text
+from aria.reporting.outbound import DraftPolicy, screen_all
 from aria.reporting.writer import cited_evidence
 from aria.security.safety import check_text
+from aria.severity.policy import torn_words
 from aria.text import headline
 
 AUDIENCE = {"responders": "responders", "stakeholders": "stakeholders", "status_page": "customers"}
@@ -72,10 +76,20 @@ class CommsOutcome:
 
 
 def deterministic_drafts(
-    report: IncidentReport, *, service: str, run_url: str
+    report: IncidentReport,
+    *,
+    service: str,
+    run_url: str,
+    prediction_set: Sequence[Severity | str] = (),
 ) -> dict[str, MessageDraft]:
+    """The three drafts. ``prediction_set`` is the set the severity came from: with more than one
+    level in it, a draft that states the severity says what ARIA is torn between and the level
+    it plans for (aria.severity.policy), as the report and the review do."""
     ids = [e.id for e in cited_evidence(report)][:10] or [report.evidence[0].id]
+    torn = torn_words(report.severity, prediction_set) if prediction_set else None
     bullets = [f"• {c.text}" for c in report.summary[:3]]
+    if torn and not any(torn in line for line in bullets):
+        bullets.insert(0, f"• {torn}")
     if report.suspected_cause:
         bullets.append(f"• Suspected: {report.suspected_cause[0].text}")
     if report.actions:
@@ -87,11 +101,12 @@ def deterministic_drafts(
         evidence_ids=ids,
     )
     impact = _IMPACT_WORDS[report.severity]
+    word = SEVERITY_DESCRIPTIONS[report.severity].split(":", 1)[0].lower()
+    stated = f"{torn} ({word})" if torn else f"Severity is {report.severity} ({word})"
     stakeholders = MessageDraft(
         title=f"Incident update: {service}"[:140],
         body=(
-            f"We are responding to {impact} affecting {service}. "
-            f"Severity is {report.severity} ({SEVERITY_DESCRIPTIONS[report.severity].split(':', 1)[0].lower()}). "
+            f"We are responding to {impact} affecting {service}. {stated}. "
             "Engineers are investigating and will share the next update within 30 minutes."
         ),
         evidence_ids=ids[:3],
@@ -123,8 +138,16 @@ async def draft_comms(
     budget: BudgetGuard | None = None,
     use_llm: bool = True,
     safety_check: bool = False,
+    policy: DraftPolicy | None = None,
+    prediction_set: Sequence[Severity | str] = (),
 ) -> CommsOutcome:
-    drafts = deterministic_drafts(report, service=service, run_url=run_url)
+    """The audiences' drafts as proposals. ``policy`` says which hosts a draft may link to and
+    whom it may address; without one, only the run's own link stays. ``prediction_set`` is the
+    set the severity came from (see ``deterministic_drafts``)."""
+    policy = policy or DraftPolicy.for_link(run_url)
+    drafts = deterministic_drafts(
+        report, service=service, run_url=run_url, prediction_set=prediction_set
+    )
     known = {e.id for e in report.evidence}
     outcome = CommsOutcome(actions=[])
     if use_llm and router is not None and router.chain("comms"):
@@ -174,30 +197,45 @@ async def draft_comms(
         if problems:  # deterministic drafts should never fail; keep them out if they somehow do
             outcome.rejected.setdefault(key, []).extend(problems)
             continue
-        outcome.actions.append(_action(report, key, draft))
+        outcome.actions.append(_action(report, key, draft, policy))
     return outcome
 
 
-def _action(report: IncidentReport, key: str, draft: MessageDraft) -> OutboundAction:
+def _action(
+    report: IncidentReport, key: str, draft: MessageDraft, policy: DraftPolicy
+) -> OutboundAction:
+    """The draft as a proposal, with every link and recipient off the allow-list taken out and
+    listed on the action (``removed``) for the reviewer."""
+    (title, body), removed = screen_all((draft.title, draft.body), policy)
     return OutboundAction(
         action_id=action_id(report.report_id, key),
         kind=KIND[key],  # type: ignore[arg-type]
         audience=AUDIENCE[key],  # type: ignore[arg-type]
-        title=draft.title,
-        body=draft.body,
-        payload={"text": f"*{draft.title}*\n{draft.body}"} if KIND[key] == "slack" else {},
+        title=title,
+        body=body,
+        payload={"text": f"*{title}*\n{body}"} if KIND[key] == "slack" else {},
         evidence_ids=draft.evidence_ids,
+        removed=removed,
     )
 
 
 def redraft(
-    actions: Sequence[OutboundAction], report: IncidentReport, *, service: str, run_url: str
+    actions: Sequence[OutboundAction],
+    report: IncidentReport,
+    *,
+    service: str,
+    run_url: str,
+    policy: DraftPolicy | None = None,
+    prediction_set: Sequence[Severity | str] = (),
 ) -> list[OutboundAction]:
     """The actions rewritten from the reviewed report. Used when a reviewer changed its severity or
     title: a draft written for the old facts must not go out under the new ones."""
+    policy = policy or DraftPolicy.for_link(run_url)
     drafts = {
         action_id(report.report_id, key): (key, draft)
-        for key, draft in deterministic_drafts(report, service=service, run_url=run_url).items()
+        for key, draft in deterministic_drafts(
+            report, service=service, run_url=run_url, prediction_set=prediction_set
+        ).items()
     }
     rewritten: list[OutboundAction] = []
     for action in actions:
@@ -205,6 +243,6 @@ def redraft(
         rewritten.append(
             action
             if found is None
-            else _action(report, *found).model_copy(update={"status": action.status})
+            else _action(report, *found, policy).model_copy(update={"status": action.status})
         )
     return rewritten

@@ -1,7 +1,8 @@
-"""Evaluation suites: ``aria eval run --suite smoke|severity|pipeline|robustness|real|all``.
+"""Evaluation suites: ``aria eval run --suite smoke|severity|generalisation|pipeline|...|all``.
 
 ``smoke`` is small and deterministic: CI runs it as a regression gate (``--gate``). ``real``
-replays real, expert-labelled logs (``evals/real.py``). ``all`` runs every suite at full size and
+replays real, expert-labelled logs (``evals/real.py``). ``generalisation`` scores systems and
+failure modes the model never saw (``evals/rings.py``). ``all`` runs every suite at full size and
 regenerates ``docs/evaluation.md``. Results are written as JSON to ``reports/eval/<suite>.json``.
 """
 
@@ -27,24 +28,46 @@ from aria.config import get_app_config
 from aria.data.loghub import iter_structured_csv
 from aria.data.scenarios import LinePools, Scenario, ScenarioBuilder
 from aria.evals import bgl as bg
+from aria.evals import domains as dm
 from aria.evals import edge as ed
 from aria.evals import gitlab as gl
 from aria.evals import hadoop as hd
 from aria.evals import injection as inj
+from aria.evals import llm_choice as lcm
 from aria.evals import logchunks as lc
 from aria.evals import openstack as osf
 from aria.evals import parsing as ps
 from aria.evals import pipeline as pl
 from aria.evals import postmortems as pmx
 from aria.evals import real as rl
+from aria.evals import redteam as rt
+from aria.evals import rings
 from aria.evals import severity as sv
 from aria.evals import tickets as tk
 from aria.retrieval.seed import MEMORY_SEEDS
 from aria.severity.engine import SeverityEngine
+from aria.severity.rules import load_rules
 from aria.severity.training import SplitSeeds, known_templates
 
-SUITES = ("smoke", "severity", "pipeline", "robustness", "parsing", "edge", "real", "all")
+SUITES = (
+    "smoke",
+    "severity",
+    "generalisation",
+    "pipeline",
+    "robustness",
+    "parsing",
+    "edge",
+    "real",
+    *dm.SUITES,
+    "llm-choice",
+    "redteam",
+    "redteam-datamarking",
+    "all",
+)
+# The training split's size, so held-out models are fitted the way the shipped one is.
+TRAINING_SIZE = {"per_mode": 6, "quiet_per_system": 3}
 THRESHOLDS = Path("config/eval_thresholds.yaml")
+REGISTRY = Path("config/eval_registry.yaml")
 FIXTURES_DIR = Path("tests/fixtures/loghub")  # tiny samples for tests, not for measurement
 
 
@@ -63,6 +86,13 @@ SIZES = {
     "smoke": Size((41,), 1, 1, False, 12, 4, 1),
     "full": Size(SplitSeeds().test, 6, 3, True, 60, 16, 2),
 }
+
+
+def _registry() -> dict[str, Any] | None:
+    if not REGISTRY.exists():
+        return None
+    loaded = yaml.safe_load(REGISTRY.read_text(encoding="utf-8"))
+    return loaded if isinstance(loaded, dict) else None
 
 
 def is_fixtures(loghub_dir: Path) -> bool:
@@ -127,6 +157,42 @@ async def run(
             "fixtures": is_fixtures(loghub_dir),
         },
     }
+    if suite == "all":
+        # What each suite was used for, so the report can say which numbers are clean tests.
+        registry = await asyncio.to_thread(_registry)
+        if registry:
+            results["registry"] = registry
+    rules = load_rules(Path(config.severity.rules_file))
+    fitted: dict[str, rings.TrainingWindows] = {}
+
+    def training() -> rings.TrainingWindows:
+        """The training splits' windows, parsed once for every held-out model."""
+        if "windows" not in fitted:
+            fitted["windows"] = rings.training_windows(
+                builder,
+                rules,
+                per_mode=TRAINING_SIZE["per_mode"],
+                quiet_per_system=TRAINING_SIZE["quiet_per_system"],
+                workers=workers,
+            )
+        return fitted["windows"]
+
+    def unseen_engine(system: str) -> SeverityEngine:
+        """An engine whose model was fitted without any window of ``system``."""
+
+        def other(w: Any) -> bool:
+            return bool(w.system != system)
+
+        model = rings.model_without(
+            training(),
+            other,
+            alpha=config.severity.alpha,
+            rules_version=rules.version,
+            serious_alpha=config.severity.serious_alpha,
+            severe_miss_risk=config.severity.severe_miss_risk,
+        )
+        return SeverityEngine(rules, model, alpha=config.severity.alpha)
+
     if suite in ("smoke", "parsing", "all"):
         results["parsing"] = ps.summarize(loghub_dir)
     if suite in ("parsing", "all"):  # 140,000 and 1.9 million lines: too many for the smoke gate
@@ -138,6 +204,13 @@ async def run(
         results["edge"] = ed.evaluate(ed.generate())
     if suite in ("edge", "all"):
         results["injection_benchmarks"] = inj.evaluate()
+    if suite in ("redteam", "all"):  # adaptive attacks, scored on what they achieve
+        results["redteam"] = await rt.run_suite(builder, n=limit or rt.ATTACKS, use_llm=use_llm)
+    if suite == "redteam-datamarking":  # the same attacks with and without datamarking
+        results["redteam_datamarking"] = await rt.compare_datamarking(
+            builder, n=limit or rt.ATTACKS, use_llm=use_llm
+        )
+        return results
     if suite in ("real", "all"):
         pool = loghub_dir / "HDFS" / "HDFS_2k.log_structured.csv"
         results["real"] = rl.summarize(
@@ -155,6 +228,7 @@ async def run(
             if bgl_pool.exists()
             else set(),
             workers=workers,
+            unseen=None if is_fixtures(loghub_dir) else unseen_engine("bgl"),
         )
         results["real"]["uci_tickets"] = tk.summarize(Path(config.severity.ticket_model_file))
         results["real"]["hadoop"] = await _hadoop(builder, loghub_dir, size, workers)
@@ -162,12 +236,30 @@ async def run(
         results["real"]["logchunks"] = await _logchunks(builder, loghub_dir, size, workers)
         results["real"]["gitlab"] = gl.summarize()
         results["real"]["postmortems"] = pmx.summarize()
+    if suite in dm.SUITES or suite == "all":  # ring C: new domains, each run when downloaded
+        await dm.add_to(results, suite, loghub_dir=loghub_dir, workers=workers, limit=limit)
+        if suite != "all":
+            return results
     test = sv.held_out(
         builder,
         seeds=size.severity_seeds,
         per_mode=size.severity_per_mode,
         quiet_per_system=size.severity_quiet,
     )
+    features: list[Any] | None = None
+    if suite == "llm-choice":  # the model's choice inside the set, asked k times a window
+        results["llm_choice"] = await lcm.evaluate(
+            builder=builder,
+            rules=rules,
+            config=config,
+            loghub_dir=loghub_dir,
+            test=test,
+            features=sv.featurize(builder, test, workers=workers),
+            windows=training(),
+            use_llm=use_llm,
+            limit=limit,
+        )
+        return results
     if suite in ("smoke", "severity", "all"):
         engine = SeverityEngine.load(config.severity)
         features = sv.featurize(builder, test, workers=workers)
@@ -181,6 +273,22 @@ async def run(
             cases, alpha=engine.alpha, majority=sv.majority_label(), tfidf=tfidf
         )
         results["severity"]["model_version"] = engine.model.version if engine.model else None
+    if suite in ("generalisation", "all"):
+        if features is None:
+            features = sv.featurize(builder, test, workers=workers)
+        results["generalisation"] = rings.evaluate(
+            builder,
+            rules,
+            test,
+            features,
+            alpha=config.severity.alpha,
+            serious_alpha=config.severity.serious_alpha,
+            severe_miss_risk=config.severity.severe_miss_risk,
+            windows=training(),
+            workers=workers,
+            per_mode=TRAINING_SIZE["per_mode"],
+            quiet_per_system=TRAINING_SIZE["quiet_per_system"],
+        )
     if suite in ("smoke", "pipeline", "robustness", "all"):
         benign_modes = {k for k, mode in builder.pools.modes.items() if mode.benign}
         with tempfile.TemporaryDirectory(prefix="aria-eval-") as tmp:
@@ -397,8 +505,16 @@ def _lookup(results: dict[str, Any], dotted: str) -> Any:
 
 
 def check_gate(results: dict[str, Any], suite: str, path: Path = THRESHOLDS) -> list[str]:
-    """Failures of the suite's thresholds (empty when the gate passes)."""
-    spec = (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get(suite, {})
+    """Failures of the suite's thresholds (empty when the gate passes).
+
+    The suite's own block applies, and so does any other block named after a section the
+    results hold: the red team's bounds apply to ``--suite all`` because its section ran, and
+    never to the smoke suite, which does not run it."""
+    blocks = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    spec: dict[str, Any] = dict(blocks.get(suite, {}))
+    for name, bounds in blocks.items():
+        if name != suite and name in results:
+            spec.update(bounds)
     failures = []
     if results.get("data", {}).get("fixtures"):
         failures.append(

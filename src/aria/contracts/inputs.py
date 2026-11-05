@@ -113,6 +113,10 @@ class TriageRequest(Contract):
     # Lines past the per-run cap. ARIA drops them when it records a run, so they are never stored,
     # and counts them here for the plan's note. It is not part of the published schema.
     logs_dropped: SkipJsonSchema[Annotated[int, Field(ge=0)]] = 0
+    # Why ARIA ran a triage offline that asked for a model: the shared models had no room for its
+    # calls (aria.llm.quota). The runner sets it for the plan's note; a caller's value is
+    # dropped. It is not part of the published schema.
+    offline_reason: SkipJsonSchema[Annotated[str, StringConstraints(max_length=500)] | None] = None
 
     @model_validator(mode="after")
     def _has_something_to_triage(self) -> TriageRequest:

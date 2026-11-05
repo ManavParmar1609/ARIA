@@ -320,9 +320,16 @@ export function sourceLink(
     : null;
 }
 
+/** A word's meaning in one line: "Runbook: A team's written steps…", or, where the meaning
+ * already opens with the word ("SEV1 means critical…"), the meaning alone, so the word is never
+ * said twice over. */
+export function definitionText({ term, text }: Definition): string {
+  return text.startsWith(`${term} `) ? text : `${term}: ${text}`;
+}
+
 /** An answer as text to paste elsewhere: its points with their source numbers, then the sources. */
 export function answerText(turn: Turn): string {
-  if (turn.definition) return `${turn.definition.term}: ${turn.definition.text}`;
+  if (turn.definition) return definitionText(turn.definition);
   const answer = turn.answer;
   if (!answer?.answer.length) return "";
   const numbers = sourceNumbers(answer);
@@ -701,11 +708,13 @@ function Reply({
   const text = answerText(turn);
   let body: ReactNode;
   if (turn.definition) {
+    const { term, text } = turn.definition;
+    const opensWithTerm = text.startsWith(`${term} `);
     body = (
       <div className="grid gap-2">
         <p>
-          <strong className="font-semibold text-heading">{turn.definition.term}</strong>:{" "}
-          {turn.definition.text}
+          <strong className="font-semibold text-heading">{term}</strong>
+          {opensWithTerm ? text.slice(term.length) : `: ${text}`}
         </p>
         <p className="text-sm text-muted-foreground">
           From{" "}

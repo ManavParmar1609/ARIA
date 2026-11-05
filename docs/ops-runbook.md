@@ -9,9 +9,9 @@ It is not the incident runbook library in [`runbooks/`](../runbooks), which ARIA
 | Component | Command | What it does |
 |---|---|---|
 | API | `aria serve` (`make api`) | Serves REST and server-sent events, MCP at `/mcp`, A2A at `/a2a` and AG-UI at `/agui`, and the health checks. With `ARIA_WORKER_MODE=inprocess` it also executes runs and the periodic jobs. |
-| Worker | `aria worker` (`make worker`) | With `ARIA_WORKER_MODE=external`, it claims queued runs from the database and executes them, and runs the periodic jobs (the log scan and recalibration) |
+| Worker | `aria worker` (`make worker`) | With `ARIA_WORKER_MODE=external`, it claims queued runs from the database and executes them, and runs the periodic jobs (the log scan, recalibration and, when you set it up, the retention purge) |
 | Web app | `pnpm --dir web dev` (`make web`), or the `web` image | The landing page and the console. Its server forwards console requests to the API with the signed-in key. |
-| Database | | SQLite by default, or Azure SQL. It holds runs, checkpoints, events, reports, outbound actions, the tool-call audit, reviews and incident memory. |
+| Database | | SQLite by default, or Azure SQL. It holds runs, checkpoints, events, reports, outbound actions, the tool-call audit, reviews, incident memory and the append-only decision record. |
 | Model files | | The trained severity model, `models/severity_log.json`, ships with the code. Recalibrated versions and the offline embeddings live in `ARIA_MODELS_DIR` (`/var/lib/aria/models`, on the shared volume, in containers). |
 | Optional | | Arize Phoenix for traces, and a self-hosted NVIDIA NIM (both are compose profiles) |
 
@@ -162,18 +162,23 @@ Both are read when a process starts, so restart after a change. `GET /api/v1/set
 | `ARIA_PSEUDONYM_KEY` | Keys the per-run pseudonyms for IP and e-mail addresses. Set the same value on every process. Without it, the processes sharing a database make one random key and keep it in that database, so they still agree, but anyone with a copy of the database can recompute the pseudonyms: set it from Key Vault in production. |
 | `ARIA_LOG_LEVEL`, `ARIA_LOG_FORMAT` | Log level, and `json` or `console` output |
 | `ARIA_OTEL_EXPORTER`, `ARIA_OTLP_ENDPOINT` | Trace export: `none`, `console`, `otlp` (to `ARIA_OTLP_ENDPOINT`) or `azure` |
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Where the `azure` exporter sends traces |
-| `ARIA_OTEL_CAPTURE_CONTENT` | Record prompt and completion text in traces. Off by default, because that text holds log data. |
+| `ARIA_OTLP_METRICS_ENDPOINT` | Where the `otlp` exporter sends the GenAI metrics, as an OTLP/HTTP `/v1/metrics` URL. Unset: no metrics over OTLP, since a traces-only backend such as Phoenix refuses them. The `azure` exporter sends them without it. |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Where the `azure` exporter sends traces and metrics |
+| `ARIA_DRAFT_LINK_HOSTS` | Hosts a message draft may link to, comma-separated, besides ARIA's own console and API (`comms.link_hosts`). A subdomain counts as its host. |
+| `ARIA_DRAFT_RECIPIENTS` | Whom a message draft may address besides its channel: `@handles`, `#channels` or e-mail addresses, comma-separated (`comms.recipients`). None by default. |
 | `ARIA_CONFIG_FILE`, `ARIA_DATA_DIR`, `ARIA_MODELS_DIR`, `ARIA_RUNBOOKS_DIR` | Where the config file, data, offline embeddings and runbooks live |
 | `ARIA_MCP_URL`, `ARIA_MCP_TOKEN` | Have the investigator call tools on a remote MCP endpoint instead of in-process |
-| `GEMINI_API_KEY` (or `gemini_api_key`) | Enables Gemini for every role, ahead of hosted NIM |
-| `GEMINI_CHAT_MODEL`, `GEMINI_LITE_MODEL`, `GEMINI_REASONING_EFFORT`, `GEMINI_BASE_URL` | Override the Gemini models, the reasoning effort (minimal by default) and the endpoint |
+| `GEMINI_API_KEY` (or `gemini_api_key`) | Enables the Gemini pool (four models on the one key) for every role, ahead of hosted NIM |
+| `GEMINI_CHAT_MODEL`, `GEMINI_LITE_MODEL`, `GEMINI_LITE_2_MODEL`, `GEMMA_MODEL`, `GEMINI_REASONING_EFFORT`, `GEMINI_BASE_URL` | Override the pool's models, the reasoning effort (minimal by default) and the endpoint |
+| `GEMINI_RPM`, `GEMINI_TPM`, `GEMINI_RPD`, and the same with `GEMINI_LITE_`, `GEMINI_LITE_2_` or `GEMMA_` in front | Each model's requests a minute, tokens a minute and requests a day, copied from AI Studio's rate-limit page. ARIA keeps under them; `none` lifts one. The defaults are cautious placeholders. |
+| `ARIA_QUOTA_MARGIN`, `ARIA_QUOTA_FILE` | The share of each limit ARIA leaves unused (0.1), and where it keeps its counts between restarts (`llm-quota.json` in `ARIA_DATA_DIR`) |
 | `NVIDIA_API_KEY` | Enables hosted NVIDIA NIM for every role |
 | `NVIDIA_NIM_BASE_URL`, `NVIDIA_NIM_CHAT_MODEL`, `NVIDIA_NIM_REASONING_EFFORT`, `NVIDIA_NIM_FALLBACK_MODEL`, `NVIDIA_NIM_EMBED_MODEL`, `NVIDIA_NIM_SAFETY_MODEL`, `NVIDIA_NIM_RERANK_MODEL`, `NVIDIA_NIM_RERANK_URL` | NIM endpoint and model overrides. Reranking stays off until both rerank variables are set. |
 | `NIM_LOCAL_BASE_URL`, `NIM_LOCAL_CHAT_MODEL`, `NIM_LOCAL_EMBED_MODEL`, `NIM_LOCAL_RERANK_MODEL`, `NIM_LOCAL_RERANK_URL` | A self-hosted NIM, which leads every chain once its URL is set |
 | `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_USE_ENTRA`, `AZURE_OPENAI_CHAT_DEPLOYMENT`, `AZURE_OPENAI_EMBED_DEPLOYMENT` | Azure OpenAI, with a key or with the managed identity |
 | `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `OPENAI_CHAT_MODEL`, `OPENAI_EMBED_MODEL` | Any OpenAI-compatible endpoint (OpenAI, vLLM, Ollama) |
 | `ARIA_SCAN_INTERVAL_S`, `ARIA_SCAN_SOURCES` | The periodic log scan: seconds between polls (`0` turns it off), and `system=path` pairs |
+| `ARIA_RETENTION_DAYS`, `ARIA_PURGE_INTERVAL_S` | How long runs are kept (`0`, the default, keeps them until someone deletes them), and seconds between purges by the process that executes runs (`0`: only `aria purge` deletes). See [Retention and purge](#retention-and-purge). |
 | `SLACK_WEBHOOK_URL`, `TEAMS_WEBHOOK_URL`, `ARIA_OUTBOUND_WEBHOOK_URL`, `ARIA_OUTBOUND_WEBHOOK_SECRET` | Destinations for approved messages, and the key that signs generic webhook deliveries |
 | `ARIA_API_URL` | Web app: where its server reaches the API |
 | `ARIA_WEB_URL` | Web app: its public URL, used in page metadata and link previews. Pages are prerendered, so pass it when building the image too (`--build-arg ARIA_WEB_URL=...`; azd reads it from `azd env set ARIA_WEB_URL`) |
@@ -186,9 +191,12 @@ The `config/aria.yaml` settings operators change most often:
 | `llm.routing` | The provider chain for each role |
 | `llm.safety` | The providers that answer the content-safety check |
 | `budgets` | Per-run limits for tokens, cost, elapsed time, steps, tool calls and LLM calls |
-| `guardrails` | Redaction, IP pseudonyms, injection detection, the content-safety check, and the line caps |
+| `guardrails` | Redaction, IP pseudonyms, injection detection, the content-safety check, spotlighting by datamarking (off until it is compared, see [Compare datamarking](#compare-datamarking)), and the line caps |
 | `triggers` | The alert grouping window, plus the scan's burst threshold and window size |
+| `comms.link_hosts`, `comms.recipients` | The hosts a message draft may link to and the recipients it may address. Anything else is taken out of the draft before review and listed for the reviewer. |
 | `severity.recalibrate_after`, `severity.recalibrate_check_s` | When recalibration runs. Their defaults are in [`config.py`](../src/aria/config.py), so add them to the YAML to change them. |
+| `retention.days`, `retention.purge_interval_s` | How long runs are kept, and how often they are purged (see [Retention and purge](#retention-and-purge)). Both are off by default. |
+| `llm.data_terms` | What each model provider's own terms say about the prompts ARIA sends it, and the day someone read them. Settings shows them beside the model settings. |
 
 ## Watching it run
 
@@ -202,6 +210,7 @@ The `config/aria.yaml` settings operators change most often:
 | Web view of the API | `GET /api/ready` on the web app | Forwards the API's `/readyz` |
 | Worker liveness | `aria worker-health --max-age 60` | Exits 1 when the worker has not polled the queue recently. It reads this host's heartbeat file, `worker-<hostname>.heartbeat`, in `ARIA_DATA_DIR`. |
 | Providers | `GET /api/v1/providers` | Each provider's models, circuit-breaker state and last error, without keys |
+| Model limits | `GET /api/v1/llm/capacity` | Each model with limits: requests and tokens left this minute, requests left today, any rest after a refusal, and how many more model-written triages fit today. Counts only, never a key. The console's **Settings** shows it as **The site's models**. |
 
 Two caveats about the worker check:
 
@@ -232,12 +241,26 @@ scrape_configs:
 | `aria_reviews_total{decision}` | Review decisions |
 | `aria_time_to_review_seconds` | From the start of a run until its report is ready for review |
 | `aria_info{version}` | The running version |
+| `aria_severity_decisions_total{level,decided_by,calibration}` | Severity decisions by level, by who decided and by the calibration the set came from |
+| `aria_severity_set_size` | How many levels each prediction set kept |
+| `aria_severity_review_reasons_total{reason}` | Why a person was asked to confirm a severity: `outside_training`, `unusual_mix`, `new_patterns`, `empty_set`, `every_level`, `new_system` |
+
+A sudden rise in set sizes or in `unusual_mix` and `new_patterns`, or a change in the mix of levels, is drift worth a look; `GET /api/v1/drift` tests the level mix per system against chance.
 
 Only the API process serves metrics. In `external` mode the counters and the histogram see only what the API process executes, which is reviews and publishing. `aria_runs{status}` reads the database, so it covers every process.
 
 ### Traces
 
-Set `ARIA_OTEL_EXPORTER=otlp` and `ARIA_OTLP_ENDPOINT`, for example Phoenix in compose. On Azure, `azure` sends traces to Application Insights. Spans follow the OpenTelemetry GenAI conventions (`chat <model>`, `execute_tool <tool>`), and carry no prompt or completion text unless `ARIA_OTEL_CAPTURE_CONTENT=true`.
+Set `ARIA_OTEL_EXPORTER=otlp` and `ARIA_OTLP_ENDPOINT`, for example Phoenix in compose. On Azure, `azure` sends traces to Application Insights. Spans follow the OpenTelemetry GenAI conventions (`chat <model>`, `execute_tool <tool>`). Each model call's span records:
+
+- the provider, the operation and the model asked for (`gen_ai.provider.name`, `gen_ai.operation.name`, `gen_ai.request.model`);
+- the model that answered and the provider's id for its response (`gen_ai.response.model`, `gen_ai.response.id`);
+- how the reply ended and the tokens it used (`gen_ai.response.finish_reasons`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`), also for a reply that was declined or cut short;
+- the endpoint's host and port, and `error.type` when the call failed.
+
+Counts ARIA estimated because the provider reported none are marked `aria.usage.estimated`. Two histograms follow the same conventions: `gen_ai.client.token.usage` (reported tokens, by `gen_ai.token.type`) and `gen_ai.client.operation.duration` (seconds). They reach Application Insights with `azure`; with `otlp`, set `ARIA_OTLP_METRICS_ENDPOINT` to a backend that takes metrics.
+
+Spans and metrics never carry prompt or completion text, keys or error messages: a failed call shows only its error's class or HTTP status. The run's events keep each failed call's error for the console.
 
 The API and `aria worker` both configure the exporter, so runs are traced whichever process executes them. The API's Prometheus counters cover only runs the API itself executes.
 
@@ -252,16 +275,48 @@ Processes log to standard output. With `ARIA_LOG_FORMAT=json`, each line is one 
 | `worker.recovered` | The API continued runs that a previous process left unfinished |
 | `worker.job_failed`, `runner.failed` | A run failed |
 | `llm.provider_error`, `llm.invalid_output` | A provider failed, or returned output that did not validate |
+| `llm.declined`, `llm.length_stop` | A model declined (a refusal or a content filter), or its structured answer stopped at its token limit; neither is used, and the call moves on |
 | `notify.sent`, `notify.failed` | An approved message was delivered, or was not |
-| `scan.started`, `scan.run_opened`, `scan.covered`, `scan.failed` | The log scan |
-| `severity.recalibrated`, `severity.model_reloaded`, `severity.recalibration_failed`, `severity.model_missing` | The severity model |
+| `scan.started`, `scan.run_opened`, `scan.followup`, `scan.covered`, `scan.failed` | The log scan |
+| `severity.adapted`, `severity.recalibrated`, `severity.model_reloaded`, `severity.recalibration_failed`, `severity.model_missing` | The severity model |
+| `severity.severe_miss_alarm` | Blind checks show more severe misses than the model's calibration promises, with confidence (see [The severe-miss alarm](#the-severe-miss-alarm)). Logged on every recalibration round while it stands. |
+| `severity.history_unavailable` | A run was rated without the system's baseline and dismissed patterns because the database did not answer; the run went on without them |
 | `services.ticket_models_missing` | No ticket model was found at start |
+| `retention.purged`, `retention.purge_failed` | The retention purge deleted runs (with how many rows of each kind, and how many runs it left because a process held them), or failed and will try again on its next round |
+| `record.appended`, `record.failed` | A decision went on the decision record, or could not be written. `record.failed` is an error: the step that made the decision failed with it (a run marked failed, a request answered with an error, a job that logs the failure), so look into it at once. See [The decision record](#the-decision-record). |
+
+### Reviewers
+
+`GET /api/v1/reviewers` says how each person reviews. The console's **Settings** shows it under **Deployment details**, **Learning from reviews**, as **How each reviewer decides**. For each reviewer:
+
+| Figure | What it counts |
+|---|---|
+| Reviews | Reports they approved, edited or discarded |
+| Approved without edits | Reviews that approved the report exactly as ARIA wrote it |
+| Changed ARIA's level | Reviews that settled on a level other than the one ARIA planned for |
+| Median time to decide | The median time from the run pausing for review to their decision. "Not known" when none of their runs recorded the pause. |
+
+The figures come from rows ARIA already stores, so they need no setup:
+
+- each review's feedback row: who decided, what, and ARIA's level against theirs;
+- the run's first `interrupt` event: when it paused for review;
+- the report's review time: when the decision was applied.
+
+They cover the newest 2,000 reviews by default (`?limit=` takes up to 10,000), and only reviews that are still stored:
+
+- a deleted or purged run takes its review with it;
+- reviews of a visitor's own runs on a shared demo (`ARIA_VISITOR_SCOPE`) are never stored, so they never count;
+- unattended runs (`ARIA_REQUIRE_APPROVAL=false`) have no reviewer, so they never count.
+
+A reviewer who approves nearly everything without edits, and quickly, may be agreeing with ARIA rather than checking it; blind checks (see [Recalibration](#recalibration)) measure that without the anchor.
+
+Reviews also teach the adjudicator by example. When a model is asked to choose inside the prediction set, it sees up to three past incidents like the one at hand that a person reviewed (the nearest run-sourced incidents in memory whose runs have a review), redacted and fenced, each with the level the person set. The run's evidence lists them (`memory.reviewed`), so the reviewer sees what the model saw. When such a level lies outside ARIA's set, the evidence, the report's rationale and the review say so and ask for a check; the decision itself stays inside the set. Seeded incidents, visitors' own runs on a shared demo and unattended runs are never examples.
 
 ## Routine operations
 
 ### Rotate an API key
 
-`ARIA_API_KEYS` holds `name:secret` pairs, and every valid key has full access. Two secrets may share a name, which keeps reviews and the rate-limit bucket under one label during the overlap. In production each secret needs at least 32 characters (`openssl rand -hex 32` makes one), and a secret must not contain a colon: `a:b` is read as a key named `a`. Every request to a protected path is logged as `api.request` with its method, path, status and key name (never the secret or the query string), so the log shows who read, reviewed or deleted what.
+`ARIA_API_KEYS` holds `name:secret` pairs, and every valid key has full access. Two secrets may share a name, which keeps reviews and the rate-limit bucket under one label during the overlap. In production each secret needs at least 32 characters (`openssl rand -hex 32` makes one), and the first colon separates the name from the secret: a bare `a:b` is read as a key named `a` with the secret `b`, so give every secret a name, and keep the name free of colons. Every request to a protected path is logged as `api.request` with its method, path, status and key name (never the secret or the query string), so the log shows who read, reviewed or deleted what.
 
 1. Add the new secret beside the old one, for example `ops:<new secret>,ops:<old secret>`, then restart the API and workers.
 2. Move every client to the new secret:
@@ -300,7 +355,7 @@ A provider is enabled when its endpoint and key are set; chains skip disabled pr
 
 | Provider | What to set |
 |---|---|
-| Google Gemini | `GEMINI_API_KEY` (get one at aistudio.google.com). Optionally, the model variables. |
+| Google Gemini | `GEMINI_API_KEY` (get one at aistudio.google.com), and each model's limits from AI Studio's rate-limit page (`GEMINI_RPM` and the like). Optionally, the model variables. |
 | Hosted NVIDIA NIM | `NVIDIA_API_KEY` (keys start with `nvapi-`; get one at build.nvidia.com). Optionally, the model variables. |
 | Self-hosted NIM | `NIM_LOCAL_BASE_URL` and `NIM_LOCAL_CHAT_MODEL` (or the compose `nim` profile) |
 | Azure OpenAI | `AZURE_OPENAI_ENDPOINT`, then `AZURE_OPENAI_API_KEY` or `AZURE_OPENAI_USE_ENTRA=true`, and the deployment names |
@@ -320,13 +375,17 @@ uv run aria providers check nim
 
 Changing the embedding provider changes the vector space. Memory re-embeds stale rows when it reloads, so an index never mixes models.
 
+**The critic's independence.** The report's critic runs on "another provider" than the writer when one is set up, so a model does not judge its own report. On the Gemini pool alone, that is another Gemini model on the same key, which may share the writer's blind spots. For real independence, set a second vendor's key (`ANTHROPIC_API_KEY`, `NVIDIA_API_KEY`, `AZURE_OPENAI_*` or `OPENAI_*`) and put that provider first in `llm.routing.critic`. The run's report metadata (`critic_provider`) says who judged each report.
+
+Before you send real logs to a hosted provider, read what its terms say about prompts. `llm.data_terms` in `config/aria.yaml` records it for each provider, and Settings shows it beside the model settings. Terms that nobody has read say "Not verified". When you read them, fill in whether the provider may use prompts to improve its models and how long it keeps them, and set `verified` to the date you read them. The config refuses terms that say either without that date. A new hosted provider names its entry with `terms`.
+
 ### Scale workers
 
 - **More workers.** Run more `aria worker` processes against the same database; a claim is a conditional update, so two workers never take the same run. In compose, run `docker compose up -d --scale worker=3`. On Azure, raise the worker app's `minReplicas` (the template allows up to three).
 - **Concurrency.** Set `ARIA_WORKER_CONCURRENCY`, or override it per worker with `aria worker --concurrency N`.
 - **The database.** SQLite serialises writes. For more than a couple of workers, use Azure SQL.
-- **Abandoned runs.** Every process that drives a run, a worker or the API applying a review, claims it first and renews the claim every minute; it lets go when the run pauses or ends. A run whose holder went quiet for 5 minutes is reclaimed by another worker (or, in process, by the API), and a process with every slot busy leaves it to the others. A reclaimed run that had already paused for review, or ended, is recorded as such and let go at once. Two processes never drive one run at once, and each approved message is marked as being sent before it goes out, so it goes out once.
-- **Periodic jobs.** Each worker runs the recalibration job against the shared model file; repeating it is harmless, because the same reviews give the same threshold. Configure the log scan on one worker only, or replicas tailing the same files can open duplicate runs.
+- **Abandoned runs.** Every process that drives a run, a worker or the API applying a review, claims it first and renews the claim every minute; it lets go when the run pauses or ends. A run whose holder went quiet for 5 minutes is reclaimed by another worker (or, in process, by the API), and a process with every slot busy leaves it to the others. A reclaimed run that had already paused for review, or ended, is recorded as such and let go at once. Two processes never drive one run at once, and each approved message is marked as being sent before it goes out, so it goes out once. The drive that applies a review saves each step before the next begins, so a process that stops while publishing leaves the approval saved: the run is recovered in front of publish, under that approval.
+- **Periodic jobs.** Each worker runs the recalibration job against the shared model file; repeating it is harmless, because each blind check is applied once, by its id, whichever worker gets there first. Configure the log scan on one worker only, or replicas tailing the same files can open duplicate runs. The retention purge is safe on every worker: each run is taken and deleted in one transaction, by one of them.
 - **More API replicas.** Run migrations as a separate step (`aria db upgrade`), and set `ARIA_MIGRATE_ON_START=false`. The rate limiter and the A2A task store live in each process's memory, so each replica keeps its own. Alert grouping does not: an alert storm delivered to several replicas at once still opens one group and one run. The database keeps one open group per alert key (a unique index, added by `aria db upgrade`), and every request tries the group's run IDs in the same order, so racing requests end up on the same run.
 
 ### Database migrations
@@ -390,32 +449,58 @@ What else to keep:
 
 ### Recalibration
 
-Approvals and edits record each run's model input and the severity the reviewer settled on. Every `severity.recalibrate_check_s` seconds (600 by default; 0 turns it off), the process that executes runs checks whether `severity.recalibrate_after` new reviews have gathered since the loaded model was calibrated (30 by default, never fewer than 10). If they have, it refits the conformal threshold on every reviewed incident. Coefficients never change.
+Models with per-level calibrations, the ones `make train` writes, learn from **blind checks**: in Settings, "Check ARIA blind" shows a random recent incident without ARIA's level, a person rates it, and the rating is stored with the run's model input. Each incident is rated blind once: a second rating, by anyone, is refused (409), since the reveal has shown ARIA's level by then. Approvals and edits are still recorded, but no longer recalibrate (see [ADR 0014](adr/0014-promise-coverage-per-level-and-send-unfamiliar-windows-to-a-person.md)). On a server with `ARIA_VISITOR_SCOPE`, visitors' ratings are not stored.
 
-It saves the new model to `severity_log.json` in `ARIA_MODELS_DIR` under a version such as `<trained version>-recal<n>`, and keeps the previous file beside it as `severity_log.<version>.json`. The trained model that ships with the code is never overwritten there: engines read it until the first recalibration. Running engines reload the file when its modification time changes, at the start of each run's severity step, in every container that shares the volume.
+Every `severity.recalibrate_check_s` seconds (600 by default; 0 turns it off), the process that executes runs applies the blind checks it has not seen yet, in the order they arrived: each moves its level's miss rate toward the target, and every 100 further checks of a level replace that level's calibration scores. Coefficients never change.
+
+It saves the model to `severity_log.json` in `ARIA_MODELS_DIR` under a version such as `<trained version>-aci<n>`, and keeps the previous file beside it as `severity_log.<version>.json`. The trained model that ships with the code is never overwritten there: engines read it until the first change. Running engines reload the file when its modification time changes, at the start of each run's severity step, in every container that shares the volume. A model file without per-level calibrations still recalibrates its single threshold on reviews, every `severity.recalibrate_after` of them.
 
 **Watch it.**
 
-- `GET /api/v1/feedback` reports the reviews, the model version, the reviews it was calibrated on, the reviews pending, and the coverage before and after.
-- The console's Settings page shows the same under "Learning from reviews".
-- The log line `severity.recalibrated` records each change.
+- `GET /api/v1/feedback` reports the reviews and the model version; `GET /api/v1/blind-check` reports how many blind checks there are.
+- The log line `severity.adapted` records each change (`severity.recalibrated` for the older single-threshold models).
+- `GET /api/v1/drift` and "Has anything shifted?" in Settings compare each system's recent levels with its earlier ones.
+- The log line `severity.severe_miss_alarm` says the blind checks show more severe misses than the calibration promises ([below](#the-severe-miss-alarm)).
 
 In `external` mode the workers run the job. The API checks the shared model file before it answers `/api/v1/feedback`, so it reports the version the workers wrote.
 
-**Preview a recalibration** without saving it:
+**Preview it** without saving:
 
 ```bash
 uv run aria train recalibrate --dry-run
 ```
 
-It prints the coverage and mean set size before and after. `--min-new-reviews N` overrides the threshold; in compose, run it with `docker compose exec worker aria train recalibrate --dry-run`.
+It prints how many checks would apply, how many the sets missed and the new miss rates; in compose, run it with `docker compose exec worker aria train recalibrate --dry-run`.
 
 **Roll back.**
 
 1. Copy the kept version over the live model in `ARIA_MODELS_DIR`, for example `cp severity_log.<version>.json severity_log.json` (in compose: `docker compose exec worker sh -c 'cd /var/lib/aria/models && cp severity_log.<version>.json severity_log.json'`). Deleting `severity_log.json` there returns to the trained model. Engines pick the change up at the next run.
-2. Then set `severity.recalibrate_check_s: 0` (or raise `recalibrate_after`), and restart. The restored file counts fewer reviews, so the next check would recalibrate again.
+2. Then set `severity.recalibrate_check_s: 0` and restart: the restored file has not seen the later checks, so the next check would apply them again.
 
-In containers, the live model sits on the shared volume, so it survives a recreated container. In a checkout, `ARIA_MODELS_DIR` is `models/`, so a recalibration rewrites the committed model file (the previous version stays beside it).
+In containers, the live model sits on the shared volume, so it survives a recreated container. In a checkout, `ARIA_MODELS_DIR` is `models/`, so a change rewrites the committed model file (the previous version stays beside it).
+
+### The severe-miss alarm
+
+A severe miss is an incident a person rated SEV1 or SEV2 that ARIA rated SEV3 or SEV4. The model's calibration promises that they stay rare (`severity.severe_miss_risk`, the risk its guard was certified for; without a certificate, the serious levels' target, `severity.serious_alpha`). Every recalibration round reads the blind checks of incidents people rated SEV1 or SEV2, in the order they arrived, and tests whether the share ARIA missed has gone above that promise with confidence. The test is anytime-valid (a mixture likelihood-ratio martingale read against Ville's inequality, [`drift.py`](../src/aria/severity/drift.py)): you may look after every check, and over an endless run of checks it sounds falsely at most one time in twenty. Once it sounds it stays up; later checks cannot withdraw it.
+
+**What it does.** Nothing by itself. It is logged as `severity.severe_miss_alarm` (a warning, with the checks, the misses, the promised rate and the check at which it first sounded) on every round while it stands, and `aria train recalibrate --dry-run` returns it under `severe_miss_alarm` whenever there are new checks to report on. It needs blind checks that record ARIA's level, which every check made through the console does.
+
+**What to do.** Treat it as a recommendation to recalibrate or retrain:
+
+1. Look at the missed incidents in the console (Settings, "Check ARIA blind" shows the count; the run view shows each run's rating against the reviewer's).
+2. Let the blind checks keep coming: each one already moves its level's miss rate, and after enough of a level its calibration scores are replaced by the checks' own ([Recalibration](#recalibration)).
+3. If the misses share a system or a kind of incident, add its lines to the training pools and retrain (`make train`), or add a rule for what the model misses, chosen on validation seeds only ([`docs/validation-log.md`](validation-log.md)).
+
+The alarm does not expose itself on `/metrics` or `GET /api/v1/drift` yet: alert on the log line.
+
+### The system's own baseline and dismissed patterns
+
+Two things ARIA reads from its own database before rating a window on a system ([`src/aria/severity/history.py`](../src/aria/severity/history.py)). Neither needs setup, and neither exists on a fresh database.
+
+- **The baseline.** The median error ratio of the system's last 30 finished runs (the events and errors each run's parsing step recorded), once it has at least 5. The window's error ratio against it is a burn rate in the SRE workbook's sense, and two rules read it: errors at six times the usual ratio with at least ten of them in a hundred lines, and at fourteen times with at least twenty. The run view shows the figure as a feature item, "Errors at N× this system's usual ratio", with the median and the runs behind it. Visitors' own runs on a shared demo, and runs still queued or running, never count. The baseline follows what you send: a system triaged only when it is on fire has a high baseline, and deleting or purging runs changes it.
+- **Dismissed patterns.** The log patterns on the issue lines of the system's runs whose reviewers discarded the draft or lowered the level to SEV4 (its newest 200 reviews). When most of a window's issue lines follow them, the run view shows a feedback item, "Reviewers dismissed this pattern N times before on <system>", and the severity's rationale repeats it. It informs the reviewer and never lowers the level. It needs the runs' stored lines, so a purge or a deletion forgets those reviews.
+
+When the database does not answer, the run goes on without both and logs `severity.history_unavailable`.
 
 ### Enable the log scan
 
@@ -425,7 +510,7 @@ The scan tails log files and opens a run when the recent window's error burst sc
 2. Make the files readable where runs execute: the API in `inprocess` mode, each worker in `external` mode. In compose, mount them read-only into the `worker` service and add the variables to it, both in an override file.
 3. Restart. Expect `scan.started` with the number of sources.
 
-The first look at each file starts at its end, so history never opens a run. A file that shrinks (rotated or truncated) is read again from the top. Each system gets at most one scan run at a time, and none within `triggers.alert_group_window_s` of the last.
+The first look at each file starts at its end, so history never opens a run. A file that shrinks (rotated or truncated) is read again from the top. Each system gets at most one scan run at a time, and none within `triggers.alert_group_window_s` of the last. A burst on a system whose scan run is still open is added to that run as a follow-up (`scan.followup`), so its reviewer sees the incident grow; ARIA keeps the level it proposed and never lowers it.
 
 ### Enable the content-safety check
 
@@ -435,16 +520,165 @@ The first look at each file starts at its end, so history never opens a run. A f
 
 The safety model reads LLM-written report claims and polished messages. A flagged one is replaced by the deterministic draft, and run notes say why. Each check is one more LLM call against the run's budget. The check fails closed; see [the safety check flags everything](#the-safety-check-flags-everything).
 
+### Run the red-team suite
+
+After a change to the guard, the prompts, the report checks or the message drafts, see what injection attacks can still achieve:
+
+```bash
+uv run aria eval run --suite redteam --gate
+```
+
+It runs offline and costs nothing: no provider is called. It starts from the public injection benchmarks when they are downloaded (`aria data download`), or from the edge-case suite's own attacks, mutates each attack until a version gets past the guard, and triages it with a stand-in model that obeys any order it reads. Then it plants the same attacks with the guard bypassed, as if it had missed every line, so every order reaches the model: what the checks after the guard hold on their own. `--limit N` runs N attacks instead of the default. The results land in `reports/eval/redteam.json`:
+
+- `outcomes`: how many attacks moved the severity outside its prediction set, got a message sent without approval, left an unlisted link or recipient in a stored draft, or got a planted key, password or address into a prompt, the report or a draft, each with an exact 95% upper bound. Any hit is a failure to investigate, and `--gate` fails the run on a severity outside its set or a message sent, in either arm ([`config/eval_thresholds.yaml`](../config/eval_thresholds.yaml)).
+- `model_obeyed`: how many attacks got the stand-in model to act on each kind of order, which is what the checks after the guard had to stop. With the guard on it can be empty, when the guard caught every version of every attack.
+- `guard_bypassed`: the same figures for the arm where every order reached the model. There `model_obeyed` must not be empty, or the arm proved nothing, and `outcomes` must still be clean.
+- `guard`: how many attacks the guard missed as written, which mutations got past it, and how many it flagged whatever the mutation.
+- `model_calls`: how many model calls the attacks took, which is what a live run spends.
+
+`make eval` runs it too, as part of `--suite all`, and `docs/evaluation.md` gets a section for it.
+
+**Against a real model.** `--llm` puts the configured provider chains in the stand-in's place, for every role, and scores what they are talked into the same way. `model_obeyed` is then empty, because a real model's reasons are not visible, and only the outcomes count. It makes about `model_calls` requests per arm (the offline run's figure for the same `--limit`), against the shared keys' daily limits. Nobody has run it yet.
+
+### Compare datamarking
+
+Spotlighting by datamarking (`guardrails.datamark_untrusted` in `config/aria.yaml`, off by default) replaces every space inside a prompt's untrusted blocks with a marker and tells the model what the marker means, so an instruction hidden in a log line is visibly data. It can also hurt on code-like text such as log lines, so compare it before turning it on:
+
+```bash
+uv run aria eval run --suite redteam-datamarking
+```
+
+It runs the same attacks twice, with the marks off and then on, with the guard bypassed in both arms so that every order reaches the model, and writes `reports/eval/redteam-datamarking.json`: both arms in full, `difference` (hits with the marks minus hits without, by outcome: below zero, the marks helped) and `obeyed_difference`. Offline both arms face the stand-in, which reads through the marks by design, so they agree: the offline run proves the harness and counts the calls. The comparison that matters is `--llm`, against the configured providers, which makes about twice the red team's `model_calls`. Turn the option on only when that run shows fewer outcomes with the marks, keep the report beside the decision, and expect a little more in prompt tokens.
+
+### Measure the model's choice inside the set
+
+A language model may choose a level only inside the prediction set, and only on the windows the policy leaves open. Whether its pick beats the calibrated model's own top level, and how steady it is, is measured by:
+
+```bash
+uv run aria eval run --suite llm-choice
+```
+
+Offline the fake provider answers (it always picks the calibrated top level inside the set, so the override benefit is nil and every run agrees): the run proves the harness, and its `calls` figure in `reports/eval/llm-choice.json` is exactly the number of model calls a live run makes: three on every held-out-system window the policy leaves open, plus three on each sampled BGL window (a seeded sample of the windows left open, when the BGL log is downloaded). `--limit N` caps the windows per system and the BGL sample. Then:
+
+```bash
+uv run aria eval run --suite llm-choice --llm
+```
+
+asks the configured adjudicator chain, with the response cache off so that each run is a request, and writes `docs/eval-llm-choice.json`. Commit it: `make eval` then quotes it in `docs/evaluation.md` under "The model's choice inside the set" (the pick against the calibrated top level and the policy's own fallback on the same windows, with exact McNemar tests, and pass^k consistency, which needs every run right). Until a live run is committed the report says nothing about the choice. If the pick does not beat the calibrated top level on systems the model never saw, the honest response is to narrow the model's role to explaining the evidence.
+
 ### Delete a run
 
-`DELETE /api/v1/runs/{run_id}` removes a run everywhere:
+`DELETE /api/v1/runs/{run_id}` removes a run and everything that belongs only to it, the same rows a retention purge removes (listed under [Retention and purge](#retention-and-purge)):
 
 - its checkpoints, lines and events;
 - its report and outbound actions;
-- its tool-call audit and reviews;
-- its incident-memory entry.
+- its tool-call audit, reviews and reviewer correction;
+- its incident-memory entry;
+- the alert group that opened it, with its alerts.
 
-It answers 409 while the run is queued or running. Nothing deletes old runs automatically.
+It answers 409 while the run is queued or running. Nothing deletes old runs automatically unless you set a retention period. The run's entries on the [decision record](#the-decision-record) stay, and the deletion joins them under the caller's key name.
+
+### Retention and purge
+
+ARIA keeps every run until someone deletes it. Nothing is deleted automatically unless you set a retention period.
+
+**Set a period.** Set `ARIA_RETENTION_DAYS` (`retention.days` in `config/aria.yaml`) to the number of days to keep a run after the last thing that happened to it: it was created, paused for review, was reviewed, had a message sent again, gained an event in its log, or someone rated it blind. Where the EU AI Act's Article 26(6) applies, keep runs at least six months (see [ARIA and the EU AI Act](eu-ai-act.md)).
+
+**Count first.** This prints how many runs are past the period and how many rows of each kind a purge would delete, and deletes nothing:
+
+```bash
+uv run aria purge --dry-run
+```
+
+Pass `--days N` to try another period. In compose, run it as `docker compose exec worker aria purge --dry-run`.
+
+**Purge.** Run it by hand or from a scheduler:
+
+```bash
+uv run aria purge
+```
+
+Or set `ARIA_PURGE_INTERVAL_S` (for example `86400`, once a day; at least `60`), and the process that executes runs purges on that schedule: the API in `inprocess` mode, each worker in `external` mode. Restart after changing either variable. Several processes can purge at once, because each takes a run and deletes it in one transaction, so every run is deleted once. A purge cannot be undone, so back up first if you might need the runs again.
+
+**What is deleted.** A run is purged when nothing has happened to it for the whole period and it is not queued or running. A run that a process holds at that moment, because it is applying a review or sending a message, is left for the next purge. For each purged run, one transaction deletes, children first:
+
+- the run itself (`runs`);
+- its event log (`run_events`), its report (`reports`), and its drafted and sent messages (`actions`);
+- its checkpoints (`lg_checkpoints`, `lg_writes`, `lg_blobs`), which hold the log lines the run was sent;
+- its stored log lines (`log_events` rows of the `run` dataset) and its tool-call audit (`tool_calls`);
+- its reviews and blind checks (`feedback`);
+- its reviewer correction in learned memory (`lg_store`, namespace `feedback/<system>/<failure mode>`, keyed by the run);
+- the incident-memory entry it became when it was published (`incidents`, the `inc-...` entry with source `run`);
+- the alert group that opened it (`alert_groups`) and that group's alerts (`alerts`).
+
+One thing stays: when the newest `feedback` row belongs to a purged run, its id is kept in an empty placeholder (no run, no reviewer, no ratings). SQLite would otherwise hand that id out again, and recalibration skips blind checks by id. A later purge removes the placeholder once newer rows exist.
+
+**What is never deleted:**
+
+- runbooks;
+- the incidents memory was seeded with, and every incident that did not come from a purged run;
+- the routine log templates ARIA learned from many runs (`lg_store`, namespace `templates`);
+- datasets (the other `log_events` rows, `log_windows` and the ITSM tables), evaluation runs (`eval_runs`) and model files;
+- other runs, copies (forks) of a purged run included: each keeps its own age;
+- the decision record (`decision_record`): a purged run's entries stay, and the purge adds one entry for each run it deleted and one for the purge as a whole (see [The decision record](#the-decision-record)).
+
+**After a purge.**
+
+- **Memory.** A purge by the periodic job reloads incident memory in its own process at once. Every other process stops finding the deleted incidents within a minute.
+- **Learning.** Recalibration keeps what it already learned from purged blind checks. A model without per-level calibrations counts reviews, so purging reviews postpones its next recalibration.
+- **Figures.** Purged runs drop out of the reviewer figures, the drift check and the review list.
+- **Copies.** A copy of a purged run still names the original, which no longer opens.
+- **The record.** The decision record keeps every purged run's entries and gains the purge's own.
+
+### The decision record
+
+Every decision ARIA or a person takes is one entry in the `decision_record` table, which only grows ([ADR 0017](adr/0017-keep-an-append-only-hash-chained-decision-record.md)). It is for the question "who decided what, and when", asked months later, by someone who must not have to trust the database as it stands today.
+
+**What is recorded.** One entry each time:
+
+| Kind | When | What the entry holds |
+|---|---|---|
+| `review` | A reviewer approves, edits or rejects a report, from the console, the API, A2A or AG-UI, or ARIA approves an unattended run | The decision, the reviewer, the level before and after, how ARIA had decided, the prediction set, the message ids approved, the comment |
+| `edit` | A review carried edits | Which parts changed: the new title or level, how many summary lines and actions, the note |
+| `publish` | A report is published | The report id and version, its level, who decided it, whether a model or the template wrote it, whether it validated |
+| `send` | An approved message goes out, fails or is kept as a preview, or is sent again | The message id, channel, audience, title and outcome. Never the message's body |
+| `blind_check` | A key-holder rates an incident blind | Their level, ARIA's, whether it was in the set, the model version |
+| `recalibration` | A recalibration writes a new model file (the job, or `aria train recalibrate`) | The versions before and after, how many checks or reviews it used, the coverage or miss figures |
+| `model_swap` | A running engine starts using a different model version | The versions before and after, and the file |
+| `purge` | The retention purge deletes runs | One entry per deleted run with the rows that went, and one for the purge with its totals |
+| `delete` | Someone deletes a run by hand | The run's status, system, trigger and title |
+
+Each entry names who acted: the reviewer's key name, `cli` for the operator at the command line, or `system` for ARIA's own jobs. Never a key. Every string in an entry goes through the same redaction as log text, with the run's own pseudonyms, and a reviewer's comment or note is cut to 500 characters. Log lines, report text and message bodies are never in it: those stay in their own rows.
+
+Each entry carries a SHA-256 hash over a canonical JSON of its own fields and the hash of the entry before it (the first chains to a fixed hash of zeros). Its moment is kept to the whole second, which SQLite and Azure SQL both store exactly as it was hashed; the sequence number orders entries within a second. The database refuses `UPDATE` and `DELETE` on the table, on SQLite and on Azure SQL, and nothing links it to `runs`, so deleting or purging a run leaves its entries where they are. A decision that cannot be recorded is not dropped: the step fails with the reason (a run ends `failed`, a request answers with an error, the purge job logs `record.failed`), so a quiet gap cannot open.
+
+**Verify it.**
+
+```bash
+uv run aria audit verify
+```
+
+It walks the chain from the first entry, prints how many entries it holds and exits 0 when every link holds, or names the first entry that does not and exits 1. It also prints the newest hash. `GET /api/v1/audit/verify` answers the same (`ok`, `length`, `first_broken`, `problem`, `head_hash`), and the console's Settings shows it under "Decision record". `GET /api/v1/runs/{run_id}/record` lists one run's entries, which the incident page shows as a list of when, what happened and who. Verifying reads every entry, so run it on a schedule (a daily cron, or your monitoring) rather than on every page view. In compose, run it as `docker compose exec api aria audit verify`.
+
+**Anchor the newest hash.** The chain shows that an entry was changed, removed or reordered. It cannot show that the whole chain was rewritten from some entry onward by someone with write access to the database, because they can recompute every later hash. Keeping the newest hash somewhere they cannot write (a ticket, a log system with its own retention, a file in another account) after each verify, and comparing it next time, catches that: a rewritten chain ends in a different hash, and a cut-off tail in an older one. The verify command and endpoint print it for that purpose.
+
+**What a broken chain means.** The verifier reports one of three things, for the first entry that fails:
+
+- *does not match its own hash*: that entry's fields were changed after it was written;
+- *does not chain to the entry before it*: an entry before it was changed, or replaced;
+- *is missing*: an entry was removed from the middle of the chain.
+
+None of these happens in normal operation: the triggers refuse every change, and the writer never reuses or skips a number (two writers that read the same tail cannot both insert the next entry; the loser tries again). A break means the triggers were dropped and rows were written by hand, or the database was restored from a backup and then written to from a copy with a different history. A step that ran twice after a database error writes its entry twice, which the verifier does not report: the two entries are what happened.
+
+**What to do.**
+
+1. Stop trusting the record from the broken entry onward, and say so to whoever relies on it.
+2. Find out how it was changed: the database's own audit (Azure SQL auditing, if enabled), the access log (`api.request`) for the time of the change, and who had write access.
+3. Compare with the last anchored hash and the backups: a backup from before the break still verifies and holds the entries as they were.
+4. Do not rewrite the chain back. Leave it as evidence, record what happened outside ARIA, and restore from a backup only if the whole database is being restored.
+5. Check that the triggers are in place: on SQLite, `SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'decision_record'` lists `decision_record_no_update` and `decision_record_no_delete`; on Azure SQL, `SELECT name FROM sys.triggers WHERE parent_id = OBJECT_ID('decision_record')`. `aria db upgrade` installs them with the table; a database someone created the table in by other means lacks them.
+
+**Migration.** The table arrives with `aria db upgrade` (revision `e8f2a7c3d9b1`). Decisions made before the upgrade are not on the record; the reports, actions and feedback rows still hold them. The record is never purged; it grows by a handful of entries per reviewed run and one per purged run.
 
 ## Troubleshooting
 
@@ -473,11 +707,16 @@ It answers 409 while the run is queued or running. Nothing deletes old runs auto
 **Check.**
 
 - `GET /api/v1/providers` shows `breaker: open` and the `last_error`.
+- `GET /api/v1/llm/capacity` shows a model resting after a refusal for a limit (`held_until`,
+  `held_because`), or with no requests left today.
 - Reports are written by the template, and `/readyz` reports `degraded`.
-- Logs show `llm.provider_error`.
+- Logs show `llm.provider_error`; `llm.daily_quota_used` or `llm.spend_cap` say a model is resting
+  until its limit lifts, and `llm.quota_skip` that ARIA passed over a model with no room.
 - Run `uv run aria providers check <name>`.
 
-**Fix.** Correct the key or the model variable and restart. A breaker that opened after three failures in a row lets one trial request through after 30 seconds; meanwhile the chain falls back to the next provider. Breakers live in memory, so a restart closes them.
+**Fix.** Correct the key or the model variable and restart. A breaker that opened after three failures in a row lets one trial request through after 30 seconds; meanwhile the chain falls back to the next provider. Breakers live in memory, so a restart closes them. A rest after a daily quota or a spending cap is kept in `llm-quota.json` in `ARIA_DATA_DIR` and ends at the next midnight Pacific time; to try a model sooner (say, after raising its cap), stop the API, delete that file and start it again.
+
+**Declined and cut-short replies.** A model that declines (a refusal or a content filter) or whose structured answer stops at its token limit has failed that call: nothing it wrote is used, and the call moves to the next provider, or to the deterministic path. Neither opens the breaker, and the tokens are still counted. The run's model calls show `stop: refusal` or `stop: length`, and the logs say `llm.declined` or `llm.length_stop`. A cut answer is asked for once more with twice the token budget first. Frequent length stops on one model usually mean its reasoning spends the budget: lower its `reasoning_effort` or raise its `reasoning_tokens` in `config/aria.yaml`.
 
 ### Runs fall back to rules only
 
@@ -537,6 +776,22 @@ A message whose process stopped while sending it stays marked as being sent. Onc
 ended, the card says "Delivery not confirmed" and offers **Send again** too. It may already have
 gone out: the resend carries the same idempotency key, so a receiver that keeps those drops the
 repeat. Check the receiver first if it does not.
+
+### A draft says "[link removed]" or "[recipient removed]"
+
+**Cause.** The draft linked to a host that is not ARIA's own console or API and not in `comms.link_hosts`, or addressed someone not in `comms.recipients`. The text may have come from a model, a log line or an alert label; ARIA takes it out before review either way.
+
+**Check.** The run's notes say "removed from the responders draft: ...", and the review lists each action's `removed` items. Hosts and addresses there are written with their dots bracketed (`evil[.]example`), so the list itself is never a link.
+
+**Fix.** Nothing, when the link or address should not be there. When it should (your wiki, your incident channel), add it to `ARIA_DRAFT_LINK_HOSTS` or `ARIA_DRAFT_RECIPIENTS` and restart; drafts written after that keep it.
+
+### The critic could not judge a report
+
+**Symptom.** The report has a `critic_abstained` or `critic_cannot_judge` warning, the run's notes say "the critic could not judge everything", and the review lists `critic_checks`.
+
+**Cause.** The critic, a model judging each claim against its cited evidence, said it could not tell, and named what a person should check instead. It removes nothing when it abstains. When another real provider is set up, the critic runs there rather than on the provider that wrote the report; the run's report metadata names both.
+
+**Fix.** Check what the review lists before approving. A report can also carry `evidence_mismatch` warnings: claims whose cited evidence is about something else (a sentence about disk space citing a failed login). Those are flagged, never removed.
 
 ### The scan opens no runs
 

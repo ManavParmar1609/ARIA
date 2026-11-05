@@ -94,6 +94,13 @@ describe("modelHint", () => {
     );
   });
 
+  it("says until when the site's models are at their limits", () => {
+    const busy = { left: 2, per_visitor: 5, back_at: "2026-11-02T08:00:00Z" };
+    expect(modelHint(["gemini"], null, busy)).toMatch(
+      /^Offline until \d{2}:\d{2}: the site's models are at their limits for now/,
+    );
+  });
+
   it("keeps the offline promise where no keys are taken", () => {
     expect(modelHint([], null)).toContain("nothing leaves the server");
   });

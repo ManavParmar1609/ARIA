@@ -4,10 +4,14 @@ Labelled windows come from the semi-synthetic scenario suite (real Loghub lines,
 composition; BGL scenarios labelled by the alert-tag rubric, others by the documented scenario
 policy). Each split uses different scenario seeds, so no window appears in two splits:
 
-* train: fit the logistic regression (C chosen by cross-validation on train only);
+* train: fit the logistic regression (C chosen by cross-validation on train only, with whole
+  systems held out in each fold, so the choice favours what works on a system it has not seen);
 * temperature: fit the calibration temperature;
-* conformal: fit the conformal threshold;
+* conformal: fit the per-level conformal thresholds and the severe-miss guard;
 * test: reserved for ``make eval``.
+
+The model's calibration promises coverage per severity level (see :mod:`aria.severity.conformal`),
+and records the systems it trained on, so a window from any other system goes to a person.
 
 Every window is parsed by the production parser with the production rules, so training sees
 exactly the features the running system computes.
@@ -34,9 +38,11 @@ from aria.contracts.parsing import ParsedBatch, WindowFeatures
 from aria.data.scenarios import LinePools, Scenario, ScenarioBuilder
 from aria.evidence import EvidenceStore
 from aria.parsing.parser import parse_lines
+from aria.severity.conformal import FAMILIAR, coverage, fit_calibration, level_alphas
 from aria.severity.features import log_feature_names, log_feature_row
 from aria.severity.model import (
     LinearModel,
+    Novelty,
     calibrate,
     conformal_threshold,
     expected_calibration_error,
@@ -165,25 +171,88 @@ def _xy(
     return x, [str(w.severity) for w in windows]
 
 
-def _choose_c(x: np.ndarray, y: list[str], grid: Sequence[float], seed: int) -> float:
+def _choose_c(
+    x: np.ndarray,
+    y: list[str],
+    grid: Sequence[float],
+    seed: int,
+    groups: Sequence[str] | None = None,
+) -> float:
+    """The regularisation with the best held-out log-loss.
+
+    With ``groups`` (the system of each window), each fold holds out whole systems, so C is chosen
+    for how the model does on a system it has not seen, not on fresh windows of familiar ones.
+    A fold whose held-out systems lack a class the loss needs is skipped.
+    """
     from sklearn.linear_model import LogisticRegression  # noqa: PLC0415 - training only
-    from sklearn.model_selection import StratifiedKFold, cross_val_score  # noqa: PLC0415
+    from sklearn.metrics import log_loss  # noqa: PLC0415
+    from sklearn.model_selection import GroupKFold, StratifiedKFold  # noqa: PLC0415
     from sklearn.pipeline import make_pipeline  # noqa: PLC0415
     from sklearn.preprocessing import StandardScaler  # noqa: PLC0415
 
-    counts = Counter(y)
-    folds = max(2, min(4, *counts.values()))
+    labels = sorted(set(y))
+    y_arr = np.array(y)
+    if groups is not None and len(set(groups)) >= 3:
+        splits = list(GroupKFold(n_splits=min(4, len(set(groups)))).split(x, y, list(groups)))
+    else:
+        counts = Counter(y)
+        folds = max(2, min(4, *counts.values()))
+        splits = list(StratifiedKFold(n_splits=folds, shuffle=True, random_state=seed).split(x, y))
     best, best_score = grid[0], -np.inf
     for c in grid:
-        pipe = make_pipeline(
-            StandardScaler(),
-            LogisticRegression(C=c, class_weight="balanced", max_iter=5_000, random_state=seed),
-        )
-        cv = StratifiedKFold(n_splits=folds, shuffle=True, random_state=seed)
-        score = float(np.mean(cross_val_score(pipe, x, y, cv=cv, scoring="neg_log_loss")))
+        losses = []
+        for train_idx, test_idx in splits:
+            if len(set(y_arr[train_idx])) < 2:
+                continue
+            pipe = make_pipeline(
+                StandardScaler(),
+                LogisticRegression(C=c, class_weight="balanced", max_iter=5_000, random_state=seed),
+            )
+            pipe.fit(x[train_idx], y_arr[train_idx])
+            probs = pipe.predict_proba(x[test_idx])
+            # Classes the fold's training part never saw get no probability mass.
+            full = np.zeros((len(test_idx), len(labels)))
+            for j, cls in enumerate(pipe.classes_):
+                full[:, labels.index(str(cls))] = probs[:, j]
+            full = np.clip(full, 1e-12, 1.0)
+            full /= full.sum(axis=1, keepdims=True)
+            losses.append(log_loss(y_arr[test_idx], full, labels=labels))
+        score = -float(np.mean(losses)) if losses else -np.inf
         if score > best_score:
             best, best_score = c, score
     return best
+
+
+def new_pattern_share(values: dict[str, float]) -> float:
+    """The share of a window's log patterns never seen in its system's history."""
+    return float(values.get("novel_templates", 0.0)) / max(
+        float(values.get("n_templates", 0.0)), 1.0
+    )
+
+
+def fit_novelty(
+    model: LinearModel,
+    x_train: np.ndarray,
+    held: Sequence[LabelledWindow],
+    x_held: np.ndarray,
+) -> Novelty | None:
+    """Mahalanobis novelty on standardised features: a shrunk covariance from the training
+    windows, and reference distances and new-pattern shares from held-out windows (never the
+    training ones, whose distances are biased small)."""
+    from sklearn.covariance import LedoitWolf  # noqa: PLC0415 - training only
+
+    if len(x_train) <= 2 or not len(x_held):
+        return None
+    # Constant features standardise to zero; shrinkage keeps the covariance invertible.
+    estimate = LedoitWolf().fit(model.standardise(x_train))
+    novelty = Novelty(
+        center=np.asarray(estimate.location_, dtype=np.float64),
+        precision=np.asarray(estimate.precision_, dtype=np.float64),
+        distances=[],
+        shares=sorted(new_pattern_share(w.values) for w in held),
+    )
+    novelty.distances = sorted(novelty.distance(z) for z in model.standardise(x_held))
+    return novelty
 
 
 def fit_log_model(
@@ -195,16 +264,38 @@ def fit_log_model(
     rules_version: str,
     seed: int = 0,
     c_grid: Sequence[float] = (0.03, 0.1, 0.3, 1.0, 3.0),
+    grouped: bool = True,
+    serious_alpha: float | None = None,
+    severe_miss_risk: float | None = None,
 ) -> tuple[LinearModel, dict[str, Any]]:
+    """Fit, then calibrate per level (see :mod:`aria.severity.conformal`).
+
+    ``serious_alpha`` is the miss rate the SEV1 and SEV2 thresholds allow (``alpha`` when None);
+    ``severe_miss_risk`` is the severe-miss rate the guard certifies (no guard when None).
+    """
     names = log_feature_names()
     x_train, y_train = _xy(names, train)
     x_temp, y_temp = _xy(names, temperature)
     x_conf, y_conf = _xy(names, conformal)
-    c = _choose_c(x_train, y_train, c_grid, seed) if len(set(y_train)) > 1 else 1.0
+    groups = [w.system for w in train] if grouped else None
+    c = _choose_c(x_train, y_train, c_grid, seed, groups) if len(set(y_train)) > 1 else 1.0
     model = fit_linear_model(
         "severity_log", x_train, y_train, classes=CLASSES, feature_names=names, c=c, seed=seed
     )
     calibrate(model, x_temp, y_temp, x_conf, y_conf, alpha=alpha)
+    alphas = level_alphas(CLASSES, alpha, serious_alpha)
+    model.calibrations[FAMILIAR] = fit_calibration(
+        model.logits(x_temp),
+        y_temp,
+        model.logits(x_conf),
+        y_conf,
+        CLASSES,
+        alphas=alphas,
+        epsilon=severe_miss_risk,
+        source="fresh windows of the systems the model trained on",
+    )
+    model.novelty = fit_novelty(model, x_train, conformal, x_conf)
+    systems = sorted({w.system for w in train})
     digest = hashlib.sha256(model.coef.round(6).tobytes()).hexdigest()[:8]
     model.version = f"severity-log-{datetime.now(UTC):%Y%m%d}-{digest}"
 
@@ -227,6 +318,9 @@ def fit_log_model(
         "model_version": model.version,
         "rules_version": rules_version,
         "c": c,
+        "c_chosen_by": "cross-validation holding out whole systems"
+        if groups is not None and len(set(groups)) >= 3
+        else "stratified cross-validation",
         "alpha": alpha,
         "temperature": round(model.temperature, 4),
         "conformal_q": model.conformal_q,
@@ -238,10 +332,26 @@ def fit_log_model(
         "train": summary(x_train, y_train),
         "temperature_split": summary(x_temp, y_temp),
         "conformal_split": summary(x_conf, y_conf),
+        "calibrations": {
+            kind: {
+                "temperature": round(cal.temperature, 4),
+                "alphas": cal.alphas,
+                "thresholds": {cls: round(cal.threshold(cls), 4) for cls in CLASSES},
+                "guard": None if cal.guard is None else round(cal.guard, 4),
+                "severe_miss_risk": cal.epsilon,
+                "windows": {cls: len(cal.scores.get(cls, [])) for cls in CLASSES},
+                "conformal_split": coverage(cal, model.predict_proba(x_conf, kind), y_conf, CLASSES)
+                if kind == FAMILIAR
+                else None,
+                "source": cal.source,
+            }
+            for kind, cal in model.calibrations.items()
+        },
         "synthetic": all(w.synthetic for w in [*train, *temperature, *conformal]),
     }
     model.metadata.update(
         {
+            "trained_systems": systems,
             "rules_version": rules_version,
             "training_data": "semi-synthetic scenario suite (real Loghub lines); see docs/data-card.md",
             "label_sources": sorted({w.label_source for w in train}),
@@ -261,6 +371,8 @@ def train_from_loghub(
     per_mode: int = 6,
     quiet_per_system: int = 3,
     workers: int = 1,
+    serious_alpha: float | None = None,
+    severe_miss_risk: float | None = None,
 ) -> tuple[LinearModel, dict[str, Any]]:
     seeds = seeds or SplitSeeds()
     builder = ScenarioBuilder(LinePools.from_loghub(loghub_dir))
@@ -268,7 +380,15 @@ def train_from_loghub(
     train = build_split(builder, rules, seeds.train, **sizes)
     temp = build_split(builder, rules, seeds.temperature, **sizes)
     conf = build_split(builder, rules, seeds.conformal, **sizes)
-    model, report = fit_log_model(train, temp, conf, alpha=alpha, rules_version=rules.version)
+    model, report = fit_log_model(
+        train,
+        temp,
+        conf,
+        alpha=alpha,
+        rules_version=rules.version,
+        serious_alpha=serious_alpha,
+        severe_miss_risk=severe_miss_risk,
+    )
     report["seeds"] = {
         "train": seeds.train,
         "temperature": seeds.temperature,

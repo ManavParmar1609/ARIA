@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDownIcon, CircleCheckIcon, TriangleAlertIcon } from "lucide-react";
+import { ChevronDownIcon, CircleCheckIcon, CircleMinusIcon, TriangleAlertIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -33,7 +33,7 @@ import {
   type Severity,
 } from "@/lib/api/types";
 import { stripSeverity } from "@/lib/format";
-import { LEVEL_WORD, orList } from "@/lib/levels";
+import { LEVEL_WORD, tornText } from "@/lib/levels";
 import { cn } from "@/lib/utils";
 
 const KIND: Record<string, string> = {
@@ -44,16 +44,97 @@ const KIND: Record<string, string> = {
   ticket_draft: "Ticket draft",
 };
 
+/** How much of a message is known. The review names every message and what was removed from
+ * each; its text comes with the run's state, which may still be loading or have failed. */
+export type DraftState = "loading" | "ready" | "error";
+
+/** The removals in words: "1 link not on the allow-list and 2 recipients nobody configured".
+ * The server names each removal as "link to ..." or "recipient ..."; anything else is counted
+ * as an item. */
+export function removedWords(removed: readonly string[]): string {
+  const links = removed.filter((item) => item.startsWith("link to")).length;
+  const recipients = removed.filter((item) => item.startsWith("recipient ")).length;
+  const other = removed.length - links - recipients;
+  const parts: string[] = [];
+  if (links) parts.push(`${links} ${links === 1 ? "link" : "links"} not on the allow-list`);
+  if (recipients) {
+    parts.push(`${recipients} ${recipients === 1 ? "recipient" : "recipients"} nobody configured`);
+  }
+  if (other) parts.push(`${other} other ${other === 1 ? "item" : "items"}`);
+  return parts.length > 1
+    ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`
+    : (parts[0] ?? "");
+}
+
+/** What was taken out of a draft before the reviewer saw it, in a sentence, and each item when
+ * `detailed` (hosts and addresses come defanged from the server, so the list itself never
+ * becomes a link). Without a list it says whether the draft is still loading, could not be
+ * loaded, or is from before ARIA said what it removed. */
+export function RemovedFromDraft({
+  removed,
+  state = "ready",
+  detailed = false,
+  className,
+}: {
+  removed: string[] | undefined;
+  state?: DraftState;
+  detailed?: boolean;
+  className?: string;
+}) {
+  if (removed === undefined) {
+    if (state === "loading") {
+      return (
+        <p role="status" className={cn("text-xs text-muted-foreground", className)}>
+          Checking what was removed from this draft…
+        </p>
+      );
+    }
+    if (state === "error") {
+      return (
+        <p role="alert" className={cn("text-xs text-danger", className)}>
+          ARIA could not load what was removed from this draft.
+        </p>
+      );
+    }
+    return null; // a run from before ARIA said what it removed
+  }
+  if (!removed.length) {
+    return detailed ? (
+      <p className={cn("text-xs text-muted-foreground", className)}>
+        Nothing was removed from this draft.
+      </p>
+    ) : null;
+  }
+  return (
+    <div className={cn("text-xs", className)}>
+      <p className="flex gap-1.5">
+        <CircleMinusIcon aria-hidden className="mt-px size-3.5 shrink-0 text-sev3-fg" />
+        <span>Removed from this draft: {removedWords(removed)}.</span>
+      </p>
+      {detailed ? (
+        <ul className="mt-1 list-disc pl-5 text-muted-foreground">
+          {removed.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 /** One message ARIA drafted. With a connected channel it has a box to tick; without one it is a
- * preview to read, with nothing to tick. The receipt lists the ones kept unsent the same way. */
+ * preview to read, with nothing to tick. The receipt lists the ones kept unsent the same way.
+ * What was removed from the draft is said in the row, and listed with the message. */
 export function ActionChoice({
   action,
   checked,
   onChange,
+  draftState = "ready",
 }: {
   action: OutboundAction;
   checked?: boolean;
   onChange?: (value: boolean) => void;
+  draftState?: DraftState;
 }) {
   const [open, setOpen] = useState(false);
   const id = useId();
@@ -63,6 +144,7 @@ export function ActionChoice({
         {KIND[action.kind] ?? action.kind} to {action.audience}
       </span>
       <span className="truncate text-muted-foreground">{action.title}</span>
+      <RemovedFromDraft removed={action.removed} />
     </>
   );
   return (
@@ -121,13 +203,28 @@ export function ActionChoice({
             <span className="font-medium">ARIA</span>
             <span className="text-muted-foreground">to {action.audience}</span>
           </p>
-          <p className="mt-2 text-sm leading-6 whitespace-pre-wrap">{action.body}</p>
+          {action.body ? (
+            <p className="mt-2 text-sm leading-6 whitespace-pre-wrap">{action.body}</p>
+          ) : draftState === "error" ? (
+            <p role="alert" className="mt-2 text-sm text-danger">
+              The message could not be loaded. Try again, or read it after the review.
+            </p>
+          ) : draftState === "loading" ? (
+            <p role="status" className="mt-2 text-sm text-muted-foreground">
+              Loading the message…
+            </p>
+          ) : (
+            <p className="mt-2 text-sm text-muted-foreground">This message has no text.</p>
+          )}
+          <RemovedFromDraft removed={action.removed} state={draftState} detailed className="mt-2" />
           {/* No channel sends it, so a person may want to post it by hand. */}
-          <CopyButton
-            text={action.body}
-            label={`${KIND[action.kind] ?? action.kind} message to ${action.audience}`}
-            className="mt-2"
-          />
+          {action.body ? (
+            <CopyButton
+              text={action.body}
+              label={`${KIND[action.kind] ?? action.kind} message to ${action.audience}`}
+              className="mt-2"
+            />
+          ) : null}
         </div>
       ) : null}
     </li>
@@ -178,6 +275,24 @@ export function hasChanges(edits: ReportEdits): boolean {
   );
 }
 
+/** What the review says of the level before anyone decides. With several levels possible it
+ * names them and the one ARIA plans for, never a bare level; with one, it speaks only when ARIA
+ * was unsure of it, as it always has. */
+export function severityAdvice(
+  prompt: Pick<ReviewPrompt, "severity" | "prediction_set" | "needs_review">,
+): string | null {
+  const torn = tornText(prompt.severity, prompt.prediction_set);
+  if (prompt.needs_review) {
+    const lead = torn
+      ? `${torn}.`
+      : `ARIA isn't sure enough of ${prompt.severity} to decide alone.`;
+    return `${lead} Check the severity before approving, or change it with Edit before sending.`;
+  }
+  return torn
+    ? `${torn}. Approving keeps ${prompt.severity}; Edit before sending changes it.`
+    : null;
+}
+
 /** What approving does, in the button's words: a message goes out only when one is ticked and
  * its channel is connected. */
 export function approveLabel(sending: number, pending: boolean): string {
@@ -193,6 +308,7 @@ export function ReviewPanel({
   actions,
   report,
   onDecided,
+  actionsState = "ready",
   className,
 }: {
   runId: string;
@@ -201,6 +317,9 @@ export function ReviewPanel({
   report: IncidentReport | undefined;
   /** Called once the decision is saved; the page then shows its receipt in this place. */
   onDecided?: () => void;
+  /** Whether the messages' text has arrived with the run's state, is still loading, or could
+   * not be loaded. The review itself names every message and what was removed from it. */
+  actionsState?: DraftState;
   className?: string;
 }) {
   const id = useId();
@@ -238,7 +357,23 @@ export function ReviewPanel({
       : review.error instanceof ApiError
         ? review.error.detail
         : review.error?.message;
-  const proposed = actions.filter((a) => a.status === "proposed" || a.status === undefined);
+  // The review names every message ARIA drafted, with what was removed from each; the run's
+  // state brings their text. Until it does, each message is listed from the review with its
+  // text still loading, so the reviewer sees what to expect and what was taken out.
+  const byId = new Map(actions.map((a) => [a.action_id, a]));
+  const listed: OutboundAction[] = prompt.actions.length
+    ? prompt.actions.map(
+        (a) =>
+          byId.get(a.action_id) ?? {
+            ...a,
+            body: "",
+            status: "proposed",
+            requires_approval: true,
+            evidence_ids: [],
+          },
+      )
+    : actions;
+  const proposed = listed.filter((a) => a.status === "proposed" || a.status === undefined);
   // A message can go out only through a connected channel; the others stay previews, with
   // nothing to tick. Until the settings load, every message reads as a preview.
   const channels = settings.data?.channels ?? {};
@@ -246,6 +381,7 @@ export function ReviewPanel({
   const previews = proposed.filter((a) => !channels[a.kind]);
   const sending = sendable.filter((a) => send.has(a.action_id)).length;
   const validation = report?.validation;
+  const advice = severityAdvice(prompt);
 
   // The dialogs open from these buttons, not from triggers of their own, so closing one puts
   // focus back by hand: otherwise it falls to the page and the next key press is a shortcut.
@@ -354,16 +490,13 @@ export function ReviewPanel({
           {error}
         </p>
       ) : null}
-      {prompt.needs_review ? (
+      {advice && prompt.needs_review ? (
         <p className="flex gap-2 rounded-md bg-sev3/12 p-2.5 text-sm">
           <TriangleAlertIcon aria-hidden className="mt-0.5 size-4 shrink-0 text-sev3-fg" />
-          <span>
-            {prompt.prediction_set.length > 1
-              ? `ARIA isn't sure whether this is ${orList(prompt.prediction_set)}.`
-              : `ARIA isn't sure enough of ${prompt.severity} to decide alone.`}{" "}
-            Check the severity before approving, or change it with Edit before sending.
-          </span>
+          <span>{advice}</span>
         </p>
+      ) : advice ? (
+        <p className="text-sm">{advice}</p>
       ) : null}
       {!prompt.valid ? (
         <p className="flex gap-2 rounded-md bg-danger/10 p-2.5 text-sm text-danger">
@@ -379,6 +512,7 @@ export function ReviewPanel({
               <ActionChoice
                 key={action.action_id}
                 action={action}
+                draftState={actionsState}
                 checked={send.has(action.action_id)}
                 onChange={(on) =>
                   setSend((current) => {
@@ -404,7 +538,7 @@ export function ReviewPanel({
           </summary>
           <ul className="mt-2 grid gap-2">
             {previews.map((action) => (
-              <ActionChoice key={action.action_id} action={action} />
+              <ActionChoice key={action.action_id} action={action} draftState={actionsState} />
             ))}
           </ul>
         </details>

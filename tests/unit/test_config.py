@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from aria.config import (
     AppConfig,
+    DataTerms,
     ProviderConfig,
     ProviderKind,
     get_app_config,
@@ -90,6 +91,47 @@ def test_unknown_provider_in_routing_is_rejected() -> None:
         )
 
 
+def test_terms_nobody_read_cannot_say_what_a_provider_does_with_prompts() -> None:
+    read = {
+        "company": "Anthropic",
+        "service": "Claude API",
+        "uses": [{"account": "API", "improves_models": False, "keeps_prompts": "30 days"}],
+        "sources": [{"title": "Terms", "url": "https://www.anthropic.com/legal/commercial-terms"}],
+    }
+    with pytest.raises(ValidationError, match="without the date someone read them"):
+        DataTerms.model_validate(read)
+    terms = DataTerms.model_validate({**read, "verified": "2026-11-01"})
+    assert terms.uses[0].improves_models is False
+    unread = DataTerms.model_validate({**read, "uses": [{"account": "API"}]})
+    assert (unread.verified, unread.uses[0].improves_models, unread.uses[0].keeps_prompts) == (
+        None,
+        None,
+        None,
+    )
+    with pytest.raises(ValidationError):  # a source is a page anyone can open
+        DataTerms.model_validate({**read, "sources": [{"title": "Terms", "url": "ftp://x"}]})
+
+
+def test_a_provider_names_terms_that_exist() -> None:
+    with pytest.raises(ValidationError, match=r"lacks: fake \(ghost\)"):
+        AppConfig.model_validate(
+            {"llm": {"providers": {"fake": {"kind": "fake", "terms": "ghost"}}}}
+        )
+
+
+def test_every_provider_that_sends_prompts_elsewhere_names_its_terms() -> None:
+    """Hosted providers point at what their terms say; a server you run yourself has none."""
+    llm = get_app_config().llm
+    yours = {"nim-local", "openai_compat", "fake", "local"}
+    for name, provider in llm.providers.items():
+        assert (provider.terms is None) == (name in yours), name
+    for kind, names in llm.visitor_keys.providers.items():
+        assert all(llm.providers[name].terms for name in names), kind
+    for key, terms in llm.data_terms.items():
+        assert all(source.url.startswith("https://") for source in terms.sources), key
+        assert terms.verified is not None or terms.notes, key  # unread terms say why
+
+
 def test_allow_no_key_enables_self_hosted_endpoint() -> None:
     provider = ProviderConfig(
         kind=ProviderKind.NVIDIA_NIM, base_url="http://nim:8000/v1", allow_no_key=True
@@ -138,14 +180,54 @@ def test_gemini_comes_after_a_self_hosted_nim_and_before_hosted_nim(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     llm = get_app_config().llm
-    assert all(chain[1:3] == ["gemini", "gemini-lite"] for chain in llm.routing.values())
-    assert all(chain.index("gemini-lite") < chain.index("nim") for chain in llm.routing.values())
+    pool = {"gemini", "gemini-lite", "gemini-lite-2", "gemma"}
+    assert all(set(chain[1:5]) == pool for chain in llm.routing.values())
+    assert all(
+        chain.index(name) < chain.index("nim") for chain in llm.routing.values() for name in pool
+    )
+    # Where quality matters the quality model leads; light work leads with the lite models.
+    for role in ("adjudicator", "investigator", "reporter"):
+        assert llm.routing[role][1] == "gemini"
+    for role in ("comms", "critic", "ask"):
+        assert llm.routing[role][1:4] == ["gemini-lite", "gemini-lite-2", "gemma"]
     assert not llm.providers["gemini"].is_enabled()  # no Gemini key in tests
     monkeypatch.setenv("gemini_api_key", "AIza-test")
     reset_caches()
     providers = get_app_config().llm.providers
-    assert providers["gemini"].is_enabled()
-    assert providers["gemini-lite"].is_enabled()
+    assert all(providers[name].is_enabled() for name in pool)  # one key for the whole pool
+
+
+def test_every_model_in_the_gemini_pool_has_limits_the_owner_can_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    llm = get_app_config().llm
+    for name in ("gemini", "gemini-lite", "gemini-lite-2", "gemma"):
+        limits = llm.providers[name].limits
+        assert limits is not None
+        assert None not in (limits.rpm, limits.tpm, limits.rpd)
+    assert not llm.providers["gemini-lite-2"].verified  # new ids wait for a live check
+    assert not llm.providers["gemma"].verified
+    assert llm.providers["gemma"].structured_output.value == "prompt"
+    monkeypatch.setenv("GEMINI_RPD", "1500")
+    monkeypatch.setenv("GEMMA_TPM", "none")
+    reset_caches()
+    providers = get_app_config().llm.providers
+    assert providers["gemini"].limits is not None
+    assert providers["gemini"].limits.rpd == 1500
+    assert providers["gemma"].limits is not None
+    assert providers["gemma"].limits.tpm is None  # "none" lifts a limit
+
+
+def test_limits_and_quota_settings_are_validated() -> None:
+    from aria.config import ProviderLimits, QuotaConfig
+
+    with pytest.raises(ValidationError):
+        ProviderLimits(rpm=-1)
+    assert ProviderLimits(rpd=0).rpd == 0  # a model with no quota at all
+    with pytest.raises(ValidationError):
+        QuotaConfig(margin=1.0)
+    with pytest.raises(ValidationError):
+        QuotaConfig(timezone="Mars/Olympus_Mons")
 
 
 def test_a_self_hosted_nim_leads_every_chain_once_configured(

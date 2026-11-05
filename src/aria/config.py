@@ -17,10 +17,12 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Callable
+from datetime import date
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Any, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
@@ -58,6 +60,28 @@ class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+_NO_LIMIT = {"", "none", "off", "unlimited"}
+
+
+class ProviderLimits(_Strict):
+    """What the provider allows this project for one model: requests a minute (``rpm``), tokens a
+    minute (``tpm``) and requests a day (``rpd``). Unset means no limit; 0 means none at all, as
+    AI Studio shows for a model with no free quota. ARIA keeps under each, less ``llm.quota``'s
+    safety margin."""
+
+    rpm: int | None = Field(default=None, ge=0)
+    tpm: int | None = Field(default=None, ge=0)
+    rpd: int | None = Field(default=None, ge=0)
+
+    @field_validator("rpm", "tpm", "rpd", mode="before")
+    @classmethod
+    def _words_mean_no_limit(cls, value: Any) -> Any:
+        # From an environment variable: "none" (or "unlimited", "off") lifts a limit.
+        if isinstance(value, str) and value.strip().lower() in _NO_LIMIT:
+            return None
+        return value
+
+
 class ProviderConfig(_Strict):
     kind: ProviderKind
     base_url: str | None = None
@@ -73,6 +97,9 @@ class ProviderConfig(_Strict):
     rerank_url: str | None = None
     safety_model: str | None = None
     structured_output: StructuredOutputMode = StructuredOutputMode.JSON_SCHEMA
+    # "merge" folds system messages into the first user message, for models that refuse a
+    # system role (Gemma on the Gemini API is reported to).
+    system_messages: Literal["keep", "merge"] = "keep"
     supports_streaming: bool = True
     # Stream every request, so a model that stalls (sends nothing for stall_timeout_s) fails
     # over quickly instead of holding the run until the full timeout.
@@ -89,10 +116,16 @@ class ProviderConfig(_Strict):
     extra_headers: dict[str, str] = Field(default_factory=dict)
     # The model list answers anyone, so checking a key needs one tiny request instead (NVIDIA's).
     public_catalog: bool = False
+    # A provider's client sends each request once: when it fails, the router hands the call to
+    # the next provider in the chain, ARIA's one retry layer (see aria.llm.router).
     timeout_s: float = Field(default=60.0, gt=0)
-    max_retries: int = Field(default=2, ge=0, le=6)
     price_input_per_mtok: float | None = Field(default=None, ge=0)
     price_output_per_mtok: float | None = Field(default=None, ge=0)
+    # Rate limits ARIA keeps under (aria.llm.quota); None: the provider's limits are not tracked.
+    limits: ProviderLimits | None = None
+    # The entry of ``llm.data_terms`` that says what this provider may do with prompts; None for
+    # a server you run yourself, or the offline providers.
+    terms: str | None = None
     verified: bool = False
     notes: str | None = None
 
@@ -133,6 +166,53 @@ class ProviderConfig(_Strict):
         return self.allow_no_key or self.azure_ad or self.api_key() is not None
 
 
+class TermsSource(_Strict):
+    """A page of a provider's terms."""
+
+    title: str = Field(min_length=1, max_length=120)
+    url: str = Field(pattern=r"^https://\S+$", max_length=500)
+
+
+class DataUse(_Strict):
+    """What a provider's terms say happens to the prompts ARIA sends, for one kind of account.
+
+    None means not verified: nobody has read the terms on that point for ARIA.
+    """
+
+    account: str = Field(min_length=1, max_length=120)
+    # Whether the provider may use the prompts to improve its models.
+    improves_models: bool | None = None
+    # How long it keeps them, in plain words.
+    keeps_prompts: str | None = Field(default=None, min_length=1, max_length=500)
+
+
+class DataTerms(_Strict):
+    """A model provider's own terms about the prompts it is sent, as someone read them for ARIA.
+
+    ``verified`` is the day someone read the ``sources``. Terms nobody has read may not claim
+    anything: each use stays "not verified", so the console never states terms no one read.
+    """
+
+    company: str = Field(min_length=1, max_length=80)
+    service: str = Field(min_length=1, max_length=120)
+    uses: list[DataUse] = Field(min_length=1)
+    sources: list[TermsSource] = Field(min_length=1)
+    verified: date | None = None
+    notes: str | None = None
+
+    @model_validator(mode="after")
+    def _only_terms_someone_read_say_anything(self) -> DataTerms:
+        said = [u.account for u in self.uses if u.improves_models is not None or u.keeps_prompts]
+        if self.verified is None and said:
+            msg = (
+                f"data terms for {self.company} say what happens to prompts "
+                f"({', '.join(said)}) without the date someone read them: read the sources "
+                "and add `verified`, or leave those points unsaid"
+            )
+            raise ValueError(msg)
+        return self
+
+
 class VisitorKeysConfig(_Strict):
     """Whether a caller may send its own model key, and which providers each kind of key fills.
 
@@ -162,6 +242,42 @@ class SharedAllowanceConfig(_Strict):
     per_day: int = Field(default=0, ge=0)
 
 
+class QuotaConfig(_Strict):
+    """How ARIA keeps every provider with ``limits`` inside them (aria.llm.quota).
+
+    ``margin`` is the share of each limit left unused, for clocks and counts that differ a little
+    from the provider's. A request that would pass a per-minute limit waits up to ``max_wait_s``
+    for room, then goes to the next provider. A model-written triage reserves the calls it needs
+    across the chains before it starts (``reserve_runs``); a reservation lapses after
+    ``reservation_ttl_s``. Daily counts start again at midnight in ``timezone``: Pacific time, as
+    Google's are.
+    """
+
+    margin: float = Field(default=0.1, ge=0, lt=1)
+    max_wait_s: float = Field(default=5.0, ge=0, le=60)
+    reserve_runs: bool = True
+    reservation_ttl_s: float = Field(default=900.0, gt=0, le=86_400)
+    timezone: str = "America/Los_Angeles"
+
+    @field_validator("timezone")
+    @classmethod
+    def _known_zone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            msg = f"unknown time zone {value!r}"
+            raise ValueError(msg) from exc
+        return value
+
+
+class ResponseCacheConfig(_Strict):
+    """Answers kept in memory for repeats of the same deterministic request (temperature 0):
+    for ``ttl_s`` seconds, at most ``max_entries`` of them. 0 for either turns it off."""
+
+    ttl_s: float = Field(default=900.0, ge=0, le=86_400)
+    max_entries: int = Field(default=256, ge=0, le=10_000)
+
+
 class LLMConfig(_Strict):
     providers: dict[str, ProviderConfig]
     routing: dict[str, list[str]] = Field(default_factory=dict)
@@ -170,6 +286,10 @@ class LLMConfig(_Strict):
     safety: list[str] = Field(default_factory=list)
     visitor_keys: VisitorKeysConfig = Field(default_factory=VisitorKeysConfig)
     shared: SharedAllowanceConfig = Field(default_factory=SharedAllowanceConfig)
+    quota: QuotaConfig = Field(default_factory=QuotaConfig)
+    cache: ResponseCacheConfig = Field(default_factory=ResponseCacheConfig)
+    # What each provider's own terms say about prompts, by name; providers point here by `terms`.
+    data_terms: dict[str, DataTerms] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _chains_reference_known_providers(self) -> LLMConfig:
@@ -180,6 +300,14 @@ class LLMConfig(_Strict):
         unknown = sorted({name for chain in chains for name in chain} - self.providers.keys())
         if unknown:
             msg = f"routing references unknown providers: {', '.join(unknown)}"
+            raise ValueError(msg)
+        missing = sorted(
+            f"{name} ({cfg.terms})"
+            for name, cfg in self.providers.items()
+            if cfg.terms is not None and cfg.terms not in self.data_terms
+        )
+        if missing:
+            msg = f"providers name data terms that llm.data_terms lacks: {', '.join(missing)}"
             raise ValueError(msg)
         for kind, names in self.visitor_keys.providers.items():
             if not re.fullmatch(r"[a-z][a-z0-9-]{0,23}", kind) or not names:
@@ -220,12 +348,22 @@ class GuardrailConfig(_Strict):
     pseudonymize_ips: bool = True
     detect_injection: bool = True
     safety_model: bool = False
+    # Spotlighting by datamarking (Hines et al., 2024): mark every space inside the untrusted
+    # blocks of a prompt and tell the model what the marker means, so an instruction hidden in a
+    # log line is visibly data. Off by default: it costs tokens and can hurt on code-like text,
+    # so measure it first with the red-team suite's A/B harness (aria.evals.redteam).
+    datamark_untrusted: bool = False
     max_line_chars: int = Field(default=2_000, gt=80)
     max_lines: int = Field(default=20_000, gt=0)
 
 
 class SeverityConfig(_Strict):
+    # The miss rate the prediction set allows: ``alpha`` for SEV3 and SEV4, ``serious_alpha`` for
+    # SEV1 and SEV2, and ``severe_miss_risk`` for "a serious incident's set holds no serious
+    # level" (conformal risk control; None turns that guard off). See aria.severity.conformal.
     alpha: float = Field(default=0.10, gt=0, lt=0.5)
+    serious_alpha: float = Field(default=0.05, gt=0, lt=0.5)
+    severe_miss_risk: float | None = Field(default=0.05, gt=0, lt=0.5)
     rules_file: Path = Path("config/severity_rules.yaml")
     log_model_file: Path = Path("models/severity_log.json")
     ticket_model_file: Path = Path("models/severity_ticket.json")
@@ -279,6 +417,48 @@ class CommsConfig(_Strict):
     # Name of the variable holding the HMAC key that signs generic webhook deliveries.
     generic_webhook_secret_env: str = "ARIA_OUTBOUND_WEBHOOK_SECRET"  # noqa: S105
     timeout_s: float = Field(default=10.0, gt=0, le=60)
+    # Hosts an outbound draft may link to, besides ARIA's own console and API (the hosts of
+    # ARIA_CONSOLE_URL and ARIA_PUBLIC_BASE_URL, always allowed); a subdomain counts as its host.
+    # Any other link is taken out of the draft before review and listed for the reviewer.
+    link_hosts: list[str] = Field(default_factory=list)
+    # Whom a draft may address besides the channel it goes to: @handles, #channels or e-mail
+    # addresses. Any other mention or address is taken out and listed for the reviewer.
+    recipients: list[str] = Field(default_factory=list)
+
+    @field_validator("link_hosts", "recipients", mode="before")
+    @classmethod
+    def _split_list(cls, value: Any) -> Any:
+        # From an environment variable: "wiki.example.com, status.example.com".
+        if isinstance(value, str):
+            value = value.split(",")
+        if isinstance(value, list):
+            return [str(item).strip().lower() for item in value if str(item).strip()]
+        return value
+
+
+# A purge reads every run's last change: once a minute is the most that is worth doing.
+MIN_PURGE_INTERVAL_S = 60
+
+
+class RetentionConfig(_Strict):
+    """How long ARIA keeps runs. Off by default: with ``days`` at 0, nothing is ever deleted
+    unless someone deletes a run.
+
+    With a period set, a run is purged, with everything that belongs only to it, once nothing has
+    happened to it for ``days`` days (aria.graph.retention): by ``aria purge``, and every
+    ``purge_interval_s`` seconds by the process that executes runs (0: by the command only).
+    """
+
+    days: int = Field(default=0, ge=0, le=36_500)
+    purge_interval_s: int = Field(default=0, ge=0, le=31_536_000)
+
+    @field_validator("purge_interval_s")
+    @classmethod
+    def _not_too_often(cls, value: int) -> int:
+        if 0 < value < MIN_PURGE_INTERVAL_S:
+            msg = f"purge_interval_s: purge at most once a minute ({MIN_PURGE_INTERVAL_S} or more)"
+            raise ValueError(msg)
+        return value
 
 
 class InvestigationConfig(_Strict):
@@ -297,6 +477,7 @@ class AppConfig(_Strict):
     investigation: InvestigationConfig = Field(default_factory=InvestigationConfig)
     triggers: TriggerConfig = Field(default_factory=TriggerConfig)
     comms: CommsConfig = Field(default_factory=CommsConfig)
+    retention: RetentionConfig = Field(default_factory=RetentionConfig)
 
 
 class Settings(BaseSettings):
@@ -309,6 +490,9 @@ class Settings(BaseSettings):
     database_auth: Literal["default", "entra"] = "default"
     config_file: Path = Path("config/aria.yaml")
     data_dir: Path = Path("data")
+    # Where the model rate-limit counts are kept between restarts (aria.llm.quota). Unset: the
+    # file llm-quota.json in data_dir.
+    quota_file: Path | None = None
     models_dir: Path = Path("models")
     runbooks_dir: Path = Path("runbooks")
     api_keys: SecretStr | None = None
@@ -319,6 +503,10 @@ class Settings(BaseSettings):
     log_format: Literal["json", "console"] = "console"
     otel_exporter: Literal["none", "console", "otlp", "azure"] = "none"
     otlp_endpoint: str | None = None
+    # Where the otlp exporter sends the GenAI metrics (an OTLP/HTTP /v1/metrics URL). Unset: no
+    # metrics over OTLP, since a traces-only backend such as Phoenix refuses them. Azure Monitor
+    # takes them without it.
+    otlp_metrics_endpoint: str | None = None
     worker_mode: Literal["inprocess", "external"] = "inprocess"
     # Bring the schema to the latest migration when the API starts (containers). Run one API
     # replica while a release migrates, or run `aria db upgrade` as a job instead.
@@ -355,7 +543,15 @@ class Settings(BaseSettings):
     mcp_url: str | None = None
     mcp_token: SecretStr | None = None
 
-    @field_validator("api_keys", "pseudonym_key", "mcp_token", "mcp_url", mode="before")
+    @field_validator(
+        "api_keys",
+        "pseudonym_key",
+        "mcp_token",
+        "mcp_url",
+        "quota_file",
+        "otlp_metrics_endpoint",
+        mode="before",
+    )
     @classmethod
     def _blank_is_unset(cls, value: Any) -> Any:
         # Compose and shell defaults pass "" for an unset variable; an empty secret must not
@@ -372,6 +568,10 @@ class Settings(BaseSettings):
     @property
     def is_prod(self) -> bool:
         return self.env is Environment.PROD
+
+    @property
+    def quota_path(self) -> Path:
+        return self.quota_file or self.data_dir / "llm-quota.json"
 
 
 def _interpolate(value: Any) -> Any:

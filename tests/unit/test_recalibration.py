@@ -21,11 +21,17 @@ from aria.db.engine import get_engine, init_db
 from aria.graph.runner import TriageRunner
 from aria.services import Services
 from aria.severity import recalibration
+from aria.severity.conformal import FAMILIAR
 from aria.severity.engine import SeverityEngine
-from aria.severity.model import LinearModel, live_model_path
+from aria.severity.model import Calibration, LinearModel, live_model_path
 from aria.severity.recalibration import (
+    ACI_STEP,
+    BATCH_PER_LEVEL,
     MIN_REVIEWED,
+    BlindCheck,
     ReviewedExample,
+    adapt,
+    adapt_from_blind_checks,
     recalibrate,
     recalibrate_from_feedback,
     reviewed_examples,
@@ -148,6 +154,7 @@ def test_after_an_upgrade_reviews_recalibrate_the_new_model(
 ) -> None:
     """The job kept recalibrating the previous release's model, which the engine then refused,
     so reviews never reached the model the upgrade shipped."""
+    init_db(get_engine())  # a recalibration goes on the decision record
     shipped, shared = tmp_path / "app", tmp_path / "volume"
     shipped.mkdir()
     shared.mkdir()
@@ -257,3 +264,185 @@ async def test_reviews_recalibrate_the_model_and_running_engines_reload_it(
     assert LinearModel.load(trained_file).version == trained.version  # never written
     assert fresh.refresh()  # every container sharing the volume picks it up
     assert fresh.model.version == saved.version
+
+
+# --- blind checks and adaptive conformal inference ---------------------------------------------
+
+
+def calibrated_tiny(alpha: float) -> LinearModel:
+    """The tiny model with a per-level calibration fitted on its own agreeing windows."""
+    model = tiny_model(conformal_q=0.2)
+    rng = np.random.default_rng(9)
+    xs = rng.uniform(-2, 2, size=300)
+    probs = model.predict_proba(model.matrix([{"x": float(x)} for x in xs]))
+    tops = probs.argmax(axis=1)
+    scores = {
+        cls: sorted(float(1 - probs[i, k]) for i in range(len(xs)) if tops[i] == k)
+        for k, cls in enumerate(CLASSES)
+    }
+    model.calibrations = {
+        FAMILIAR: Calibration(
+            temperature=1.0,
+            alphas=dict.fromkeys(CLASSES, alpha),
+            scores=scores,
+            guard_classes=["SEV1", "SEV2"],
+            ordered=True,
+        )
+    }
+    return model
+
+
+def checks(
+    model: LinearModel, n: int, *, disagree: float, seed: int, start: int = 1
+) -> list[BlindCheck]:
+    rng = np.random.default_rng(seed)
+    out: list[BlindCheck] = []
+    for i in range(n):
+        x = float(rng.uniform(-2, 2))
+        top = int(np.argmax(model.predict_proba(model.matrix([{"x": x}]))[0]))
+        label = top if rng.random() >= disagree else (top + 1 if top < 3 else 2)
+        out.append(BlindCheck(start + i, {"x": x}, CLASSES[label], FAMILIAR))
+    return out
+
+
+def _missed(model: LinearModel, sample: list[BlindCheck]) -> float:
+    calibration = model.calibrations[FAMILIAR]
+    return float(
+        np.mean(
+            [
+                c.label
+                not in calibration.classes_in(
+                    model.predict_proba(model.matrix([c.row]))[0], CLASSES
+                )
+                for c in sample
+            ]
+        )
+    )
+
+
+def test_over_any_stream_each_level_misses_close_to_its_target_share(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Adaptive conformal inference's bound (Gibbs and Candès, 2021): over n checks of a level,
+    the share its sets missed exceeds the target by at most (max(a, 1 - a) + step) / (step n),
+    whatever the checks were. Here the labels are random, so the sets must widen a long way to
+    keep it. (A level with no calibration scores is never ruled out, so it can only miss less; a
+    batch recalibration starts the bound afresh, so this stream stays below one.)"""
+    monkeypatch.setattr(recalibration, "BATCH_PER_LEVEL", 10**9)
+    model = calibrated_tiny(alpha=0.1)
+    rng = np.random.default_rng(4)
+    stream = [
+        BlindCheck(i + 1, {"x": float(rng.uniform(-2, 2))}, CLASSES[int(rng.integers(4))], FAMILIAR)
+        for i in range(1_600)
+    ]
+    adapted, summary = adapt(model, stream, targets=dict.fromkeys(CLASSES, 0.1))
+    assert summary["applied"] == 1_600
+    for level in CLASSES:
+        n = summary["by_level"][level]["checks"]
+        share = summary["by_level"][level]["missed"] / n
+        assert share - 0.1 <= (0.9 + ACI_STEP) / (ACI_STEP * n) + 1e-9
+    assert adapted.version == "tiny-1-aci1600"
+    assert adapted.metadata["aci"]["applied_through"] == 1_600
+    assert model.calibrations[FAMILIAR].alphas == dict.fromkeys(CLASSES, 0.1)  # left as it was
+
+
+def test_a_level_the_sets_keep_missing_gets_a_lower_miss_rate_until_they_hold_it() -> None:
+    model = calibrated_tiny(alpha=0.1)
+    calibration = model.calibrations[FAMILIAR]
+    row = {"x": 2.0}  # the model is sure of SEV1 here
+    assert "SEV4" not in calibration.classes_in(
+        model.predict_proba(model.matrix([row]))[0], CLASSES
+    )
+    stream = [BlindCheck(i + 1, row, "SEV4", FAMILIAR) for i in range(60)]
+    adapted, summary = adapt(model, stream, targets=dict.fromkeys(CLASSES, 0.1))
+    assert adapted.calibrations[FAMILIAR].alphas["SEV4"] < 0.1
+    held = adapted.calibrations[FAMILIAR].classes_in(
+        adapted.predict_proba(adapted.matrix([row]))[0], CLASSES
+    )
+    assert "SEV4" in held
+    assert summary["missed"] < 60  # it stopped missing once the set reached SEV4
+
+
+def test_each_blind_check_moves_the_sets_once() -> None:
+    model = calibrated_tiny(alpha=0.1)
+    targets = dict.fromkeys(CLASSES, 0.1)
+    stream = checks(model, 30, disagree=0.2, seed=6)
+    adapted, _ = adapt(model, stream, targets=targets)
+    again, summary = adapt(adapted, stream, targets=targets)
+    assert summary["applied"] == 0
+    assert again.calibrations[FAMILIAR].alphas == adapted.calibrations[FAMILIAR].alphas
+    more, summary = adapt(
+        adapted, [*stream, *checks(model, 5, disagree=0.2, seed=7, start=31)], targets=targets
+    )
+    assert summary["applied"] == 5
+    assert more.metadata["aci"]["checks"] == 35
+
+
+def test_a_level_with_enough_blind_checks_is_calibrated_on_them() -> None:
+    model = calibrated_tiny(alpha=0.1)
+    targets = dict.fromkeys(CLASSES, 0.1)
+    many = [c for c in checks(model, 900, disagree=0.0, seed=8) if c.label == "SEV1"]
+    assert len(many) >= BATCH_PER_LEVEL
+    adapted, summary = adapt(model, many, targets=targets)
+    assert summary["replaced_scores"] == {FAMILIAR: ["SEV1"]}
+    assert len(adapted.calibrations[FAMILIAR].scores["SEV1"]) == len(many)
+    assert adapted.calibrations[FAMILIAR].alphas["SEV1"] == 0.1  # back to target on fresh scores
+    _, again = adapt(adapted, many, targets=targets)
+    assert again["replaced_scores"] == {}  # no new batch since
+
+
+def test_blind_checks_in_the_database_adapt_the_live_model(tmp_path: Path) -> None:
+    engine = get_engine()
+    init_db(engine)
+    trained = tmp_path / "severity_log.json"
+    calibrated_tiny(alpha=0.1).save(trained)
+    live = tmp_path / "live" / "severity_log.json"
+    for i, check in enumerate(checks(calibrated_tiny(0.1), 12, disagree=0.5, seed=10)):
+        repo.save_feedback(
+            engine,
+            f"run-{i}",
+            "blind_check",
+            {"to": check.label, "model_row": check.row, "calibration": FAMILIAR},
+            author="ana",
+        )
+    targets = dict.fromkeys(CLASSES, 0.1)
+    result = adapt_from_blind_checks(engine, live, targets=targets, trained=trained)
+    assert result is not None
+    assert result["applied"] == 12
+    assert LinearModel.load(live).metadata["aci"]["checks"] == 12
+    assert adapt_from_blind_checks(engine, live, targets=targets, trained=trained) is None
+
+
+def test_blind_checks_of_serious_incidents_feed_the_severe_miss_alarm_in_arrival_order(
+    tmp_path: Path,
+) -> None:
+    engine = get_engine()
+    init_db(engine)
+    trained = tmp_path / "severity_log.json"
+    calibrated_tiny(alpha=0.1).save(trained)
+    live = tmp_path / "live" / "severity_log.json"
+    # Five serious incidents, four of them rated SEV3 or SEV4 by ARIA; one the person rated SEV3
+    # (not a serious incident, so not a check of the promise); one check without ARIA's level.
+    rows = [
+        ("SEV1", "SEV4"),
+        ("SEV2", "SEV4"),
+        ("SEV3", "SEV3"),
+        ("SEV1", "SEV2"),
+        ("SEV2", "SEV3"),
+        ("SEV1", None),
+        ("SEV1", "SEV4"),
+    ]
+    for i, (theirs, aria) in enumerate(rows):
+        value = {"to": theirs, "model_row": {"x": -2.0}, "calibration": FAMILIAR}
+        if aria is not None:
+            value["aria"] = aria
+        repo.save_feedback(engine, f"run-{i}", "blind_check", value, author="ana")
+    targets = dict.fromkeys(CLASSES, 0.1)
+    result = adapt_from_blind_checks(engine, live, targets=targets, trained=trained, dry_run=True)
+    assert result is not None
+    alarm = result["severe_miss_alarm"]
+    assert (alarm["checks"], alarm["misses"]) == (5, 4)
+    assert alarm["promised"] == 0.1  # no certified guard: the serious levels' target
+    assert alarm["raised"]
+    assert alarm["raised_at"] <= 5
+    assert not live.exists()  # a dry run, and the alarm itself, change nothing

@@ -73,6 +73,7 @@ export function ErrorState({
   onRetry,
   action,
   className,
+  heading: Title = "p",
 }: {
   error: unknown;
   title: string;
@@ -80,6 +81,8 @@ export function ErrorState({
   /** Another way forward beside "Try again", such as a link back. */
   action?: ReactNode;
   className?: string;
+  /** "h1" where the error is the whole page, such as the console with its API down. */
+  heading?: "p" | "h1";
 }) {
   const detail =
     error instanceof ApiError
@@ -92,10 +95,10 @@ export function ErrorState({
       role="alert"
       className={cn("grid justify-items-start gap-3 rounded-lg bg-danger/10 px-6 py-6", className)}
     >
-      <p className="flex items-center gap-2 font-medium text-danger">
+      <Title className="flex items-center gap-2 font-sans text-base font-medium text-danger">
         <CircleAlertIcon aria-hidden className="size-4" />
         {title}
-      </p>
+      </Title>
       <p className="max-w-full text-sm wrap-anywhere text-muted-foreground">{detail}</p>
       {onRetry || action ? (
         <div className="flex flex-wrap gap-2">
@@ -151,24 +154,36 @@ export function PageHeader({
 }
 
 /** A section of a long page: its title in the serif, between the page's title and its cards' in
- * size, and a sentence on what the section holds. */
+ * size, and a sentence on what the section holds. A small badge may sit beside the title. */
 export function SectionHeader({
   id,
   title,
   description,
+  badge,
 }: {
   id: string;
   title: ReactNode;
   description?: ReactNode;
+  badge?: ReactNode;
 }) {
+  const heading = (
+    <h2
+      id={id}
+      className="scroll-mt-24 font-display text-3xl leading-tight font-normal tracking-heading lg:scroll-mt-8"
+    >
+      {title}
+    </h2>
+  );
   return (
     <div className="grid max-w-3xl gap-2">
-      <h2
-        id={id}
-        className="scroll-mt-24 font-display text-3xl leading-tight font-normal tracking-heading lg:scroll-mt-8"
-      >
-        {title}
-      </h2>
+      {badge ? (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {heading}
+          {badge}
+        </div>
+      ) : (
+        heading
+      )}
       {description ? <p className="text-lg text-muted-foreground">{description}</p> : null}
     </div>
   );
