@@ -317,14 +317,24 @@ class AriaExecutor(AgentExecutor):
         await updater.cancel()
 
 
+def task_owner(context: ServerCallContext) -> str:
+    """Whose tasks a call may see: one visitor's on a server that keeps visitors apart, else
+    everyone's. The store keeps each owner's tasks apart, so another visitor's task is as
+    missing as no task to every request that names it (reading it, answering its review,
+    cancelling it), and their answer never reaches it."""
+    viewer = context.state.get("viewer") if context is not None else None
+    tag = viewer.tag if isinstance(viewer, Viewer) else None
+    return tag or "shared"
+
+
 class BoundedTaskStore(InMemoryTaskStore):
     """The in-memory task store, keeping only the newest tasks: at most ``max_tasks``, and at most
     ``max_bytes`` of them in all, so a stream of large requests cannot fill the API's memory. A
     task's run stays in the database, so a client whose old task was forgotten still finds the
-    run and its report through the REST API."""
+    run and its report through the REST API. Tasks are kept apart by ``task_owner``."""
 
     def __init__(self, *, max_tasks: int = 500, max_bytes: int = 64 * 1024 * 1024) -> None:
-        super().__init__()
+        super().__init__(owner_resolver=task_owner)
         self.max_tasks = max_tasks
         self.max_bytes = max_bytes
         self._held: OrderedDict[str, tuple[int, ServerCallContext]] = OrderedDict()
