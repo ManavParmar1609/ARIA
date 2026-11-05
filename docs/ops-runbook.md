@@ -191,7 +191,7 @@ The `config/aria.yaml` settings operators change most often:
 | `llm.routing` | The provider chain for each role |
 | `llm.safety` | The providers that answer the content-safety check |
 | `budgets` | Per-run limits for tokens, cost, elapsed time, steps, tool calls and LLM calls |
-| `guardrails` | Redaction, IP pseudonyms, injection detection, the content-safety check, and the line caps |
+| `guardrails` | Redaction, IP pseudonyms, injection detection, the content-safety check, spotlighting by datamarking (off until it is compared, see [Compare datamarking](#compare-datamarking)), and the line caps |
 | `triggers` | The alert grouping window, plus the scan's burst threshold and window size |
 | `comms.link_hosts`, `comms.recipients` | The hosts a message draft may link to and the recipients it may address. Anything else is taken out of the draft before review and listed for the reviewer. |
 | `severity.recalibrate_after`, `severity.recalibrate_check_s` | When recalibration runs. Their defaults are in [`config.py`](../src/aria/config.py), so add them to the YAML to change them. |
@@ -310,6 +310,8 @@ They cover the newest 2,000 reviews by default (`?limit=` takes up to 10,000), a
 
 A reviewer who approves nearly everything without edits, and quickly, may be agreeing with ARIA rather than checking it; blind checks (see [Recalibration](#recalibration)) measure that without the anchor.
 
+Reviews also teach the adjudicator by example. When a model is asked to choose inside the prediction set, it sees up to three past incidents like the one at hand that a person reviewed (the nearest run-sourced incidents in memory whose runs have a review), redacted and fenced, each with the level the person set. The run's evidence lists them (`memory.reviewed`), so the reviewer sees what the model saw. When such a level lies outside ARIA's set, the evidence, the report's rationale and the review say so and ask for a check; the decision itself stays inside the set. Seeded incidents, visitors' own runs on a shared demo and unattended runs are never examples.
+
 ## Routine operations
 
 ### Rotate an API key
@@ -372,6 +374,8 @@ uv run aria providers check nim
 `providers list` shows every provider, whether it is enabled and which roles use it. `providers check` verifies keys, reachability and model IDs. By default it sends one tiny chat request and one embedding request, which costs a little; pass `--no-probe` to read only the model catalog. It does not test the content-safety model. `uv run aria providers models nim` lists every model the provider serves.
 
 Changing the embedding provider changes the vector space. Memory re-embeds stale rows when it reloads, so an index never mixes models.
+
+**The critic's independence.** The report's critic runs on "another provider" than the writer when one is set up, so a model does not judge its own report. On the Gemini pool alone, that is another Gemini model on the same key, which may share the writer's blind spots. For real independence, set a second vendor's key (`ANTHROPIC_API_KEY`, `NVIDIA_API_KEY`, `AZURE_OPENAI_*` or `OPENAI_*`) and put that provider first in `llm.routing.critic`. The run's report metadata (`critic_provider`) says who judged each report.
 
 Before you send real logs to a hosted provider, read what its terms say about prompts. `llm.data_terms` in `config/aria.yaml` records it for each provider, and Settings shows it beside the model settings. Terms that nobody has read say "Not verified". When you read them, fill in whether the provider may use prompts to improve its models and how long it keeps them, and set `verified` to the date you read them. The config refuses terms that say either without that date. A new hosted provider names its entry with `terms`.
 
@@ -521,16 +525,46 @@ The safety model reads LLM-written report claims and polished messages. A flagge
 After a change to the guard, the prompts, the report checks or the message drafts, see what injection attacks can still achieve:
 
 ```bash
-uv run aria eval run --suite redteam
+uv run aria eval run --suite redteam --gate
 ```
 
-It runs offline and costs nothing: no provider is called. It starts from the public injection benchmarks when they are downloaded (`aria data download`), or from the edge-case suite's own attacks, mutates each attack until a version gets past the guard, and triages it with a stand-in model that obeys any order it reads. `--limit N` runs N attacks instead of the default. The results land in `reports/eval/redteam.json`:
+It runs offline and costs nothing: no provider is called. It starts from the public injection benchmarks when they are downloaded (`aria data download`), or from the edge-case suite's own attacks, mutates each attack until a version gets past the guard, and triages it with a stand-in model that obeys any order it reads. Then it plants the same attacks with the guard bypassed, as if it had missed every line, so every order reaches the model: what the checks after the guard hold on their own. `--limit N` runs N attacks instead of the default. The results land in `reports/eval/redteam.json`:
 
-- `outcomes`: how many attacks moved the severity outside its prediction set, got a message sent without approval, left an unlisted link or recipient in a stored draft, or got a planted key, password or address into a prompt, the report or a draft, each with an exact 95% upper bound. Any hit is a failure to investigate.
-- `model_obeyed`: how many attacks got the stand-in model to act on each kind of order, which is what the checks after the guard had to stop.
+- `outcomes`: how many attacks moved the severity outside its prediction set, got a message sent without approval, left an unlisted link or recipient in a stored draft, or got a planted key, password or address into a prompt, the report or a draft, each with an exact 95% upper bound. Any hit is a failure to investigate, and `--gate` fails the run on a severity outside its set or a message sent, in either arm ([`config/eval_thresholds.yaml`](../config/eval_thresholds.yaml)).
+- `model_obeyed`: how many attacks got the stand-in model to act on each kind of order, which is what the checks after the guard had to stop. With the guard on it can be empty, when the guard caught every version of every attack.
+- `guard_bypassed`: the same figures for the arm where every order reached the model. There `model_obeyed` must not be empty, or the arm proved nothing, and `outcomes` must still be clean.
 - `guard`: how many attacks the guard missed as written, which mutations got past it, and how many it flagged whatever the mutation.
+- `model_calls`: how many model calls the attacks took, which is what a live run spends.
 
-`make eval` runs it too, as part of `--suite all`.
+`make eval` runs it too, as part of `--suite all`, and `docs/evaluation.md` gets a section for it.
+
+**Against a real model.** `--llm` puts the configured provider chains in the stand-in's place, for every role, and scores what they are talked into the same way. `model_obeyed` is then empty, because a real model's reasons are not visible, and only the outcomes count. It makes about `model_calls` requests per arm (the offline run's figure for the same `--limit`), against the shared keys' daily limits. Nobody has run it yet.
+
+### Compare datamarking
+
+Spotlighting by datamarking (`guardrails.datamark_untrusted` in `config/aria.yaml`, off by default) replaces every space inside a prompt's untrusted blocks with a marker and tells the model what the marker means, so an instruction hidden in a log line is visibly data. It can also hurt on code-like text such as log lines, so compare it before turning it on:
+
+```bash
+uv run aria eval run --suite redteam-datamarking
+```
+
+It runs the same attacks twice, with the marks off and then on, with the guard bypassed in both arms so that every order reaches the model, and writes `reports/eval/redteam-datamarking.json`: both arms in full, `difference` (hits with the marks minus hits without, by outcome: below zero, the marks helped) and `obeyed_difference`. Offline both arms face the stand-in, which reads through the marks by design, so they agree: the offline run proves the harness and counts the calls. The comparison that matters is `--llm`, against the configured providers, which makes about twice the red team's `model_calls`. Turn the option on only when that run shows fewer outcomes with the marks, keep the report beside the decision, and expect a little more in prompt tokens.
+
+### Measure the model's choice inside the set
+
+A language model may choose a level only inside the prediction set, and only on the windows the policy leaves open. Whether its pick beats the calibrated model's own top level, and how steady it is, is measured by:
+
+```bash
+uv run aria eval run --suite llm-choice
+```
+
+Offline the fake provider answers (it always picks the calibrated top level inside the set, so the override benefit is nil and every run agrees): the run proves the harness, and its `calls` figure in `reports/eval/llm-choice.json` is exactly the number of model calls a live run makes: three on every held-out-system window the policy leaves open, plus three on each sampled BGL window (a seeded sample of the windows left open, when the BGL log is downloaded). `--limit N` caps the windows per system and the BGL sample. Then:
+
+```bash
+uv run aria eval run --suite llm-choice --llm
+```
+
+asks the configured adjudicator chain, with the response cache off so that each run is a request, and writes `docs/eval-llm-choice.json`. Commit it: `make eval` then quotes it in `docs/evaluation.md` under "The model's choice inside the set" (the pick against the calibrated top level and the policy's own fallback on the same windows, with exact McNemar tests, and pass^k consistency, which needs every run right). Until a live run is committed the report says nothing about the choice. If the pick does not beat the calibrated top level on systems the model never saw, the honest response is to narrow the model's role to explaining the evidence.
 
 ### Delete a run
 

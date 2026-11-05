@@ -19,6 +19,9 @@ app = typer.Typer(no_args_is_help=True, help="ARIA incident triage.")
 db_app = typer.Typer(no_args_is_help=True, help="Database migrations.")
 # The latest end-to-end run through a live LLM: committed, quoted by `make eval`.
 LIVE_RESULTS = Path("docs/eval-live.json")
+# The latest live run of the model's choice inside the set (`--suite llm-choice --llm`): until
+# one is committed, `make eval` says nothing about that choice.
+LIVE_CHOICE = Path("docs/eval-llm-choice.json")
 data_app = typer.Typer(no_args_is_help=True, help="Download and ingest the public datasets.")
 train_app = typer.Typer(
     help="Train and export the severity and ticket models.", invoke_without_command=True
@@ -624,8 +627,9 @@ def eval_run(
     suite: Annotated[
         str,
         typer.Option(
-            help="smoke, severity, pipeline, robustness, parsing, edge, real, redteam, a "
-            "new-domain suite (ait-ads, rcaeval, anomod, itbench, jira, nezha) or all"
+            help="smoke, severity, pipeline, robustness, parsing, edge, real, llm-choice, "
+            "redteam, redteam-datamarking, a new-domain suite (ait-ads, rcaeval, anomod, "
+            "itbench, jira, nezha) or all"
         ),
     ] = "smoke",
     gate: Annotated[bool, typer.Option(help="Fail when a threshold is missed (CI).")] = False,
@@ -672,10 +676,25 @@ def eval_run(
     if suite == "pipeline" and llm:
         LIVE_RESULTS.write_text(json.dumps(results, indent=2, default=str) + "\n", "utf-8")
         console.print(f"wrote {LIVE_RESULTS}; `make eval` quotes it")
+    if suite == "llm-choice":
+        choice = results["llm_choice"]
+        console.print(
+            f"[bold]llm-choice[/bold] {choice['model']}: {choice['calls']} model calls, "
+            f"{choice['held_out_systems']['windows']} held-out-system windows left to a model"
+            + (
+                f", {choice['bgl']['windows']} BGL windows sampled"
+                if "windows" in choice.get("bgl", {})
+                else ""
+            )
+        )
+        if llm:
+            LIVE_CHOICE.write_text(json.dumps(results, indent=2, default=str) + "\n", "utf-8")
+            console.print(f"wrote {LIVE_CHOICE}; `make eval` quotes it")
     if suite == "all" and not llm:
         live = json.loads(LIVE_RESULTS.read_text()) if LIVE_RESULTS.exists() else None
+        choice_run = json.loads(LIVE_CHOICE.read_text()) if LIVE_CHOICE.exists() else None
         docs.parent.mkdir(parents=True, exist_ok=True)
-        docs.write_text(report.render(results, live), encoding="utf-8")
+        docs.write_text(report.render(results, live, choice=choice_run), encoding="utf-8")
         Path("docs/eval-results.json").write_text(
             json.dumps({k: v for k, v in results.items() if not k.endswith("_cases")}, indent=2)
             + "\n",

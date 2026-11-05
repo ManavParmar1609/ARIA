@@ -19,7 +19,7 @@ from aria.config import (
     SeverityConfig,
 )
 from aria.contracts.base import Claim, Evidence, EvidenceKind, Severity
-from aria.contracts.report import ActionItem, IncidentReport
+from aria.contracts.report import ActionItem, IncidentReport, ReportEdits, ReviewDecision
 from aria.contracts.retrieval import Hypothesis, Investigation, RetrievalResult, SimilarIncident
 from aria.data.scenarios import LinePools, ScenarioBuilder
 from aria.db.engine import get_engine, init_db
@@ -41,6 +41,7 @@ from aria.reporting.grounding import (
 )
 from aria.reporting.markdown import render_markdown, render_postmortem
 from aria.reporting.outbound import DraftPolicy, screen
+from aria.reporting.review import apply_review
 from aria.reporting.writer import ReportWriter
 from aria.retrieval.memory import IncidentMemory
 from aria.retrieval.retriever import Retriever, build_query
@@ -239,7 +240,10 @@ async def test_a_moderate_window_without_errors_is_not_said_to_have_them(
     moderate = replace(
         ctx,
         batch=ctx.batch.model_copy(update={"features": quiet}),
-        severity=ctx.severity.model_copy(update={"severity": Severity.SEV3}),
+        # The level and its set together: a set of one level keeps the bare level in the words.
+        severity=ctx.severity.model_copy(
+            update={"severity": Severity.SEV3, "prediction_set": [Severity.SEV3]}
+        ),
     )
     level = compose_draft(moderate).summary[0].text
     assert level.startswith("SEV3 (moderate): a contained problem with limited user impact.")
@@ -641,6 +645,75 @@ async def test_comms_are_proposals_and_leaky_polish_is_rejected(builder: Scenari
     assert "R02" not in status.body  # the leaky polish was dropped for the deterministic draft
     assert "status_page" in outcome.rejected
     assert outcome.polished_by == "llm/aria-fake-1"
+
+
+def _torn(ctx: ReportContext) -> ReportContext:
+    """The context with a two-level set ARIA plans the more serious of."""
+    return replace(
+        ctx,
+        severity=ctx.severity.model_copy(
+            update={
+                "severity": Severity.SEV2,
+                "prediction_set": [Severity.SEV2, Severity.SEV3],
+                "decided_by": "fallback",
+                "needs_review": True,
+                "floor": None,
+            }
+        ),
+    )
+
+
+async def test_a_wider_set_leads_the_report_and_the_drafts_with_what_aria_is_torn_between(
+    builder: ScenarioBuilder,
+) -> None:
+    torn = _torn(await _context(builder))
+    first = compose_draft(torn).summary[0].text
+    assert first.startswith("ARIA is torn between SEV2 and SEV3 and plans for SEV2 (high): ")
+    report = (
+        await ReportWriter(None, RUNBOOKS).write(torn, report_id="rep-9", use_llm=False)
+    ).report
+    assert report.title.startswith("SEV2 · ")  # the heading keeps the level it is parsed by
+    drafts = deterministic_drafts(
+        report,
+        service="BlueGene/L compute",
+        run_url="http://aria/runs/run-r1",
+        prediction_set=torn.severity.prediction_set,
+    )
+    assert drafts["responders"].title.startswith("[SEV2] ")
+    assert "ARIA is torn between SEV2 and SEV3 and plans for SEV2" in drafts["responders"].body
+    assert drafts["responders"].body.count("ARIA is torn between") == 1  # said once
+    assert "ARIA is torn between SEV2 and SEV3 and plans for SEV2 (high)." in (
+        drafts["stakeholders"].body
+    )
+    assert "Severity is" not in drafts["stakeholders"].body
+    # With one level in the set, the drafts read as they always have.
+    plain = deterministic_drafts(
+        report,
+        service="BlueGene/L compute",
+        run_url="http://aria/runs/run-r1",
+        prediction_set=[Severity.SEV2],
+    )
+    assert "Severity is SEV2 (high)." in plain["stakeholders"].body
+    assert "torn" not in plain["stakeholders"].body
+
+
+async def test_a_reviewer_who_settles_a_torn_level_replaces_what_aria_was_torn_between(
+    builder: ScenarioBuilder,
+) -> None:
+    ctx = await _context(builder)
+    torn = _torn(ctx)
+    report = (
+        await ReportWriter(None, RUNBOOKS).write(torn, report_id="rep-10", use_llm=False)
+    ).report
+    assert report.summary[0].text.startswith("ARIA is torn between SEV2 and SEV3")
+    decision = ReviewDecision(
+        decision="edit", reviewer="ana", edits=ReportEdits(severity=Severity.SEV3)
+    )
+    edited, assessment = apply_review(report, torn.severity, decision, EvidenceStore(ctx.evidence))
+    assert (edited.severity, assessment.decided_by) == (Severity.SEV3, "human")
+    assert edited.title.startswith("SEV3 · ")
+    assert "assigned SEV3" in edited.summary[0].text
+    assert not any("torn between" in claim.text for claim in edited.summary)
 
 
 async def test_drafts_keep_only_allowed_links_and_recipients_and_list_what_they_lost(

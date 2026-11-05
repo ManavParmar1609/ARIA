@@ -33,6 +33,7 @@ from aria.evals import edge as ed
 from aria.evals import gitlab as gl
 from aria.evals import hadoop as hd
 from aria.evals import injection as inj
+from aria.evals import llm_choice as lcm
 from aria.evals import logchunks as lc
 from aria.evals import openstack as osf
 from aria.evals import parsing as ps
@@ -58,7 +59,9 @@ SUITES = (
     "edge",
     "real",
     *dm.SUITES,
+    "llm-choice",
     "redteam",
+    "redteam-datamarking",
     "all",
 )
 # The training split's size, so held-out models are fitted the way the shipped one is.
@@ -202,7 +205,12 @@ async def run(
     if suite in ("edge", "all"):
         results["injection_benchmarks"] = inj.evaluate()
     if suite in ("redteam", "all"):  # adaptive attacks, scored on what they achieve
-        results["redteam"] = await rt.evaluate(builder, n=limit or rt.ATTACKS)
+        results["redteam"] = await rt.run_suite(builder, n=limit or rt.ATTACKS, use_llm=use_llm)
+    if suite == "redteam-datamarking":  # the same attacks with and without datamarking
+        results["redteam_datamarking"] = await rt.compare_datamarking(
+            builder, n=limit or rt.ATTACKS, use_llm=use_llm
+        )
+        return results
     if suite in ("real", "all"):
         pool = loghub_dir / "HDFS" / "HDFS_2k.log_structured.csv"
         results["real"] = rl.summarize(
@@ -239,6 +247,19 @@ async def run(
         quiet_per_system=size.severity_quiet,
     )
     features: list[Any] | None = None
+    if suite == "llm-choice":  # the model's choice inside the set, asked k times a window
+        results["llm_choice"] = await lcm.evaluate(
+            builder=builder,
+            rules=rules,
+            config=config,
+            loghub_dir=loghub_dir,
+            test=test,
+            features=sv.featurize(builder, test, workers=workers),
+            windows=training(),
+            use_llm=use_llm,
+            limit=limit,
+        )
+        return results
     if suite in ("smoke", "severity", "all"):
         engine = SeverityEngine.load(config.severity)
         features = sv.featurize(builder, test, workers=workers)
@@ -484,8 +505,16 @@ def _lookup(results: dict[str, Any], dotted: str) -> Any:
 
 
 def check_gate(results: dict[str, Any], suite: str, path: Path = THRESHOLDS) -> list[str]:
-    """Failures of the suite's thresholds (empty when the gate passes)."""
-    spec = (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get(suite, {})
+    """Failures of the suite's thresholds (empty when the gate passes).
+
+    The suite's own block applies, and so does any other block named after a section the
+    results hold: the red team's bounds apply to ``--suite all`` because its section ran, and
+    never to the smoke suite, which does not run it."""
+    blocks = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    spec: dict[str, Any] = dict(blocks.get(suite, {}))
+    for name, bounds in blocks.items():
+        if name != suite and name in results:
+            spec.update(bounds)
     failures = []
     if results.get("data", {}).get("fixtures"):
         failures.append(

@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -23,7 +23,7 @@ from sqlalchemy.exc import OperationalError
 
 from aria.agents.investigator import INVESTIGATOR_TOOLS
 from aria.config import ProviderKind, get_app_config
-from aria.contracts.base import EvidenceKind, utcnow
+from aria.contracts.base import EvidenceKind, Severity, utcnow
 from aria.contracts.inputs import AlertSignal, RunOptions, TriageRequest
 from aria.contracts.parsing import ParsedBatch
 from aria.contracts.report import IncidentReport, OutboundAction
@@ -768,6 +768,62 @@ async def test_reviewer_corrections_flag_similar_ratings_for_review(env: Env) ->
     feedback = [e for e in state["evidence"] if e["kind"] == "feedback"]
     assert feedback
     assert feedback[0]["data"]["corrections"] == 2
+
+
+async def test_reviewed_incidents_like_this_one_are_examples_and_flag_a_level_outside_the_set(
+    env: Env,
+) -> None:
+    """A past run a person reviewed, near this window, goes to the adjudicator as an example
+    with the level the person set. When that level lies outside ARIA's set, the evidence and the
+    review say so and ask for a check; the decision itself stays inside the set."""
+    scenario = env.builder.build(
+        "bgl.kernel_panic",
+        seed=9,
+        nodes=3,
+        duration_min=5,
+        background_per_min=5,
+        incident_per_min=6,
+    )
+    past = replace(
+        incident_from_scenario(scenario, load_runbooks(Path("runbooks"))),
+        id="inc-20260101-aa",
+        source="run",
+        synthetic=False,
+        severity=Severity.SEV4,
+    )
+    await env.services.memory.bulk_insert([past])
+    await env.runner.store.aput(
+        ("feedback", "bgl", "kernel_panic"),
+        "run-20260101-aa",
+        {
+            "run_id": "run-20260101-aa",
+            "decision": "edit",
+            "from": "SEV1",
+            "to": "SEV4",
+            "failure_mode": "kernel_panic",
+            "reviewer": "ana",
+        },
+    )
+    outcome = await env.runner.start(kernel_panic(env))
+    assert outcome.interrupt is not None
+    state = (await env.runner.snapshot(outcome.run_id)).values
+    [listed] = [e for e in state["evidence"] if e["source"] == "memory.reviewed"]
+    [example] = listed["data"]["examples"]
+    assert example == {
+        "incident_id": "inc-20260101-aa",
+        "severity": "SEV4",
+        "aria_severity": "SEV1",
+        "decision": "edit",
+        "similarity": example["similarity"],
+    }
+    assert "a reviewer set SEV4 where ARIA had proposed SEV1" in listed["detail"]
+    severity = state["severity"]
+    assert "SEV4" not in severity["prediction_set"]  # a kernel panic never reads as noise
+    assert severity["severity"] in severity["prediction_set"]  # the example moved nothing
+    assert severity["needs_review"] is True
+    assert any("rated SEV4, outside ARIA's set" in c["text"] for c in severity["rationale"])
+    assert outcome.interrupt["needs_review"] is True
+    assert any("outside ARIA's set" in note for note in state["notes"])
 
 
 async def test_invalid_reviews_are_asked_again_with_the_reason(env: Env) -> None:

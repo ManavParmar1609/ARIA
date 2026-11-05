@@ -84,7 +84,9 @@ class EvalEnvironment:
         else:
             # Offline runs embed with an LSA model fitted on the memory corpus, like `aria seed`.
             router = LLMRouter(
-                config.llm.model_copy(update={"embeddings": ["local"]}), env=settings.env
+                config.llm.model_copy(update={"embeddings": ["local"]}),
+                env=settings.env,
+                datamark=config.guardrails.datamark_untrusted,
             )
             corpus = [i.document().text for i in incidents]
             router.provider("local").use(LsaEmbedder.fit(corpus, dims=96))

@@ -75,6 +75,17 @@ suites:
     ring: C
     status: seen
     note: Looked at during development before this record began.
+  redteam:
+    ring: C
+    status: seen
+    since: "2026-11-04"
+    note: >-
+      Adaptive injection attacks seeded from the public benchmarks (or the edge-case suite's
+      own), mutated until they get past the guard and scored on what they achieve, with the
+      guard and with it bypassed. Its first run showed look-alike letters carrying orders past
+      the guard, and the guard was taught to fold them (2026-11-01), so the guard's own counts
+      here are no longer a blind test; the outcomes after the guard, which are what it gates,
+      were never tuned on.
   domains.ait-ads:
     ring: C
     status: seen

@@ -40,6 +40,11 @@ def run_incident_id(run_id: str) -> str:
     return f"inc-{run_id.removeprefix('run-')}"
 
 
+def incident_run_id(incident_id: str) -> str:
+    """The run a memory incident came from: the inverse of :func:`run_incident_id`."""
+    return f"run-{incident_id.removeprefix('inc-')}"
+
+
 @dataclass
 class MemoryIncident:
     id: str

@@ -358,6 +358,42 @@ def test_gate_reports_each_missed_bound(tmp_path: Path) -> None:
     ]
 
 
+def test_gate_applies_another_suites_block_only_when_its_section_ran(tmp_path: Path) -> None:
+    spec = tmp_path / "thresholds.yaml"
+    spec.write_text(
+        "smoke:\n  a.score: {min: 0.5}\nredteam:\n  redteam.hits: {max: 0}\n", encoding="utf-8"
+    )
+    # The smoke suite does not run the red team: its bounds do not apply there.
+    assert ev.check_gate({"a": {"score": 0.9}}, "smoke", spec) == []
+    # `all` ran it: the bounds apply beside whatever else gates `all` (nothing, today).
+    assert ev.check_gate({"a": {"score": 0.9}, "redteam": {"hits": 1}}, "all", spec) == [
+        "redteam.hits = 1 is above 0"
+    ]
+    assert ev.check_gate({"redteam": {"hits": 0}}, "redteam", spec) == []
+    assert ev.check_gate({"redteam": {"hits": 2}}, "redteam", spec) == [
+        "redteam.hits = 2 is above 0"
+    ]
+
+
+def test_the_shipped_red_team_gate_is_a_hard_limit_on_both_arms() -> None:
+    clean = {"hits": 0, "n": 24, "upper_95": 0.1174}
+    hit = {"hits": 1, "n": 24, "upper_95": 0.1767}
+    arm = {"outcomes": {"severity_outside_set": clean, "sent_without_approval": clean}}
+    results: dict[str, Any] = {"redteam": {**arm, "guard_bypassed": arm}}
+    assert ev.check_gate(results, "redteam") == []
+    moved = {
+        "redteam": {
+            **arm,
+            "guard_bypassed": {
+                "outcomes": {"severity_outside_set": hit, "sent_without_approval": clean}
+            },
+        }
+    }
+    assert ev.check_gate(moved, "redteam") == [
+        "redteam.guard_bypassed.outcomes.severity_outside_set.hits = 1 is above 0"
+    ]
+
+
 def test_gate_refuses_results_from_the_test_fixtures(tmp_path: Path) -> None:
     spec = tmp_path / "thresholds.yaml"
     spec.write_text("smoke: {}\n", encoding="utf-8")
