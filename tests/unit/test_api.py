@@ -1183,6 +1183,22 @@ async def test_a_blind_check_hides_the_level_until_rated_then_counts_once(api: A
     assert missing.status_code == 404
 
 
+async def test_an_incident_is_rated_blind_once(api: Api) -> None:
+    """A second rating is not blind (the reveal showed ARIA's level) and would count the incident
+    twice in the recalibration and the severe-miss alarm, whoever sends it."""
+    run = await start(api)
+    first = await api.client.post(f"/api/v1/blind-check/{run['id']}", json={"severity": "SEV2"})
+    assert first.status_code == 200, first.text
+    again = await api.client.post(f"/api/v1/blind-check/{run['id']}", json={"severity": "SEV1"})
+    assert again.status_code == 409, again.text
+    other = await api.client.post(
+        f"/api/v1/blind-check/{run['id']}", json={"severity": "SEV1"}, headers=RAJ
+    )
+    assert other.status_code == 409, other.text
+    assert (await api.client.get("/api/v1/blind-check")).json()["checks"] == 1
+    assert len(repo.feedback_of(api.state.services.engine, "blind_check")) == 1
+
+
 async def test_reviews_calibration_evaluation_and_tickets(
     api: Api, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
