@@ -81,6 +81,7 @@ export function SeverityPanel({
           key={assessment.severity}
           severity={assessment.severity}
           stamp
+          planned={unsettled(assessment, status) && status !== "rejected"}
           className="justify-self-start"
         />
         <p className="text-sm">

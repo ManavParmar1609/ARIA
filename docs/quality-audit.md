@@ -703,14 +703,16 @@ The coverage review corrected two descriptions to match the code:
 - The model card now says the model's regularisation is chosen with whole systems held out, and
   that blind checks, not approvals, recalibrate the model.
 
+### The owner's calls, decided after the round
+
+- Code and log lines may go to 13 px, a shade under the text floor.
+- The home page example's log keeps each line to one row on phones.
+- An unsettled incident's level is drawn dashed in How serious, like the header's badge.
+- "Deployment details" in Settings is a real heading, with its sections under it.
+- On a phone, Approve comes after the report.
+
 ### Not done in this round
 
-- **The owner's call:**
-  - a minimum size for code text;
-  - whether the home page example's log wraps or is cut short on phones;
-  - how an unrated incident's level chip looks;
-  - whether "Deployment details" in Settings should be a heading;
-  - whether Approve should come after the report on phones.
 - The report's own summary still gives a window's length in minutes. The console converts it.
 - When a critic removes claims, which only happens with a live model, the reviewer is not shown
   which ones.

@@ -226,7 +226,7 @@ Do these once, in this order:
    | `gemini-3.6-flash` | `GEMINI_RPM`, `GEMINI_TPM`, `GEMINI_RPD` |
    | `gemini-3.5-flash-lite` | `GEMINI_LITE_RPM`, `GEMINI_LITE_TPM`, `GEMINI_LITE_RPD` |
    | `gemini-3.1-flash-lite` | `GEMINI_LITE_2_RPM`, `GEMINI_LITE_2_TPM`, `GEMINI_LITE_2_RPD` |
-   | `gemma-3-27b-it` | `GEMMA_RPM`, `GEMMA_TPM`, `GEMMA_RPD` |
+   | `gemma-4-26b-a4b-it` | `GEMMA_RPM`, `GEMMA_TPM`, `GEMMA_RPD` |
 
    Until you do, ARIA uses cautious placeholders from `config/aria.yaml`. A model that AI Studio
    shows with a limit of 0 has no quota on your tier: set 0, and ARIA never calls it. Copy the

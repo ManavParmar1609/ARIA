@@ -257,7 +257,7 @@ llm:
       base_url: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai}
       api_key_env: [GEMINI_API_KEY, gemini_api_key]
       terms: google
-      chat_model: ${GEMMA_MODEL:-gemma-3-27b-it}
+      chat_model: ${GEMMA_MODEL:-gemma-4-26b-a4b-it}
       # Whether Gemma takes a JSON schema, a JSON mode or a system role through this endpoint is
       # unverified, so it is asked the plain way: the schema in the prompt, its JSON pulled out
       # of the reply and checked, with one repair; and the instructions folded into the first
@@ -271,12 +271,13 @@ llm:
         rpm: ${GEMMA_RPM:-15}
         tpm: ${GEMMA_TPM:-12000}
         rpd: ${GEMMA_RPD:-500}
-      verified: false
+      verified: true
       notes: >-
         Google's open Gemma model, served on the same key with limits of its own: the pool's
-        last stop before other providers. gemma-3-27b-it has not been called from ARIA, so its
-        ID, its structured output and its system-role handling are unverified: run `aria
-        providers check gemma` first. Set GEMMA_MODEL to use another Gemma.
+        last stop before other providers. gemma-4-26b-a4b-it answered `aria providers check
+        gemma` on 2026-11-05; gemma-3-27b-it is no longer served (404), and gemma-4-31b-it timed
+        out that day. Its structured output and system-role handling are still untested, so it is
+        asked the plain way. Set GEMMA_MODEL to use another Gemma.
 
     nim:
       kind: nvidia_nim

@@ -206,7 +206,8 @@ def test_every_model_in_the_gemini_pool_has_limits_the_owner_can_set(
         assert limits is not None
         assert None not in (limits.rpm, limits.tpm, limits.rpd)
     assert not llm.providers["gemini-lite-2"].verified  # new ids wait for a live check
-    assert not llm.providers["gemma"].verified
+    assert llm.providers["gemma"].verified  # gemma-4-26b-a4b-it answered a live check
+    assert "2026-11-05" in (llm.providers["gemma"].notes or "")
     assert llm.providers["gemma"].structured_output.value == "prompt"
     monkeypatch.setenv("GEMINI_RPD", "1500")
     monkeypatch.setenv("GEMMA_TPM", "none")
