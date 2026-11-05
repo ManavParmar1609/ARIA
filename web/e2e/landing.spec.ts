@@ -22,8 +22,8 @@ test.describe("landing page", () => {
       "Tested on real, labelled logs",
       "Let ARIA take the first look.",
     ]);
-    // The lines that run together: apart for the problem, merging for the answer and the way in.
-    await expect(page.locator("main svg.draw")).toHaveCount(3);
+    // The decorative line drawings were taken out at the owner's request: none comes back.
+    await expect(page.locator("main svg.draw")).toHaveCount(0);
     // What the video shows is written out under it, not folded away.
     await expect(page.getByText("What the video shows")).toBeVisible();
     await expect(page.locator("main video")).toHaveAttribute("preload", "none");

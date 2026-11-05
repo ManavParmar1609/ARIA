@@ -458,20 +458,6 @@
   }
 }
 
-/* Line art (line-art.tsx): when a drawing comes into view its strokes draw in once, left to right,
-   each a little after the one before. Only the dash offset moves; with reduced motion the drawing
-   is simply there. */
-@media (prefers-reduced-motion: no-preference) {
-  .js .draw path {
-    stroke-dasharray: var(--len) var(--len);
-    stroke-dashoffset: var(--len);
-  }
-  .js .draw[data-drawn] path {
-    stroke-dashoffset: 0;
-    transition: stroke-dashoffset 1800ms var(--ease-out) calc(var(--i, 0) * 70ms);
-  }
-}
-
 /* Library charts (library-charts.tsx): the first time a chart comes into view its bars grow from
    their baseline, each a little after the one before. Only the transform moves, so later changes
    to a bar's length never animate; with reduced motion the bars are simply there. */
