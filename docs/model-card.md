@@ -423,9 +423,9 @@ regression.
 - **Cancellations.** No dataset ARIA trains on logs client cancellations, so the discount for
   windows made mostly of them rests on OpenTelemetry's convention and unit tests, not on
   measurement.
-- **Prediction sets.** Almost every set holds one label, so coverage sits close to top-1
-  accuracy and an LLM adjudicates rarely. The 90% target holds on windows exchangeable with the
-  calibration windows; coverage differs by class and falls under a shift.
+- **Prediction sets.** Most sets hold one label. A set that holds more goes to a person, and an
+  LLM, when one is configured, chooses only inside it. Each level's target holds on windows
+  exchangeable with the calibration windows, and coverage falls under a shift.
 - **Retrieval scores.** Retrieval filters by system first, and most systems have a single failure
   mode in memory, so many queries cannot miss. Recall@3 here is a hit rate at three, close to what
   a random pick within the system would score. The harder test is on

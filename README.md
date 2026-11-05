@@ -394,16 +394,17 @@ Every section, with its method: [docs/evaluation.md](docs/evaluation.md).
   rate, which ARIA's features estimate. That suits ARIA better than real on-call labels would.
   See the [data card](docs/data-card.md).
 - **The severity model learned from semi-synthetic windows.** On the real BGL log, the rules
-  alone did better than the rules and model together
-  ([evaluation](docs/evaluation.md#real-logs-a-supercomputers-alert-tags)). A deployment should
-  recalibrate on its own reviewed incidents (`aria train recalibrate`).
+  and model together miss fewer serious windows than the rules alone, but page on more quiet
+  ones ([evaluation](docs/evaluation.md#real-logs-a-supercomputers-alert-tags)). A deployment
+  should recalibrate on its own reviewed incidents (`aria train recalibrate`).
 - **ARIA knows few failure modes outside its samples.** On OpenStack runs with an injected bug,
   its one OpenStack failure mode is a missing image-cache file, from a 2,000-line sample of
-  another deployment. It was unsure of most runs and sent them to a reviewer at the most severe
-  label in their prediction set, so at SEV1-3 it flags nearly every run, failed or not. Ranked by
-  its probability of SEV1-2, it tells failed from healthy runs a little less well than counting
-  ERROR lines does ([evaluation](docs/evaluation.md#real-failures-bugs-injected-into-openstack)).
-  A deployment needs failure modes and reviewed incidents of its own.
+  another deployment. It was unsure of every run and sent each to a reviewer at the most severe
+  label in its prediction set, so it pages on nearly every run, failed or not. Ranked by its
+  probability of SEV1-2, it tells failed from healthy runs only a little better than chance,
+  where counting ERROR lines does much better
+  ([evaluation](docs/evaluation.md#real-failures-bugs-injected-into-openstack)). A deployment
+  needs failure modes and reviewed incidents of its own.
 - **Memory needs more than a summary of impact.** On three clouds' public post-mortems, no
   method finds a past incident with the same root cause or fix from an incident's title and
   impact summary much more often than picking past incidents at random does
