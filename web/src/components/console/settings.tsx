@@ -449,20 +449,6 @@ export function Settings() {
         )}
       </Section>
 
-      <Section
-        id="set-data-terms"
-        title="What providers do with prompts"
-        intro="What each model provider's own terms say it may do with the evidence ARIA sends it, and when someone last read them for ARIA. Terms nobody has read yet say Not verified."
-      >
-        {view.isError ? (
-          <p className="text-sm text-muted-foreground">Not loaded: see the error above.</p>
-        ) : view.isPending ? (
-          <LoadingRows rows={2} label="Loading what providers do with prompts" />
-        ) : (
-          <DataTerms terms={view.data.data_terms ?? []} />
-        )}
-      </Section>
-
       {/* Only where the site has a model of its own: its room is what visitors share. */}
       {view.data?.shared_model ? (
         <Section
@@ -529,6 +515,22 @@ export function Settings() {
             })}
           </div>
         </fieldset>
+      </Section>
+
+      {/* After the two things the page promises (the model and the look): the providers' terms
+          run long, and most visitors come for the theme or a key. */}
+      <Section
+        id="set-data-terms"
+        title="What providers do with prompts"
+        intro="What each model provider's own terms say it may do with the evidence ARIA sends it, and when someone last read them for ARIA. Terms nobody has read yet say Not verified."
+      >
+        {view.isError ? (
+          <p className="text-sm text-muted-foreground">Not loaded: see the error above.</p>
+        ) : view.isPending ? (
+          <LoadingRows rows={2} label="Loading what providers do with prompts" />
+        ) : (
+          <DataTerms terms={view.data.data_terms ?? []} />
+        )}
       </Section>
 
       <details className="group/deployment border-t border-rule pt-6">

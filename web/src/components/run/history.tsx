@@ -160,6 +160,8 @@ export function History({
                   size="sm"
                   variant={isViewing ? "primary" : "secondary"}
                   aria-pressed={isViewing}
+                  // "Back to now" hands focus back here (run-view.tsx).
+                  data-checkpoint={cp.checkpoint_id}
                   onClick={() => onView(isViewing ? null : cp.checkpoint_id)}
                 >
                   <HistoryIcon aria-hidden />

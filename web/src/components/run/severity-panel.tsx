@@ -145,17 +145,24 @@ export function SeverityPanel({
                 : ""}
             </span>
           </p>
-          <p className="leading-relaxed text-muted-foreground">
-            How the pieces fit: the rules score what the logs show, and a safety rule can set the
-            lowest level allowed.{" "}
-            {rulesOnly
-              ? "Here the calibrated model was not used, so the rule scores stand in for its likelihoods."
-              : "The calibrated model weighs the whole window, rule scores included, and gives each level a likelihood."}{" "}
-            The short list keeps the levels that can&apos;t be ruled out, never below a safety
-            rule&apos;s level. When one level is left and a safety rule set it, or the model is
-            confident in it, ARIA decides alone; otherwise a language model chooses from the list,
-            or ARIA plans for the most serious level on it, and a person confirms.
-          </p>
+          {/* The same explanation on every incident: folded, so the chart and the rules that
+              matched here come first, and a reader meets the primer once. */}
+          <details className="text-sm">
+            <summary className="w-fit cursor-pointer py-0.5 text-muted-foreground hover:text-heading">
+              How the pieces fit
+            </summary>
+            <p className="pt-2 leading-relaxed text-muted-foreground">
+              The rules score what the logs show, and a safety rule can set the lowest level
+              allowed.{" "}
+              {rulesOnly
+                ? "Here the calibrated model was not used, so the rule scores stand in for its likelihoods."
+                : "The calibrated model weighs the whole window, rule scores included, and gives each level a likelihood."}{" "}
+              The short list keeps the levels that can&apos;t be ruled out, never below a safety
+              rule&apos;s level. When one level is left and a safety rule set it, or the model is
+              confident in it, ARIA decides alone; otherwise a language model chooses from the list,
+              or ARIA plans for the most serious level on it, and a person confirms.
+            </p>
+          </details>
           <SeverityScale
             probabilities={assessment.probabilities}
             predictionSet={assessment.prediction_set}

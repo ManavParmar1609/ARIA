@@ -21,11 +21,19 @@ import { useMemo } from "react";
 
 import type { RunEvent } from "@/lib/api/types";
 import { capitalise, decisionWords, duration, reviewerName } from "@/lib/format";
+import { triggerLabel } from "@/lib/systems";
 import { cn } from "@/lib/utils";
 
 import { NODE_LABEL } from "@/lib/steps";
 
 import { Citations } from "./evidence";
+
+// How a run ended, in the words the rest of the console uses ("Discarded", never "rejected").
+const ENDED: Record<string, string> = {
+  published: "published",
+  rejected: "discarded",
+  failed: "failed",
+};
 
 type StepState = "pending" | "running" | "done" | "paused" | "failed";
 
@@ -85,7 +93,7 @@ function rows(events: RunEvent[], { offline = false, titles = {} }: RowOptions =
           t,
           icon: PlayIcon,
           title: "Run started",
-          detail: p.trigger ? `trigger: ${String(p.trigger)}` : undefined,
+          detail: p.trigger ? capitalise(triggerLabel(String(p.trigger))) : undefined,
         });
         break;
       case "node_finished": {
@@ -218,7 +226,7 @@ function rows(events: RunEvent[], { offline = false, titles = {} }: RowOptions =
           t,
           icon: FlagIcon,
           tone: p.status === "failed" ? "bad" : "good",
-          title: `Run finished: ${String(p.status)}`,
+          title: `Run finished: ${ENDED[String(p.status)] ?? String(p.status)}`,
         });
         break;
       default:

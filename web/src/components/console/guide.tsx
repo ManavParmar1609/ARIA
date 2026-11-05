@@ -279,7 +279,7 @@ export function Guide({
               <Task
                 id="review"
                 number={4}
-                title="Approve, edit or discard a message"
+                title="Approve, edit or discard a draft"
                 action={
                   <TaskLink href="/console/runs?status=awaiting_review">
                     Incidents waiting for you
@@ -430,10 +430,12 @@ export function Guide({
               description="The same definitions open from any word with a dotted underline."
             />
             <dl className="grid gap-3 sm:grid-cols-2">
-              {Object.values(GLOSSARY).map((entry) => (
+              {Object.entries(GLOSSARY).map(([key, entry]) => (
+                // Each word has its own address (#word-prediction-set), so Search can land on it.
                 <div
-                  key={entry.term}
-                  className="grid content-start gap-1.5 rounded-card border border-rule bg-raised p-5"
+                  key={key}
+                  id={`word-${key}`}
+                  className="grid scroll-mt-24 content-start gap-1.5 rounded-card border border-rule bg-raised p-5 lg:scroll-mt-8"
                 >
                   <dt className="text-lg font-semibold text-heading">{entry.term}</dt>
                   <dd className="text-base leading-relaxed text-muted-foreground">

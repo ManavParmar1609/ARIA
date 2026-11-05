@@ -188,10 +188,14 @@ describe("an answer as text to paste elsewhere", () => {
     );
   });
 
-  it("copies a word's meaning, and has nothing to copy when nothing answered", () => {
+  it("copies a word's meaning, never saying the word twice over, and has nothing to copy when nothing answered", () => {
     const definition = { term: "SEV1", text: "SEV1 means critical." };
     expect(answerText({ id: "t2", question: "q", runId: null, definition })).toBe(
-      "SEV1: SEV1 means critical.",
+      "SEV1 means critical.",
+    );
+    const runbook = { term: "Runbook", text: "A team's written steps for one kind of problem." };
+    expect(answerText({ id: "t4", question: "q", runId: null, definition: runbook })).toBe(
+      "Runbook: A team's written steps for one kind of problem.",
     );
     const empty = { ...ANSWER, answer: [] };
     expect(answerText({ id: "t3", question: "q", runId: null, answer: empty })).toBe("");

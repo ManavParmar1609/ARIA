@@ -53,11 +53,24 @@ export function shortTime(iso: string | null | undefined): string {
 /** A log pattern as people read it: each part that varies ("<*>") becomes "…". */
 export const plainTemplate = (template: string): string => template.replaceAll("<*>", "…");
 
-/** How long a stretch of logs spans: "under a minute", "1 minute", "7.7 minutes". */
+/**
+ * How long a stretch of logs spans: "under a minute", "1 minute", "7.7 minutes", "2.5 hours",
+ * "3 days". A day's log never reads as "1440.0 minutes".
+ */
 export function minutesWords(seconds: number): string {
   if (seconds < 60) return "under a minute";
-  const minutes = Number((seconds / 60).toFixed(1));
-  return minutes === 1 ? "1 minute" : `${minutes} minutes`;
+  const minutes = seconds / 60;
+  if (minutes < 90) {
+    const m = Number(minutes.toFixed(1));
+    return m === 1 ? "1 minute" : `${m} minutes`;
+  }
+  const hours = minutes / 60;
+  if (hours < 48) {
+    const h = Number(hours.toFixed(1));
+    return h === 1 ? "1 hour" : `${h} hours`;
+  }
+  const days = Math.round(hours / 24);
+  return days === 1 ? "1 day" : `${days.toLocaleString("en")} days`;
 }
 
 /** 734 -> "734 ms", 12_400 -> "12.4 s", 193_000 -> "3 min 13 s", 7_260_000 -> "2 h 1 min". */
