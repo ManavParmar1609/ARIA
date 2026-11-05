@@ -15,7 +15,7 @@ export function BaselineChart({
   className?: string;
 }) {
   const row =
-    "grid grid-cols-[minmax(0,1fr)_3.5rem] items-center gap-x-3 gap-y-1 @xl:grid-cols-[minmax(10rem,15rem)_minmax(0,1fr)_3.5rem]";
+    "grid grid-cols-[minmax(0,1fr)_4rem] items-center gap-x-3 gap-y-1 @xl:grid-cols-[minmax(10rem,15rem)_minmax(0,1fr)_4rem]";
   return (
     <figure className={cn("@container grid gap-3", className)}>
       <div
