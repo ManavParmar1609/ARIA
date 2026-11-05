@@ -527,7 +527,8 @@ test.describe("console", () => {
     await card.getByRole("button", { name: /^Replay it: Silent block failures/ }).click();
 
     await expect(page).toHaveURL(/\/console\/runs\/run-/);
-    await expect(page.getByText("a real incident, replayed")).toBeVisible();
+    // The incident's own line, not the activity row that also says it once the feed loads.
+    await expect(page.getByText(/HDFS, a real incident, replayed/)).toBeVisible();
     // The incident keeps the name its card gave it.
     await expect(
       page.getByRole("heading", { level: 1, name: /Silent block failures on a Hadoop cluster/ }),
