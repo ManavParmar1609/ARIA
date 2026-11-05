@@ -23,6 +23,7 @@ from aria.data.scenarios import LinePools, ScenarioBuilder
 from aria.evidence import EvidenceStore
 from aria.llm.fake import FakeProvider
 from aria.llm.router import LLMRouter
+from aria.llm.schemas import AdjudicationOutput
 from aria.severity.engine import SeverityEngine
 from aria.severity.features import log_feature_names, log_feature_row
 from aria.severity.model import (
@@ -880,6 +881,47 @@ async def test_a_compromised_llm_cannot_leave_the_prediction_set(rules: RuleSet)
     assert result.assessment.decided_by == "fallback"
     assert len(fake.calls) == 2  # first answer plus one repair attempt, both rejected
     assert "severity must be one of SEV1, SEV2" in fake.calls[1]["messages"][-1].content
+
+
+async def test_a_lower_case_label_is_read_and_still_checked_against_the_set(
+    rules: RuleSet,
+) -> None:
+    """A model answering in prompt mode may write "sev2": the label counts, and one outside the
+    set is refused however it is written."""
+    assert (
+        AdjudicationOutput.model_validate(
+            {"severity": " sev2 ", "rationale": [{"text": "x", "evidence_ids": ["E1"]}]}
+        ).severity
+        is Severity.SEV2
+    )
+
+    def answers(level: str) -> Any:
+        def respond(ctx: dict[str, Any]) -> dict[str, Any]:
+            eid = ctx["evidence_index"][0]["id"]
+            return {
+                "severity": level,
+                "rationale": [{"text": "The errors are contained.", "evidence_ids": [eid]}],
+                "uncertainty": "",
+            }
+
+        return respond
+
+    engine = SeverityEngine(rules, constant_model(UNCERTAIN, 0.6), alpha=0.1)
+    inside = FakeProvider(responders={"adjudication": answers("sev2")})
+    result = await engine.assess(
+        WINDOW, system="bgl", evidence=EvidenceStore(), router=_router(inside)
+    )
+    assert (result.assessment.severity, result.assessment.decided_by) == (Severity.SEV2, "llm")
+    assert len(inside.calls) == 1  # read first time, no repair
+
+    outside = FakeProvider(responders={"adjudication": answers("sev4")})
+    result = await engine.assess(
+        WINDOW, system="bgl", evidence=EvidenceStore(), router=_router(outside)
+    )
+    assert (result.assessment.severity, result.assessment.decided_by) == (
+        Severity.SEV1,
+        "fallback",
+    )
 
 
 async def test_llm_citing_unknown_evidence_is_rejected(rules: RuleSet) -> None:

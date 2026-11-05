@@ -183,8 +183,10 @@ Three of these depend on configuration and history:
     features a run computes.
 - **Fit.** scikit-learn's logistic regression on standardised features, with balanced class
   weights.
-  - C is chosen from {0.03, 0.1, 0.3, 1, 3} by stratified cross-validation on the training
-    split (up to 4 folds), scored by log loss.
+  - C is chosen from {0.03, 0.1, 0.3, 1, 3} by cross-validation on the training split that
+    holds out whole systems in each fold (up to 4 folds; stratified folds only when fewer than
+    three systems train), scored by log loss, so the choice favours what works on a system the
+    model has not seen. The training report records which (`c_chosen_by`).
   - The committed model chose C = 3.
   - Classes absent from the training data would get almost no probability.
 - **Calibration.** A single temperature that minimises negative log-likelihood on the
@@ -454,8 +456,12 @@ regression.
   benign failure modes and quiet windows exist to measure it. Under-triage rates are reported in
   the [evaluation](evaluation.md#severity).
 - **Review and automation bias.** The review screen shows the evidence behind a severity: the
-  rule trace, the probabilities and the prediction set. Approvals feed recalibration as
-  confirmations, so a reviewer who disagrees should edit the severity rather than approve it.
+  rule trace, the probabilities and the prediction set, and says which levels ARIA is torn
+  between when the set holds more than one. Approvals no longer recalibrate the shipped model;
+  blind checks do, because an approval carries a pull toward agreeing with ARIA
+  ([above](#recalibration-on-blind-checks)). A reviewer who disagrees should still edit the
+  severity rather than approve it: the edit goes on the decision record and into the reviewer
+  figures (`GET /api/v1/reviewers`), which show who approves everything unread.
 - **Privacy.**
   - Logs carry personal data. Secrets are redacted before any model sees the text, and e-mail
     and IP addresses are pseudonymised. Hostnames and usernames remain.
