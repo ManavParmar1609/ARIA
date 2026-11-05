@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from aria.reporting.outbound import LINK_REMOVED, DraftPolicy, host_of, screen
@@ -57,3 +59,16 @@ def test_an_allowed_link_still_passes_whole() -> None:
     screened = screen(text, POLICY)
     assert screened.text == text
     assert screened.removed == []
+
+
+def test_markdown_links_with_titles_are_still_read_and_a_never_closed_one_costs_linear_time() -> (
+    None
+):
+    titled = 'See [the report](https://console.example/runs/1 "the report") and [more](https://evil.example/x "x").'
+    screened = screen(titled, POLICY)
+    assert "https://console.example/runs/1" in screened.text
+    assert "evil" not in screened.text
+    assert screened.removed == ["link to evil[.]example"]
+    started = time.perf_counter()
+    screen("[x](" + "a" * 200_000, POLICY)
+    assert time.perf_counter() - started < 3.0  # about 15 seconds before the title tail was fixed

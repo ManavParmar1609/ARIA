@@ -36,7 +36,9 @@ _TLDS = (
     "tech|store|shop|live|page|zip|mov|ru|cn|tk|us|uk|de|eu|in|gg|tv|cc|ws|to|su"
 )
 _STOP = "\\s<>\"'`|"  # characters that end a URL in running text
-_MARKDOWN_LINK = re.compile(r"\[([^\]\n]{0,300})\]\(\s*((?:[^()\s]|\([^()\s]*\))+)[^)\n]*\)")
+# A title after the target must start with a space, so the target's end is never in doubt and a
+# long, never-closed link costs linear time rather than the square of its length.
+_MARKDOWN_LINK = re.compile(r"\[([^\]\n]{0,300})\]\(\s*((?:[^()\s]|\([^()\s]*\))+)(?:\s[^)\n]*)?\)")
 _SCHEME_URL = re.compile(rf"(?i)\b(?:https?|ftps?|wss?)://[^{_STOP}]+")
 _UNSAFE_TARGET = re.compile(rf"(?i)\b(?:javascript|vbscript|data|file):[^{_STOP}]+")
 _MAILTO = re.compile(rf"(?i)\bmailto:[^{_STOP}]+")
