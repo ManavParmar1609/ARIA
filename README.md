@@ -252,7 +252,7 @@ allows ([docs/deploy-free.md](docs/deploy-free.md#keep-your-gemini-key-inside-it
 | Google Gemini (`gemini`) | chat `gemini-3.6-flash`, reasoning minimal | Verified with live calls on 2026-10-30, including a full triage |
 | Google Gemini, lighter model (`gemini-lite`) | chat `gemini-3.5-flash-lite` | Verified with live calls on 2026-10-30 |
 | Google Gemini, second lighter model (`gemini-lite-2`) | chat `gemini-3.1-flash-lite` | Not verified with a live call |
-| Google Gemma, on the Gemini key (`gemma`) | chat `gemma-3-27b-it`, JSON asked for in the prompt | Not verified with a live call |
+| Google Gemma, on the Gemini key (`gemma`) | chat `gemma-4-26b-a4b-it`, JSON asked for in the prompt | Answered a live check on 2026-11-05 |
 | NVIDIA NIM, hosted (`nim`) | chat `openai/gpt-oss-20b`; embeddings `nvidia/nemotron-3.5-embed-1b` | Verified with live calls on 2026-10-29 |
 | NVIDIA NIM, second model (`nim-fallback`) | chat `minimaxai/minimax-m3.1-flash` | Verified with live calls on 2026-10-29 |
 | NVIDIA NIM, self-hosted (`nim-local`) | Whatever your NIM container serves | Not verified (needs a GPU) |
