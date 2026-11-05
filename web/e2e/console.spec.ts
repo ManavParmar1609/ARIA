@@ -441,12 +441,13 @@ test.describe("console", () => {
       }
     }
     // Settings leads with the model. The deployment's own settings are folded away until asked for;
-    // there, reviews from the earlier tests feed the recalibration queue.
+    // there, the reviews from the earlier tests are listed and the model says how far its learning
+    // has got: blind checks for a model calibrated per level, reviews for an older one.
     await expect(page.getByRole("heading", { level: 2 }).first()).toHaveText("Language model");
     await expect(page.getByRole("table", { name: "Recent reviews" })).toBeHidden();
     await page.getByText("Deployment details").click();
     await expect(page.getByRole("table", { name: "Recent reviews" })).toContainText("Approved");
-    await expect(page.getByText(/of 30 needed/)).toBeVisible();
+    await expect(page.getByText(/^Blind checks so far$|of \d+ needed/)).toBeVisible();
 
     // The theme setting applies at once and survives a reload. The radios are styled labels
     // around visually hidden inputs, so click the label as a person would.
