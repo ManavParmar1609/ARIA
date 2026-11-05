@@ -362,6 +362,21 @@ def test_the_migration_adds_the_record_and_can_be_undone(tmp_path: Path) -> None
     engine.dispose()
 
 
+def test_entries_are_stamped_to_the_second_so_every_database_keeps_what_was_hashed() -> None:
+    """SQL Server's DATETIME keeps 1/300 of a second, so a moment hashed to the microsecond would
+    come back rounded and the entry would no longer match its own hash."""
+    engine = get_engine()
+    init_db(engine)
+    entry = record.append(engine, kind="review", actor="ana", run_id="run-1", payload={"n": 1})
+    assert entry.ts.microsecond == 0
+    [stored] = record.list_entries(engine)
+    # Round the moment the way such a database would: to the nearest 1/300 of a second.
+    coarse = round(stored.ts.microsecond / 3_333) * 3_333 % 1_000_000
+    rounded = stored.model_copy(update={"ts": stored.ts.replace(microsecond=coarse)})
+    assert rounded.ts == stored.ts
+    assert record.check([rounded]).ok
+
+
 # --- every decision path --------------------------------------------------------------------------
 
 

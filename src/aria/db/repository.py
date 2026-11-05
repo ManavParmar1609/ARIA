@@ -584,18 +584,28 @@ def decided_levels(engine: Engine, *, per_system: int = 400) -> dict[str, list[s
 
     Visitors' own runs on a shared demo stay out: they are theirs, like their reviews.
     """
+    # Numbered newest first within each system, so the database hands back at most
+    # ``per_system`` rows a system rather than every run it holds.
+    rank = (
+        func.row_number()
+        .over(partition_by=RunRow.system, order_by=(RunRow.created_at.desc(), RunRow.id.desc()))
+        .label("rank")
+    )
+    recent = (
+        select(RunRow.system, RunRow.severity, rank)
+        .where(RunRow.severity.is_not(None), RunRow.visitor.is_(None))
+        .subquery()
+    )
     out: dict[str, list[str]] = {}
     with session_scope(engine) as session:
         rows = session.execute(
-            select(RunRow.system, RunRow.severity)
-            .where(RunRow.severity.is_not(None), RunRow.visitor.is_(None))
-            .order_by(RunRow.created_at.desc(), RunRow.id.desc())
+            select(recent.c.system, recent.c.severity)
+            .where(recent.c.rank <= per_system)
+            .order_by(recent.c.system, recent.c.rank.desc())
         )
         for system, level in rows:
-            levels = out.setdefault(str(system), [])
-            if len(levels) < per_system:
-                levels.append(str(level))
-    return {system: levels[::-1] for system, levels in out.items()}
+            out.setdefault(str(system), []).append(str(level))
+    return out
 
 
 def mark_feedback_used(engine: Engine, ids: Sequence[int]) -> None:

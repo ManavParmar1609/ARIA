@@ -196,6 +196,10 @@ async def rate_blind(
     run = await asyncio.to_thread(repo.get_run, services.engine, run_id)
     if run is None or run.get("visitor") is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "no such run")
+    if run_id in await asyncio.to_thread(repo.blind_checked_runs, services.engine):
+        # One rating per incident: a second one is not blind (the first reveal showed ARIA's
+        # level), and it would count the incident twice in the recalibration and the alarm.
+        raise HTTPException(status.HTTP_409_CONFLICT, "this incident has been rated blind already")
     batch, assessment, request = await _decided(state, run_id)
     counted = viewer.tag is None
     if counted:

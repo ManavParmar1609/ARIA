@@ -342,6 +342,20 @@ async def test_a2a_tasks_belong_to_the_visitor_who_sent_them(demo: Demo) -> None
     stored = repo.get_run(demo.state.services.engine, run_id)
     assert stored is not None
     assert stored["status"] == "awaiting_review"  # Bob's answer changed nothing
+    # Nor can Bob read the task, with its report; and Alice's task is as it was, not failed by
+    # Bob's answer, so she can still finish it.
+    rpc = {"jsonrpc": "2.0", "id": 3, "method": "GetTask", "params": {"id": task["id"]}}
+    assert "error" in (await demo.client.post("/a2a", json=rpc, headers=other)).json()
+    mine = (await demo.client.post("/a2a", json=rpc, headers=headers)).json()["result"]
+    assert mine["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
+    reply["messageId"] = "m3"
+    reply["parts"] = [{"data": {"decision": "reject"}}]
+    rpc = {"jsonrpc": "2.0", "id": 4, "method": "SendMessage", "params": {"message": reply}}
+    done = (await demo.client.post("/a2a", json=rpc, headers=headers)).json()["result"]["task"]
+    assert done["status"]["state"] == "TASK_STATE_COMPLETED"
+    stored = repo.get_run(demo.state.services.engine, run_id)
+    assert stored is not None
+    assert stored["status"] == "rejected"
 
 
 async def test_the_open_mcp_endpoint_reads_only_the_examples_lines(
