@@ -67,7 +67,9 @@ function Pattern({ text }: { text: string }) {
             <>
               <span
                 aria-hidden
-                className="mx-0.5 inline-block rounded-[4px] bg-panel-sage px-1 align-baseline font-sans text-[0.75em] leading-[1.4] text-heading"
+                // 12 px, the floor for a label inside a drawing (DESIGN.md); 0.75 em of the
+                // 13 px pattern was under 10 px.
+                className="mx-0.5 inline-block rounded-[4px] bg-panel-sage px-1 align-baseline font-sans text-[0.75rem] leading-[1.4] text-heading"
               >
                 any
               </span>
@@ -121,7 +123,7 @@ function ReadVisual({ data }: { data: StepShowcase }) {
       <div className="overflow-hidden rounded-[12px] border border-rule bg-raised font-mono text-[0.8125rem] leading-6">
         <p className="flex items-center justify-between gap-3 border-b border-rule bg-sunken px-3 py-1.5 font-sans text-sm text-muted-foreground">
           <span>The log as it arrives ({data.system})</span>
-          <span className="tabular">{data.facts.lines} lines</span>
+          <span className="tabular whitespace-nowrap">{data.facts.lines} lines</span>
         </p>
         <div className="grid grid-cols-1 py-1">
           {data.lines.map((line) => (

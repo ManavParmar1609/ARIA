@@ -1,6 +1,7 @@
 # Architecture decision records
 
-The decisions that shaped ARIA, in the format Michael Nygard described in
+The decisions that shaped ARIA, for engineers who want to know why it is built this way, in the
+format Michael Nygard described in
 [Documenting architecture decisions](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions).
 Each record says what forced the choice, what was decided, what else was considered and what
 follows from it. Records that depart from the [build brief](../build-brief.md) say so in their

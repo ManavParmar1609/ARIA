@@ -59,11 +59,11 @@ function questions(tested: Pick<TestedOn, "unseen" | "tuned">): { q: string; a: 
     },
     {
       q: "What if the logs are unlike anything it has seen?",
-      a: `It says so and asks a person. Before deciding, ARIA checks whether the window looks like what its model learned from: one too far from the training data, with too many patterns new to its system, or from a system it never trained on is never decided alone, and the short list widens to what the rules leave open. The tests hold each system out in turn to measure how it does on a new one${tested.unseen ? ", and Test results shows the result" : ""}.`,
+      a: `It says so and asks a person. Before deciding, ARIA checks whether the logs look like what its model learned from. A window too far from the training data, one with too many patterns new to its system, or one from a system it never trained on is never decided alone: a person confirms it, and the short list widens to what the rules leave open. The tests hold each system out in turn to measure how it does on a new one${tested.unseen ? ", and Test results shows the result" : ""}.`,
     },
     {
       q: "Do I need a model key?",
-      a: "No. Offline, every step uses fixed rules and the trained severity model, and the report is written from a template that only states what the evidence shows. With a model key, a language model investigates and writes, and every claim still has to cite its evidence. On this site you can add your own key in Settings. When the site has a key of its own, it serves a pool of models kept inside their own limits, and visitors without a key share it within a daily allowance; when no model has room, the triage is written offline and says when the model is back.",
+      a: "No. Offline, every step uses fixed rules and the trained severity model, and the report is written from a template that only states what the evidence shows. With a model key, a language model investigates and writes, and every claim still has to cite its evidence. On this site you can add your own key in Settings. Without one you share the site's key within a daily allowance, and when no model has room the triage is written offline and says when the model is back.",
     },
     {
       q: "What happens to sensitive data in my logs?",
@@ -71,7 +71,7 @@ function questions(tested: Pick<TestedOn, "unseen" | "tuned">): { q: string; a: 
     },
     {
       q: "How does it learn, and how would you know it had gone wrong?",
-      a: "From blind checks. In Settings, a person rates a recent incident before seeing ARIA's level, and those ratings recalibrate the short lists one at a time; approvals don't count, because a person approving a report tends to agree with it. Settings also says when a system's mix of levels has shifted beyond chance, an alarm in the logs says when blind checks show more serious incidents rated minor than promised, and every decision is on an append-only record that shows any later change.",
+      a: "From blind checks. In Settings, a person rates a recent incident before seeing ARIA's level, and those ratings recalibrate the short lists one at a time; approvals don't count, because a person approving a report tends to agree with it. You would know from three places. Settings says when a system's mix of levels has shifted beyond chance. An alarm in the logs says when blind checks show more serious incidents rated minor than promised. And every decision is on an append-only record that shows any later change.",
     },
     {
       q: "Does it work with my tools?",

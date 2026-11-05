@@ -8,8 +8,19 @@ incident report in which every claim cites the log lines behind it, and pauses f
 approve, edit or reject the report before anything is published or sent.
 
 ARIA runs offline with no API keys. Set a Gemini key (free tier available) or an NVIDIA NIM key,
-and the agents write with hosted models. Azure OpenAI and any OpenAI-compatible server work the
-same way: switching is a config change.
+and the agents write with hosted models. Anthropic Claude, OpenAI, Azure OpenAI and any
+OpenAI-compatible server work the same way: switching is a config change.
+
+Start here:
+
+- **Try it.** The [quickstart](#quickstart) runs ARIA offline in three commands; the console's
+  **How ARIA works** and **Guide** pages then show it on a real incident.
+- **Proof.** [Test results](#test-results) on public, labelled datasets, each against a simpler
+  method; every number and its method is in [docs/evaluation.md](docs/evaluation.md).
+- **Limits.** [Limitations](#limitations) and the [data card](docs/data-card.md) say what the
+  results can and cannot show.
+- **Trust.** The [safety controls](#safety-controls), the [threat model](docs/threat-model.md)
+  and the [EU AI Act position](docs/eu-ai-act.md).
 
 ![ARIA's home page: the headline "Turn a wall of logs into a report you can check." on a sage-green panel, and beside it, on a slate-blue panel, a report card from a recorded run: the level, a claim with its citation open on the log line it cites, and a note that it is waiting for a person to approve.](docs/images/hero.webp)
 
@@ -29,12 +40,14 @@ same way: switching is a config change.
    the CLI, or another agent (over A2A or AG-UI) starts a run. Alerts that share a group key
    within five minutes join one run, so an alert storm becomes one incident.
 2. **Parse.** Lines are redacted (secrets removed, IP and e-mail addresses pseudonymised),
-   checked for prompt injection, and grouped into templates with Drain. Large inputs fan out
-   over parallel shards. The parser also follows each unit of work it can name (an HDFS block, a
-   task attempt, a VM boot) from start to finish, learns from the window which steps always come
-   in equal numbers, and flags units that stop partway: failures that log no error at all.
+   checked for prompt injection, and grouped into templates (patterns) by the Drain parser.
+   Large inputs fan out over parallel shards. The parser also follows each unit of work it can
+   name (an HDFS block, a task attempt, a VM boot) from start to finish, learns from the window
+   which steps always come in equal numbers, and flags units that stop partway: failures that
+   log no error at all.
 3. **Severity.** Rules give a floor. A calibrated model gives probabilities and a conformal
-   prediction set. An LLM may adjudicate, but only between the labels in that set.
+   prediction set: the short list of levels it cannot rule out, built to hold the right one at a
+   promised rate. A language model may choose, but only between the levels in that set.
 4. **Investigate and retrieve.** An investigator tests hypotheses with read-only log tools.
    Hybrid search (BM25 plus embeddings) finds the three most similar past incidents and the
    matching runbooks. Weak evidence triggers a replan: wider retrieval, more context, another
@@ -109,15 +122,17 @@ uv run aria db upgrade && uv run aria seed
 make dev
 ```
 
-Open http://localhost:3000 for the home page, then **Open the console**. New to ARIA? The
-console's **How ARIA works** explains it in five short pages, and its **Guide** page replays a
-real incident (ten minutes of a real Hadoop cluster's log) or starts a sample triage in one click,
-and explains how to read a run. A replayed run shows the blocks ARIA flagged next to the label
-Hadoop experts gave each one, and the run page's first tab tells the run as each agent's turn. In
-the console, Ctrl or ⌘ + K opens search, which jumps to any page, recent incident, sample, runbook
-or definition, and `?` lists the keyboard shortcuts. The API listens on
-http://127.0.0.1:8000 (OpenAPI docs at `/docs`). If those ports are taken,
-`make dev API_PORT=8010 WEB_PORT=3010` moves both.
+Open http://localhost:3000 for the home page, then **Open the console**. The API listens on
+http://127.0.0.1:8000 (OpenAPI docs at `/docs`); if those ports are taken,
+`make dev API_PORT=8010 WEB_PORT=3010` moves both. New to ARIA?
+
+- The console's **How ARIA works** explains it in five short pages.
+- Its **Guide** page replays a real incident (ten minutes of a real Hadoop cluster's log) or
+  starts a sample triage in one click, and explains how to read a run. A replayed run shows the
+  blocks ARIA flagged next to the label Hadoop experts gave each one, and the run page's first
+  tab tells the run as each agent's turn.
+- Ctrl or ⌘ + K opens search, which jumps to any page, recent incident, sample, runbook or
+  definition, and `?` lists the keyboard shortcuts.
 
 Without downloaded data, ARIA seeds incident memory from the small test fixtures.
 `uv run aria data download --source loghub-2k` fetches the Loghub samples (pinned commit, checked
@@ -196,7 +211,7 @@ curl -sS http://127.0.0.1:8000/api/v1/alerts/alertmanager \
                   "startsAt":"2026-10-29T03:00:00Z"}]}'
 ```
 
-The run appears in the console's incident queue, streams its steps live, and waits for your
+The run appears in the console's **Incidents** list, streams its steps live, and waits for your
 review. To have ARIA read log files as well, set `ARIA_SCAN_SOURCES` (for example
 `bgl=/var/log/bgl.log`) and `ARIA_SCAN_INTERVAL_S`: each burst of errors opens a run with those
 lines. With `ARIA_ENV=prod`, every call needs an API key from `ARIA_API_KEYS`.
@@ -207,7 +222,7 @@ lines. With `ARIA_ENV=prod`, every call needs an API key from `ARIA_API_KEYS`.
 
 | Surface | Where | What it is for |
 |---|---|---|
-| Console | `web/`, http://localhost:3000/console | Queue, live run view with rule trace, prediction set, evidence and cited report; review, time travel, Ask ARIA, evals, the incident library with its filters and charts, settings (with how each reviewer decides and what each model provider's terms say about prompts), a guide with one-click samples, and search with keyboard shortcuts |
+| Console | `web/`, http://localhost:3000/console | Incidents, live run view with rule trace, prediction set, evidence and cited report; review, time travel, Ask ARIA, test results, the incident library with its filters and charts, settings (with how each reviewer decides and what each model provider's terms say about prompts), a guide with one-click samples, and search with keyboard shortcuts |
 | REST and SSE | `/api/v1/*`, [docs/openapi.json](docs/openapi.json) | Runs, live event stream, report (JSON and Markdown), postmortem draft, review, resending a failed message, history, fork |
 | Alert webhooks | `/api/v1/alerts/alertmanager`, `/grafana`, `/alerts` | Turn alert storms into one grouped run |
 | Log scan | `ARIA_SCAN_SOURCES`, `ARIA_SCAN_INTERVAL_S` | Open a run on an error burst no alert caught |
@@ -301,7 +316,7 @@ have the details.
 The full analysis, with the code and test for each control, is in the
 [threat model](docs/threat-model.md).
 
-## Measured results
+## Test results
 
 ![The Hadoop cluster test on the console's Test results page: ARIA's result against the label experts gave each storage block, its precision, recall and false alarms, and a table comparing ARIA with four standard detectors, its severity engine and a keyword rule.](docs/images/real.webp)
 
@@ -527,14 +542,23 @@ Mining Console Logs", SOSP 2009, for the HDFS labels. Sources and pinned checksu
 
 ## Docs
 
-- [Evaluation](docs/evaluation.md): every measured number and how it was measured
-- [Architecture decisions](docs/adr/README.md)
-- [Data card](docs/data-card.md)
-- [Model card](docs/model-card.md)
-- [Threat model](docs/threat-model.md)
-- [The EU AI Act](docs/eu-ai-act.md): why ARIA, as shipped, is not a high-risk system, and what would change that
-- [Ops runbook](docs/ops-runbook.md)
-- [Deploy a free public demo](docs/deploy-free.md): the website on Vercel, the API on Render
-- [Quality audit](docs/quality-audit.md): what the pre-release audit checked, fixed and left
+- [Evaluation](docs/evaluation.md): every measured number and how it was measured, for anyone
+  judging the results (written by `make eval`)
+- [Model card](docs/model-card.md): how severity is decided, calibrated and recalibrated, for
+  reviewers, SREs and auditors
+- [Data card](docs/data-card.md): the datasets, their labels and licences, and how the
+  semi-synthetic incidents are built, for anyone judging what the results can show
+- [Threat model](docs/threat-model.md): assets, trust boundaries, prompt injection, and the
+  control and test behind each threat, for security reviewers
+- [The EU AI Act](docs/eu-ai-act.md): why ARIA, as shipped, is not a high-risk system, and what
+  would change that, for compliance reviewers and deployers in the EU
+- [Architecture decisions](docs/adr/README.md): why ARIA is built the way it is, for engineers
+- [Ops runbook](docs/ops-runbook.md): deploying, configuring, watching and fixing ARIA, for
+  whoever operates it
+- [Deploy a free public demo](docs/deploy-free.md): the website on Vercel, the API on Render,
+  for whoever hosts a demo
+- [Validation log](docs/validation-log.md): every candidate change to the severity rules and
+  thresholds, adopted or not, for engineers changing the engine
+- [Quality audit](docs/quality-audit.md): what the pre-release audits checked, fixed and left
 - [Build brief](docs/build-brief.md): the specification and its acceptance checks
 - [AGENTS.md](AGENTS.md): conventions for coding agents working on this repo

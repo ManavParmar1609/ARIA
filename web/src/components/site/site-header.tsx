@@ -11,8 +11,8 @@ import { REPO_URL } from "@/lib/site-data";
 // The home page is short; the explanation and the evidence live in the console's pages, and each
 // link names the page it opens.
 export const SECTIONS = [
-  { href: "/console/how-it-works", label: "How it works" },
-  { href: "/console/how-it-works/example", label: "Example" },
+  { href: "/console/how-it-works", label: "How ARIA works" },
+  { href: "/console/how-it-works/example", label: "An example" },
   { href: "/console/evals", label: "Test results" },
   { href: "/console/how-it-works/questions", label: "Questions" },
 ];

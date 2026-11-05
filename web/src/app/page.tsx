@@ -165,7 +165,7 @@ export default function Landing() {
           id="what"
           tag="What it does"
           title="A careful first look at every alert"
-          intro="When an alert fires, ARIA has already read the logs. It says how serious the incident is and how sure it is, what changed, what fixed it last time, and drafts the messages for you to approve."
+          intro="Four things ARIA does for the person on call, and a short video that shows them on one real incident."
         >
           <Why />
           <Explainer lines={data.fileLines} />
@@ -210,7 +210,7 @@ export default function Landing() {
           tone="keylime"
           tag="Test results"
           title="Tested on real, labelled logs"
-          intro={testedOnText(testedOn())}
+          intro={`${testedOnText(testedOn())} Test results shows each test in full, and where ARIA falls short.`}
           more={{ href: "/console/evals", label: "See every test" }}
         >
           <p className="max-w-[62ch] text-xl leading-relaxed font-medium text-heading">

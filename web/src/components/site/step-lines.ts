@@ -6,7 +6,7 @@ export const STEP_LINES: { title: string; body: string }[] = [
   },
   {
     title: "Rate how serious it is",
-    body: "Rules and a calibrated model keep a short list of the levels they can't rule out, with a promise for each level. Logs unlike anything ARIA has learned from go to a person.",
+    body: "Rules and a trained model keep a short list of the levels they can't rule out, built to hold the right one at a promised rate. Logs unlike anything ARIA has learned from go to a person.",
   },
   {
     title: "Investigate and write",
