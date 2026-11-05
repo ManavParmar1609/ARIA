@@ -64,9 +64,19 @@ def canonical(fields: Mapping[str, Any]) -> bytes:
 
 
 def stamp(ts: datetime) -> str:
-    """The moment as the hash sees it: UTC to the microsecond, as every database keeps it."""
+    """The moment as the hash sees it: naive UTC, written to the microsecond.
+
+    Entries are written to the whole second (``moment``), because the hash must be recomputable
+    from what the database hands back: SQLite keeps microseconds, but SQL Server's DATETIME
+    keeps 1/300 of a second and would round a finer moment, breaking every entry's hash.
+    """
     utc = ts.astimezone(UTC) if ts.tzinfo is not None else ts
     return utc.replace(tzinfo=None).isoformat(timespec="microseconds")
+
+
+def moment() -> datetime:
+    """Now, to the whole second: a moment every database stores exactly as hashed."""
+    return utcnow().replace(microsecond=0)
 
 
 def entry_hash(
@@ -188,7 +198,7 @@ def append(
                 seq, prev_hash = _tail(session)
                 entry = make_entry(
                     seq=seq,
-                    ts=utcnow(),
+                    ts=moment(),
                     kind=kind,
                     run_id=run_id,
                     actor=who,
