@@ -68,10 +68,11 @@ export function DataTerms({ terms }: { terms: DataTermsView[] }) {
             <div key={use.account} className="grid gap-1">
               <p className="text-sm font-medium">{use.account}</p>
               <dl className="grid gap-1 text-sm sm:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] sm:gap-x-6">
+                {/* On a phone the pairs stack, so the answer is set apart from its question. */}
                 <dt className="text-muted-foreground">Uses prompts to improve its models</dt>
-                <dd>{improvesWords(use)}</dd>
+                <dd className="font-medium">{improvesWords(use)}</dd>
                 <dt className="text-muted-foreground">Keeps prompts</dt>
-                <dd className="max-w-prose">{keepsWords(use)}</dd>
+                <dd className="max-w-prose font-medium">{keepsWords(use)}</dd>
               </dl>
             </div>
           ))}

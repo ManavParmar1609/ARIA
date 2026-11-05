@@ -37,7 +37,8 @@ export function modelAccess(
   return { kind: "offline", label: "Offline", usedUp: shared?.left === 0 };
 }
 
-const OFFLINE = "the rules, the calibrated model and the grounded template";
+// The report names its writer the same way: "written by ARIA's evidence template".
+const OFFLINE = "the rules, the calibrated model and ARIA's evidence template";
 
 /** One sentence: what answers, and what the visitor can do about it. On Settings itself the key
  * form sits just below the sentence. */

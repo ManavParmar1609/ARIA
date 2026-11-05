@@ -25,7 +25,7 @@ describe("who answers a visitor's runs", () => {
     const none = modelAccess("openai", ["gemini"], null);
     expect(none.kind).toBe("offline");
     expect(accessSentence(none, false)).toBe(
-      "Offline: triages use the rules, the calibrated model and the grounded template, and nothing leaves the server.",
+      "Offline: triages use the rules, the calibrated model and ARIA's evidence template, and nothing leaves the server.",
     );
   });
 

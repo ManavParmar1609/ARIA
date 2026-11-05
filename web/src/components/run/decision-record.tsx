@@ -99,9 +99,11 @@ export function byWhom(actor: string): string {
 }
 
 /** A run's decisions in order: when, what happened and who did it. Each entry is hash-chained
- * to the one before it, so Settings can say whether the whole record still holds. */
+ * to the one before it, so Settings can say whether the whole record still holds. Nothing shows
+ * until there is a decision: an empty card above the report would only push it down. */
 export function DecisionRecord({ runId, enabled = true }: { runId: string; enabled?: boolean }) {
   const entries = useRunRecord(runId, enabled);
+  if (!entries.isPending && !entries.isError && entries.data.length === 0) return null;
   return (
     <section aria-labelledby="record-title" className="grid gap-3 rounded-lg bg-raised p-5">
       <h2 id="record-title" className="font-sans text-base font-semibold">
@@ -115,10 +117,6 @@ export function DecisionRecord({ runId, enabled = true }: { runId: string; enabl
           error={entries.error}
           onRetry={() => void entries.refetch()}
         />
-      ) : entries.data.length === 0 ? (
-        <p className="max-w-prose text-sm text-muted-foreground">
-          No decisions yet. The record starts when someone reviews this incident.
-        </p>
       ) : (
         <ol className="grid gap-2">
           {entries.data.map((entry) => (

@@ -115,11 +115,11 @@ describe("the decision record card", () => {
     expect(within(items[5]!).getByText("By ben")).toBeTruthy();
   });
 
-  it("says when nothing has been decided yet", () => {
+  it("shows nothing until someone has decided, so an empty card never pushes the report down", () => {
     state.record.data = [];
-    render(<DecisionRecord runId="run-1" />);
-    expect(screen.getByText(/^No decisions yet\./)).toBeTruthy();
-    expect(screen.queryByRole("list")).toBeNull();
+    const { container } = render(<DecisionRecord runId="run-1" />);
+    expect(container.innerHTML).toBe("");
+    expect(screen.queryByRole("region", { name: "Decision record" })).toBeNull();
   });
 
   it("shows that it is loading, and a failure with a way to try again", () => {

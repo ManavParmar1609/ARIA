@@ -105,7 +105,7 @@ export function modelHint(
   on = true,
 ): string {
   if (!on) {
-    return "Off: rules, the calibrated model and the grounded template write this triage. Faster, and nothing leaves the server.";
+    return "Off: the rules, the calibrated model and ARIA's evidence template write this triage. Faster, and nothing leaves the server.";
   }
   const access = modelAccess(savedProvider, kinds, shared);
   if (access.kind === "own") {

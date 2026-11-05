@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { Term } from "@/components/aria/term";
 import { DOMAIN_CARDS } from "@/components/console/domain-results";
 import { NewDomainCards } from "@/components/console/eval-domains";
 import { Bars, Facts, MethodTable, pct, Section } from "@/components/console/eval-parts";
@@ -919,8 +920,13 @@ export function Evals({
         description={
           <>
             How ARIA was tested on public, labelled data, beside simpler methods it should beat,
-            including where they win. Measured on {data.createdAt.slice(0, 10)}; anyone can run the
-            tests again from the source code.{" "}
+            including where they win. The tests sit in{" "}
+            <Term name="rings" instance="tests">
+              three rings
+            </Term>
+            , in the order below: systems its model never saw, real data with its owners&apos;
+            labels, and fresh samples of the systems it learned from. Measured on{" "}
+            {data.createdAt.slice(0, 10)}; anyone can run the tests again from the source code.{" "}
             <a
               href={EVAL_DOC_URL}
               className="text-foreground underline decoration-control underline-offset-4"

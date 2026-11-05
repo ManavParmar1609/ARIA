@@ -41,7 +41,8 @@ import { systemName, triggerLabel } from "@/lib/systems";
 
 const FILTERS: { value: Status | "all"; label: string }[] = [
   { value: "all", label: "All incidents" },
-  { value: "awaiting_review", label: "Waiting for review" },
+  // The same words as the status beside each incident.
+  { value: "awaiting_review", label: "Needs review" },
   { value: "running", label: "Running" },
   { value: "published", label: "Published" },
   { value: "rejected", label: "Discarded" },
