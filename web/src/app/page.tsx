@@ -6,7 +6,6 @@ import { resultsInShort } from "@/components/console/test-questions";
 import { Closing } from "@/components/site/closing";
 import { Explainer } from "@/components/site/explainer";
 import { Hero } from "@/components/site/hero";
-import { Converge } from "@/components/site/line-art";
 import { ResultsRow } from "@/components/site/results-row";
 import { SiteFooter } from "@/components/site/site-footer";
 import { SiteHeader } from "@/components/site/site-header";
@@ -109,10 +108,6 @@ function ProblemAndAnswer() {
             time, often in the middle of the night.
           </p>
         </div>
-        <Converge
-          apart
-          className="mt-12 h-40 w-[115%] -translate-x-[8%] text-heading sm:h-auto lg:mt-16 lg:w-full lg:translate-x-0"
-        />
       </section>
       <section
         aria-labelledby="answer-title"
@@ -130,7 +125,6 @@ function ProblemAndAnswer() {
             fixed it last time, and waits for you before anything is sent.
           </p>
         </div>
-        <Converge className="mt-12 h-40 w-full text-heading sm:h-auto lg:mt-16" />
       </section>
     </>
   );

@@ -159,7 +159,6 @@ transform, opacity and the stroke dash offset animate, and everything stops unde
 `prefers-reduced-motion`. Nothing moves on its own for longer than five seconds without a way
 to stop it (WCAG 2.2.2).
 
-- **Line art.** Each drawing's strokes draw in once as it comes into view.
 - **The seven chosen animations:**
   - the hero entrance: the report card rises into place once;
   - the sliding nav pill;
