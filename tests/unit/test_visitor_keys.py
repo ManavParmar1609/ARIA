@@ -585,3 +585,40 @@ def test_only_the_sites_own_key_counts_against_the_allowance() -> None:
     for _ in range(3):  # a server without a model of its own counts nothing
         assert may_use_model(offline_server, None, "v-1", wanted=True)
     assert offline_server.allowance.check("v-1").left == 1
+
+
+def test_the_allowance_still_binds_when_runs_do_not_reserve_their_calls() -> None:
+    """While the shared models are full, a run is let through without spending a share only
+    because the runner, finding no room to reserve, runs it offline. With reservations off the
+    runner never does, so the allowance must decide, or a visitor past their share would use
+    the server's key call by call."""
+    from types import SimpleNamespace
+    from typing import cast
+
+    from aria.api.keys import may_use_model
+    from aria.api.state import AppState
+    from aria.config import SharedAllowanceConfig
+    from aria.llm.allowance import SharedAllowance
+
+    def state(reserve_runs: bool) -> AppState:
+        # The shared models are full: run_back_at names when they have room again.
+        router = SimpleNamespace(has_real_llm=lambda role: True, run_back_at=lambda _: 4e9)
+        base = get_app_config()
+        quota = base.llm.quota.model_copy(update={"reserve_runs": reserve_runs})
+        config = base.model_copy(update={"llm": base.llm.model_copy(update={"quota": quota})})
+        return cast(
+            "AppState",
+            SimpleNamespace(
+                allowance=SharedAllowance(SharedAllowanceConfig(per_visitor=1)),
+                services=SimpleNamespace(router=router, config=config),
+            ),
+        )
+
+    reserving = state(reserve_runs=True)
+    for _ in range(3):  # let through unspent: the runner will run each offline
+        assert may_use_model(reserving, None, "v-1", wanted=True)
+    assert reserving.allowance.check("v-1").left == 1
+    direct = state(reserve_runs=False)
+    assert may_use_model(direct, None, "v-1", wanted=True)  # the one share the visitor has
+    assert not may_use_model(direct, None, "v-1", wanted=True)  # past it: offline
+    assert direct.allowance.check("v-1").left == 0
