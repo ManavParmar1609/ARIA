@@ -148,3 +148,29 @@ def test_checking_an_unconfigured_provider_by_name_fails() -> None:
     # Without a name, providers nobody configured are not failures: offline is a valid setup.
     every = runner.invoke(app, ["providers", "check", "--no-probe"])
     assert every.exit_code == 0, every.output
+
+
+def test_a_live_run_that_fell_back_to_the_stand_in_is_not_published() -> None:
+    from aria.cli import stand_in_calls
+
+    live = {"pipeline": {"providers": {"gemini": {"calls": 3}}}}
+    fell_back = {"pipeline": {"providers": {"gemini": {"calls": 1}, "fake": {"calls": 12}}}}
+    assert stand_in_calls(live) == 0
+    assert stand_in_calls(fell_back) == 12
+
+
+def test_a_live_choice_run_the_model_never_answered_is_not_published() -> None:
+    from aria.cli import unanswered_choice
+
+    answered = {
+        "held_out_systems": {"contested": 173, "answered": 150},
+        "bgl": {"contested": 4, "answered": 4},
+    }
+    blocked = {
+        "held_out_systems": {"contested": 173, "answered": 0},
+        "bgl": {"contested": 4, "answered": 5},
+    }
+    nothing_contested = {"held_out_systems": {"contested": 0, "answered": 0}}
+    assert unanswered_choice(answered) == ""
+    assert unanswered_choice(blocked) == "held_out_systems"
+    assert unanswered_choice(nothing_contested) == ""

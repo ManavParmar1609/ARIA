@@ -9,7 +9,7 @@ import os
 import signal
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 from rich.console import Console
@@ -22,6 +22,24 @@ LIVE_RESULTS = Path("docs/eval-live.json")
 # The latest live run of the model's choice inside the set (`--suite llm-choice --llm`): until
 # one is committed, `make eval` says nothing about that choice.
 LIVE_CHOICE = Path("docs/eval-llm-choice.json")
+
+
+def stand_in_calls(results: dict[str, Any]) -> int:
+    """Calls a pipeline run made to the offline stand-in model, which a live run must not."""
+    providers = results.get("pipeline", {}).get("providers", {})
+    return int(providers.get("fake", {}).get("calls", 0))
+
+
+def unanswered_choice(choice: dict[str, Any]) -> str:
+    """The parts of a live choice run where windows were contested but none got an answer."""
+    parts = ("held_out_systems", "bgl")
+    return ", ".join(
+        p
+        for p in parts
+        if choice.get(p, {}).get("contested", 0) and not choice.get(p, {}).get("answered", 0)
+    )
+
+
 data_app = typer.Typer(no_args_is_help=True, help="Download and ingest the public datasets.")
 train_app = typer.Typer(
     help="Train and export the severity and ticket models.", invoke_without_command=True
@@ -674,6 +692,14 @@ def eval_run(
                 }
             console.print(f"[bold]{section}[/bold] {json.dumps(headline, default=str)}")
     if suite == "pipeline" and llm:
+        if stand_in := stand_in_calls(results):
+            # A live run that fell back to the offline stand-in (every key busy or out of quota)
+            # would publish template text as a model's: keep the last real live run instead.
+            console.print(
+                f"[red]{stand_in} calls fell through to the offline stand-in, so this was not a "
+                f"live run; {LIVE_RESULTS} is unchanged[/red]"
+            )
+            raise typer.Exit(1)
         LIVE_RESULTS.write_text(json.dumps(results, indent=2, default=str) + "\n", "utf-8")
         console.print(f"wrote {LIVE_RESULTS}; `make eval` quotes it")
     if suite == "llm-choice":
@@ -688,6 +714,12 @@ def eval_run(
             )
         )
         if llm:
+            if unanswered := unanswered_choice(choice):
+                console.print(
+                    f"[red]the model answered none of the contested windows in: {unanswered} "
+                    f"(quota or provider errors); {LIVE_CHOICE} is unchanged[/red]"
+                )
+                raise typer.Exit(1)
             LIVE_CHOICE.write_text(json.dumps(results, indent=2, default=str) + "\n", "utf-8")
             console.print(f"wrote {LIVE_CHOICE}; `make eval` quotes it")
     if suite == "all" and not llm:
