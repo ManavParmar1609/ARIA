@@ -16,6 +16,23 @@ from aria.severity.drift import (
 )
 
 
+def test_decided_levels_reads_each_systems_newest_runs_oldest_first() -> None:
+    """The query behind the drift check hands back at most ``per_system`` runs a system, the
+    newest ones, in the order they were decided, and never a visitor's own run."""
+    from aria.db import repository as repo
+    from aria.db.engine import get_engine, init_db
+
+    engine = get_engine()
+    init_db(engine)
+    for n in range(5):
+        repo.create_run(engine, f"run-a-{n}", request={}, system="a", severity=f"SEV{n % 4 + 1}")
+    repo.create_run(engine, "run-b-0", request={}, system="b", severity="SEV2")
+    repo.create_run(engine, "run-b-1", request={}, system="b", severity="SEV1", visitor="v-1")
+    repo.create_run(engine, "run-c-0", request={}, system="c")  # not decided yet
+    levels = repo.decided_levels(engine, per_system=3)
+    assert levels == {"a": ["SEV3", "SEV4", "SEV1"], "b": ["SEV2"]}
+
+
 def test_psi_is_zero_for_the_same_mix_and_grows_with_the_shift() -> None:
     same = ["SEV4"] * 50 + ["SEV3"] * 30 + ["SEV2"] * 15 + ["SEV1"] * 5
     assert psi(same, same) == pytest.approx(0.0, abs=1e-12)
