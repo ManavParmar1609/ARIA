@@ -31,6 +31,7 @@ from aria.reporting.grounding import validate_external_text
 from aria.reporting.outbound import DraftPolicy, screen_all
 from aria.reporting.writer import cited_evidence
 from aria.security.safety import check_text
+from aria.severity.policy import torn_words
 from aria.text import headline
 
 AUDIENCE = {"responders": "responders", "stakeholders": "stakeholders", "status_page": "customers"}
@@ -75,10 +76,20 @@ class CommsOutcome:
 
 
 def deterministic_drafts(
-    report: IncidentReport, *, service: str, run_url: str
+    report: IncidentReport,
+    *,
+    service: str,
+    run_url: str,
+    prediction_set: Sequence[Severity | str] = (),
 ) -> dict[str, MessageDraft]:
+    """The three drafts. ``prediction_set`` is the set the severity came from: with more than one
+    level in it, a draft that states the severity says what ARIA is torn between and the level
+    it plans for (aria.severity.policy), as the report and the review do."""
     ids = [e.id for e in cited_evidence(report)][:10] or [report.evidence[0].id]
+    torn = torn_words(report.severity, prediction_set) if prediction_set else None
     bullets = [f"• {c.text}" for c in report.summary[:3]]
+    if torn and not any(torn in line for line in bullets):
+        bullets.insert(0, f"• {torn}")
     if report.suspected_cause:
         bullets.append(f"• Suspected: {report.suspected_cause[0].text}")
     if report.actions:
@@ -90,11 +101,12 @@ def deterministic_drafts(
         evidence_ids=ids,
     )
     impact = _IMPACT_WORDS[report.severity]
+    word = SEVERITY_DESCRIPTIONS[report.severity].split(":", 1)[0].lower()
+    stated = f"{torn} ({word})" if torn else f"Severity is {report.severity} ({word})"
     stakeholders = MessageDraft(
         title=f"Incident update: {service}"[:140],
         body=(
-            f"We are responding to {impact} affecting {service}. "
-            f"Severity is {report.severity} ({SEVERITY_DESCRIPTIONS[report.severity].split(':', 1)[0].lower()}). "
+            f"We are responding to {impact} affecting {service}. {stated}. "
             "Engineers are investigating and will share the next update within 30 minutes."
         ),
         evidence_ids=ids[:3],
@@ -127,11 +139,15 @@ async def draft_comms(
     use_llm: bool = True,
     safety_check: bool = False,
     policy: DraftPolicy | None = None,
+    prediction_set: Sequence[Severity | str] = (),
 ) -> CommsOutcome:
     """The audiences' drafts as proposals. ``policy`` says which hosts a draft may link to and
-    whom it may address; without one, only the run's own link stays."""
+    whom it may address; without one, only the run's own link stays. ``prediction_set`` is the
+    set the severity came from (see ``deterministic_drafts``)."""
     policy = policy or DraftPolicy.for_link(run_url)
-    drafts = deterministic_drafts(report, service=service, run_url=run_url)
+    drafts = deterministic_drafts(
+        report, service=service, run_url=run_url, prediction_set=prediction_set
+    )
     known = {e.id for e in report.evidence}
     outcome = CommsOutcome(actions=[])
     if use_llm and router is not None and router.chain("comms"):
@@ -210,13 +226,16 @@ def redraft(
     service: str,
     run_url: str,
     policy: DraftPolicy | None = None,
+    prediction_set: Sequence[Severity | str] = (),
 ) -> list[OutboundAction]:
     """The actions rewritten from the reviewed report. Used when a reviewer changed its severity or
     title: a draft written for the old facts must not go out under the new ones."""
     policy = policy or DraftPolicy.for_link(run_url)
     drafts = {
         action_id(report.report_id, key): (key, draft)
-        for key, draft in deterministic_drafts(report, service=service, run_url=run_url).items()
+        for key, draft in deterministic_drafts(
+            report, service=service, run_url=run_url, prediction_set=prediction_set
+        ).items()
     }
     rewritten: list[OutboundAction] = []
     for action in actions:

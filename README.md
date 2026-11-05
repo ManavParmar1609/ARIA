@@ -265,7 +265,7 @@ shown in Settings beside the model settings. Terms nobody has read yet say "Not 
 | Calibrated model | A linear model on the window's features, temperature-calibrated | Probabilities that mean what they say |
 | Novelty check | A window unlike anything in training (too far from the training data, too many new patterns, or a system the model never saw) goes to a person | The model never extrapolates quietly |
 | Conformal set | One threshold per level, with a tighter promise for SEV1 and SEV2 than for SEV3 and SEV4, sets kept in order, and a certified limit on how often a serious incident is ruled out | The promise holds for each level, not just on average |
-| LLM adjudication | Chooses only between labels already in the set | The LLM cannot invent a severity the evidence rules out |
+| LLM adjudication | Chooses only between labels already in the set, with the nearest incidents a person reviewed as examples | The LLM cannot invent a severity the evidence rules out, and a reviewed level outside the set is flagged for a person, never chosen |
 | Policy | One label decides alone; otherwise the most severe label in the set, flagged for review with the reasons | Over-triage beats under-triage when unsure |
 
 Blind checks recalibrate it. In Settings, "Check ARIA blind" shows a recent incident without
@@ -281,7 +281,9 @@ have the details.
 
 - **Prompt injection.** Instruction-like log lines, alert labels and annotations are quarantined
   before any model sees them. Everything else reaches a model only as fenced, untrusted
-  evidence.
+  evidence. An adaptive red team measures what attacks still achieve, with the guard and with
+  it bypassed, and a hard gate fails it on a severity outside the set or a message sent before
+  approval. Spotlighting by datamarking is an option, off until a comparison shows it helps.
 - **Constrained output.** The LLM can only choose severity inside the conformal set, so injected
   text cannot change it. Every report claim must cite evidence, and the validator rejects
   anything else.

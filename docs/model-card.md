@@ -96,7 +96,16 @@ order:
    cited evidence ID must exist. `decided_by` is `llm`. These decisions are not auditable, and
    they are flagged for review when the set holds three or more classes, the model was not
    used, any reason in step 4 applies, or the LLM picked SEV3 or SEV4 while the set kept a
-   serious level possible.
+   serious level possible. Past incidents like this one that a person reviewed (up to three:
+   the nearest run-sourced incidents in memory whose runs have a review) reach the model as
+   fenced, redacted examples with the level the person set, so it sees how this team rates such
+   incidents. They change nothing about the set: a model that follows one out of the set is
+   refused like any other answer, and a reviewed level outside the set is reported to the
+   reviewer, never chosen. Whether the model's pick beats the calibrated model's top level
+   inside the set, and how steady it is over repeated runs, is measured by
+   `aria eval run --suite llm-choice`; only the offline fake provider has answered it so far,
+   so no live figure is published
+   ([ops runbook](ops-runbook.md#measure-the-models-choice-inside-the-set)).
 6. **Without an LLM, ARIA takes the most severe class in the set.** This applies when no LLM is
    configured, the run's budget is spent, or the LLM's answers fail validation. The severity is
    flagged for review, and `decided_by` is `fallback`. Under-triage costs more than

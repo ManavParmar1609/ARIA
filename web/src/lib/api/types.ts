@@ -271,6 +271,10 @@ export interface OutboundAction {
   status: "proposed" | "approved" | "rejected" | "sent" | "failed" | "skipped";
   requires_approval: boolean;
   evidence_ids: string[];
+  /** What was taken out of the draft before review: links to hosts off the allow-list and
+   * recipients nobody configured, each in words ("link to evil[.]example"). Missing from runs
+   * made before the API sent it. */
+  removed?: string[];
 }
 
 export interface Plan {
@@ -341,7 +345,7 @@ export interface ReviewPrompt {
   prediction_set: Severity[];
   valid: boolean;
   generated_by: "template" | "llm";
-  actions: Pick<OutboundAction, "action_id" | "kind" | "audience" | "title">[];
+  actions: Pick<OutboundAction, "action_id" | "kind" | "audience" | "title" | "removed">[];
   decisions: ("approve" | "edit" | "reject")[];
   error?: string | null;
 }

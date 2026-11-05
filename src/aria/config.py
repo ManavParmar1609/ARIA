@@ -348,6 +348,11 @@ class GuardrailConfig(_Strict):
     pseudonymize_ips: bool = True
     detect_injection: bool = True
     safety_model: bool = False
+    # Spotlighting by datamarking (Hines et al., 2024): mark every space inside the untrusted
+    # blocks of a prompt and tell the model what the marker means, so an instruction hidden in a
+    # log line is visibly data. Off by default: it costs tokens and can hurt on code-like text,
+    # so measure it first with the red-team suite's A/B harness (aria.evals.redteam).
+    datamark_untrusted: bool = False
     max_line_chars: int = Field(default=2_000, gt=80)
     max_lines: int = Field(default=20_000, gt=0)
 

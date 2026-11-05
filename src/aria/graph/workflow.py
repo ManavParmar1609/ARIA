@@ -98,11 +98,13 @@ from aria.reporting.writer import ReportWriter
 from aria.retrieval import runlog
 from aria.retrieval.memory import MemoryIncident, run_incident_id
 from aria.retrieval.retriever import build_query
+from aria.retrieval.reviewed import reviewed_examples
 from aria.security.fields import clean_request
 from aria.security.redaction import Redactor
 from aria.services import Services
+from aria.severity.adjudicator import ReviewedExample, levels_outside_set
 from aria.severity.policy import level_words
-from aria.text import headline
+from aria.text import failure_words, headline
 
 SHARD_LINES = 4_000  # fan parsing out above this many lines
 MAX_SHARDS = 8
@@ -526,6 +528,75 @@ async def _reviewer_corrections(
     return [item.value for item in items if item.value.get("to") not in (None, str(severity))]
 
 
+async def _reviewed_examples(
+    services: Services, store: BaseStore | None, batch: ParsedBatch, evidence: EvidenceStore
+) -> list[ReviewedExample]:
+    """The nearest past incidents a person reviewed, as examples for the adjudicator, listed
+    once as evidence with the levels people set, so the reviewer sees what the model saw."""
+    examples = await reviewed_examples(
+        services.memory, store, query=build_query(batch).text, system=batch.system
+    )
+    if not examples:
+        return []
+    eid = evidence.add(
+        EvidenceKind.FEEDBACK,
+        "Past reviewed incidents like this one: "
+        + ", ".join(f"{e.incident_id} rated {e.severity} by a reviewer" for e in examples),
+        source="memory.reviewed",
+        detail="; ".join(
+            f"{e.incident_id}: {e.title} ({failure_words(e.failure_mode)}); a reviewer set "
+            f"{e.severity}"
+            + (
+                f" where ARIA had proposed {e.aria_severity}"
+                if e.aria_severity is not None and e.aria_severity != e.severity
+                else ""
+            )
+            for e in examples
+        ),
+        data={
+            "examples": [
+                {
+                    "incident_id": e.incident_id,
+                    "severity": str(e.severity),
+                    "aria_severity": str(e.aria_severity) if e.aria_severity else None,
+                    "decision": e.decision,
+                    "similarity": e.similarity,
+                }
+                for e in examples
+            ]
+        },
+    )
+    return [replace(e, evidence_id=eid) for e in examples]
+
+
+def _flag_reviewed_levels(
+    assessment: SeverityAssessment, examples: list[ReviewedExample]
+) -> tuple[SeverityAssessment, list[str]]:
+    """When people rated incidents like this one at a level ARIA's set rules out, say so and ask
+    a person to check. The level itself stays out of reach: the set is the set."""
+    outside = levels_outside_set(examples, assessment.prediction_set)
+    cite = next((e.evidence_id for e in examples if e.evidence_id), None)
+    if not outside or cite is None:
+        return assessment, []
+    levels = ", ".join(str(s) for s in outside)
+    held = ", ".join(str(s) for s in assessment.prediction_set)
+    claim = Claim(
+        text=(
+            f"Past reviewed incidents like this were rated {levels}, outside ARIA's set "
+            f"({held}); a person should check the level."
+        ),
+        evidence_ids=[cite],
+    )
+    flagged = assessment.model_copy(
+        update={"needs_review": True, "rationale": [*assessment.rationale, claim]}
+    )
+    note = (
+        f"past reviewed incidents like this were rated {levels}, outside ARIA's set; flagged "
+        "for review"
+    )
+    return flagged, [note]
+
+
 async def severity(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
     services = runtime.context.services
     request, run_plan = _request(state), _plan(state)
@@ -533,6 +604,7 @@ async def severity(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
     evidence = EvidenceStore(evidence_of(state))
     guard = _guard(state, services)
     before = guard.snapshot()
+    examples = await _reviewed_examples(services, runtime.store, batch, evidence)
     result = await services.severity.assess(
         batch.features,
         system=request.system,
@@ -541,9 +613,9 @@ async def severity(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
         router=_router(runtime.context, request, run_plan),
         budget=guard,
         use_llm=run_plan.use_llm,
+        examples=examples,
     )
-    assessment = result.assessment
-    notes: list[str] = []
+    assessment, notes = _flag_reviewed_levels(result.assessment, examples)
 
     ticket: TicketAssessment | None = None
     if request.ticket is not None and services.tickets is not None:
@@ -824,6 +896,7 @@ async def comms(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
     services = runtime.context.services
     request, run_plan = _request(state), _plan(state)
     incident = IncidentReport.model_validate(state["report"])
+    assessment = SeverityAssessment.model_validate(state["severity"])
     guard = _guard(state, services)
     before = guard.snapshot()
     outcome = await draft_comms(
@@ -835,6 +908,7 @@ async def comms(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
         use_llm=run_plan.use_llm,
         safety_check=services.config.guardrails.safety_model,
         policy=draft_policy(services),
+        prediction_set=assessment.prediction_set,
     )
     await _db(repo.save_actions, services.engine, state["run_id"], outcome.actions)
     notes = [
@@ -1185,6 +1259,10 @@ async def publish(state: TriageState, runtime: Runtime[TriageContext]) -> Json:
             service=service_name(request),
             run_url=run_url,
             policy=draft_policy(services),
+            # A level a person set is stated plainly; ARIA's own still names what it was torn between.
+            prediction_set=[assessment.severity]
+            if assessment.decided_by == "human"
+            else assessment.prediction_set,
         )
     actions: list[OutboundAction] = []
     for proposal in proposed:
