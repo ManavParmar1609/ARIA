@@ -130,7 +130,8 @@ test.describe("console", () => {
     await card.getByText(/^Show \d+ real lines/).click();
     await expect(card.locator("pre")).toBeVisible();
     // Only sizes that change the rating are offered (`aria seed` rated them); the smallest first.
-    const sizes = card.getByRole("radio");
+    // A card can offer a rate as well ("12 lines a minute"): only the servers are wanted here.
+    const sizes = card.getByRole("group", { name: "How many servers?" }).getByRole("radio");
     await expect(sizes.first()).toBeChecked();
     const smallest = (await sizes.first().getAttribute("value")) ?? "";
     const largest = (await sizes.last().getAttribute("value")) ?? "";
