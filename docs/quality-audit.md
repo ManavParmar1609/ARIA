@@ -618,6 +618,108 @@ reaction. The people:
 - Whether the site should follow the device's dark setting by default is the owner's call: light
   is the default by design.
 
+## The sixth audit: after the engine hardening
+
+Once the engine-hardening work had merged, four independent reviewers checked it, each on their
+own offline copy:
+
+- function and security;
+- the public site and docs;
+- the console;
+- whether every recommendation from the research was built.
+
+A fifth, on performance, had only just started when the owner stopped the round after its first
+pass. Whatever a reviewer had verified and committed by then was merged. The rest is listed
+under [Not done in this round](#not-done-in-this-round).
+
+### Security and function
+
+- **Fixed: a link could hide its real host.** The outbound draft screen read a link's host with
+  Python's URL splitter. A browser treats a backslash in a web address as a slash, so a link
+  could pass the allow-list and still open another site. The host is now read the way a browser
+  reads it.
+- **Fixed: decision-record entries would fail their own hash on Azure SQL.** Its date type keeps
+  times to the nearest 1/300 of a second, so entries came back rounded. Entries are now stamped
+  to the whole second.
+- **Fixed: a blind check could be given twice.** A second rating of the same incident, given
+  after the reveal or by another rater, fed recalibration and the severe-miss alarm as if it were
+  blind. It is now refused.
+- **Fixed: the daily allowance did not bind when runs do not reserve their calls.** In that mode
+  a visitor past their share used the server's key call by call. The allowance now binds either
+  way.
+- **Fixed: one visitor could read another's A2A task.** The SDK's task store was shared. Tasks
+  are now kept apart by visitor.
+- **Fixed: a long, unclosed Markdown link took time in proportion to the square of its length.**
+  The pattern now runs in linear time.
+- **Faster:** the drift check reads only each system's newest runs from the database, not every
+  decided run.
+- **Clearer:** the docs now say how a colon in an API key is read. The adjudicator reads a level
+  written in lower case, and still checks it against the prediction set.
+
+### The public site and docs
+
+- The README opens with a "Start here" block: how to try ARIA, the proof, its limits and why to
+  trust it. The quick start is now a short list instead of a paragraph.
+- "Prediction set", "Drain" and "adjudicate" are explained in plain words where they first
+  appear.
+- The README and `llms.txt` use the names the console shows: Test results, Incidents and How
+  ARIA works.
+- Each document now opens by saying who it is for.
+- **Home page:**
+  - the "What it does" introduction no longer repeats the hero;
+  - two long FAQ answers are split;
+  - the results say where to find the limits;
+  - the footer links the EU AI Act assessment.
+- **Fixed: keyboard focus could land on a citation that was still invisible** while the example
+  animated in. Focus now completes the entrance first (WCAG 2.4.7), with an end-to-end test.
+
+### The console
+
+- **Fixed: focus went nowhere** after "Back to now" in time travel and on a missing incident's
+  page. It now goes to the step's own button, or to the page's title.
+- **The command palette:**
+  - it reports when its list is closed;
+  - choosing a glossary word scrolls to that word.
+- **Plainer words:**
+  - window lengths read in hours and days, not thousands of minutes;
+  - activity events use the console's words, not raw identifiers;
+  - "Needs review" is the one name for that status;
+  - "ARIA's evidence template" replaces two older names.
+- **Less clutter:**
+  - Test results names the three rings in the order How ARIA works uses;
+  - the severity panel folds its primer under "How the pieces fit";
+  - the decision record appears only once it has an entry;
+  - Settings puts "Your session" before the providers' data terms.
+- **Phones and failures:** the palette's search box fits a 320 px screen. The waiting and failure
+  pages each have a page heading.
+- Two end-to-end tests follow the current samples and the per-level calibration.
+
+### Whether every recommendation was built
+
+The coverage review corrected two descriptions to match the code:
+
+- ADR 0015 now says which real-data suites share lines with training. BGL is rated twice, once
+  by a model that never saw BGL.
+- The model card now says the model's regularisation is chosen with whole systems held out, and
+  that blind checks, not approvals, recalibrate the model.
+
+### Not done in this round
+
+- **The owner's call:**
+  - a minimum size for code text;
+  - whether the home page example's log wraps or is cut short on phones;
+  - how an unrated incident's level chip looks;
+  - whether "Deployment details" in Settings should be a heading;
+  - whether Approve should come after the report on phones.
+- The report's own summary still gives a window's length in minutes. The console converts it.
+- When a critic removes claims, which only happens with a live model, the reviewer is not shown
+  which ones.
+- The performance review, and a second round of the other reviews, did not run.
+- **Measurements that need live model calls:**
+  - the model's choice inside the prediction set;
+  - the red team against a real model;
+  - the datamarking comparison.
+
 ## What was left
 
 These are recorded rather than fixed, because each needs a design change, infrastructure or an
