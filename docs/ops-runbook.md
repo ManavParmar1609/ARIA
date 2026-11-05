@@ -316,7 +316,7 @@ Reviews also teach the adjudicator by example. When a model is asked to choose i
 
 ### Rotate an API key
 
-`ARIA_API_KEYS` holds `name:secret` pairs, and every valid key has full access. Two secrets may share a name, which keeps reviews and the rate-limit bucket under one label during the overlap. In production each secret needs at least 32 characters (`openssl rand -hex 32` makes one), and a secret must not contain a colon: `a:b` is read as a key named `a`. Every request to a protected path is logged as `api.request` with its method, path, status and key name (never the secret or the query string), so the log shows who read, reviewed or deleted what.
+`ARIA_API_KEYS` holds `name:secret` pairs, and every valid key has full access. Two secrets may share a name, which keeps reviews and the rate-limit bucket under one label during the overlap. In production each secret needs at least 32 characters (`openssl rand -hex 32` makes one), and the first colon separates the name from the secret: a bare `a:b` is read as a key named `a` with the secret `b`, so give every secret a name, and keep the name free of colons. Every request to a protected path is logged as `api.request` with its method, path, status and key name (never the secret or the query string), so the log shows who read, reviewed or deleted what.
 
 1. Add the new secret beside the old one, for example `ops:<new secret>,ops:<old secret>`, then restart the API and workers.
 2. Move every client to the new secret:
