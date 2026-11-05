@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import Field, StringConstraints
+from pydantic import Field, StringConstraints, field_validator
 
 from aria.contracts.base import Contract, EvidenceId, Severity
 
@@ -26,6 +26,14 @@ class AdjudicationOutput(Contract):
     severity: Severity
     rationale: list[ClaimOut] = Field(min_length=1, max_length=4)
     uncertainty: Annotated[str, StringConstraints(max_length=400)] = ""
+
+    @field_validator("severity", mode="before")
+    @classmethod
+    def _read_the_label_whatever_its_case(cls, value: object) -> object:
+        """A provider asked for JSON in its prompt (no schema to hold it to the enum) may write
+        "sev2": the label is read whatever its case. The adjudicator still checks it against the
+        prediction set afterwards, so this widens nothing."""
+        return value.strip().upper() if isinstance(value, str) else value
 
 
 class ToolArguments(Contract):

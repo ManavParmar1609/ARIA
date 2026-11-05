@@ -27,9 +27,13 @@ than its point estimate, and a change chosen by looking at a test set is no long
   are fitted again on the other groups only. Every window is scored once, by a model that never
   saw its group. The rules and floors are not refitted: they are fixed by hand and apply
   everywhere.
-- **C, real data:** every real-data suite, each scored by a model trained without that system's
-  lines where the training data includes it, beside an overlap table. New domains (security
-  alerts, microservice faults, Kubernetes incidents, Jira tickets) join ring C as they are added.
+- **C, real data:** every real-data suite, beside an overlap table wherever the training pools
+  hold the suite's lines. BGL, whose lines and alert-tag rubric are in training, is rated twice:
+  by the shipped model and by one fitted without any BGL window. HDFS, Hadoop and OpenStack share
+  lines with training too; today they are rated by the shipped model and publish the overlap, and
+  rating them with a model fitted without their lines is the next step. New domains (security
+  alerts, microservice faults, Kubernetes incidents, Jira tickets) share no lines with training
+  and join ring C as they are added.
 
 **Honest statistics** ([`stats.py`](../../src/aria/evals/stats.py)): the headline is the
 severe-miss rate (a true SEV1 or SEV2 rated SEV3 or SEV4) with an exact one-sided Clopper-Pearson
