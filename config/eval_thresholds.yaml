@@ -6,8 +6,16 @@
 # make a failing change pass. The smoke sample is small: one severity window per failure mode and
 # one quiet window per system, 12 end-to-end runs and 4 attacked windows. The parsing and
 # edge-case suites run in full: every labelled line of the Loghub samples and 2,000 inputs.
+#
+# The severity bounds were re-based once, by the owner, on 2026-11-05. The conservative policy of
+# ADR 0014 plans for the most severe level its set cannot rule out and sends the window to a
+# person, which trades the policy's macro-F1 for fewer serious misses. So the old 0.85 floor now
+# applies to the calibrated model alone; the policy gets a lower floor that still catches a
+# collapse, a cap on over-triage, and the unchanged cap on serious misses.
 smoke:
-  severity.methods.aria_policy.macro_f1: {min: 0.85}
+  severity.methods.model_only.macro_f1: {min: 0.85}
+  severity.methods.aria_policy.macro_f1: {min: 0.70}
+  severity.methods.aria_policy.over_triage: {max: 0.30}  # windows rated above their level
   severity.methods.aria_policy.severe_under_triage: {max: 0.10}  # no SEV1/SEV2 rated SEV3/SEV4
   severity.conformal.coverage_with_floors: {min: 0.85}
   pipeline.groundedness.valid_reports: {min: 1.0}

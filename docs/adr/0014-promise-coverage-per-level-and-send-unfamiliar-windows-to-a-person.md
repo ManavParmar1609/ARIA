@@ -85,6 +85,14 @@ index, against the cut-off sampling noise alone would pass one time in twenty (Y
 - Severe misses fall on familiar and unseen systems alike; over-triage rises, which the
   conservative policy accepts as the price. The published numbers are in
   [evaluation.md](../evaluation.md).
+- The policy's macro-F1 falls with that over-triage, below the floor CI's smoke gate set for the
+  old engine. The owner re-based the gate rather than tune on a test seed to clear it
+  ([`config/eval_thresholds.yaml`](../../config/eval_thresholds.yaml)):
+  - the old floor now applies to the calibrated model alone;
+  - the policy has a lower floor and a cap on over-triage;
+  - the cap on serious misses is unchanged.
+
+  A weaker model, or a policy that over-triages more, still fails CI.
 - Logs from a system ARIA never trained on always reach a person, however confident the model is.
 - Recalibration needs blind checks, which take a reviewer's time; until they come, the shipped
   calibration stands.
